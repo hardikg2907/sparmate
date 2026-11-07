@@ -147,3 +147,95 @@ describe("redact", () => {
     expect(guard.redact("clean text")).toBe("clean text");
   });
 });
+
+describe("joined and look-alike forms", () => {
+  let multi: Awaited<ReturnType<typeof loadPrivacyGuard>>;
+  let single: Awaited<ReturnType<typeof loadPrivacyGuard>>;
+  beforeAll(async () => {
+    multi = await loadPrivacyGuard({ claudeJsonPath: missing(), denylistPath: await denylist(["zorblax corp"], "multi.txt") });
+    single = await loadPrivacyGuard({ claudeJsonPath: missing(), denylistPath: await denylist(["zorblax"], "single.txt") });
+  });
+
+  it.each([
+    "zorblax-corp",
+    "zorblax_corp",
+    "zorblax.corp",
+    "zorblax/corp",
+    "ZorblaxCorp",
+    "zorblax | corp",
+    "zorblax \\| corp",
+    "zorblax  \n  corp",
+    "zorblax​corp",
+    "zorblax​ corp",
+    "zorblax–corp",
+    "ｚｏｒｂｌａｘ ｃｏｒｐ",
+  ])("finds the two-word term in %j", (text) => {
+    expect(multi.findViolations(`we met ${text} today`)).toEqual(["zorblax corp"]);
+  });
+
+  it.each([
+    "zor​blax",
+    "zor­blax",
+    "zor⁠blax",
+    "zor﻿blax",
+    "ｚｏｒｂｌａｘ",
+    "ZORBLAX",
+    "zоrblаx",
+    "zorblax́",
+    "ZorblaxService",
+  ])("finds the one-word term in %j", (text) => {
+    expect(single.findViolations(`we met ${text} today`)).toEqual(["zorblax"]);
+  });
+
+  it("redacts a joined form as one unit and keeps the text around it", () => {
+    expect(multi.redact("a zorblax-corp b")).toBe("a [redacted] b");
+    expect(multi.redact("a Zorblax​ Corp b")).toBe("a [redacted] b");
+    expect(single.redact("a zоrblax b")).toBe("a [redacted] b");
+  });
+
+  it("does not match inside longer words or unrelated text", () => {
+    expect(single.findViolations("zorblaxes and unzorblax")).toEqual([]);
+    expect(multi.findViolations("zorblax and corporate")).toEqual([]);
+    expect(multi.findViolations("corp zorblax")).toEqual([]);
+  });
+
+  it("still needs word boundaries for a short common word", async () => {
+    const guard = await loadPrivacyGuard({ claudeJsonPath: missing(), denylistPath: await denylist(["box"], "short.txt") });
+    expect(guard.findViolations("a sandbox in a boxed set")).toEqual([]);
+    expect(guard.findViolations("a box here")).toEqual(["box"]);
+  });
+
+  it("scans a very long text quickly and still finds a term near the end", () => {
+    const filler = "- ".repeat(300_000);
+    const started = Date.now();
+    expect(single.findViolations(`${filler}zorblax`)).toEqual(["zorblax"]);
+    expect(single.findViolations(`${"zorblax ".repeat(1) + " ".repeat(500_000)}x`)).toEqual(["zorblax"]);
+    expect(multi.redact(`${filler}zorblax${" ".repeat(100_000)}corp`)).toBe(`${filler}[redacted]`);
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  it("finds a term that straddles the edge between scan windows", () => {
+    const text = `${"a ".repeat(99_999)}zorblax ${"b ".repeat(10)}`;
+    for (let pad = 0; pad < 4; pad++) expect(single.findViolations(`${"x".repeat(pad)} ${text}`)).toEqual(["zorblax"]);
+  });
+});
+
+describe("terms from the account domain", () => {
+  it.each([
+    ["dev@mail.quuxly.io", "we use quuxly daily", ["quuxly"]],
+    ["dev@corp.quuxly.com", "we use quuxly daily", ["quuxly"]],
+    ["dev@in.quuxly.co.in", "we use quuxly daily", ["quuxly"]],
+    ["dev@quuxly.co.uk", "we use quuxly daily", ["quuxly"]],
+    ["dev@mail.quuxly.io", "send mail to the in box in the corp", []],
+  ])("derives the registrable name from %s", async (email, text, expected) => {
+    const guard = await loadPrivacyGuard({ claudeJsonPath: await account(email), denylistPath: missing() });
+    expect(guard.findViolations(text)).toEqual(expected);
+  });
+
+  it("blocks no public suffix part and keeps skipping mail providers", async () => {
+    const guard = await loadPrivacyGuard({ claudeJsonPath: await account("pat.kim@mail.gmail.com"), denylistPath: missing() });
+    expect(guard.findViolations("the com and co and io domains, gmail and mail")).toEqual([]);
+    const plain = await loadPrivacyGuard({ claudeJsonPath: await account("pat.kim@quuxly.co.in"), denylistPath: missing() });
+    expect(plain.findViolations("the com and co and in and io domains")).toEqual([]);
+  });
+});
