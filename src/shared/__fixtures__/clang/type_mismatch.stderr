@@ -1,0 +1,64 @@
+/tmp/ir-fixtures/type_mismatch.cpp:7:7:{7:3-7:16}: error: no matching member function for call to 'push_back'
+    7 |    ids.push_back("seven");
+      |    ~~~~^~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/vector:637:60:{637:70-637:89}: note: candidate function not viable: no known conversion from 'const char[6]' to 'const value_type' (aka 'const int') for 1st argument
+  637 |    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void push_back(const_reference __x);
+      |                                                             ^         ~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/vector:639:60:{639:70-639:86}: note: candidate function not viable: no known conversion from 'const char[6]' to 'value_type' (aka 'int') for 1st argument
+  639 |    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void push_back(value_type&& __x);
+      |                                                             ^         ~~~~~~~~~~~~~~~~
+/tmp/ir-fixtures/type_mismatch.cpp:9:5:{9:3-9:11}: error: no matching member function for call to 'insert'
+    9 |    m.insert(std::make_pair(1, 2));
+      |    ~~^~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1191:46:{1191:53-1191:74}: note: candidate function not viable: no known conversion from 'pair<typename __unwrap_ref_decay<int>::type, [...]>' to 'const pair<const key_type, [...]>' for 1st argument
+ 1191 |    _LIBCPP_HIDE_FROM_ABI pair<iterator, bool> insert(const value_type& __v) { return __tree_.__insert_unique(__v); }
+      |                                               ^      ~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1198:46:{1198:53-1198:69}: note: candidate function not viable: no known conversion from 'pair<typename __unwrap_ref_decay<int>::type, [...]>' to 'pair<const key_type, [...]>' for 1st argument
+ 1198 |    _LIBCPP_HIDE_FROM_ABI pair<iterator, bool> insert(value_type&& __v) {
+      |                                               ^      ~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1206:30:{1206:37-1206:70}: note: candidate function not viable: no known conversion from 'pair<typename __unwrap_ref_decay<int>::type, typename __unwrap_ref_decay<int>::type>' (aka 'pair<int, int>') to 'initializer_list<value_type>' (aka 'initializer_list<pair<const std::string, int>>') for 1st argument
+ 1206 |    _LIBCPP_HIDE_FROM_ABI void insert(initializer_list<value_type> __il) { insert(__il.begin(), __il.end()); }
+      |                               ^      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1321:44:{1321:51-1321:67}: note: candidate function not viable: no known conversion from 'pair<typename __unwrap_ref_decay<int>::type, typename __unwrap_ref_decay<int>::type>' (aka 'pair<int, int>') to 'node_type' (aka '__basic_node_handle<std::__tree_node<std::__value_type<std::string, int>, void *>, std::allocator<std::pair<const std::string, int>>, std::__map_node_handle_specifics>') for 1st argument
+ 1321 |    _LIBCPP_HIDE_FROM_ABI insert_return_type insert(node_type&& __nh) {
+      |                                             ^      ~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1180:46: note: candidate template ignored: requirement 'is_constructible<std::pair<const std::string, int>, std::pair<int, int>>::value' was not satisfied [with _Pp = pair<typename __unwrap_ref_decay<int>::type, typename __unwrap_ref_decay<int>::type>]
+ 1180 |    _LIBCPP_HIDE_FROM_ABI pair<iterator, bool> insert(_Pp&& __p) {
+      |                                               ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1185:34:{1185:41-1185:72}: note: candidate function template not viable: requires 2 arguments, but 1 was provided
+ 1185 |    _LIBCPP_HIDE_FROM_ABI iterator insert(const_iterator __pos, _Pp&& __p) {
+      |                                   ^      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1193:34:{1193:41-1193:82}: note: candidate function not viable: requires 2 arguments, but 1 was provided
+ 1193 |    _LIBCPP_HIDE_FROM_ABI iterator insert(const_iterator __p, const value_type& __v) {
+      |                                   ^      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1202:34:{1202:41-1202:77}: note: candidate function not viable: requires 2 arguments, but 1 was provided
+ 1202 |    _LIBCPP_HIDE_FROM_ABI iterator insert(const_iterator __p, value_type&& __v) {
+      |                                   ^      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1210:30:{1210:37-1210:75}: note: candidate function template not viable: requires 2 arguments, but 1 was provided
+ 1210 |    _LIBCPP_HIDE_FROM_ABI void insert(_InputIterator __f, _InputIterator __l) {
+      |                               ^      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1326:34:{1326:41-1326:80}: note: candidate function not viable: requires 2 arguments, but 1 was provided
+ 1326 |    _LIBCPP_HIDE_FROM_ABI iterator insert(const_iterator __hint, node_type&& __nh) {
+      |                                   ^      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/ir-fixtures/type_mismatch.cpp:10:15:{10:19-10:21}: error: no viable conversion from 'int' to 'std::string' (aka 'basic_string<char>')
+   10 |    std::string s = 42;
+      |                ^   ~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/string:896:71:{896:84-896:109}: note: candidate constructor not viable: no known conversion from 'int' to 'const string &' for 1st argument
+  896 |    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_STRING_INTERNAL_MEMORY_ACCESS basic_string(const basic_string& __str)
+      |                                                                        ^            ~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/string:916:55:{916:68-916:88}: note: candidate constructor not viable: no known conversion from 'int' to 'string &&' for 1st argument
+  916 |    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(basic_string&& __str)
+      |                                                        ^            ~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/string:951:55:{951:68-951:85}: note: candidate constructor template not viable: no known conversion from 'int' to 'const char *' for 1st argument
+  951 |    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(const _CharT* __s)
+      |                                                        ^            ~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/string:1091:55:{1091:68-1091:97}: note: candidate constructor not viable: no known conversion from 'int' to 'initializer_list<char>' for 1st argument
+ 1091 |    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(initializer_list<_CharT> __il)
+      |                                                        ^            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/string:886:64: note: explicit constructor is not a candidate
+  886 |    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 explicit basic_string(const allocator_type& __a)
+      |                                                                 ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/string:1047:93: note: explicit constructor is not a candidate
+ 1047 |    _LIBCPP_METHOD_TEMPLATE_IMPLICIT_INSTANTIATION_VIS _LIBCPP_CONSTEXPR_SINCE_CXX20 explicit basic_string(const _Tp& __t)
+      |                                                                                              ^
+3 errors generated.

@@ -1,0 +1,7 @@
+/tmp/ir-fixtures/missing_member.cpp:11:5:{11:3-11:4}: error: no member named 'release' in 'Spot'
+   11 |    s.release();
+      |    ~ ^
+/tmp/ir-fixtures/missing_member.cpp:12:18:{12:16-12:17}: error: no member named 'floor' in 'Spot'
+   12 |    std::cout << s.floor << "\n";
+      |                 ~ ^
+2 errors generated.

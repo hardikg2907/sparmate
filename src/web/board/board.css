@@ -1,0 +1,106 @@
+.ir-board {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ir-board__canvas {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ir-board__canvas-inner {
+  position: absolute;
+  inset: 0;
+}
+
+/* The app has its own library of shapes in the palette; Excalidraw's library points at an online catalogue. */
+.ir-board .default-sidebar-trigger,
+.ir-board .sidebar-trigger {
+  display: none;
+}
+
+/*
+ * The app tokens already flip with the theme, so one mapping serves both. The dark selector outranks
+ * Excalidraw's own dark rules. The canvas background and its theme filter stay untouched: they paint the board.
+ */
+.ir-board .excalidraw,
+.ir-board .excalidraw.theme--dark {
+  --ui-font: var(--font-sans);
+
+  --island-bg-color: var(--card);
+  --popup-bg-color: var(--popover);
+  --popup-secondary-bg-color: var(--muted);
+  --sidebar-bg-color: var(--card);
+  --shadow-island: var(--elev-sm);
+  --library-dropdown-shadow: var(--elev-md);
+  --sidebar-shadow: var(--elev-md);
+  --modal-shadow: var(--shadow-float);
+
+  --text-primary-color: var(--foreground);
+  --color-on-surface: var(--foreground);
+  --popup-text-color: var(--popover-foreground);
+  --popup-text-inverted-color: var(--primary-foreground);
+  --input-label-color: var(--muted-foreground);
+  --keybinding-color: var(--faint);
+  --link-color: var(--primary-text);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-darker: var(--primary-hover);
+  --color-primary-darkest: var(--primary-hover);
+  --color-primary-light: var(--primary-soft);
+  --color-primary-light-darker: var(--primary-soft);
+  --color-brand-hover: var(--primary-hover);
+  --color-brand-active: var(--primary);
+  --color-surface-primary-container: var(--primary-soft);
+  --color-on-primary-container: var(--primary-soft-foreground);
+  --select-highlight-color: var(--primary);
+  --focus-highlight-color: var(--ring);
+
+  --color-surface-lowest: var(--card);
+  --color-surface-low: var(--muted);
+  --color-surface-mid: var(--muted);
+  --color-surface-high: var(--accent);
+  --button-hover-bg: var(--accent);
+  --button-active-bg: var(--accent);
+  --button-active-border: var(--primary);
+  --button-gray-1: var(--muted);
+  --button-gray-2: var(--accent);
+  --button-gray-3: var(--border);
+  --button-special-active-bg-color: var(--success-soft);
+  --button-destructive-bg-color: var(--destructive-soft);
+  --button-destructive-color: var(--destructive);
+
+  --default-border-color: var(--border);
+  --dialog-border-color: var(--border);
+  --sidebar-border-color: var(--border);
+  --list-border-color: var(--border);
+  --avatar-border-color: var(--border);
+  --color-border-outline: var(--input);
+  --color-border-outline-variant: var(--border);
+
+  --input-bg-color: var(--muted);
+  --input-hover-bg-color: var(--accent);
+  --input-border-color: var(--input);
+
+  --scrollbar-thumb: var(--input);
+  --scrollbar-thumb-hover: var(--faint);
+}
+
+/* The islands sit on a canvas of the same tone, so the shadow alone does not separate them. */
+.ir-board .excalidraw .Island {
+  border: 1px solid var(--border);
+}
+
+/* Excalidraw draws its dark canvas through this filter; the swatches need it to match the board. */
+.ir-palette[data-theme="dark"] .ir-swatch--shape {
+  filter: invert(93%) hue-rotate(180deg);
+}
+
+.ir-palette .ir-swatch {
+  flex: none;
+}

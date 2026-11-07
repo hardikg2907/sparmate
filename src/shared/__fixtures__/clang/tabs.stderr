@@ -1,0 +1,7 @@
+/tmp/ir-fixtures/tabs.cpp:4:15: error: use of undeclared identifier 'y'
+    4 |         std::cout << y << "→" << z;
+      |                       ^
+/tmp/ir-fixtures/tabs.cpp:4:29: error: use of undeclared identifier 'z'
+    4 |         std::cout << y << "→" << z;
+      |                                   ^
+2 errors generated.

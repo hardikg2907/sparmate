@@ -1,0 +1,73 @@
+# Build stage: every dependency, to bundle the page and resolve the lockfile once.
+FROM node:22-bookworm-slim AS build
+WORKDIR /app/interview-room
+COPY package.json package-lock.json ./
+RUN npm ci --include=optional --no-audit --no-fund
+COPY . .
+# Debian is glibc, so the musl build of the Claude Code binary is never used.
+RUN npm run build \
+    && cp -r node_modules/@excalidraw/excalidraw/dist/prod /tmp/excalidraw-prod \
+    && npm prune --omit=dev --no-audit --no-fund \
+    && npm uninstall --omit=dev --no-audit --no-fund $(node container/prune-runtime.mjs) \
+    && mkdir -p node_modules/@excalidraw/excalidraw/dist \
+    && mv /tmp/excalidraw-prod node_modules/@excalidraw/excalidraw/dist/prod \
+    && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl \
+    && npm cache clean --force
+
+# Runtime stage.
+FROM node:22-bookworm-slim
+
+# The sanitizer runtime ships separately from clang on Debian; without it -fsanitize=undefined cannot link.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        clang \
+        libclang-rt-14-dev \
+        libc++-dev \
+        libc++abi-dev \
+        bubblewrap \
+        util-linux \
+        python3 \
+        python3-venv \
+        libsndfile1 \
+        ca-certificates \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# One layer for the venv and its ownership: a later chown would copy every file into a second layer.
+# sympy and mpmath come in with onnxruntime for its model tools only; inference does not import them.
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir \
+        onnxruntime==1.20.1 \
+        kokoro-onnx==0.4.7 \
+        soundfile==0.13.1 \
+    && /opt/venv/bin/pip uninstall -y sympy mpmath pip setuptools \
+    && find /opt/venv -name __pycache__ -type d -prune -exec rm -rf {} + \
+    && mkdir -p /study /data /kokoro /home/node/.claude /home/node/.config /app/interview-room \
+    && chown -R node:node /study /data /kokoro /home/node /opt/venv /app
+
+WORKDIR /app/interview-room
+COPY --from=build --chown=node:node /app/interview-room/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/interview-room/dist ./dist
+COPY --chown=node:node package.json package-lock.json tsconfig.json ./
+COPY --chown=node:node src ./src
+COPY --chown=node:node content ./content
+COPY --chown=node:node study-kit ./study-kit
+COPY --chown=node:node scripts/tts ./scripts/tts
+COPY --chown=node:node container ./container
+RUN chmod +x container/entrypoint.sh \
+    && ln -s "$(ls -d /app/interview-room/node_modules/@anthropic-ai/claude-agent-sdk-linux-*/claude | head -1)" /usr/local/bin/claude
+
+USER node
+
+ENV PATH="/opt/venv/bin:/usr/local/bin:$PATH" \
+    IR_IN_CONTAINER="1" \
+    IR_PYTHON_PATH="/opt/venv/bin/python" \
+    IR_KOKORO_HOME="/kokoro" \
+    DATA_DIR="/data" \
+    STUDY_ROOT="/study" \
+    PORT="4747" \
+    NODE_ENV="production"
+
+EXPOSE 4747
+
+ENTRYPOINT ["/app/interview-room/container/entrypoint.sh"]
+CMD ["node_modules/.bin/tsx", "src/server/index.ts"]

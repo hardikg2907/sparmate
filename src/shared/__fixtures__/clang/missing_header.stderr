@@ -1,0 +1,4 @@
+/tmp/ir-fixtures/missing_header.cpp:2:10:{2:10-2:21}: fatal error: 'optionall' file not found
+    2 |  #include <optionall>
+      |           ^~~~~~~~~~~
+1 error generated.

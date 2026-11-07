@@ -1,0 +1,24 @@
+services:
+  interview-room:
+    image: interview-room:latest
+    build:
+      context: ..
+      dockerfile: container/Containerfile
+    container_name: interview-room
+    environment:
+      - PORT=4747
+      - IR_IN_CONTAINER=1
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+    ports:
+      - "127.0.0.1:4747:4747"
+    volumes:
+      - "${STUDY_ROOT:-~/interview-prep}:/study"
+      - "interview-room-data:/data"
+      - "interview-room-kokoro:/kokoro"
+      - "interview-room-claude:/home/node/.claude"
+    restart: unless-stopped
+
+volumes:
+  interview-room-data:
+  interview-room-kokoro:
+  interview-room-claude:

@@ -1,0 +1,404 @@
+[
+  {
+    "id": "api",
+    "type": "rectangle",
+    "x": 120,
+    "y": 150,
+    "width": 160,
+    "height": 70,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [],
+    "frameId": null,
+    "index": "a0",
+    "roundness": {
+      "type": 3
+    },
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": [
+      {
+        "type": "text",
+        "id": "api-label"
+      },
+      {
+        "type": "arrow",
+        "id": "api-to-db"
+      }
+    ],
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false
+  },
+  {
+    "id": "api-label",
+    "type": "text",
+    "x": 130,
+    "y": 173,
+    "width": 140,
+    "height": 25,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [],
+    "frameId": null,
+    "index": "a0",
+    "roundness": null,
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": null,
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false,
+    "fontSize": 20,
+    "fontFamily": 5,
+    "text": "API service",
+    "originalText": "API service",
+    "autoResize": true,
+    "lineHeight": 1.25,
+    "containerId": "api",
+    "textAlign": "center",
+    "verticalAlign": "middle"
+  },
+  {
+    "id": "db-body",
+    "type": "rectangle",
+    "x": 400,
+    "y": 140,
+    "width": 120,
+    "height": 90,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [
+      "grp-db"
+    ],
+    "frameId": null,
+    "index": "a0",
+    "roundness": {
+      "type": 3
+    },
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": [
+      {
+        "type": "arrow",
+        "id": "api-to-db"
+      }
+    ],
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false
+  },
+  {
+    "id": "db-top",
+    "type": "ellipse",
+    "x": 400,
+    "y": 120,
+    "width": 120,
+    "height": 40,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [
+      "grp-db"
+    ],
+    "frameId": null,
+    "index": "a0",
+    "roundness": {
+      "type": 3
+    },
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": null,
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false
+  },
+  {
+    "id": "db-bottom",
+    "type": "ellipse",
+    "x": 400,
+    "y": 210,
+    "width": 120,
+    "height": 40,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [
+      "grp-db"
+    ],
+    "frameId": null,
+    "index": "a0",
+    "roundness": {
+      "type": 3
+    },
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": null,
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false
+  },
+  {
+    "id": "db-left",
+    "type": "line",
+    "x": 400,
+    "y": 140,
+    "width": 0,
+    "height": 90,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [
+      "grp-db"
+    ],
+    "frameId": null,
+    "index": "a0",
+    "roundness": null,
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": null,
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        90
+      ]
+    ],
+    "lastCommittedPoint": null,
+    "startBinding": null,
+    "endBinding": null,
+    "startArrowhead": null,
+    "endArrowhead": null
+  },
+  {
+    "id": "db-right",
+    "type": "line",
+    "x": 520,
+    "y": 140,
+    "width": 0,
+    "height": 90,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [
+      "grp-db"
+    ],
+    "frameId": null,
+    "index": "a0",
+    "roundness": null,
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": null,
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        90
+      ]
+    ],
+    "lastCommittedPoint": null,
+    "startBinding": null,
+    "endBinding": null,
+    "startArrowhead": null,
+    "endArrowhead": null
+  },
+  {
+    "id": "db-label",
+    "type": "text",
+    "x": 410,
+    "y": 255,
+    "width": 90,
+    "height": 25,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [
+      "grp-db"
+    ],
+    "frameId": null,
+    "index": "a0",
+    "roundness": null,
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": null,
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false,
+    "fontSize": 20,
+    "fontFamily": 5,
+    "text": "Orders DB",
+    "originalText": "Orders DB",
+    "autoResize": true,
+    "lineHeight": 1.25,
+    "containerId": null,
+    "textAlign": "left",
+    "verticalAlign": "top"
+  },
+  {
+    "id": "api-to-db",
+    "type": "arrow",
+    "x": 280,
+    "y": 185,
+    "width": 120,
+    "height": 0,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [],
+    "frameId": null,
+    "index": "a0",
+    "roundness": {
+      "type": 2
+    },
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": [
+      {
+        "type": "text",
+        "id": "api-to-db-label"
+      }
+    ],
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        120,
+        0
+      ]
+    ],
+    "lastCommittedPoint": null,
+    "startBinding": {
+      "elementId": "api",
+      "focus": 0,
+      "gap": 1
+    },
+    "endBinding": {
+      "elementId": "db-body",
+      "focus": 0,
+      "gap": 1
+    },
+    "startArrowhead": null,
+    "endArrowhead": "arrow",
+    "elbowed": false
+  },
+  {
+    "id": "api-to-db-label",
+    "type": "text",
+    "x": 320,
+    "y": 173,
+    "width": 40,
+    "height": 25,
+    "angle": 0,
+    "strokeColor": "#1e1e1e",
+    "backgroundColor": "transparent",
+    "fillStyle": "solid",
+    "strokeWidth": 2,
+    "strokeStyle": "solid",
+    "roughness": 1,
+    "opacity": 100,
+    "groupIds": [],
+    "frameId": null,
+    "index": "a0",
+    "roundness": null,
+    "seed": 1234,
+    "version": 3,
+    "versionNonce": 5678,
+    "isDeleted": false,
+    "boundElements": null,
+    "updated": 1760000000000,
+    "link": null,
+    "locked": false,
+    "fontSize": 20,
+    "fontFamily": 5,
+    "text": "SQL",
+    "originalText": "SQL",
+    "autoResize": true,
+    "lineHeight": 1.25,
+    "containerId": "api-to-db",
+    "textAlign": "center",
+    "verticalAlign": "middle"
+  }
+]

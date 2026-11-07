@@ -1,0 +1,108 @@
+.dev {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.dev[data-theme="light"] {
+  background: #ffffff;
+  color: #1b1b1f;
+}
+
+.dev[data-theme="dark"] {
+  background: #1e1e1e;
+  color: #e3e3e8;
+}
+
+.dev__bar,
+.dev__code-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dev__group {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.dev__bar button,
+.dev__bar select,
+.dev__code-tools button,
+.dev__code-tools select {
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dev__bar button[aria-pressed="true"],
+.dev__code-tools button[aria-pressed="true"] {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-weight: 600;
+}
+
+.dev__code-tools select option {
+  color: #1b1b1f;
+}
+
+.dev__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dev__readout {
+  margin-left: auto;
+  opacity: 0.85;
+}
+
+.dev__readout + .dev__readout {
+  margin-left: 0;
+}
+
+.dev__main {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+}
+
+.dev__main[data-view="board"],
+.dev__main[data-view="code"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dev__board,
+.dev__code {
+  min-width: 0;
+  min-height: 0;
+}
+
+.dev__code {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dev__code-tools {
+  flex: none;
+}
+
+.dev__editor {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.dev__console {
+  flex: none;
+  height: 300px;
+  border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}

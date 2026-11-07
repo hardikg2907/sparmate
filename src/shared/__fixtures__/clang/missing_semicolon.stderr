@@ -1,0 +1,9 @@
+/tmp/ir-fixtures/missing_semicolon.cpp:5:11: error: expected ';' at end of declaration list
+    5 |    int spot
+      |            ^
+      |            ;
+/tmp/ir-fixtures/missing_semicolon.cpp:10:28: error: expected ';' after expression
+   10 |    std::cout << t.id << "\n"
+      |                             ^
+      |                             ;
+2 errors generated.

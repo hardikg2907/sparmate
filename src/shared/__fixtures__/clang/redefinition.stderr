@@ -1,0 +1,13 @@
+/tmp/ir-fixtures/redefinition.cpp:6:7: error: redefinition of 'Gate'
+    6 |  class Gate {
+      |        ^
+/tmp/ir-fixtures/redefinition.cpp:1:7: note: previous definition is here
+    1 |  class Gate {
+      |        ^
+/tmp/ir-fixtures/redefinition.cpp:13:7: error: redefinition of 'value'
+   13 |    int value = 2;
+      |        ^
+/tmp/ir-fixtures/redefinition.cpp:12:7: note: previous definition is here
+   12 |    int value = 1;
+      |        ^
+2 errors generated.

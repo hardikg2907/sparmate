@@ -1,0 +1,4 @@
+/tmp/ir-fixtures/undeclared.cpp:9:16: error: use of undeclared identifier 'bonus'
+    9 |    return sum + bonus;
+      |                 ^
+1 error generated.

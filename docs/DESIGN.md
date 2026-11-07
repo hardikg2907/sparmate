@@ -1,0 +1,586 @@
+# Interview Room — UI and UX revamp
+
+This brief explains what the revamp changes and why. It covers the user, a review of the current UI, the visual
+direction, the flows, and the changes per screen. The last sections list the labels that stay frozen, the new
+dependencies, and what needs a server change.
+
+The revamp touches only `src/web/**`, with one exception: the default theme is dark, and the server's default
+settings (`src/shared/types.ts`) say so. The WebSocket protocol and the rest of `src/shared/*` stay as they are, so the
+two versions can run side by side and the UI can be merged back later.
+
+---
+
+## 1. The user and his jobs
+
+He is one backend developer with about 1.5 years of experience. He trains for SDE-2 and senior backend rounds at
+startups. He practises system design rounds (45 minutes, whiteboard) and C++ machine-coding rounds (90 to 120
+minutes, editor). He often practises **after a full work day, tired**.
+
+His own notes show where rounds go wrong. The design should help with these first:
+
+| What trips him up | Evidence from his notes | What the UI can do |
+|---|---|---|
+| **Time against plan** | Parking lot: clarify, entities and behaviour took about 70 minutes against a plan of 25. Nothing ran inside the time. | Show the plan and where he is on it, all the time, in a form he reads in one glance. |
+| **Driving the round** | The bar asks him to state structure and move phases himself. | Show what the current phase must produce, in his own words, next to the work. |
+| **Structure of the answer** | Rate limiter: missed identity, the 429 response and the latency budget in requirements. | Keep his six-step and seven-step methods visible, with each step's goal. |
+| **Closing the loop** | Gaps must be taught and written to the tracker, or they come back. | Make "teach the gaps, then save the notes" an explicit, visible sequence after the score. |
+
+### Jobs per screen
+
+| Screen | His job | What "done" looks like |
+|---|---|---|
+| Home | "Tell me what to do tonight and let me start it without thinking." | One obvious next round, and a paused round he can resume or throw away. |
+| Start (new) | "Get me ready for the round." | He sees the length, the mode and his plan, then starts with one key press. |
+| Room | "Let me work, keep me honest about time, and let me talk to the interviewer." | Work area as large as possible, time plan always readable, chat always ready. |
+| Pause | "Stop the clock, and make it obvious how to carry on." | Work hidden, one large Resume button, the reason for the pause stated. |
+| Debrief | "Tell me straight how it went, then fix my gaps." | Verdict and scores in one screen, gaps next, evidence on demand. |
+| Coach | "Teach me the gap now, in plain words." | The coach chat sits beside the gaps, and each gap starts a lesson with one click. |
+| Study notes | "Write the right things to my files, and only what I approve." | Every change shown as a diff with a tick box, and a clear Save. |
+| History | "Find an old round, or clean up a dead one." | Status, result and the right action on each row. |
+| Settings | "Change the model, the round length or the theme." | A short form, saved with one button. |
+
+---
+
+## 2. Review of the current UI
+
+The current UI is **competent and calm**. It is keyboard-accessible, it has visible focus, it meets contrast AA,
+and the room keeps Excalidraw and Monaco mounted so tabs switch instantly. The problems below are about
+**guidance and hierarchy**, not about broken things.
+
+I reviewed the code in the main checkout and screenshots of the fixture pages. The server on port 4747 serves an
+older build than the code: its room has no Pause button in interview mode, and its user pause shows a red Retry
+banner.
+
+Ranked by how much each problem costs him in a real round. Each row names the Nielsen heuristic it breaks.
+
+| # | Problem | Where | Heuristic | Why it matters |
+|---|---|---|---|---|
+| 1 | **The phase rail hides the plan.** Every phase box has the same width, whether it is 3 minutes or 15. Nothing says "you are 4 minutes behind plan". The only overrun signal is a small amber "(over)" inside one box. | Room header | Visibility of system status | Time against plan is his main failure. He needs to see it without reading. |
+| 2 | **The goal of each phase is hidden in a tooltip.** "Boxes and arrows, then walk one request through every box" exists in the code, but only as a `title` attribute. | Phase rail | Recognition over recall | When tired, he forgets what a phase must produce. The goal is the best prompt the app owns. |
+| 3 | **A paused round is buried.** A paused or live round shows only as a text link in the last section of the home page. | Home, history | Visibility of system status, user control | Resume or discard is often the first thing to do after a break. It should be the first thing on the page. |
+| 4 | **Too many equal buttons on home.** Twelve rows with two buttons each, plus two cards with two buttons each: 28 start buttons with almost the same weight. One click starts a model call and a clock with no confirm. | Home | Aesthetic and minimalist design, error prevention | The next action is not singular. A wrong click starts a round he then has to discard. |
+| 5 | **The debrief puts the gaps below a long table.** Reading order is verdict, then six dimensions with every quote, then strengths, then gaps. The coach opens on the top gap, but "Teach me this" is two screens down. | Debrief | Match with the real world, flexibility | The action he needs after the score is "work the gaps". It is far from the score. |
+| 6 | **Nothing says the debrief is not finished.** The flow is score, then coach, then study notes. Study notes are the last section of a long page, and nothing shows progress through those three steps. | Debrief | Visibility of system status | Unsaved notes mean the tracker never learns about the gap. |
+| 7 | **The interviewer's view of the board has no warning count.** The graph already reports unlabelled boxes and dangling arrows, but the button gives no sign until he opens it. | Room toolbar | Error prevention | Research notes list "opaque diagram reading" as a top complaint. A dangling arrow costs him a point he earned. |
+| 8 | **Pause leaves the work open.** The board and editor stay usable while the clock is stopped. Only a thin banner shows the pause. | Room | Consistency with the real world | A pause that allows work breaks the timed practice. And a thin banner is easy to miss when he comes back. |
+| 9 | **Pause, End interview and the timer have the same weight.** End interview is irreversible but looks like the other outlined buttons. | Room header | Error prevention | Big, final actions should look final. |
+| 10 | **The new requirement looks like any other message.** The extension is the most important moment of the round, and it only gets a small chip. | Room chat | Visibility of system status | He must notice the extension at once and restate it before he codes. |
+| 11 | **Flat hierarchy.** Blocks that differ in importance look alike: one bordered, rounded card style, one weight of section heading, uppercase tracked labels, meta strings joined with middle dots. | All screens | Aesthetic and minimalist design | Uniform cards flatten the hierarchy. Uppercase labels are harder to read for tired eyes. The design answers this with layered surfaces (section 3). |
+| 12 | **Chrome eats the work area.** The room uses about 162 px of the 900 px height for the title row, the rail boxes and the work toolbar. | Room | Flexibility and efficiency | The whiteboard is the main tool. Every row of chrome is a row of board he loses. |
+
+---
+
+## 3. Design direction
+
+### The idea: "the clock is the only loud thing"
+
+The room is an exam desk late at night. Everything is quiet ink on paper, except one object: **the plan track**,
+the round's time plan drawn to scale with a needle for "now". It is the memorable element of the product, and it
+appears in three places with the same drawing: the start screen (the plan), the room (the plan and now), and the
+debrief (the plan against what happened).
+
+**The app opens in dark.** A new visitor, with no saved choice, gets the dark theme. The default is set in four
+places that must agree: `DEFAULT_SETTINGS.theme` (server and its mirror in `src/web/lib/contract.ts`), the first-paint
+script `public/theme-boot.js` (it adds the `dark` class unless the saved choice is `light`), `storedTheme() ?? "dark"`
+in `main.tsx`, and the fallback in `App.tsx`. A saved choice always wins, and the light theme stays one setting away
+in Settings. Fixture pages open dark too; `?theme=light` shows the light one. Every token below has both sets, and the
+dark set is the one designed first.
+
+Everything else stays disciplined, and the reading pages (home, debrief, usage) separate their parts by **surface
+level, not by outline**. The page canvas is sunken and lit by soft light from three corners: brand indigo at the
+top left, violet at the top right and a cool teal at the bottom. In dark it is a near-black plum (`#0c0a17`). Content
+sits on it in raised panels that are lit from above. The thing to do next gets a **mesh panel**: the verdict header on
+the debrief and the recommended round on home. Three tones blend as layered radial gradients, not as stripes: a
+near-black corner at the top right, a bright saturated tone through the middle (brand indigo, with violet at the left)
+and a pale lilac glow that rises from the bottom. White text sits only on the dark and bright tones. Whatever sits
+over the glow (the score cells, the plan) sits on a dark glass tile, so white keeps its contrast. The usage page keeps
+the older deep panel for its cost and chart. A hairline card is for repeated rows and for secondary blocks only.
+
+Controls stay flat and quiet. A primary button is a plain brand fill with a 1 px lighter edge along the top and one
+small shadow, and it moves 1 px when pressed. The debrief's three steps are flat, separate items on one row. Only the
+verdict word and the recommended round's title use the bold rounded face.
+
+### Type
+
+One family, in two cuts: **Atkinson Hyperlegible Next** for the interface and **Atkinson Hyperlegible Mono** for
+code, the clock and the board's text form. The Braille Institute designed the family for legibility. Its letters
+are hard to confuse (`I`, `l`, `1`; `O`, `0`; `rn`, `m`). That matters for a tired reader who checks quoted
+evidence, C++ code and compiler errors. Using one family for both UI and code makes the room feel like one tool.
+
+The scale is a minor third (1.2) on a 15 px base, because chat and debrief text are read in long runs.
+
+| Token | Size / line height | Weight | Use |
+|---|---|---|---|
+| `text-meta` | 12 / 16 | 500 | Times next to messages, file paths, small counts |
+| `text-ui` | 13 / 18 | 500 | Buttons, tabs, labels, table cells |
+| `text-body` | 15 / 24 | 400 | Chat, debrief prose, gap text |
+| `text-lead` | 18 / 26 | 600 | Card titles, section headings |
+| `text-title` | 22 / 28 | 650 | Page titles |
+| `text-display` | 32 / 36 | 700 | The room clock, page titles on usage, the verdict word and round title on a phone |
+| `text-mega` | 48 / 52 | 700 | The verdict word, the recommended round title, the progress counts, the total cost |
+
+`font-display` is for the two big headings in the mesh panels: the verdict word and the recommended round's title. It is `ui-rounded` (the system's rounded face, no download, so the CSP is unchanged) and falls
+back to Atkinson at weight 800.
+
+Labels are sentence case. There are no uppercase tracked labels. Prose lines stay under about 70 characters.
+
+### Colour tokens
+
+The accent is **marker ink**: the blue-violet of a whiteboard pen. It marks the primary action, the current
+phase and links. Beyond those it appears only as light: the brand tile, the header hairline, the start of each
+section rule and the canvas glow. Status colours carry meaning only: good for "at the bar" and "passed", warn
+for "behind plan" and "below the bar", bad for "out of time", "failed" and "missing".
+
+The dark theme is a deep slate, not black, so the Excalidraw canvas and the chat panel stay distinct.
+
+The tokens use the shadcn/ui names, so copied components read them as intended. Status colours and the soft
+accent are extensions of that set.
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--background` | `#f3f4f6` | `#100d1c` | Page background, behind the board |
+| `--card` | `#ffffff` | `#1b1e25` | Chat panel, top bar, cards, dialogs |
+| `--popover` | `#ffffff` | `#20232b` | Menus, select lists, popovers |
+| `--muted` / `--secondary` | `#eceef2` | `#242832` | Inputs, code blocks, track rails, quiet buttons |
+| `--sunken` | `#e8ebf1` | `#0c0a17` | Canvas of the reading pages, group fills inside dialogs, the footer of a dialog |
+| `--raised` | `#ffffff` | `#211e33` | Raised panels: the progress panel, the problem list, the verdict, tables |
+| `--hero` | `#1f2780` | `#2a3380` | Fallback fill of the usage page's deep panel |
+| `--hero-gradient` | `#1b2273` → `#2a309f` → `#4630a8` | `#20276a` → `#2e3690` → `#45339a` | The usage page's deep panel, at 125° |
+| `--hero-glow` | `#3a2c9c` at 38% | `#6e64ff` at 32% | The large soft glow under the deep panel |
+| `--mesh-base` | `#2b2170` | `#1d1650` | Base fill under the mesh layers |
+| `--mesh-corner` | `#1a1030` | `#05030c` | The near-black corner, top right |
+| `--mesh-violet` | `#7e4bb8` | `#7a5ad8` | The violet at the left middle |
+| `--mesh-brand` | `#3443c0` | `#3443c0` | The bright tone through the centre |
+| `--mesh-glow-edge` / `-body` | `#ece8ff` / `#a99bf0` | `#b9adff` / `#6f63d8` | The pale glow that rises from the bottom edge |
+| `--mesh-ring` | `#3443c0` at 28% | `#8e9cff` at 18% | The 1 px ring around the panel |
+| `--mesh-shadow` | violet glow, 55% | violet glow, 60% | The soft glow shadow under the panel |
+| `--mesh-tile` / `--mesh-tile-ring` | `#1a1030` at 82% / `#ece8ff` at 20% | `#0c0828` at 80% / `#b9adff` at 22% | The dark glass tile over the glow |
+| `--btn-primary` / `-hover` / `-foreground` | `#3443c0` / `#4150d2` / `#ffffff` | `#4c58d8` / `#5a66e6` / `#ffffff` | The primary button's fill |
+| `--btn-secondary-bg` / `-hover` / `-fg` / `-ring` | `#f3f4f8` / `#e8ebf1` / `#181b22` / `#c5cad4` | `#221c45` / `#2c2558` / `#cfc7ff` / `#352c66` | The secondary button; the ring is its 1 px border |
+| `--amber` / `-foreground` | `#f6c96a` / `#3d2900` | `#f6c96a` / `#3d2900` | The one warm accent: "Start here" and the recommended-round pill. Never a status colour |
+| `--hero-foreground` / `--hero-muted` | `#ffffff` / `#cdd2ff` | `#f2f3ff` / `#c3c9ff` | Text and secondary text on the deep panel |
+| `--hero-accent` / foreground | `#ffffff` / `#1f2780` | `#8e9cff` / `#0e1230` | The chart bars on the usage page's deep panel |
+| `--bar-top` / `--bar-bottom` | `#ffffff` / `#b9b2ff` | `#b3bcff` / `#7c6cf0` | The daily cost bars and the first plan segment |
+| `--glow-1` / `-2` / `-3` | `#dbe1ff` / `#ecdffe` / `#d6eff3` | indigo 22%, violet 15%, teal 9% | The canvas light, each a large radial gradient that fades out |
+| `--primary-top` / `--primary-bottom` | `#4353cf` / `#2d3aae` | `#a9b3ff` / `#7f8df6` | Accent gradients such as the room's pins |
+| `--brand-top` / `--brand-bottom` | `#5664dc` / `#2f3db0` | `#a9b3ff` / `#7f8df6` | The logo tile |
+| `--brand-violet` / `--brand-teal` | `#7c4ddb` / `#0e8fa0` | `#c08ae6` / `#4cc3d1` | The second and third stops of the room's gradient edges, fills and rings |
+| `--step-current-top` / `-bottom` | `#f3f4ff` / `#e1e5fb` | `#2f3667` / `#252b52` | The lit fill of the current step in the step bar |
+| `--bubble-top` / `--bubble-bottom` | `#eff1fe` / `#dfe3fa` | `#2d3462` / `#242a50` | His chat bubbles, at 165° |
+| `--edge-top` / `--edge-bottom` | ink at 5% / 13% | white at 13% / 4% | The hairline of a raised panel, lighter at the top |
+| `--highlight` | white at 90% | white at 7% | The 1 px inner line at the top of panels, pills and buttons |
+| `--band-good` / `-warn` / `-bad` | `#d3eedd` → `#eef8f2`, `#f8e5bb` → `#fdf6e4`, `#f8dad6` → `#fdf1ef` | `#1b3d28` → `#13241a`, `#44330f` → `#2a200c`, `#4a221f` → `#2c1614` | The verdict band, with the status fill at 10% as light from its left edge |
+| `--border-strong` | `#c5cad4` | `#424857` | Rules under section headings, dividers between steps |
+| `--accent` | `#e3e6ec` | `#2b303b` | Hover fill, and the fill of a quiet (secondary) button |
+| `--border` | `#dcdfe5` | `#2e333e` | Hairlines between areas |
+| `--input` | `#78808f` | `#6f7889` | Input borders, control outlines (3:1 or more, also on `--sunken`) |
+| `--foreground` | `#181b22` | `#e8eaf0` | Main text |
+| `--muted-foreground` | `#485060` | `#b1b8c6` | Secondary text |
+| `--faint` | `#5d6575` | `#959eae` | Tertiary text, still AA |
+| `--primary` | `#3443c0` | `#8e9cff` | Primary buttons, current phase, needle |
+| `--primary-foreground` | `#ffffff` | `#0e1230` | Text on the primary colour |
+| `--primary-text` | `#2f3db0` | `#a3afff` | Links, accent text on panels |
+| `--primary-soft` / foreground | `#e8eafb` / `#28349a` | `#262c52` / `#c9d0ff` | Selected rows, the candidate's chat bubbles |
+| `--success` / soft / fill | `#12663a` / `#e1f2e8` / `#1a7b46` | `#6fd69c` / `#16301f` / `#3fae6f` | At the bar, passed, saved |
+| `--warning` / soft / fill | `#7a4a00` / `#fbefd6` / `#b06f06` | `#f2b755` / `#372a10` / `#d99a2b` | Behind plan, below the bar, paused |
+| `--destructive` / soft / fill | `#a3221a` / `#fbe7e5` / `#c0392b` | `#ff9a91` / `#3b1c1a` / `#e5655a` | Out of time, failed, missing |
+| `--ring` | `#3443c0` | `#a3afff` | Focus outline |
+| `--chart-1` to `--chart-5` | | | Usage charts |
+
+Inside a mesh panel (`.on-mesh`) every text and status token takes its dark-theme value in either theme, because the
+panel is dark in both: white text, lilac secondary text, and the bright status colours. A `Badge` or a score on a tile
+therefore reads the same in light and in dark.
+
+The plain status token is the text and icon colour; `-soft` is the tinted fill it sits on; `-fill` is a solid bar,
+dot or button. Excalidraw's toolbar and menus and the Monaco editor take their colours from these tokens, so both
+sit in the room in either theme.
+
+Measured contrast (WCAG 2.2): main text 15.7:1 (light) and 15.1:1 (dark). The faintest text is 5.3:1 and 6.2:1.
+Every status text on its soft fill is above 6:1. Control outlines are 3.4:1 and 3.8:1. On `--sunken`, main text is
+14.4:1 and 15.7:1, secondary text 6.8:1 and 9.5:1, the faintest text 4.9:1 and 7.0:1, and control outlines
+3.3:1 and 4.3:1. Everything meets AA, and most text meets AAA.
+
+Text on a gradient is measured against its darkest and its lightest point:
+
+Every text over a mesh panel, a step tab and an enabled primary or secondary button was measured on rendered pixels:
+the text was hidden, the background under each word was read, and the worst point was compared with the text colour.
+The lowest value is 4.7:1, in both themes, at 1440 and at 375 px. Disabled buttons are exempt.
+
+| Where | Light | Dark |
+|---|---|---|
+| Mesh panel, lowest text over the mesh and its tiles (measured) | 4.9 | 4.7 |
+| White on the bright violet, at its brightest | 5.9 | 4.9 |
+| White on the primary button, rest and hover | 7.7, 6.4 | 5.7, 4.7 |
+| Secondary button label, rest and hover | 15.7, 14.4 | 10.0, 8.8 |
+| Debrief step: current (label on its soft fill), other steps (label on the bar) | 8.6, 8.1 | 8.9, 8.4 |
+| Amber badge label | 8.9 | 8.9 |
+| Canvas at the brightest glow: main, secondary, faintest text | 13.3, 6.3, 4.5 | 11.8, 7.1, 5.2 |
+| Usage deep panel, darkest stop: text, secondary text | 13.8, 9.4 | 12.2, 8.4 |
+| Usage deep panel, lightest stop: text, secondary text | 9.3, 6.3 | 8.7, 6.0 |
+| Pills at the shaded top edge | 5.2 to 7.3 | 6.1 to 7.0 |
+| Large counts, both ends of their gradient | 17.2, 8.7 | 11.8, 6.8 |
+| Room glass header over the canvas light: main, secondary text | 16.4, 7.7 | 13.5, 8.1 |
+| Room work toolbar over the canvas light: secondary, faintest text | 7.3, 5.3 | 7.9, 5.8 |
+| Current step label and time, top and bottom of its fill | 9.4, 8.2 | 7.6, 9.0 |
+| Faintest text on a step chip | 5.7 | 5.2 |
+| His chat bubble text, top and bottom of its gradient | 9.1, 8.1 | 7.8, 9.2 |
+| Room clock digits in their well, both ends of their gradient | 15.2, 7.7 | 15.2, 8.8 |
+| Guide's pin number, top and bottom of its gradient | 6.2, 9.0 | 9.2, 6.1 |
+| Held pin number on its fill, card to soft end | 7.0, 6.1 | 9.4, 8.0 |
+| Gap pin number on its fill, card to soft end | 7.5, 6.3 | 8.2, 7.5 |
+
+### Verdict words
+
+The scorecard stores four verdicts (`strong_hire`, `hire`, `lean_no_hire`, `no_hire`), and the judge keeps those terms.
+The screen never shows them. Every place that shows a verdict reads its words from `src/web/lib/verdict.ts`: the
+debrief header and its step status, the home page's last-attempt badges and the history list.
+
+| Stored value | Label | One-line meaning, shown on the debrief header |
+|---|---|---|
+| `strong_hire` | Strong pass | An interviewer would pass this round with confidence, and you showed more than the bar asks. |
+| `hire` | Pass | An interviewer would likely pass this round. You met the bar. |
+| `lean_no_hire` | Close, not yet | An interviewer would likely not pass this round, but one or two fixes would change that. |
+| `no_hire` | Not yet | An interviewer would not pass this round. Several parts fell below the bar. |
+
+The senior bar uses the same labels. Tones are unchanged: good for both passes, warn for "Close, not yet", bad for "Not yet".
+
+### Space, shape and density
+
+- A 4 px grid. Gaps of 4, 8, 12, 16, 24, 32 and 48 px.
+- Radius follows hierarchy: 8 px for controls, 10 px for hairline cards, 14 px for raised panels, the usage page's
+  deep panel and dialogs, 24 px for the mesh panels, full round only for status pills.
+- **Two densities.** The room is dense, like an IDE: 13 px controls, 40 to 48 px bars. Home and the debrief are
+  for reading: 15 px text, 24 px line height, wide margins, a 720 px reading column.
+- Four surfaces, set by the `variant` of the card. `flat` is a hairline card with a faint shadow and an inner top
+  highlight. `raised` has a hairline that is lighter at the top than at the bottom, an inner top highlight and a
+  fill that darkens a little toward the bottom. It has no
+  heavy edge and a medium shadow (`--elev-md`). `sunken` is a fill with no edge, for a group inside another
+  surface. `mesh` is the three-tone panel described above, with the 1 px ring and the violet glow shadow. `hero` is the usage page's deep panel: its gradient, a 1 px inner highlight at the top, `--elev-lg` and a large soft
+  glow in `--hero-glow` under it. Interactive cards rise 2 px on hover, their shadow grows and their edge takes a
+  little of the brand ink; rows inside a divided list rise 1 px. Menus, popovers and dialogs float on the deepest
+  shadow with an inner top highlight, and a dialog's fill is lit a little from the top.
+- Pills are tinted glass: their own text colour shades the top edge at 10% and draws a 14% rim.
+- Buttons. Primary is flat: `--btn-primary` with a 1 px lighter line along the top and one small shadow, no gradient and
+  no glow. Hover moves the fill to `--btn-primary-hover`. Secondary is a quiet fill (`--btn-secondary-*`) with a 1 px
+  border. Outline keeps its hairline; on hover its edge takes the brand ink. Every button moves down 1 px while it is
+  pressed, except under reduced motion. A focused button shows the focus outline with a soft glow around it. The
+  recommended-round panel uses the same primary and secondary buttons as the rest of the app.
+- Section headings are 22 px bold on a 2 px rule that starts in the brand ink and fades through `--border-strong`
+  to nothing on the right, so the page reads as chapters. The verdict
+  word and the large counts use the 48 px `text-mega` size; on a phone the verdict word and the round title fall
+  back to the 32 px display size.
+- The shell header is translucent glass: the card colour at 80% over a 24 px blur, sticky at the top, with a 1 px
+  gradient hairline (transparent, indigo, violet, transparent) on its bottom edge. The brand mark sits on a tile
+  filled with a gradient from `--brand-top` to `--brand-bottom`.
+
+### Motion
+
+- **The page arrives in one sequence.** On home, debrief and usage the sections fade in and rise 10 px, 400 ms
+  each, in 50 ms steps from the top. Rows in a list follow the same rule inside their section, capped at ten
+  steps so a long list never makes the last row wait. Then meters fill: progress pips, score meters and the cache
+  meter grow from their left edge in 500 ms, in 45 ms steps; the daily cost bars grow from the bottom in 550 ms,
+  in 18 ms steps. The large numbers count up once from zero in 700 to 1100 ms with an ease-out: the progress
+  counts, the debrief scores and the total cost. A later change to a number shows the new value at once.
+- **The next gap's ring** flares once, 1.6 s, as the debrief opens, then stays at a soft level.
+- **The plan needle** moves with the clock. When the phase changes, the current segment's fill slides to the next
+  segment in 200 ms.
+- **Motion that answers an action**: buttons ease colour and shadow in 150 ms and move down 1 px while pressed; cards rise on
+  hover in 180 ms; dialogs fade and scale in from 95% with a 260 ms ease-out over a blurred, dimmed page, and fade
+  out in 150 ms; menus, select lists, popovers and tooltips grow from their trigger; toasts slide in at the bottom
+  left.
+- **Route changes cross-fade** with the View Transitions API: the old page fades out in 160 ms, the new one fades
+  in over 260 ms. Browsers without the API swap pages at once. The room only fades in when it opens, because the
+  board measures its position when it mounts.
+- Loading states are skeletons in the shape of the content, so nothing jumps when the data arrives.
+- **The room is a work surface, so nothing in it moves on its own** except the needle, the typing dots and the
+  spinner. Movement there only answers his own actions or the round's progress: a step chip rises 1 px on hover and
+  presses to 98%; a palette row lights and its swatch grows a little on hover; a step's progress fill grows by scale
+  in 300 ms; a coverage ring redraws in 240 ms after a check; a new message rises in over 200 ms; a pin pops in from
+  half size in 180 ms when it appears, and its note fades and scales in over 150 ms.
+- **The debrief's step rings** start empty and fill once, in 900 ms, when each scrolls into view.
+- Only `transform`, `opacity` and `filter` animate, except the ring and the needle. Enter animations fill backwards
+  only, so they leave no transform behind and fixed and sticky elements keep working. The glass blur sits only on
+  the header bars, the dialog backdrop and the pause cover, never on a scrolling list. The pause cover blurs the
+  board only while the round is paused and the board is inert.
+- Nothing moves on its own except the needle, the typing dots, the spinner and the skeleton shimmer. The mesh
+  gradient is still.
+- With `prefers-reduced-motion`, nothing moves: no entrance, no fill, no count-up, no hover lift, no button
+  movement and no view transition. Every number shows its final value at once and the needle jumps once a second. The gradients stay. Scripted test runs (`?testhooks=1`) also show final numbers at once.
+
+### Components
+
+The primitives live in `src/web/components/ui/` and follow shadcn/ui: Radix-based dialog, alert dialog, dropdown
+menu, select, tabs, tooltip, popover, scroll area, switch, checkbox and collapsible, plus button, badge, card,
+alert, banner, empty state, skeleton, separator, input, textarea, keycap and a segmented control. Cards take a `variant` (`flat`, `raised`, `sunken`, `hero`, `mesh`). The `useCountUp` hook runs the count-up of large numbers. Toasts come from
+Sonner. The Escape that closes a layer never reaches the room's "stop speaking" shortcut. Pressing `?` outside a
+text field, the board or the editor lists every keyboard shortcut.
+
+---
+
+## 4. Information architecture and flows
+
+```
+ Home ──(choose a round)──► Start dialog ──(Start)──► Room ──(End interview / time up)──► Debrief
+  │  ▲                                                 │ ▲                                 │
+  │  └──────────────── Back to home ◄──────────────────┘ │                                 ├─ Gaps ──► Coach chat
+  │                                                      │                                 └─ Study notes ──► Save
+  ├─ Resume strip ──(Resume)─────────────────────────────┘
+  ├─ Resume strip ──(Discard)──► confirm ──► Home
+  ├─ History row ──(Open)──► Room or Debrief
+  └─ Settings dialog
+```
+
+### Start a round
+
+1. Home shows **one recommended round** at the top, with the other due redos beside it.
+2. He presses **Start interview** (or **Guided**) on any problem. A start dialog opens. It shows the problem, the
+   mode, the length from his settings, and the plan track for that length with each phase's goal.
+3. Focus is on the start button. **Enter** starts the round; **Escape** closes the dialog. The dialog shows
+   "Preparing the interviewer…" while the server creates the session.
+
+The dialog adds one key press. It earns it: starting creates a model session and a clock, and the dialog is the
+moment to read the plan before the clock runs. A real round has the same moment.
+
+### During the round
+
+```
+ ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+ │ ← URL Shortener  HLD interview                      27:26 left   1:40 behind   Pause   End   ⋯ │  56 px
+ ├───────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ ◔ Requirements │ ◑ Capacity │ ◔ API │ ◔ High-level design ▌   │ ○ Deep dives      │ ○ Bottleneck …│  48 px
+ ├───────────────────────────────────────────────────────────┬───────────────────────────────────┤
+ │ High-level design. Boxes and arrows, then walk one …      │ ╭ ◔ Checklist · High-level design ╮│
+ │ [Show this step] [Whole board] [Interviewer's view 2]     │ │ ◐ Walk one redirect      Partly ││
+ │ ┌──────┐ ┌ Requirements ┐ ┌ Capacity ┐ ┌ API ─────┐       │ │ ○ Walk one create       Not yet ││
+ │ │ pal  │ │              │ │          │ │          │       │ ╰ Checked at 17:18 ───────────────╯│
+ │ │      │ └──────────────┘ └──────────┘ └──────────┘       │  Interviewer 08:25                │
+ │ │      │ ┌ High-level design ──────────┐ ┌ Deep dives ┐   │  Why a 302 and not a 301?         │
+ │ │      │ │ [LB] → [Service] → [Redis] ①│ │            │   │                    You 09:00 ┌───┐│
+ │ └──────┘ └─────────────────────────────┘ └────────────┘   │                              │...││
+ │                                                           │  [ Reply to the interviewer…  ]  ⏎│
+ └───────────────────────────────────────────────────────────┴───────────────────────────────────┘
+```
+
+- **Plan track.** Segments are drawn to scale by planned minutes, as separate raised chips on the page band. Each
+  segment fills with the time actually spent in it and carries a small coverage ring for its checklist. Time past the
+  plan shows as a striped warn extension. A thin accent needle marks "now" on the plan's scale. Each segment is a
+  button: a click (or Enter) moves to that phase and brings the step's frame into view (the Code tab for an LLD step
+  that is answered in code). The frame also comes into view when the interviewer or guide moves the rail. In a
+  guided round, hover or focus on a segment shows the step's checklist beside its goal, so a step can be read
+  without moving the rail; a timed round shows the goal alone.
+- **The board is the answer sheet.** One board holds a labelled frame per step, so each step's drawing and notes are
+  its answer. "Show this step" and "Whole board" in the work toolbar move the view. In a guided round, the guide's pins
+  sit on the elements they are about; hover or focus shows the note.
+- **Step checklist.** In a guided round, a raised card at the top of the chat column shows how many things the
+  current step covers. Once the step is checked, it lists each item, where it was covered ("Said at 04:12", "On the
+  board") and what is still missing, with a missing requirement shown as the question to ask rather than its answer, and the step bar shows a
+  coverage ring per step. An interview round shows neither: the list is drawn from the hidden brief, and a real
+  interviewer gives no running score. The debrief shows both in every mode.
+- **Behind-plan signal.** When the clock passes the planned end of the current phase, a warn pill next to the
+  timer says "1:40 behind plan". This is the single most useful number for him, and today it does not exist.
+- **Goal line.** The work toolbar says what the current phase must produce, from his own method.
+- **Timer.** Large mono digits. Neutral when on plan, warn under 5 minutes, bad at 0. Guided mode counts up.
+- **End interview** is the only filled bad-tone button in the bar. **Pause** is quiet. Discard stays in the menu.
+
+### Pause, auto-pause and resume
+
+- Any pause covers the work area and the chat with a calm panel: the reason, the time left, and one large
+  **Resume** button that takes focus. A model error shows **Retry** instead. The chat box is disabled, as today.
+- The board and the editor stay mounted under the panel, so nothing reloads on resume.
+- The reason texts stay the same as today, so the meaning does not change: "Paused because the room was closed.
+  Resume when you're ready." and the others.
+
+### End and debrief
+
+1. **End interview** asks for confirmation with today's text. Time up does the same without a click.
+2. While the debrief runs, the page shows the four stages with plain words for each, and the round's plan
+   against actual time, so the wait already teaches something.
+3. When the score is ready, the top of the debrief shows **three steps**: read the score, work the gaps with the
+   coach, save the study notes. Each step shows its state ("2 of 4 gaps taught", "Notes saved").
+
+### Coach and study notes
+
+- The coach chat stays on the right. Each gap card has **Teach me this**. Once the coach has a record for a gap, the
+  card shows a badge: "Sent to the coach", "Started by the coach", "Taught" or "Core idea only, topic session
+  later", the button reads "Ask again", and the step counter reads "n of m worked with the coach". The chat shows a
+  divider line, "Now on: <gap>", where each gap begins.
+- **Draft study notes** sits in the third step, at the top, and in its section at the end. The proposal view keeps
+  every behaviour: grouped by file, a tick box per change, blocked changes disabled with the reason, a diff per
+  file, **Save selected**, the result list, and **Draft again** on a stale draft.
+
+### Resume or discard from home
+
+- When a round is live or paused, a strip at the top of home says "Chat System is paused. Started 30 Sept,
+  20:15." with **Resume** and **Discard**. Discard asks first, with the same text as today.
+
+---
+
+## 5. Changes per screen
+
+### Home
+
+- **Header.** "Interview Room" on a filled brand tile, a one-line progress summary, and Settings. Usage and
+  Settings show only their icons on a phone. Test mode stays as a warn pill.
+- **Resume strip** for each live or paused round, above everything else, on a warm fill with a solid icon.
+- **Progress.** One raised panel with a column per track. Each column shows a large count ("1 of 6"), one pip
+  per problem (done first, then partly done, then not started) and a legend with the last round date. A redo that
+  is due shows as a warn pill in the column header.
+- **Up next.** The recommended round is the mesh panel: an amber "Recommended" (or "Redo") pill, the title at 48 px in
+  the rounded face, the reason, Start interview as the primary key and Guided as the secondary button. The plan, drawn
+  to scale with its phase minutes, sits on a dark glass tile over the glow. Due redos are one line each in a raised
+  panel below it.
+- **Problem lists.** One raised panel with a toolbar (track tabs, status filter, sort) on a muted fill, and
+  one row per problem. A row reads like a table line: tracker mark, title, difficulty, last attempt with its
+  verdict, and the two start buttons. The summary shows as a tooltip on the title. The recommended and the redo
+  row carry a coloured edge and a tint. On a phone the row wraps into three short lines.
+- **Practise any question.** Same fields and limits, below the lists.
+- **History.** One raised panel with a muted header row and an actions column. The table scrolls sideways on a
+  phone.
+- **Start dialog**, described in section 4.
+
+### Room
+
+- **Surfaces.** The room uses the reading pages' finish without their ambient motion. Behind the chrome lies the
+  sunken canvas with two soft lights from the top corners (indigo left, violet right). On it sit the glass top bar,
+  the step band and the work toolbar; raised, lit cards float on them (the step chips, the checklist, pins and their
+  notes). The board, the editor and the chat column stay plain card surfaces, so the work stays quiet.
+- **Top bar** in one 56 px row of glass (the card colour at 80% over a 24 px blur) with the gradient hairline on its
+  bottom edge: back, the title in lead type, a tinted-glass track and mode chip (accent when guided), the timer, the
+  behind-plan pill, Pause, End interview, and the menu. The timer sits in a shallow sunken well; on plan its mono
+  digits shade from the text colour into the brand ink. Under five minutes and at zero it takes the tinted warn and
+  bad fills instead. The behind-plan pill is tinted warn glass with a glowing dot.
+- **Plan track** in one 48 px row of raised chips, lit from above with a hairline lighter at the top. The current step
+  is lit in a soft brand fill with a gradient edge (indigo, violet, teal) and a brand shadow. Each chip's progress
+  bar fills with a gradient (indigo to violet for the current step, the outline grey for the others) and glows
+  softly; time past the plan stays striped warn. In a guided round each chip carries a coverage ring drawn with an
+  indigo-to-violet stroke, or solid green when the step is done. The needle is an indigo-to-violet line with a soft
+  glow.
+- **Work toolbar** is a translucent card strip with an inner top highlight and a hairline under it. It shows the goal
+  line, the LLD tabs (their underline is the indigo-to-violet gradient), and "Show this step", "Whole board" and "What
+  the interviewer sees" as matching outlined buttons; the last one turns soft accent glass while the panel is open and
+  carries a warn count.
+- **Board.** A fresh board starts with one empty frame per step (HLD: Requirements, Capacity, API, High-level design,
+  Deep dives; LLD: Entities and States), and opens on the current step's frame. Pins are numbered circles over the
+  canvas: a brand gradient for a guide's note, outlined green or red for what the judge marked held or a gap, each
+  with a soft glow in its own colour. A pin whose element sits under one of the board's controls (the top toolbar,
+  the menu button, the shape properties panel, zoom, undo and redo, help) is hidden and out of the tab order until the element is scrolled into
+  the open canvas; a note that would open into the controls along the top opens below its pin.
+- **Board palette.** A raised side panel, lit from above. Its rows light up with an inner highlight on hover, the
+  swatch grows a little, and a press scales the row to 98%. The swatches use the app tokens; keyboard order is
+  unchanged.
+- **Editor and console.** Monaco uses the mono cut of the family, after the font loads, so the cursor stays
+  aligned. The attempt path strip and the console are lit from above like a raised panel. The console keeps Run,
+  the error list, jump-to-line and every note.
+- **Step checklist** above the chat, collapsible, with its own scroll area so the chat keeps its height. It is the
+  room's raised card: a lit fill, a hairline lighter at the top, an inner top highlight and the brand hairline along
+  its top edge. Each item's mark is tinted by its state: green and softly glowing when covered, amber when partly
+  covered, muted when missing.
+- **Chat.** The header is lit from above and ends in the gradient hairline; its status dot says "thinking" or
+  "listening" and carries a soft halo in its colour. The interviewer's messages are plain text under a name line
+  with a small indigo-to-violet dot, like a transcript. His own messages are bubbles in a light brand gradient with
+  an inner highlight and a faint brand shadow. System events are small centred lines between two rules that fade
+  out to the sides. The extension is a distinct raised "New requirement" card with a gradient bar on its left edge.
+  "Check this step" and "Hint" are outlined buttons. The composer is a lit field that glows in the brand ink when it
+  has focus; Send is the primary gradient button.
+- **Pause panel**, described in section 4. It covers the work with the dialogs' backdrop (dimmed toward the brand ink
+  and blurred) and scales in like a dialog: from 95% over 260 ms, its fill lit from the top. The icon sits on a
+  tinted-glass disc.
+
+### Debrief
+
+- **Header.** Back, title, track and mode, date, round time, and the status. The date line hides on a phone.
+- **Three steps** under the header: Read the score, Work the gaps, Save study notes, each a jump link. They sit on one
+  row as separate items joined by a thin connector. Each has a small numbered circle, a bold title and a status line.
+  The first open step is marked by a 1 px brand border and a soft brand fill, with a solid brand circle. Finished steps
+  carry a green tick. On a phone only the step titles show and the connectors hide.
+- **Verdict.** One mesh panel. The call sits at the top in 48 px rounded type, white, with a glowing status bar on the
+  left edge in the colour of the call (green for a pass, amber for "Close, not yet", red for "Not yet"). The senior
+  call ("Senior bar"), the confidence and the tracker mark sit beside it, and one plain sentence under the call says
+  what it means (see "Verdict words"). Under it come the summary and a "Work the gaps" primary button that jumps to
+  the gaps. Last, one dark glass tile per dimension (a large score, its word and a four-segment meter) over the glow,
+  each a jump link to the evidence that lifts on hover.
+- **Gaps** follow at once, most serious first. The first gap the coach has no record for is the next action: a
+  raised card tinted with the soft accent and ringed in an indigo-violet-teal gradient, with an amber "Start here"
+  badge, a larger title and a large "Teach me this" button. The other gaps are
+  compact hairline cards. Strengths and the practice task sit below.
+- **Study notes**, **time** (the plan against what happened, with key moments), **usage of this round** and the
+  **step by step** and **evidence** blocks follow as raised panels. In **step by step**, each step is its own raised
+  card: the step's frame sits in a sunken well like paper laid on the card, with the pins at their places; the title
+  carries a tinted-glass pill with the coverage ring and "5 of 6 on the checklist"; "What held" and "What's missing"
+  are headings in the status colour with a tinted mark (a tick, a minus); his notes from the round sit in a sunken
+  fill. Each dimension header carries its score as a
+  tinted tile.
+- **Scenarios** (LLD), **What the judge saw**, **Reference answer** keep their content in raised panels.
+- **Coach.** On a wide screen the coach sits beside the scorecard. Below the md breakpoint it sits under it, so
+  the score stays reachable on a phone.
+
+### Usage
+
+- **Cost panel.** The deep panel holds the total cost at 48 px, the call and round counts, and the daily cost
+  chart for 30 days with bars in a light-to-violet gradient.
+- **Token strip.** One raised panel with input tokens, output tokens and the cache hit rate, with a meter,
+  separated by hairlines.
+- **Tables.** Usage by problem, round, role and model sit in raised panels with a muted header row, under
+  sentence-case section headings.
+
+### Settings
+
+- Same fields. Each group (round length, models and effort, theme, voice, study folder) is a sunken fill with a
+  bold heading and a short help line. The dialog footer is sunken too. The theme still previews live. On a phone
+  the model table shows each role's name on its own line above its two lists.
+
+---
+
+## 6. Labels and hooks that stay frozen
+
+Scripts and tests depend on these, so the revamp keeps them exactly.
+
+- Text "Interview Room" on the home page (`scripts/smoke-ui.mjs`).
+- A button whose text contains "End interview" in the room, and a confirm button whose text is "End interview"
+  (`scripts/e2e/ui-tour.mjs`).
+- Text "What the judge saw", "Strengths" or "Teach me" on the debrief (`ui-tour.mjs`).
+- The room's back link `a[aria-label="Back to home"]`, its leave confirm button "Leave", and Ctrl+M for the
+  microphone (`scripts/e2e/voice-lifecycle.mjs`).
+- The room root keeps `flex h-full`, the room never scrolls as a whole, and no scroller sits inside another
+  (`scripts/e2e/layout-check.mjs`).
+- `window.__irBoard` and `window.__irShell` with `?testhooks=1`, and the `__fixtureLog` in fixture mode.
+- Fixture URL parameters: `fixture`, `theme`, `mode`, `status`, `settings`, `error`, `reason`, `offline`,
+  `timeup`, `stale`, `preparing`.
+
+---
+
+## 7. New dependencies
+
+| Package | Version | Licence | Why it is needed |
+|---|---|---|---|
+| `@fontsource-variable/atkinson-hyperlegible-next` | `5.3.0` | SIL Open Font License 1.1 | The interface typeface. Self-hosted woff2, bundled by Vite, no network request. |
+| `@fontsource-variable/atkinson-hyperlegible-mono` | `5.3.0` | SIL Open Font License 1.1 | The code, clock and graph-text typeface. Same reasons. |
+| `radix-ui` | `1.8.1` | MIT | Accessible dialog, menu, select, tabs, tooltip, popover and form primitives. |
+| `class-variance-authority` | `0.7.1` | Apache 2.0 | Button variants. |
+| `clsx` | `2.1.1` | MIT | Joins class names. |
+| `tailwind-merge` | `3.7.0` | MIT | Merges Tailwind classes; taught the app's type scale. |
+| `sonner` | `2.0.8` | MIT | Toasts. |
+| `tw-animate-css` (dev) | `1.4.0` | MIT | CSS-only enter and exit animations for the Radix layers. |
+
+Every version is pinned exactly. The OFL is not MIT. It is a permissive font licence: free use, bundling and
+redistribution, with the one rule that the font is not sold on its own. The CSP already allows the fonts
+(`font-src 'self' data:`), and only the Latin subset loads, through `unicode-range`. Radix and Sonner set inline
+`style` attributes and Sonner adds one `<style>` element; the CSP allows both (`style-src 'self' 'unsafe-inline'`).
+None of the packages uses `eval` or loads anything from the network.
+
+---
+
+## 8. Needs a server change
+
+One line: the default theme in `DEFAULT_SETTINGS` (`src/shared/types.ts`) is `dark`, so a new install opens dark. A
+`settings.json` that already holds a theme keeps it. The gap badges and the step count read `Session.gapProgress`.
+
+---
+
+## 9. How the revamp is checked
+
+- `npm run typecheck`, `npm test` and `npx vite build` pass, and so do `scripts/e2e/ws-fake-round.mjs`,
+  `layout-check.mjs`, `voice-lifecycle.mjs` and `ui-tour.mjs`, each with its own `PORT`.
+- Screenshots of the main pages in `docs/screens/`, plus a live run of this version.
+- An accessibility pass: contrast AA in both themes, focus order on every screen, labels on every control, the
+  timer and chat announcements unchanged, and reduced motion respected.

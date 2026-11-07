@@ -1,0 +1,21 @@
+In file included from /tmp/ir-fixtures/header_error.cpp:1:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:582:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/operations.h:358:16:{358:12-358:15}{358:18-358:21}: error: invalid operands to binary expression ('const Key' and 'const Key')
+  358 |      return __x < __y;
+      |             ~~~ ^ ~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:643:12: note: in instantiation of member function 'std::less<Key>::operator()' requested here
+  643 |      return static_cast<const _Compare&>(*this)(__x, __y.__get_value().first);
+      |             ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__tree:1687:11: note: in instantiation of member function 'std::__map_value_compare<Key, std::__value_type<Key, int>, std::less<Key>>::operator()' requested here
+ 1687 |        if (value_comp()(__v, __nd->__value_)) {
+      |            ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__tree:1782:34: note: in instantiation of function template specialization 'std::__tree<std::__value_type<Key, int>, std::__map_value_compare<Key, std::__value_type<Key, int>, std::less<Key>>, std::allocator<std::__value_type<Key, int>>>::__find_equal<Key>' requested here
+ 1782 |    __node_base_pointer& __child = __find_equal(__parent, __k);
+      |                                   ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map:1519:8: note: in instantiation of function template specialization 'std::__tree<std::__value_type<Key, int>, std::__map_value_compare<Key, std::__value_type<Key, int>, std::less<Key>>, std::allocator<std::__value_type<Key, int>>>::__emplace_unique_key_args<Key, const std::piecewise_construct_t &, std::tuple<const Key &>, std::tuple<>>' requested here
+ 1519 |        .__emplace_unique_key_args(__k, std::piecewise_construct, std::forward_as_tuple(__k), std::forward_as_tuple())
+      |         ^
+/tmp/ir-fixtures/header_error.cpp:10:4: note: in instantiation of member function 'std::map<Key, int>::operator[]' requested here
+   10 |    m[k] = 2;
+      |     ^
+1 error generated.
