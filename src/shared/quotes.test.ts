@@ -144,3 +144,24 @@ describe("checkQuotes", () => {
     expect(result!.verified).toBe(false);
   });
 });
+
+describe("word boundaries", () => {
+  it("does not match part of a word", () => {
+    expect(verify("ache")).toBe(false);
+    expect(verify("add a cach")).toBe(false);
+    expect(verify("hot key")).toBe(false);
+  });
+
+  it("matches whole words, a later whole-word hit, and quotes that start or end on punctuation", () => {
+    expect(verify("add a cache")).toBe(true);
+    expect(verify("the hot keys")).toBe(true);
+    expect(verify("the cache ... hot keys")).toBe(true);
+    expect(verify("lock_guard<std::mutex>", "code")).toBe(true);
+    expect(verify("mutex> g", "code")).toBe(true);
+  });
+
+  it("finds a whole-word hit after an embedded one", () => {
+    const [r] = checkQuotes(card([{ id: "d", quotes: [{ quote: "cat", source: "candidate" }] }]), { ...sources, candidate: "concatenate the cat" });
+    expect(r!.verified).toBe(true);
+  });
+});
