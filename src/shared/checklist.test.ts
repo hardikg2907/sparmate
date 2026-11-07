@@ -150,8 +150,8 @@ describe("deriveChecklist", () => {
     expect(labels).toContain("insertMoney(d)");
     expect(labels).toContain("restock(...)");
     expect(labels).toContain("loadMoney(...)");
-    expect(labels.some((l) => l.includes("move the order's pieces INTO the stock"))).toBe(true);
-    expect(labels.some((l) => l.includes("makeChange(paid - price) from the stock"))).toBe(true);
+    expect(labels).toContain("The completion check, in this order");
+    expect(labels.some((l) => l.includes("INTO the stock") || l.includes("3a") || l.includes("->"))).toBe(false);
     expect(labels.some((l) => l.includes("What does your win check cost"))).toBe(false);
   });
 
@@ -242,5 +242,108 @@ describe("deriveChecklist with questions", () => {
     const start = Date.now();
     deriveChecklist("hld", { "Expected requirements": `1. ${"*Ask: ".repeat(200_000)}` });
     expect(Date.now() - start).toBeLessThan(500);
+  });
+});
+
+const behaviourLabels = (text: string) =>
+  deriveChecklist("lld", { ...LLD_BRIEF, "Behaviour and states": text }).behaviour?.map((i) => i.label) ?? [];
+
+describe("behaviour items", () => {
+  it("keeps one item per method when a table row, a bullet and a bare name repeat it", () => {
+    const labels = behaviourLabels(
+      [
+        "```",
+        " cancel()        | nothing | return the pieces",
+        " makeChange(amount) | a | b",
+        "```",
+        "- `cancel`",
+        "- `makeChange(paid - price)` from the stock",
+        "- `MakeChange`",
+      ].join("\n"),
+    );
+    expect(labels.filter((l) => /^cancel\b/i.test(l))).toHaveLength(1);
+    expect(labels.filter((l) => /^makeChange/i.test(l))).toEqual(["makeChange(paid - price)"]);
+    expect(labels).toContain("cancel()");
+  });
+
+  it("states a bare method name as a sentence so the label says what it does", () => {
+    const labels = behaviourLabels("- `makeChange` walks the stock from the largest piece down. It writes the stock last.");
+    expect(labels).toEqual(["makeChange walks the stock from the largest piece down"]);
+  });
+
+  it("turns a numbered procedure inside a code block into one item named by the sentence before the block", () => {
+    const labels = behaviourLabels(
+      [
+        "The completion check, in this order:",
+        "",
+        "```",
+        " paid < price ?   -> wait",
+        " 1. move the order's pieces INTO the stock",
+        " 2. makeChange(paid - price) from the stock",
+        " 3a. success -> quantity--, dispense, return the change",
+        " 3b. failure -> take the pieces back OUT of the stock, return them, NO_EXACT_CHANGE",
+        " drop the order, state = IDLE",
+        "```",
+        "- Greedy fails on some stock mixes.",
+      ].join("\n"),
+    );
+    expect(labels).toEqual(["The completion check, in this order", "Greedy fails on some stock mixes"]);
+  });
+
+  it("names a numbered procedure by the heading above it and keeps lists apart", () => {
+    const labels = behaviourLabels(
+      ["### Booking flow", "1. hold the seats", "2. take payment", "", "- `release(booking)` frees them.", "", "Cleanup:", "1. drop the hold", "2. free the seats"].join("\n"),
+    );
+    expect(labels).toEqual(["Booking flow", "release(booking)", "Cleanup"]);
+  });
+
+  it("still reads a single numbered line as its own item", () => {
+    expect(behaviourLabels("1. `reset()` clears the board.")).toEqual(["reset()"]);
+  });
+
+  it("names an unnamed procedure by its steps so it is never empty", () => {
+    const labels = behaviourLabels(["1. validate the input", "2. write the row"].join("\n"));
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatch(/^Steps in order: validate the input/);
+  });
+});
+
+describe("label cuts and limits", () => {
+  it("drops a long shape to the words before its colon rather than cutting inside the braces", () => {
+    const shape = `A post: \`{ ${"field, ".repeat(40)}}\`. More text.`;
+    const list = deriveChecklist("hld", { ...HLD_BRIEF, "API and entities": `External API:\n- ${shape}` });
+    expect(list.api?.[0]?.label).toBe("A post");
+  });
+
+  it("names a long event by its name instead of cutting its field list", () => {
+    const event = `\`fetched { ${"field, ".repeat(40)}}\` is published for every fetch.`;
+    const list = deriveChecklist("hld", { ...HLD_BRIEF, "API and entities": `Event contracts:\n- ${event}` });
+    expect(list.api?.[0]?.label).toBe("fetched");
+  });
+
+  it("groups entity names into one item when the API step is over its limit", () => {
+    const endpoints = Array.from({ length: 10 }, (_, i) => `- \`GET /r${i}\` returns it.`);
+    const entities = ["Alpha", "Beta", "Gamma", "Delta"].map((n) => `- \`${n} { id }\``);
+    const list = deriveChecklist("hld", { ...HLD_BRIEF, "API and entities": ["External API:", ...endpoints, "", "Core entities:", ...entities].join("\n") });
+    const labels = list.api?.map((i) => i.label) ?? [];
+    expect(labels.length).toBeLessThanOrEqual(12);
+    expect(labels).toContain("Entities: Alpha, Beta, Gamma, Delta");
+    expect(labels.filter((l) => l.startsWith("GET")).length).toBe(10);
+  });
+
+  it("folds items past the limit into one last item instead of dropping them", () => {
+    const caps = Array.from({ length: 14 }, (_, i) => `- **Item${i + 1}:** x.`).join("\n");
+    const labels = deriveChecklist("hld", { ...HLD_BRIEF, "Capacity math": caps }).capacity?.map((i) => i.label) ?? [];
+    expect(labels).toHaveLength(12);
+    expect(labels[11]).toBe("Also: Item12; Item13; Item14");
+    expect(labels[10]).toBe("Item11");
+  });
+
+  it("joins a bare continuation scenario title with its next sentence", () => {
+    const list = deriveChecklist("lld", {
+      ...LLD_BRIEF,
+      "Demo scenarios": ["1. First run. Details.", "2. Continues 1. `go(2)` returns id 2. More."].join("\n"),
+    });
+    expect(list.fill_out?.map((i) => i.label)).toEqual(["Demo: Continues 1: go(2) returns id 2"]);
   });
 });

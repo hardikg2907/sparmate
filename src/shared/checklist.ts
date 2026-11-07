@@ -57,6 +57,11 @@ export function plainLabel(markdown: string, max: number = MAX_LABEL): string {
   }
 
   const cutIndex = clauseCut > 40 ? clauseCut : (spaceCut > 40 ? spaceCut : (anyCut > 0 ? anyCut : max - 1));
+  // A long shape after a short name ("A post: { ... }") has no readable cut, so the name alone is the label.
+  const colon = text.indexOf(":");
+  if (cutIndex <= 40 && colon >= 3 && colon <= 60) {
+    return text.slice(0, colon).replace(/`([^`]*)`/g, "$1").trim();
+  }
   const cut = text.slice(0, cutIndex).replace(/`([^`]*)`/g, "$1").replace(/[.,;:\s]+$/, "");
   return `${cut}…`;
 }
@@ -167,9 +172,7 @@ function apiItems(section: string | undefined): string[] {
         if (match[1]) set.add(match[1]);
       }
       for (const ent of set) {
-        if (!rawEntities.includes(`Entity ${ent}`)) {
-          rawEntities.push(`Entity ${ent}`);
-        }
+        if (!rawEntities.includes(ent)) rawEntities.push(ent);
       }
       continue;
     }
@@ -210,24 +213,48 @@ function apiItems(section: string | undefined): string[] {
     }
 
     const lead = codeLead(bullet);
-    rawApi.push(lead !== null ? lead.replace(/\s+with\s.*$/, "") : firstSentence(bullet));
+    if (lead === null) {
+      rawApi.push(firstSentence(bullet));
+      continue;
+    }
+    const trimmedLead = lead.replace(/\s+with\s.*$/, "");
+    // A field list longer than a label cannot be cut cleanly, so the event keeps its name only.
+    const eventName = /^([A-Za-z_][\w-]*)\s*\{/.exec(trimmedLead)?.[1];
+    rawApi.push(trimmedLead.length > MAX_LABEL && eventName ? eventName : trimmedLead);
   }
 
-  // Combining related messages under the channel maintains coverage without exceeding the display limit.
-  const total = rawApi.length + messageGroups.length + rawEntities.length;
-  if (total > MAX_ITEMS) {
+  const mergeGroups = () => {
     const mergedMap = new Map<string, string[]>();
     for (const g of messageGroups) {
       const existing = mergedMap.get(g.prefix) ?? [];
       existing.push(...g.messages);
       mergedMap.set(g.prefix, existing);
     }
-    const mergedItems = [...mergedMap.entries()].map(([p, msgs]) => `${p}: ${[...new Set(msgs)].join(", ")}`);
-    return [...rawApi, ...mergedItems, ...rawEntities];
-  } else {
-    const groupItems = messageGroups.map((g) => `${g.prefix}: ${g.messages.join(", ")}`);
-    return [...rawApi, ...groupItems, ...rawEntities];
+    return [...mergedMap.entries()].map(([p, msgs]) => `${p}: ${[...new Set(msgs)].join(", ")}`);
+  };
+  const plainGroups = () => messageGroups.map((g) => `${g.prefix}: ${g.messages.join(", ")}`);
+  const entityItems = rawEntities.map((e) => `Entity ${e}`);
+
+  // Combining related messages under the channel maintains coverage without exceeding the display limit.
+  let groupItems = plainGroups();
+  if (rawApi.length + groupItems.length + entityItems.length <= MAX_ITEMS) return [...rawApi, ...groupItems, ...entityItems];
+  groupItems = mergeGroups();
+  if (rawApi.length + groupItems.length + entityItems.length <= MAX_ITEMS) return [...rawApi, ...groupItems, ...entityItems];
+
+  // Still over the limit: entity names share items, so none is dropped.
+  const chunks: string[] = [];
+  let current = "";
+  for (const name of rawEntities) {
+    const next = current === "" ? `Entities: ${name}` : `${current}, ${name}`;
+    if (current !== "" && next.length > MAX_LABEL) {
+      chunks.push(current);
+      current = `Entities: ${name}`;
+    } else {
+      current = next;
+    }
   }
+  if (current !== "") chunks.push(current);
+  return [...rawApi, ...groupItems, ...chunks];
 }
 
 function walks(section: string | undefined): string[] {
@@ -268,12 +295,32 @@ function requirementItems(section: string | undefined): { text: string; ask?: st
   return numbered(section).map(splitAsk);
 }
 
+const NUMBERED = /^\s*\d+[a-z]?\.\s+(.+)$/;
+
+/** A procedure's name: the heading above its list, else the sentence before it (above the code block that holds it). */
+function procedureName(all: string[], listStart: number, fenceStart: number | null): string | null {
+  let i = (fenceStart ?? listStart) - 1;
+  while (i >= 0 && all[i]!.trim() === "") i--;
+  const above = i >= 0 ? all[i]!.trim() : "";
+  const text = above.replace(/^#+\s+/, "");
+  if (text === "" || text.startsWith("```") || text.startsWith("- ") || text.includes("|") || NUMBERED.test(above)) return null;
+  const label = plainLabel(text);
+  return label === "" ? null : label;
+}
+
 function behaviourItems(section: string | undefined): string[] {
   const out: string[] = [];
+  const all = lines(section);
   let skippingQuestions = false;
+  let fenceStart: number | null = null;
 
-  for (const line of lines(section)) {
+  for (let idx = 0; idx < all.length; idx++) {
+    const line = all[idx]!;
     const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      fenceStart = fenceStart === null ? idx : null;
+      continue;
+    }
     if (/^#+\s+/i.test(trimmed)) {
       skippingQuestions = /questions to ask/i.test(trimmed);
       continue;
@@ -295,16 +342,35 @@ function behaviourItems(section: string | undefined): string[] {
       }
     }
 
-    const mNum = /^\s*\d+[a-z]?\.\s+(.+)$/.exec(line);
+    const mNum = NUMBERED.exec(line);
     if (mNum?.[1]) {
-      const clean = mNum[1].replace(/\s*<-.*$/, "").trim();
-      out.push(codeLead(clean) ?? firstSentence(clean));
+      // Steps of one procedure are not checks on their own, so a run of two or more becomes one item.
+      const steps: string[] = [];
+      let end = idx;
+      for (let j = idx; j < all.length; j++) {
+        const step = NUMBERED.exec(all[j]!);
+        if (step?.[1]) {
+          steps.push(step[1]);
+          end = j;
+        } else if (all[j]!.trim() !== "") break;
+      }
+      if (steps.length < 2) {
+        const clean = mNum[1].replace(/\s*<-.*$/, "").trim();
+        out.push(codeLead(clean) ?? firstSentence(clean));
+        continue;
+      }
+      const name = procedureName(all, idx, fenceStart);
+      const stepLabels = steps.map((st) => firstSentence(st.replace(/\s*<-.*$/, "").trim()));
+      out.push(name ?? plainLabel(`Steps in order: ${stepLabels.join("; ")}`));
+      idx = end;
       continue;
     }
 
     const mBullet = /^- (.+)$/.exec(line);
     if (mBullet?.[1]) {
-      out.push(codeLead(mBullet[1]) ?? firstSentence(mBullet[1]));
+      // A bare method name says nothing alone, so the sentence it opens is the label.
+      const lead = codeLead(mBullet[1]);
+      out.push(lead !== null && !/^[A-Za-z_][\w:]*$/.test(lead) ? lead : firstSentence(mBullet[1]));
     }
   }
 
@@ -320,8 +386,10 @@ function demoScenarios(section: string | undefined): string[] {
     if (mBold?.[1]) {
       title = mBold[1].replace(/[.:]+$/, "");
     } else {
-      const mDot = /^([^.]+?)\.(?:\s|$)/.exec(s.trim());
-      title = mDot?.[1] ?? s;
+      title = firstSentence(s.trim());
+      // "Continues 2" alone names nothing, so the next sentence completes it.
+      const cont = /^(Continues \d+)\.\s+(.+)$/i.exec(s.trim());
+      if (cont?.[1] && cont[2]) title = `${cont[1]}: ${firstSentence(cont[2])}`;
     }
     const clean = plainLabel(title);
     const base = `Demo: ${clean}`;
@@ -329,6 +397,36 @@ function demoScenarios(section: string | undefined): string[] {
     seen.set(base, count + 1);
     return count > 0 ? `${base} (${count + 1})` : base;
   });
+}
+
+/** Method name without arguments or trailing words, case-folded, so "cancel", "cancel()" and "Cancel() now" match. */
+function itemKey(label: string): string {
+  const method = /^([A-Za-z_][\w:]*)\s*\(/.exec(label);
+  return (method?.[1] ?? label).toLowerCase();
+}
+
+/** One item per key, in first-seen order, keeping the longer label. */
+function dedupe(labels: string[]): string[] {
+  const at = new Map<string, number>();
+  const out: string[] = [];
+  for (const label of labels) {
+    const key = itemKey(label);
+    const i = at.get(key);
+    if (i === undefined) {
+      at.set(key, out.length);
+      out.push(label);
+    } else if (label.length > out[i]!.length) {
+      out[i] = label;
+    }
+  }
+  return out;
+}
+
+/** Items past the limit share the last slot, so none is dropped. */
+function fitToLimit(labels: string[]): string[] {
+  if (labels.length <= MAX_ITEMS) return labels;
+  const tail = labels.slice(MAX_ITEMS - 1);
+  return [...labels.slice(0, MAX_ITEMS - 1), plainLabel(`Also: ${tail.join("; ")}`)];
 }
 
 /**
@@ -366,7 +464,7 @@ export function deriveChecklist(track: Track, sections: Sections): Record<string
   const asking = track === "hld" ? "requirements" : "clarify";
   const out: Record<string, ChecklistItem[]> = {};
   for (const phase of phasesFor(track)) {
-    const labels = [...new Set((raw[phase.id] ?? []).map((l) => plainLabel(l)).filter((l) => l !== ""))].slice(0, MAX_ITEMS);
+    const labels = fitToLimit(dedupe((raw[phase.id] ?? []).map((l) => plainLabel(l)).filter((l) => l !== "")));
     const chosen = labels.length > 0 ? labels : [plainLabel(phase.goal)];
     out[phase.id] = chosen.map((label, i) => {
       const ask = phase.id === asking ? askFor.get(label) : undefined;

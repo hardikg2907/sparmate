@@ -79,7 +79,7 @@ Live connection (one WebSocket per phone):
 - Server to driver: `offer { offerId, rideId, pickup, etaSeconds, expiresAt }`, and `gone` when an accept loses.
 - Server to rider: `status { rideId, status }` and `driverLocation { lat, lon, etaSeconds }`.
 
-ETA service (external): `etaBatch([{ from, to }, ...])` takes up to 10 pairs and returns seconds for each.
+- ETA service (external): `etaBatch([{ from, to }, ...])` takes up to 10 pairs and returns seconds for each.
 
 Core entities:
 - `Ride { rideId (primary key), riderId, requestKey, city, pickup, dropoff, status, driverId?, matchDeadline, timestamps }`. `requestKey` is the idempotency key, unique per rider. `matchDeadline` is the end of the current 2-minute window, and a driver cancel resets it. Two partial unique indexes: one active ride per rider (`riderId` while REQUESTED, ASSIGNED, ARRIVED or IN_PROGRESS) and one per driver (`driverId` while ASSIGNED, ARRIVED or IN_PROGRESS).
