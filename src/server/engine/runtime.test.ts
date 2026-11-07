@@ -1424,3 +1424,28 @@ describe("saving study notes", () => {
     rt.dispose();
   });
 });
+
+describe("step quotes in the debrief", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("fails a step quote that was said only in another step", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "phase.set", phase: "capacity" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Reads outnumber writes by a hundred to one here." }, t.peer);
+    await rt.handle({ type: "session.end" }, t.peer);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(session.status).toBe("debriefed");
+    });
+    // The fake judge quotes his only line under the first step, but he said it in the capacity step.
+    const first = session.scorecard?.steps?.[0]?.phase;
+    expect(first).toBe("requirements");
+    expect(session.scorecard?.stepQuoteChecks?.filter((c) => c.phase === first).map((c) => c.verified)).toEqual([false]);
+    rt.dispose();
+  });
+});

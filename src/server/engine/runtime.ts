@@ -43,6 +43,7 @@ import {
   judgeMessage,
   lintCard,
   phaseTiming,
+  stepSources,
   type JudgeInput,
   type JudgedCard,
   type QuoteCheck,
@@ -727,6 +728,18 @@ export class SessionRuntime {
       this.checkRuns.set(phase, run);
     }
     return run;
+  }
+
+  /** The board text of each step's frame, as the checker reads it; a board with no step frames gives none, so steps read the whole board. */
+  private stepBoardText(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const p of this.phases) {
+      const frameStep = evidenceStepFor(this.session.track, p.id);
+      if (frameStep === null) continue;
+      const frame = frameEvidence(this.boardElements, frameStep);
+      if (frame.frameId) out[p.id] = frame.text;
+    }
+    return out;
   }
 
   /** What the checker reads for a step: its chat, its frame on the board, and the code in a machine-coding round. */
@@ -1804,13 +1817,16 @@ export class SessionRuntime {
 
       this.progress("checking", "Checking the evidence quotes");
       const sources = { candidate: candidateText(s), board: s.board.graphText, code: finalCode ?? "" };
+      const emptySources = { candidate: "", board: "", code: "" };
+      const bySteps = stepSources(s, finalCode, { endMs: this.roundNow(), stepBoard: this.stepBoardText() });
+      const stepSourcesFor = (phase: string) => bySteps[phase] ?? emptySources;
       let checks = this.safeCheckQuotes(card, sources);
-      let stepChecks = this.safeCheckStepQuotes(card, sources);
+      let stepChecks = this.safeCheckStepQuotes(card, stepSourcesFor);
       if (failedRatio(checks, stepChecks) > 0.3) {
         try {
           const second = await this.runJudge(input, image, failedQuoteNote(card, checks, stepChecks), tester, 1);
           const secondChecks = this.safeCheckQuotes(second.card, sources);
-          const secondStepChecks = this.safeCheckStepQuotes(second.card, sources);
+          const secondStepChecks = this.safeCheckStepQuotes(second.card, stepSourcesFor);
           if (failedRatio(secondChecks, secondStepChecks) < failedRatio(checks, stepChecks)) {
             card = second.card;
             pins = second.pins;
@@ -1956,7 +1972,7 @@ export class SessionRuntime {
     }
   }
 
-  private safeCheckStepQuotes(card: JudgedCard, sources: { candidate: string; board: string; code: string }): StepQuoteCheck[] {
+  private safeCheckStepQuotes(card: JudgedCard, sources: (phase: string) => { candidate: string; board: string; code: string }): StepQuoteCheck[] {
     try {
       return checkStepQuotes(card, sources);
     } catch (err) {
