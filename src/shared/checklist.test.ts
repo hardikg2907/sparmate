@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HLD_PHASES, LLD_PHASES } from "./phases";
-import { deriveChecklist, plainLabel } from "./checklist";
+import { deriveChecklist, firstSentence, plainLabel } from "./checklist";
 
 const HLD_BRIEF = {
   "Expected requirements": "1. Create a short link\n2. Redirect adds under 50 ms at p99\n3. Links expire",
@@ -54,8 +54,134 @@ describe("deriveChecklist", () => {
   it("strips Markdown and cuts long labels at a word", () => {
     expect(plainLabel("**Writes:** `POST /x` and [a link](https://example.com).")).toBe("Writes: POST /x and a link");
     const long = plainLabel("word ".repeat(40));
-    expect(long.length).toBeLessThanOrEqual(90);
+    expect(long.length).toBeLessThanOrEqual(140);
     expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("does not split first sentence on question mark inside code spans or unclosed braces", () => {
+    const s = firstSentence("Driver to server: `location { lat, lon, ts, rideId? }` every 4 seconds. More details follow.");
+    expect(s).toBe("Driver to server: location { lat, lon, ts, rideId? } every 4 seconds");
+
+    const list = deriveChecklist("hld", {
+      ...HLD_BRIEF,
+      "API and entities": [
+        "External API:",
+        "- `POST /seeds` with URLs.",
+        "- `fetched { url, etag? }` is published for every fetch. The indexer reads the events.",
+        "",
+        "Core entities:",
+        "- `Host { hostId }` is stored.",
+      ].join("\n"),
+    });
+    const labels = list.api?.map((i) => i.label) ?? [];
+    expect(labels.some((l) => l.includes("etag?"))).toBe(true);
+    expect(labels.some((l) => l.endsWith("{") || l.endsWith("etag?"))).toBe(false);
+  });
+
+  it("cuts long labels at a natural clause boundary without cutting inside brackets or code spans", () => {
+    const markdown = "Redirect replies name the right node: MOVED node when ownership changed for good (update routes on client), ASK node during a migration (one-off fetch, do not update routes).";
+    const label = plainLabel(markdown);
+    expect(label.endsWith("…")).toBe(true);
+    expect(label).not.toMatch(/\([^)]*…/);
+    expect(label).not.toMatch(/\{[^}]*…/);
+    expect(label).toBe("Redirect replies name the right node: MOVED node when ownership changed for good (update routes on client)…");
+  });
+
+  it("extracts multiple endpoints and groups related messages within the item cap", () => {
+    const list = deriveChecklist("hld", {
+      ...HLD_BRIEF,
+      "API and entities": [
+        "External API:",
+        "- `POST /conversations` with members.",
+        "- `POST /conversations/{id}/members` and `DELETE /conversations/{id}/members/{userId}` (admins) return 204.",
+        "- `GET /conversations/{id}/messages?beforeSeq=&limit=50` returns messages.",
+        "- `PUT /me/push-token` registers device.",
+        "",
+        "Live connection:",
+        "- Phone to server: `send { clientMsgId, conversationId, body }`. Reply: `sent`.",
+        "- Phone to server: `ack { conversationId, seq }` (phone holds up to `seq`), `read { conversationId, seq }`, `watch { userId }` and `unwatch { userId }`, and `ping` every 30 seconds.",
+        "- Server to phone: `message { id }`, `receipt { seq }`, `presence { online }`.",
+        "",
+        "Core entities:",
+        "- `Conversation { conversationId }`",
+        "- `Member { conversationId, userId }`",
+        "- `Message { conversationId, seq }`",
+        "- `Inbox { userId, conversationId }`",
+        "- `SentLog { senderId, clientMsgId }`",
+      ].join("\n"),
+    });
+    const labels = list.api?.map((i) => i.label) ?? [];
+    expect(labels).toContain("POST /conversations/{id}/members");
+    expect(labels).toContain("DELETE /conversations/{id}/members/{userId}");
+    expect(labels.some((l) => l.includes("read") && l.includes("watch") && l.includes("unwatch"))).toBe(true);
+    expect(labels).toContain("Entity SentLog");
+    expect(labels.length).toBeLessThanOrEqual(12);
+  });
+
+  it("reads table rows and numbered lists in behaviour while ignoring interviewer questions", () => {
+    const list = deriveChecklist("lld", {
+      ...LLD_BRIEF,
+      "Behaviour and states": [
+        "A machine has two states.",
+        "```",
+        " method          | IDLE | SLOT_SELECTED",
+        " ----------------|------|-----------------------------------------",
+        " selectSlot(id)  | bad  | same",
+        " insertMoney(d)  | none | check",
+        " restock(...)    | ok   | busy",
+        " loadMoney(...)  | ok   | busy",
+        "```",
+        "",
+        "The completion check, in this order:",
+        "1. move the order's pieces INTO the stock",
+        "2. makeChange(paid - price) from the stock",
+        "3a. success -> quantity--, dispense, return the change",
+        "3b. failure -> take the pieces back OUT of the stock, return them, NO_EXACT_CHANGE",
+        "",
+        "- `makeChange` walks the stock.",
+        "",
+        "Questions to ask once the code runs:",
+        "- \"What does your win check cost on a 1,000 by 1,000 board with K = 5?\"",
+        "- \"What happens if K is 4 on a 5 by 5 board?\"",
+      ].join("\n"),
+    });
+    const labels = list.behaviour?.map((i) => i.label) ?? [];
+    expect(labels).toContain("selectSlot(id)");
+    expect(labels).toContain("insertMoney(d)");
+    expect(labels).toContain("restock(...)");
+    expect(labels).toContain("loadMoney(...)");
+    expect(labels.some((l) => l.includes("move the order's pieces INTO the stock"))).toBe(true);
+    expect(labels.some((l) => l.includes("makeChange(paid - price) from the stock"))).toBe(true);
+    expect(labels.some((l) => l.includes("What does your win check cost"))).toBe(false);
+  });
+
+  it("extracts all entity names sharing a single bullet", () => {
+    const list = deriveChecklist("lld", {
+      ...LLD_BRIEF,
+      "Entities and relationships": [
+        "- `SeatCategory` (enum class): REGULAR, PREMIUM.",
+        "- `City`, `Theatre`, `Screen`, `Movie`: plain data linked by ids.",
+        "- `Show`: movie id.",
+        "- Not stored: free-seat lists.",
+      ].join("\n"),
+    });
+    const labels = list.entities?.map((i) => i.label) ?? [];
+    expect(labels).toEqual(["SeatCategory", "City", "Theatre", "Screen", "Movie", "Show"]);
+  });
+
+  it("uses scenario titles for demo labels and preserves uniqueness across identical titles", () => {
+    const list = deriveChecklist("lld", {
+      ...LLD_BRIEF,
+      "Demo scenarios": [
+        "1. **Ride, with a tie.** Press hall call (5, UP). All three cars are 5 floors away, so pick car 1.",
+        "2. **Ride, with a tie.** A duplicate scenario title with different description.",
+        "3. A plain scenario title without bold. Second sentence explaining the scenario.",
+      ].join("\n"),
+    });
+    const thin = list.thin_slice?.map((i) => i.label) ?? [];
+    const fill = list.fill_out?.map((i) => i.label) ?? [];
+    expect(thin).toEqual(["Demo: Ride, with a tie"]);
+    expect(fill).toEqual(["Demo: Ride, with a tie (2)", "Demo: A plain scenario title without bold"]);
   });
 });
 
