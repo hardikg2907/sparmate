@@ -90,6 +90,8 @@ export type ServerMsg =
   | { type: "notes.changed"; phase: string; text: string; version: number }
   | { type: "board.graph"; version: number; graphText: string; warnings: string[] }
   | { type: "code.external"; version: number; content: string }
+  /** The server dropped a `code.update` that was not newer than its text; `held` is the version it holds. */
+  | { type: "code.rejected"; version: number; held: number }
   | { type: "code.diagnostics"; version: number; diagnostics: CompileDiagnostic[] }
   | { type: "code.run.result"; result: RunResult }
   | { type: "debrief.progress"; stage: "collecting" | "testing" | "judging" | "checking" | "done"; detail?: string }

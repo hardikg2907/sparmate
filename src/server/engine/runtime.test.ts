@@ -1281,6 +1281,54 @@ describe("freezing the work at the end", () => {
   });
 });
 
+describe("a stale code update", () => {
+  const ATTEMPT = "lld/parking-lot/attempt-2026-10-30.cpp";
+  const HEADER = "// Parking Lot attempt, 2026-10-30\n";
+  let root = "";
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    root = await mkdtemp(join(tmpdir(), "ir-stale-"));
+    await mkdir(join(root, "lld", "parking-lot"), { recursive: true });
+    await writeFile(join(root, ATTEMPT), HEADER);
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("is refused out loud to the peer that sent it, and keeps the server's text", async () => {
+    const file = join(APP_ROOT, "content", "problems", "lld", "b3-parking-lot.md");
+    const problem = parseProblem(await readFile(file, "utf8"), file, false);
+    const session: Session = {
+      ...newSession("interview"),
+      id: "20261030-1000-b3-parking-lot-abcd",
+      problemId: "b3-parking-lot",
+      title: "Parking Lot",
+      track: "lld",
+      durationMs: 90 * MIN,
+      phase: "clarify",
+      phaseHistory: [{ phase: "clarify", at: 0, by: "candidate" }],
+      code: { path: ATTEMPT, version: 0, lastRun: null },
+    };
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "interview", root);
+    const rt = await t.start(session, problem);
+    const otherMsgs: ServerMsg[] = [];
+    const other: Peer = { id: "p2", send: (m) => void otherMsgs.push(m), close() {} };
+    rt.attach(other);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await rt.handle({ type: "code.update", version: 3, content: `${HEADER}int a;\n` }, t.peer);
+    expect(t.msgs.some((m) => m.type === "code.rejected")).toBe(false);
+    await rt.handle({ type: "code.update", version: 3, content: `${HEADER}int b;\n` }, t.peer);
+    expect(t.msgs.findLast((m) => m.type === "code.rejected")).toEqual({ type: "code.rejected", version: 3, held: 3 });
+    expect(otherMsgs.some((m) => m.type === "code.rejected")).toBe(false);
+    expect(await readFile(join(root, ATTEMPT), "utf8")).toBe(`${HEADER}int a;\n`);
+    expect(session.code?.version).toBe(3);
+    rt.dispose();
+  });
+});
+
 describe("reopening a round", () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
   afterEach(() => vi.useRealTimers());

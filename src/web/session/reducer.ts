@@ -176,6 +176,10 @@ function applyServer(state: SessionState, msg: ServerMsg, now: number, fresh: bo
       return { ...state, code: { ...state.code, content: msg.content, version: msg.version } };
     }
 
+    case "code.rejected":
+      // The session hook settles the editor against the server's text; nothing in the page state changes.
+      return state;
+
     case "code.diagnostics": {
       if (!state.code || msg.version < state.code.diagnosticsVersion) return state;
       return { ...state, code: { ...state.code, diagnostics: msg.diagnostics, diagnosticsVersion: msg.version } };

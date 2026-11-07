@@ -5,7 +5,7 @@ import type { ClientMsg, ServerMsg } from "../../shared/protocol";
 import type { Channel, PublicSession } from "../../shared/types";
 import { CHAT_MAX_CHARS, PNG_MAX_BASE64 } from "../lib/contract";
 import { roundMsAt } from "../lib/timing";
-import { confirmVersion, decideAfterReconnect, decideOnExternal, editLedger, recordSent, settleLedger, startLedger, type CodeDecision, type CodeLedger, type CodeText } from "./codeSync";
+import { confirmVersion, decideAfterReconnect, decideOnExternal, decideOnRejected, editLedger, recordSent, settleLedger, startLedger, type CodeDecision, type CodeLedger, type CodeText } from "./codeSync";
 import { chatItems, initialState, reducer, type Action } from "./reducer";
 import type { SessionActions, SessionController, SessionSource } from "./types";
 
@@ -18,6 +18,7 @@ const SERVER_TYPES = [
   "board.png.request",
   "board.graph",
   "code.external",
+  "code.rejected",
   "code.diagnostics",
   "code.run.result",
   "debrief.progress",
@@ -230,9 +231,19 @@ export function useSessionController(source: SessionSource): SessionController {
       if (decision.kind === "take") dispatch({ type: "server", msg, now: Date.now(), fresh: false });
     };
 
+    const onRejected = (msg: Extract<ServerMsg, { type: "code.rejected" }>) => {
+      io.codeServerVersion = Math.max(io.codeServerVersion, msg.held);
+      if (!io.code) return;
+      if (decideOnRejected(io.code, msg.held).kind === "check") checkCode(io, source, socketRef, dispatch, true);
+    };
+
     const onServer = (msg: ServerMsg) => {
       if (msg.type === "code.external") {
         onExternal(msg);
+        return;
+      }
+      if (msg.type === "code.rejected") {
+        onRejected(msg);
         return;
       }
       const fresh = io.fresh && msg.type === "session.state";

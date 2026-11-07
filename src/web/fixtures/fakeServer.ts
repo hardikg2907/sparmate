@@ -168,9 +168,10 @@ export class FakeServer {
         log("board.update", { version: msg.version, elements: msg.elements.length });
         break;
       case "code.update": {
-        // Like the real server, an update that is not newer than the file is dropped without a reply.
+        // Like the real server, an update that is not newer than the file is dropped and the sender is told.
         if (this.code && msg.version <= this.code.version) {
           log("code.update.dropped", { version: msg.version, held: this.code.version });
+          this.emit({ type: "code.rejected", version: msg.version, held: this.code.version });
           break;
         }
         if (this.code) this.code = { version: msg.version, content: msg.content };

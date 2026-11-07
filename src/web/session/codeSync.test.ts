@@ -4,6 +4,7 @@ import {
   confirmVersion,
   decideAfterReconnect,
   decideOnExternal,
+  decideOnRejected,
   editLedger,
   recordSent,
   settleLedger,
@@ -82,6 +83,21 @@ describe("on a live outside change", () => {
     const decision = decideOnExternal(ledger, { version: 5, content: "same" });
     expect(decision).toEqual({ kind: "same", version: 5 });
     expect(settleLedger(ledger, decision, { version: 5, content: "same" })).toMatchObject({ unsent: false, sent: [], base: { version: 5 } });
+  });
+});
+
+describe("when the server refuses an update as stale", () => {
+  it("fetches the server's text when the editor is not above the version the server holds", () => {
+    // v5 was sent against a server that an outside edit had already taken to 5.
+    const ledger = recordSent(typed(loaded(), "v5"));
+    expect(decideOnRejected(ledger, 5)).toEqual({ kind: "check" });
+    expect(decideOnRejected(typed(loaded(), "v5"), 6)).toEqual({ kind: "check" });
+  });
+
+  it("waits when the editor is already above the held version", () => {
+    // The refusal was for v5; v6 is on its way and the server takes it next.
+    const ledger = recordSent(typed(recordSent(typed(loaded(), "v5")), "v6"));
+    expect(decideOnRejected(ledger, 5)).toEqual({ kind: "wait" });
   });
 });
 

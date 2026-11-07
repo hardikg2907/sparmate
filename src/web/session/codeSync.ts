@@ -1,5 +1,6 @@
-// The server drops a code update that is not newer than its version without a word, and an outside edit bumps
-// that version too, so the page decides whose text wins from what it knows the server holds and what it has sent.
+// The server drops a code update that is not newer than its version (and says so with `code.rejected`), and an
+// outside edit bumps that version too, so the page decides whose text wins from what it knows the server holds and
+// what it has sent.
 
 export interface CodeText {
   version: number;
@@ -73,6 +74,14 @@ export function decideOnExternal(ledger: CodeLedger, external: CodeText): CodeDe
   if (!ledger.unsent && lastSent < external.version) return { kind: "take" };
   // Unsent edits, or an update at the same version that the server dropped as not newer.
   return { kind: "send", version: Math.max(editor.version, external.version) + 1, notice: OUTSIDE_CHANGE_NOTICE };
+}
+
+/**
+ * On `code.rejected`: the server holds `held` and dropped one of our updates. A text of ours above `held` is already
+ * sent or waiting and will be taken; otherwise the server's text is fetched and settled like after a reconnect.
+ */
+export function decideOnRejected(ledger: CodeLedger, held: number): { kind: "check" } | { kind: "wait" } {
+  return ledger.editor.version > held ? { kind: "wait" } : { kind: "check" };
 }
 
 /** The ledger once a decision is carried out; a "send" still has to be handed to the socket. */

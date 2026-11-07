@@ -515,7 +515,7 @@ export class SessionRuntime {
         case "board.png.result":
           return this.onPngResult(msg.requestId, msg.pngBase64);
         case "code.update":
-          return await this.onCodeUpdate(msg.version, msg.content);
+          return await this.onCodeUpdate(msg.version, msg.content, peer);
         case "code.run":
           await this.onCodeRun();
           return;
@@ -1678,12 +1678,16 @@ export class SessionRuntime {
     this.scheduleCheck();
   }
 
-  private async onCodeUpdate(version: number, content: string): Promise<void> {
+  private async onCodeUpdate(version: number, content: string, peer: Peer): Promise<void> {
     const s = this.session;
     if (s.track !== "lld" || !s.code) throw new UserError("not_lld", "This round has no code file.");
     if (s.status !== "live" && s.status !== "paused" && !this.acceptsLateEdit()) throw new UserError("not_live", "The round is over, so the code file is frozen.");
     if (!this.codeAbs) throw new UserError("no_file", "The code file is not available.");
-    if (version <= s.code.version) return;
+    if (version <= s.code.version) {
+      // The page cannot tell a dropped update from a slow one, so it is told which version the server holds.
+      peer.send({ type: "code.rejected", version, held: s.code.version });
+      return;
+    }
     if (Buffer.byteLength(content) > LIMITS.codeBytes) throw new UserError("too_large", "The code is too large to save.");
     s.code.version = version;
     this.creditStepCode(this.codeContent, content);
