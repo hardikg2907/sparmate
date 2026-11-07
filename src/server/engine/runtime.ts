@@ -106,6 +106,8 @@ const MAX_RECHECKS_PER_TURN = 3;
 const RECHECK_WAIT_MS = 60_000;
 /** The guide's step feedback waits this long for the checker, then goes ahead with the last finished reading. */
 const FEEDBACK_WAIT_MS = 30_000;
+/** The page flushes unsaved edits when it sees time run out, so they may land just after the round has ended. */
+const LATE_EDIT_GRACE_MS = 2_000;
 
 interface StepCheckRun {
   /** Settles once the running check, and any follow-up folded into it, has finished. Null while none runs. */
@@ -223,9 +225,12 @@ export class SessionRuntime {
   private rechecksThisTurn = 0;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private boardWrites: Promise<void> = Promise.resolve();
+  /** Wall time until which board and code edits still count after time ran out; null when none may land. */
+  private lateEditsUntil: number | null = null;
   private debriefRunning = false;
   private lastProgress: Extract<ServerMsg, { type: "debrief.progress" }> | null = null;
   private drafting = false;
+  private applying: Promise<void> = Promise.resolve();
   private disposed = false;
   private discarded = false;
   private awayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -301,6 +306,8 @@ export class SessionRuntime {
     });
     if (s.status === "live" || s.status === "paused") {
       this.startWatcher();
+      // A round that stopped before its opening reply still owes him the opening, ahead of anything he said.
+      if (!s.transcript.some((e) => e.channel === "interview" && e.role === "interviewer")) this.interview.queue.push(this.openingTurn());
       const last = [...s.transcript].reverse().find((e) => e.channel === "interview" && e.role !== "system");
       if (last?.role === "candidate") this.interview.queue.push(this.candidateTurn(last.text));
       if (s.status === "paused" && s.pauseReason === "error") {
@@ -318,15 +325,20 @@ export class SessionRuntime {
     this.syncCoachAwayTimer();
   }
 
-  /** First start of a brand-new round: the interviewer opens it. */
+  /** First start of a brand-new round: the interviewer opens it. `init` has already queued the opening. */
   start(): void {
-    this.enqueue(this.interview, {
+    if (!this.interview.queue.some((t) => t.kind === "start")) this.interview.queue.push(this.openingTurn());
+    void this.pump(this.interview);
+  }
+
+  private openingTurn(): QueuedTurn {
+    return {
       kind: "start",
       build: () => {
         const { view, commit } = this.interviewContext(this.interview);
         return { turn: { text: startTurn(view), meta: { kind: "start" } }, commit };
       },
-    });
+    };
   }
 
   attach(peer: Peer): void {
@@ -412,10 +424,13 @@ export class SessionRuntime {
   /** True when nothing is running and nobody is watching, so the runtime can be dropped from memory. */
   isDormant(): boolean {
     const s = this.session.status;
+    // A paused round's hidden notes and queued requests for the interviewer live only here, so dropping it loses them.
+    const owesInterviewer = s === "paused" && (this.interview.queue.length > 0 || this.pendingEvents.length > 0);
     return (
       this.peers.size === 0 &&
       s !== "live" &&
       s !== "debriefing" &&
+      !owesInterviewer &&
       !this.debriefRunning &&
       !this.drafting &&
       !this.interview.busy &&
@@ -554,7 +569,7 @@ export class SessionRuntime {
 
   private async onBoardUpdate(version: number, elements: Record<string, unknown>[]): Promise<void> {
     const s = this.session;
-    if (s.status !== "live" && s.status !== "paused") return;
+    if (s.status !== "live" && s.status !== "paused" && !this.acceptsLateEdit()) return;
     if (version <= s.board.version) return;
     const json = JSON.stringify(elements);
     if (Buffer.byteLength(json) > LIMITS.sceneBytes) throw new UserError("too_large", "The board is too large to save.");
@@ -884,6 +899,7 @@ export class SessionRuntime {
     s.pauseReason = null;
     s.status = "ended";
     s.endedAt = new Date(now).toISOString();
+    if (by === "time") this.lateEditsUntil = now + LATE_EDIT_GRACE_MS;
     this.scheduler?.stop();
     this.syncAwayTimer();
     const note = by === "candidate" ? "The candidate ended the round." : by === "interviewer" ? "The interviewer ended the round." : "Time is up.";
@@ -944,6 +960,7 @@ export class SessionRuntime {
     if (ch.replayNext) {
       ch.replayNext = false;
       ch.freshResume = false;
+      if (ch === this.interview) this.endRequested = false;
       ch.conv = this.deps.driver.startConversation({ ...setup, resumeSessionId: null });
       const speaker = ch.name === "coach" ? "coach" : "interviewer";
       // Until the model has spoken there is nothing to replay: the queued turns, opening first, simply run again.
@@ -1021,6 +1038,8 @@ export class SessionRuntime {
       }
     } catch (err) {
       failed = true;
+      // An end asked for in a turn that never completed must not end the round after some later reply.
+      if (ch === this.interview) this.endRequested = false;
       if (filter) this.keepPartial(ch, filter, entryId);
       await this.onTurnError(ch, err);
     } finally {
@@ -1036,8 +1055,9 @@ export class SessionRuntime {
           this.syncCoachAwayTimer();
         }
       }
+      // Every exit, a skipped turn included, hands the channel to the next turn in line.
+      if (!failed || ch.status !== "error") void this.pump(ch);
     }
-    if (!failed || ch.status !== "error") void this.pump(ch);
   }
 
   /** Text the browser already saw stays in the transcript, so its copy and ours never disagree. */
@@ -1638,7 +1658,7 @@ export class SessionRuntime {
   private async onCodeUpdate(version: number, content: string): Promise<void> {
     const s = this.session;
     if (s.track !== "lld" || !s.code) throw new UserError("not_lld", "This round has no code file.");
-    if (s.status !== "live" && s.status !== "paused") throw new UserError("not_live", "The round is over, so the code file is frozen.");
+    if (s.status !== "live" && s.status !== "paused" && !this.acceptsLateEdit()) throw new UserError("not_live", "The round is over, so the code file is frozen.");
     if (!this.codeAbs) throw new UserError("no_file", "The code file is not available.");
     if (version <= s.code.version) return;
     if (Buffer.byteLength(content) > LIMITS.codeBytes) throw new UserError("too_large", "The code is too large to save.");
@@ -1712,6 +1732,22 @@ export class SessionRuntime {
     }
   }
 
+  private acceptsLateEdit(): boolean {
+    return this.lateEditsUntil !== null && Date.now() < this.lateEditsUntil;
+  }
+
+  /** Waits out the time-up grace, after which no edit reaches the board or the code file. */
+  private async closeLateEdits(): Promise<void> {
+    const left = this.lateEditsUntil === null ? 0 : this.lateEditsUntil - Date.now();
+    if (left > 0) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, left);
+        timer.unref?.();
+      });
+    }
+    this.lateEditsUntil = null;
+  }
+
   private progress(stage: DebriefStage, detail?: string): void {
     const msg: Extract<ServerMsg, { type: "debrief.progress" }> = { type: "debrief.progress", stage, ...(detail ? { detail } : {}) };
     this.lastProgress = msg;
@@ -1724,6 +1760,8 @@ export class SessionRuntime {
     if (s.status !== "ended" && s.status !== "failed") return;
     this.debriefRunning = true;
     try {
+      await this.closeLateEdits();
+      if (this.disposed) return;
       this.closeChannel(this.interview);
       this.stopWatcher();
       s.status = "debriefing";
@@ -1731,6 +1769,8 @@ export class SessionRuntime {
       this.sendState();
 
       this.progress("collecting", "Saving the final board and code");
+      // The page sends its last edit and the end together, so the copy on disk may still be on its way.
+      await Promise.allSettled([this.codeWrites, this.boardWrites]);
       const fresh = await this.requestPng();
       if (fresh) await this.deps.store.writeFinalPng(s.id, fresh);
       const image = fresh ?? (await this.deps.store.readFinalPng(s.id));
@@ -1969,11 +2009,23 @@ export class SessionRuntime {
     }
   }
 
-  private async onApply(proposalId: string, opIds: string[]): Promise<void> {
+  /** Saves run one at a time, so a second Save reads the draft the first one left and cannot write it twice. */
+  private onApply(proposalId: string, opIds: string[]): Promise<void> {
+    const run = this.applying.then(() => this.applyNow(proposalId, opIds));
+    this.applying = run.catch(() => undefined);
+    return run;
+  }
+
+  private async applyNow(proposalId: string, opIds: string[]): Promise<void> {
     const s = this.session;
     const proposal = await this.deps.store.loadProposal(s.id, proposalId);
     if (!proposal || proposal.sessionId !== s.id) throw new UserError("no_proposal", "That draft no longer exists. Draft again.");
-    if (proposal.status !== "draft") throw new UserError("not_draft", proposal.status === "stale" ? "The files changed since the draft. Draft again." : "That draft was already saved.");
+    // A repeated Save of a draft that is already in the files writes nothing; resending it settles the page that asked.
+    if (proposal.status === "applied") {
+      this.broadcast({ type: "bookkeeping.proposal", proposal });
+      return;
+    }
+    if (proposal.status !== "draft") throw new UserError("not_draft", "The files changed since the draft. Draft again.");
     try {
       const result = await applyProposal(this.deps.config.studyRoot, proposal, opIds, this.deps.guard);
       await this.deps.store.saveProposal(s.id, result.proposal);

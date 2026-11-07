@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "../../shared/types";
 import { makeStack, type Stack } from "./__fixtures__/stack";
 import { SessionManager } from "./sessions";
@@ -40,5 +40,36 @@ describe("starting the server with rounds on disk", () => {
     await fresh.init();
     expect(await fresh.session(id)).toMatchObject({ status: "paused", pauseReason: "user" });
     await fresh.shutdown();
+  });
+});
+
+describe("the sweep that drops idle rounds from memory", () => {
+  const sweep = (m: SessionManager) => (m as unknown as { sweep(): void }).sweep();
+
+  it("keeps a paused round that still owes the interviewer its pause note", async () => {
+    const id = await stack.manager.create({ problemId: "c2-url-shortener", mode: "interview" });
+    const rt = await stack.manager.open(id);
+    const peer = { id: "p", send() {}, close() {} };
+    rt!.attach(peer);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await rt!.handle({ type: "session.pause" }, peer);
+    rt!.detach(peer);
+    rt!.lastActivity = 0;
+    sweep(stack.manager);
+    expect(await stack.manager.open(id)).toBe(rt);
+  });
+
+  it("drops a finished round nobody is watching", async () => {
+    const id = await stack.manager.create({ problemId: "c2-url-shortener", mode: "interview" });
+    const rt = await stack.manager.open(id);
+    const peer = { id: "p", send() {}, close() {} };
+    rt!.attach(peer);
+    // With no page open, the debrief does not wait for a board image.
+    rt!.detach(peer);
+    await rt!.handle({ type: "session.end" }, peer);
+    await vi.waitFor(() => expect(rt!.session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true), { timeout: 5_000 });
+    rt!.lastActivity = 0;
+    sweep(stack.manager);
+    expect(await stack.manager.open(id)).not.toBe(rt);
   });
 });

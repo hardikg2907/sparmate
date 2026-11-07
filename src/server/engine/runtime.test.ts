@@ -10,6 +10,8 @@ import { APP_ROOT, type ServerConfig } from "./config";
 import { DriverError, type Conversation, type ConversationSetup, type Driver, type RoomTool, type UserTurn } from "./driver";
 import { createFakeDriver } from "./fake-driver";
 import { memoryLogger } from "./log";
+import { makeCustomRoot, type TempStudyRoot } from "../study/__fixtures__/studyRoot";
+import { planProposal } from "../study/bookkeeping";
 import { parseProblem } from "./problems";
 import type { PromptLoader } from "./prompts";
 import { AWAY_PAUSE_MS, SessionRuntime, type Peer, type RuntimeDeps } from "./runtime";
@@ -169,7 +171,8 @@ describe("a full interview round on the clock", () => {
     expect(session.extension?.text).toBe(texts.at(-1));
     expect(session.extension?.at).toBeGreaterThanOrEqual(35 * MIN);
 
-    await vi.advanceTimersByTimeAsync(10 * MIN + 1_000);
+    // Past time up and the short grace for edits the page flushes when the round ends.
+    await vi.advanceTimersByTimeAsync(10 * MIN + 3_000);
     expect(interviewerTexts(t.msgs).at(-1)).toBe("We're out of time, so let's stop here. Thank you.");
     expect(session.status).toBe("debriefed");
     expect(session.endedAt).not.toBeNull();
@@ -1109,6 +1112,315 @@ describe("the coach and the scorecard gaps", () => {
     rt.attach(t.peer);
     await vi.waitFor(() => expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true));
     expect(session.gapProgress["Hot keys"]).toMatchObject({ by: "coach", state: "started" });
+    rt.dispose();
+  });
+});
+
+/** Answers like the fake driver, but a send that `slow` picks takes `delayMs` longer, as a long reply would. */
+function slowWhen(slow: (turn: UserTurn) => boolean, delayMs: number): Driver {
+  const inner = createFakeDriver({ chunkDelayMs: 0 });
+  return {
+    kind: "fake",
+    runOnce: (s) => inner.runOnce(s),
+    startConversation(s) {
+      const conv = inner.startConversation(s);
+      return {
+        sdkSessionId: () => conv.sdkSessionId(),
+        close: () => conv.close(),
+        async send(turn, handlers) {
+          if (slow(turn)) await new Promise((resolve) => setTimeout(resolve, delayMs));
+          return conv.send(turn, handlers);
+        },
+      };
+    },
+  };
+}
+
+const saidBy = (marker: string) => (turn: UserTurn) => turn.meta.kind === "candidate" && (turn.meta.candidateText ?? "").includes(marker);
+
+describe("the interviewer queue", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("answers his next message when a waiting phase nudge no longer applies because he moved on", async () => {
+    const t = setup(slowWhen(saidBy("short links"), 2 * MIN));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(4 * MIN);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "We need short links and redirects." }, t.peer);
+    // The planned end of requirements passes while that reply streams, so its nudge waits in the queue.
+    await vi.advanceTimersByTimeAsync(1.5 * MIN);
+    await rt.handle({ type: "phase.set", phase: "capacity" }, t.peer);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c2", text: "About 100 million links a month." }, t.peer);
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    expect(interviewerTexts(t.msgs)).toHaveLength(3);
+    expect(session.status).toBe("live");
+    rt.dispose();
+  });
+
+  it("closes and debriefs when a long reply runs past both the five-minute warning and time up", async () => {
+    const t = setup(slowWhen(saidBy("sum up"), 7 * MIN));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(39 * MIN + 30_000);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Let me sum up the design." }, t.peer);
+    await vi.advanceTimersByTimeAsync(8 * MIN);
+    expect(interviewerTexts(t.msgs).at(-1)).toBe("We're out of time, so let's stop here. Thank you.");
+    expect(session.status).toBe("debriefed");
+    rt.dispose();
+  });
+});
+
+describe("freezing the work at the end", () => {
+  const ATTEMPT = "lld/parking-lot/attempt-2026-10-30.cpp";
+  const HEADER = "// Parking Lot attempt, 2026-10-30\n";
+  let root = "";
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    root = await mkdtemp(join(tmpdir(), "ir-freeze-"));
+    await mkdir(join(root, "lld", "parking-lot"), { recursive: true });
+    await writeFile(join(root, ATTEMPT), HEADER);
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  async function parkingLotRound(durationMs = 90 * MIN) {
+    const file = join(APP_ROOT, "content", "problems", "lld", "b3-parking-lot.md");
+    const problem = parseProblem(await readFile(file, "utf8"), file, false);
+    const session: Session = {
+      ...newSession("interview"),
+      id: "20261030-1000-b3-parking-lot-abcd",
+      problemId: "b3-parking-lot",
+      title: "Parking Lot",
+      track: "lld",
+      durationMs,
+      phase: "clarify",
+      phaseHistory: [{ phase: "clarify", at: 0, by: "candidate" }],
+      code: { path: ATTEMPT, version: 0, lastRun: null },
+    };
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "interview", root);
+    const rt = await t.start(session, problem);
+    return { t, rt, session };
+  }
+
+  it("judges the code he typed just before he ended the round", async () => {
+    const { t, rt, session } = await parkingLotRound();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const last = `${HEADER}int main() { return 0; }\n`;
+    // The page sends its last edit and the end together, without waiting for the edit to be saved.
+    const edit = rt.handle({ type: "code.update", version: 1, content: last }, t.peer);
+    await rt.handle({ type: "session.end" }, t.peer);
+    await edit;
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(session.status).toBe("debriefed");
+    });
+    expect(t.store.code).toBe(last);
+    rt.dispose();
+  });
+
+  it("keeps board and code edits that land just after time is up, and refuses them once the work is frozen", async () => {
+    const { t, rt, session } = await parkingLotRound(20 * MIN);
+    await vi.advanceTimersByTimeAsync(20 * MIN + 200);
+    expect(["ended", "debriefing"]).toContain(session.status);
+    const late = `${HEADER}class Lot {};\n`;
+    const elements = [{ id: "r1", type: "rectangle", x: 0, y: 0, width: 100, height: 60, frameId: null }];
+    await rt.handle({ type: "code.update", version: 1, content: late }, t.peer);
+    await rt.handle({ type: "board.update", version: 1, elements }, t.peer);
+    expect(t.msgs.some((m) => m.type === "error")).toBe(false);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(session.status).toBe("debriefed");
+    });
+    expect(t.store.code).toBe(late);
+    expect(session.board.version).toBe(1);
+    expect(t.store.board.version).toBe(1);
+
+    await rt.handle({ type: "code.update", version: 2, content: `${late}// after\n` }, t.peer);
+    expect(t.msgs.at(-1)).toMatchObject({ type: "error", code: "not_live", message: "The round is over, so the code file is frozen." });
+    expect(t.store.code).toBe(late);
+    rt.dispose();
+  });
+});
+
+describe("reopening a round", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  const OPENING = "Let's design a URL shortener, something like bit.ly. Where would you like to start?";
+
+  it("opens the round on resume when the server stopped before the opening reply", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    session.status = "paused";
+    session.pauseReason = "restart";
+    session.pauseStartedAt = new Date().toISOString();
+    const rt = new SessionRuntime(t.deps, session, await urlShortener());
+    await rt.init();
+    rt.attach(t.peer);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(interviewerTexts(t.msgs)).toEqual([OPENING]);
+    rt.dispose();
+  });
+
+  it("opens first and then answers a message he sent before the opening arrived", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    session.status = "paused";
+    session.pauseReason = "error";
+    session.pauseStartedAt = new Date().toISOString();
+    session.transcript.push({ id: "m1", at: 1_000, wall: new Date().toISOString(), channel: "interview", role: "candidate", text: "Hello?" });
+    const rt = new SessionRuntime(t.deps, session, await urlShortener());
+    await rt.init();
+    rt.attach(t.peer);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(interviewerTexts(t.msgs)).toEqual([OPENING, "Okay. What would you do next in requirements?"]);
+    rt.dispose();
+  });
+
+  it("opens a brand-new round exactly once", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const rt = await t.start(newSession("interview"));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(interviewerTexts(t.msgs)).toEqual([OPENING]);
+    rt.dispose();
+  });
+});
+
+describe("dropping an idle round from memory", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps a paused round whose pause note the interviewer has not heard yet", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "session.pause" }, t.peer);
+    rt.detach(t.peer);
+    expect(rt.isDormant()).toBe(false);
+    rt.dispose();
+  });
+
+  it("keeps a paused round with a turn still waiting in the queue", async () => {
+    const { driver } = flakyDriver((n) => n === 2);
+    const t = setup(driver);
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(500);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Requirements first." }, t.peer);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(session.pauseReason).toBe("error");
+    rt.detach(t.peer);
+    expect(rt.isDormant()).toBe(false);
+    rt.dispose();
+  });
+
+  it("lets a finished round go, even with a pause note the interviewer never heard", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "session.pause" }, t.peer);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await rt.handle({ type: "session.end" }, t.peer);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true);
+    });
+    rt.detach(t.peer);
+    expect(rt.isDormant()).toBe(true);
+    rt.dispose();
+  });
+});
+
+describe("an end the interviewer asked for in a failed turn", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("does not end the round after the next reply once that turn failed", async () => {
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    let calls = 0;
+    const driver: Driver = {
+      kind: "fake",
+      runOnce: (s) => inner.runOnce(s),
+      startConversation(s) {
+        const conv = inner.startConversation(s);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          async send(turn, handlers) {
+            calls += 1;
+            if (calls === 2) {
+              // The model asked to end, then the turn broke before its reply was in.
+              await s.tools.find((x) => x.name === "end_interview")!.run({ reason: "He said he was done." });
+              throw new DriverError("The model is rate limited right now. Wait a minute, then retry.");
+            }
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(500);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "I think that covers it." }, t.peer);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(session.pauseReason).toBe("error");
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(500);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c2", text: "Actually, one more thing on capacity." }, t.peer);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(session.status).toBe("live");
+    expect(interviewerTexts(t.msgs).length).toBeGreaterThanOrEqual(3);
+    rt.dispose();
+  });
+});
+
+describe("saving study notes", () => {
+  const C2 = "### C2. Classic HLD Problems";
+  let study: TempStudyRoot;
+  beforeEach(async () => {
+    study = await makeCustomRoot({ "TRACKER.md": `# Tracker\n\n${C2}\n- [ ] URL Shortener\n`, "REVIEW.md": "# Review\n" });
+  });
+  afterEach(async () => {
+    await study.cleanup();
+  });
+
+  it("saves a draft once when Save arrives twice", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "interview", study.root);
+    const session = newSession("interview");
+    session.status = "debriefed";
+    session.transcript.push({ id: "c0", at: 0, wall: new Date().toISOString(), channel: "coach", role: "coach", text: "Let's start." });
+    const rt = new SessionRuntime(t.deps, session, await urlShortener());
+    await rt.init();
+    rt.attach(t.peer);
+    const proposal = await planProposal(
+      study.root,
+      session.id,
+      [{ kind: "tracker_update_bullet", section: C2, bullet: "URL Shortener", mark: "[~]", appendSuffix: "→ notes/c2-url-shortener.md · 2026-10-30" }],
+      t.deps.guard,
+    );
+    expect(proposal.ops.every((o) => o.blocked === null)).toBe(true);
+    await t.store.saveProposal(session.id, proposal);
+    const opIds = proposal.ops.map((o) => o.id);
+    await Promise.all([
+      rt.handle({ type: "bookkeeping.apply", proposalId: proposal.id, opIds }, t.peer),
+      rt.handle({ type: "bookkeeping.apply", proposalId: proposal.id, opIds }, t.peer),
+    ]);
+    expect(t.msgs.some((m) => m.type === "error")).toBe(false);
+    expect(t.msgs.filter((m) => m.type === "bookkeeping.applied")).toHaveLength(1);
+    // The second Save gets the saved draft back, so its page stops waiting.
+    expect(t.msgs.findLast((m) => m.type === "bookkeeping.proposal")).toMatchObject({ proposal: { id: proposal.id, status: "applied" } });
+    expect(t.store.proposals.get(proposal.id)?.status).toBe("applied");
+    expect(session.studyNotes).toMatchObject({ proposalId: proposal.id, status: "applied", appliedCount: 1 });
+    expect((await study.read("TRACKER.md")).match(/notes\/c2-url-shortener\.md/g)).toHaveLength(1);
     rt.dispose();
   });
 });
