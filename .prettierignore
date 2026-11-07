@@ -1,0 +1,20 @@
+dist/
+node_modules/
+coverage/
+data/
+package-lock.json
+
+# Prompts and problem briefs are parsed by code.
+content/
+study-kit/
+docs/SPEC.md
+docs/DESIGN.md
+src/**/__fixtures__/**/*.md
+
+# Only the two top-level guides are formatted.
+**/*.md
+!/README.md
+!/CONTRIBUTING.md
+
+# Fixture inputs whose exact text matters.
+scripts/e2e/fixtures/
