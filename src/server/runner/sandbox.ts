@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname, sep } from "node:path";
 
 export const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 export const BWRAP_EXEC = "/usr/bin/bwrap";
@@ -39,12 +40,92 @@ export function buildSandboxProfile(writableDir: string, privateRoot: string = r
     "(deny network*)",
     "(deny file-write*)",
     `(allow file-write* (subpath ${quote(writableDir)}))`,
-    '(allow file-write* (literal "/dev/null") (literal "/dev/tty") (literal "/dev/stdout") (literal "/dev/stderr") (literal "/dev/dtracehelper"))',
+    DEVICE_WRITES,
     // Later rules win, so the build folder stays readable even when it sits inside the private root.
     `(deny file-read-data (subpath ${quote(privateRoot)}))`,
     `(allow file-read-data (subpath ${quote(writableDir)}))`,
   ].join("\n");
 }
+
+/**
+ * A Seatbelt profile for the compiler. Source text can pull in any file through #include or an assembler
+ * .incbin, and diagnostics and the built program both reach the page and the model, so file contents are
+ * readable only from an allow-list: the system, the toolchain, the build folder and the named input files.
+ * Writes stay inside the build folder and network use is denied. Forking stays allowed because the compiler
+ * driver starts the linker.
+ *
+ * Every path must be a real path, for the same reason as in buildSandboxProfile.
+ */
+export function buildCompileSandboxProfile(workDir: string, inputs: readonly string[], toolchainRoots: readonly string[] = toolchainReadRoots()): string {
+  const roots = ["/usr", "/System", ...toolchainRoots];
+  return [
+    "(version 1)",
+    "(allow default)",
+    "(deny network*)",
+    "(deny file-write*)",
+    `(allow file-write* (subpath ${quote(workDir)}))`,
+    DEVICE_WRITES,
+    "(deny file-read-data)",
+    // The root listing, the active-toolchain link and the time zone files are read by the toolchain itself.
+    '(allow file-read-data (literal "/") (literal "/private/var/db/xcode_select_link") (subpath "/private/var/db/timezone"))',
+    // Only devices with a fixed size, so an #include cannot read forever from /dev/zero or /dev/urandom.
+    '(allow file-read-data (literal "/dev/null") (literal "/dev/dtracehelper") (literal "/dev/autofs_nowait"))',
+    `(allow file-read-data ${roots.map((r) => `(subpath ${quote(r)})`).join(" ")})`,
+    `(allow file-read-data (subpath ${quote(workDir)})${inputs.map((i) => ` (literal ${quote(i)})`).join("")})`,
+  ].join("\n");
+}
+
+const COMMAND_LINE_TOOLS = "/Library/Developer/CommandLineTools";
+
+/**
+ * Folders the Apple toolchain reads from: the active developer folder (Command Line Tools or a whole Xcode
+ * bundle, whose Info.plist sits outside Contents/Developer) and, for a compiler outside it, the compiler's
+ * install prefix unless that prefix would open the home folder.
+ */
+export function toolchainReadRoots(compiler?: string): string[] {
+  const roots = [COMMAND_LINE_TOOLS];
+  try {
+    const developer = realpathSync("/private/var/db/xcode_select_link");
+    const bundle = /^(.*\.app)\/Contents\/Developer$/.exec(developer)?.[1];
+    roots.push(bundle ?? developer);
+  } catch {
+    // No toolchain selected; the Command Line Tools path is the only candidate.
+  }
+  const prefix = compilerPrefix(compiler);
+  if (prefix !== null) roots.push(prefix);
+  return [...new Set(roots)];
+}
+
+/** The folder two levels above the real compiler binary, or null when that would expose the home folder or the root. */
+export function compilerPrefix(compiler: string | undefined, home: string = realHome()): string | null {
+  if (compiler === undefined) return null;
+  let real: string;
+  try {
+    real = realpathSync(compiler);
+  } catch {
+    return null;
+  }
+  const prefix = dirname(dirname(real));
+  if (prefix === "/" || prefix === home || home.startsWith(prefix + sep)) return null;
+  return prefix;
+}
+
+export interface LinuxSandboxOptions {
+  /** Arguments passed to `program`. */
+  args?: readonly string[];
+  /** Files or folders outside `writableDir` that must be readable, mounted read-only at the same path. */
+  readOnly?: readonly string[];
+  limits?: Partial<LinuxLimits>;
+}
+
+export interface LinuxLimits {
+  addressSpaceBytes: number;
+  cpuSeconds: number;
+  processes: number;
+  fileBytes: number;
+}
+
+const DEFAULT_LINUX_LIMITS: LinuxLimits = { addressSpaceBytes: 1073741824, cpuSeconds: 10, processes: 64, fileBytes: 16777216 };
 
 /**
  * Bubblewrap invocation for Linux containers. Constructs a minimal isolated root holding only system
@@ -54,7 +135,9 @@ export function buildLinuxSandboxInvocation(
   program: string,
   writableDir: string,
   _privateRoots: readonly string[] = [realHome()],
+  options: LinuxSandboxOptions = {},
 ): { command: string; args: string[] } {
+  const limits = { ...DEFAULT_LINUX_LIMITS, ...options.limits };
   const bwrap = findExecutable([BWRAP_EXEC, "/usr/local/bin/bwrap", "/bin/bwrap"]) ?? BWRAP_EXEC;
   const prlimit = findExecutable([PRLIMIT_EXEC, "/usr/local/bin/prlimit", "/bin/prlimit"]);
 
@@ -85,6 +168,7 @@ export function buildLinuxSandboxInvocation(
   for (const dev of ["null", "zero", "random", "urandom"]) args.push("--dev-bind", `/dev/${dev}`, `/dev/${dev}`);
   args.push("--tmpfs", "/tmp");
 
+  for (const path of options.readOnly ?? []) args.push("--ro-bind", path, path);
   args.push(
     "--bind", writableDir, writableDir,
     "--unshare-all",
@@ -94,15 +178,13 @@ export function buildLinuxSandboxInvocation(
   if (prlimit) {
     args.push(
       prlimit,
-      "--as=1073741824",
-      "--cpu=10",
-      "--nproc=64",
-      "--fsize=16777216",
-      program,
+      `--as=${limits.addressSpaceBytes}`,
+      `--cpu=${limits.cpuSeconds}`,
+      `--nproc=${limits.processes}`,
+      `--fsize=${limits.fileBytes}`,
     );
-  } else {
-    args.push(program);
   }
+  args.push(program, ...(options.args ?? []));
 
   return { command: bwrap, args };
 }
@@ -115,6 +197,9 @@ export function realHome(): string {
     return home;
   }
 }
+
+const DEVICE_WRITES =
+  '(allow file-write* (literal "/dev/null") (literal "/dev/tty") (literal "/dev/stdout") (literal "/dev/stderr") (literal "/dev/dtracehelper"))';
 
 function quote(path: string): string {
   if (/\p{Cc}/u.test(path)) throw new Error("Unsafe path for a sandbox profile");

@@ -13,7 +13,7 @@ import {
   createCppRunnerWithLimits,
   detectSanitizers,
 } from "./cpp";
-import { buildLinuxSandboxInvocation, buildSandboxProfile, sandboxAvailable } from "./sandbox";
+import { buildCompileSandboxProfile, buildLinuxSandboxInvocation, buildSandboxProfile, sandboxAvailable } from "./sandbox";
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -78,16 +78,36 @@ describe("sandbox platform choice and refusal", () => {
     expect(inv.args).toContain("/tmp/build");
   });
 
-  it("refuses to run code when sandbox is required but unavailable", async () => {
+  it("builds a linux compiler invocation that mounts only the named input file and passes the compiler's arguments", () => {
+    const inv = buildLinuxSandboxInvocation("/usr/bin/clang++", "/tmp/build", ["/home/test"], {
+      args: ["-fsyntax-only", "--", "/study/lld/a/attempt.cpp"],
+      readOnly: ["/study/lld/a/attempt.cpp"],
+      limits: { cpuSeconds: 25, addressSpaceBytes: 4294967296 },
+    });
+    const at = inv.args.indexOf("/study/lld/a/attempt.cpp");
+    expect(inv.args.slice(at - 1, at + 2)).toEqual(["--ro-bind", "/study/lld/a/attempt.cpp", "/study/lld/a/attempt.cpp"]);
+    expect(inv.args).not.toContain("/study");
+    expect(inv.args).not.toContain("/home/test");
+    expect(inv.args.slice(-4)).toEqual(["/usr/bin/clang++", "-fsyntax-only", "--", "/study/lld/a/attempt.cpp"]);
+    if (inv.args.some((a) => a.endsWith("prlimit"))) {
+      expect(inv.args).toContain("--cpu=25");
+      expect(inv.args).toContain("--as=4294967296");
+    }
+  });
+
+  it("refuses to compile code when sandbox is required but unavailable, because the compiler reads files too", async () => {
     const sandboxModule = await import("./sandbox");
     const spy = vi.spyOn(sandboxModule, "sandboxAvailable").mockReturnValue(false);
     try {
       const pickyRunner = createCppRunner({ tmpRoot, sandbox: true });
       const result = await pickyRunner.compileAndRun(fixture("hello.cpp"));
-      expect(result.compile.ok).toBe(true);
-      expect(result.run).not.toBeNull();
-      expect(result.run!.exitCode).toBe(1);
-      expect(result.run!.stderr).toContain("Refusing to run code: no safe sandbox is available");
+      expect(result.compile.ok).toBe(false);
+      expect(result.run).toBeNull();
+      expect(result.compile.stderr).toContain("Refusing to compile code: no safe sandbox is available");
+      expect(result.compile.diagnostics[0]).toMatchObject({ severity: "error", message: expect.stringContaining("Refusing to compile code") });
+      const check = await pickyRunner.syntaxCheck(fixture("hello.cpp"));
+      expect(check.ok).toBe(false);
+      expect(check.stderr).toContain("Refusing to compile code");
     } finally {
       spy.mockRestore();
     }
@@ -537,6 +557,155 @@ describe("the sandbox", () => {
     const { run: ran } = await odd.compileAndRun(await program("weird_root.cpp", source));
     expect(ran!.stdout).toBe("inside ok\n");
     await rm(join(base, 'we"ird\\ root'), { recursive: true, force: true });
+  });
+});
+
+describe("the compile sandbox", () => {
+  const marker = `planted-${Math.random().toString(36).slice(2)}`;
+  let secret: string;
+
+  beforeAll(async () => {
+    // Outside every build folder and outside the sources folder, like any other file on the machine.
+    secret = join(base, "outside-secret.txt");
+    await writeFile(secret, `first line ${marker}\nsecond line ${marker}\n`);
+  });
+
+  const includeProgram = (): string => `#include "${secret}"\nint main() { return 0; }\n`;
+  const incbinProgram = (): string =>
+    "#include <cstdio>\n" +
+    "#ifdef __APPLE__\n#define BLOB \"_blob\"\n#define DATA \".const\"\n#else\n#define BLOB \"blob\"\n#define DATA \".section .rodata\"\n#endif\n" +
+    `__asm__(DATA "\\n.globl " BLOB "\\n" BLOB ":\\n.incbin \\"${secret}\\"\\n.byte 0\\n");\n` +
+    'extern "C" const char blob[];\nint main() { std::fputs(blob, stdout); }\n';
+  const leaks = (result: { stderr: string; diagnostics: { message: string }[] }): boolean =>
+    result.stderr.includes(marker) || result.diagnostics.some((d) => d.message.includes(marker));
+
+  it("refuses an #include of a file outside the build folder in a syntax check, and echoes none of it", async () => {
+    const result = await runner.syntaxCheck(await program("include_secret.cpp", includeProgram()));
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toMatch(/Operation not permitted|No such file/);
+    expect(leaks(result)).toBe(false);
+  });
+
+  it("refuses the same #include in a build", async () => {
+    const result = await runner.compileAndRun(await program("include_secret_build.cpp", includeProgram()));
+    expect(result.compile.ok).toBe(false);
+    expect(result.run).toBeNull();
+    expect(leaks(result.compile)).toBe(false);
+  });
+
+  it("refuses an .incbin of a file outside the build folder, so its bytes never reach the program", async () => {
+    const result = await runner.compileAndRun(await program("incbin_secret.cpp", incbinProgram()));
+    expect(result.compile.ok).toBe(false);
+    expect(result.run).toBeNull();
+    expect(leaks(result.compile)).toBe(false);
+  });
+
+  it("refuses an #include of the file from a tester's harness", async () => {
+    const harness = `#include "${secret}"\nint main() { return 0; }\n`;
+    const result = await runner.runHarness(fixture("candidate_counter.cpp"), harness);
+    expect(result.compile.ok).toBe(false);
+    expect(result.run).toBeNull();
+    expect(leaks(result.compile)).toBe(false);
+  });
+
+  it("refuses an #include that would read forever from a device", async () => {
+    const result = await runner.syntaxCheck(await program("include_zero.cpp", '#include "/dev/zero"\nint main() {}\n'));
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toMatch(/Operation not permitted/);
+  });
+
+  it("proves the refusals come from the sandbox: without it both tricks read the file", async () => {
+    const open = createCppRunner({ tmpRoot, sandbox: false });
+    const included = await open.syntaxCheck(await program("include_control.cpp", includeProgram()));
+    expect(leaks(included)).toBe(true);
+    const embedded = await open.compileAndRun(await program("incbin_control.cpp", incbinProgram()));
+    expect(embedded.compile.ok).toBe(true);
+    expect(embedded.run!.stdout).toContain(marker);
+  });
+
+  const classes = [
+    "#include <iostream>",
+    "#include <memory>",
+    "#include <mutex>",
+    "#include <optional>",
+    "#include <string>",
+    "#include <vector>",
+    "",
+    "class Shape {",
+    " public:",
+    "  virtual ~Shape() = default;",
+    "  virtual double area() const = 0;",
+    "};",
+    "",
+    "class Square : public Shape {",
+    " public:",
+    "  explicit Square(double side) : side_(side) {}",
+    "  double area() const override { return side_ * side_; }",
+    "",
+    " private:",
+    "  double side_;",
+    "};",
+    "",
+    "class Registry {",
+    " public:",
+    "  void add(std::unique_ptr<Shape> shape) {",
+    "    std::lock_guard<std::mutex> lock(mutex_);",
+    "    shapes_.push_back(std::move(shape));",
+    "  }",
+    "  std::optional<double> largest() const {",
+    "    std::lock_guard<std::mutex> lock(mutex_);",
+    "    if (shapes_.empty()) return std::nullopt;",
+    "    double best = 0;",
+    "    for (const auto& s : shapes_) best = s->area() > best ? s->area() : best;",
+    "    return best;",
+    "  }",
+    "",
+    " private:",
+    "  mutable std::mutex mutex_;",
+    "  std::vector<std::unique_ptr<Shape>> shapes_;",
+    "};",
+    "",
+    "int main() {",
+    "  Registry registry;",
+    "  registry.add(std::make_unique<Square>(2));",
+    "  registry.add(std::make_unique<Square>(3));",
+    '  std::cout << "largest " << registry.largest().value_or(-1) << "\\n";',
+    "}",
+    "",
+  ];
+
+  it("still builds and runs a normal multi-class program with the standard headers", async () => {
+    const result = await runner.compileAndRun(await program("classes.cpp", classes.join("\n")));
+    expect(result.compile).toMatchObject({ ok: true, diagnostics: [] });
+    expect(result.run).toMatchObject({ exitCode: 0, stdout: "largest 9\n", stderr: "" });
+  });
+
+  it("still puts diagnostics on the user's own lines", async () => {
+    const broken = [...classes];
+    broken[44] = "  registry.add(std::make_unique<Square>(3)) // missing semicolon";
+    broken[33] = "    int unused = 0;" + broken[33];
+    const path = await program("classes_broken.cpp", broken.join("\n"));
+    const check = await runner.syntaxCheck(path);
+    expect(check.ok).toBe(false);
+    expect(check.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ line: 34, severity: "warning", message: expect.stringContaining("unused variable") }),
+        expect.objectContaining({ line: 45, severity: "error", message: expect.stringContaining("expected ';'") }),
+      ]),
+    );
+    const built = await runner.compileAndRun(path);
+    expect(built.compile.diagnostics.map((d) => [d.line, d.severity])).toEqual(check.diagnostics.map((d) => [d.line, d.severity]));
+  });
+
+  it("builds a profile that reads only the system, the toolchain, the build folder and the named inputs", () => {
+    const profile = buildCompileSandboxProfile("/tmp/build", ["/study/lld/a/attempt.cpp"], ["/Library/Developer/CommandLineTools"]);
+    expect(profile).toContain("(deny network*)");
+    expect(profile).toContain("(deny file-read-data)");
+    expect(profile).toContain('(allow file-write* (subpath "/tmp/build"))');
+    expect(profile).toContain('(literal "/study/lld/a/attempt.cpp")');
+    expect(profile).not.toContain('(subpath "/study');
+    expect(profile).not.toContain("process-fork");
+    expect(profile).not.toContain("/dev/zero\")");
   });
 });
 

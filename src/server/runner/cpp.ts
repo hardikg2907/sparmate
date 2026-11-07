@@ -1,10 +1,19 @@
-import { realpathSync } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { constants, existsSync, realpathSync } from "node:fs";
+import { access, chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseClangDiagnostics, toUtf16Columns } from "../../shared/clang";
 import type { CompileDiagnostic, RunResult } from "../../shared/types";
 import { type ProcessResult, runProcess, truncateUtf8 } from "./process";
-import { SANDBOX_EXEC, buildLinuxSandboxInvocation, buildSandboxProfile, realHome, sandboxAvailable } from "./sandbox";
+import {
+  SANDBOX_EXEC,
+  buildCompileSandboxProfile,
+  buildLinuxSandboxInvocation,
+  buildSandboxProfile,
+  compilerPrefix,
+  realHome,
+  sandboxAvailable,
+  toolchainReadRoots,
+} from "./sandbox";
 
 export interface CheckResult {
   ok: boolean;
@@ -85,6 +94,10 @@ const HARNESS_HEADER = [
   "",
 ].join("\n");
 
+/** Linux compile limits: far above what a single-file build needs, low enough to stop a runaway one. */
+const COMPILE_ADDRESS_SPACE_BYTES = 4 * 1024 * 1024 * 1024;
+const COMPILE_FILE_BYTES = 256 * 1024 * 1024;
+
 /** The compiler's own stderr is read in full to find diagnostics; callers only get the first output cap of it. */
 const COMPILER_STDERR_CAP = 256 * 1024;
 const PROBE_SOURCE = '#include <cstdio>\n#include <vector>\nint main() { std::vector<int> v(4, 7); std::printf("probe ok %d\\n", v[2]); return 0; }\n';
@@ -120,6 +133,19 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
     return mkdtemp(join(await realpath(options.tmpRoot), "run-"));
   };
 
+  const privateRoots = (): string[] => {
+    const roots = [realHome()];
+    if (options.studyRoot) {
+      try {
+        roots.push(realpathSync(options.studyRoot));
+      } catch {
+        roots.push(options.studyRoot);
+      }
+    }
+    return roots;
+  };
+
+  /** `cwd` is a fresh build folder; it is the only place the compiler may write. */
   const compile = async (args: {
     cwd: string;
     inputs: readonly string[];
@@ -128,12 +154,45 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
     timeoutMs: number;
     reports: readonly Report[];
   }): Promise<CheckResult> => {
+    if (wantSandbox && !sandboxAvailable()) {
+      const message = "Refusing to compile code: no safe sandbox is available on this system (sandbox-exec on macOS, bubblewrap on Linux)\n";
+      return { ok: false, diagnostics: [{ line: 1, column: 1, endLine: 1, endColumn: 2, severity: "error", message: message.trim() }], stderr: message, durationMs: 0 };
+    }
+    try {
+      await access(compiler, constants.X_OK);
+    } catch (error) {
+      return interpretCompile(notStarted(error), args.reports, args.timeoutMs, limits.outputCapBytes);
+    }
+
     const argv = [...BASE_FLAGS, ...args.flags, ...(args.output === null ? [] : ["-o", args.output]), "--", ...args.inputs];
+    let command = compiler;
+    let commandArgs = argv;
+    if (wantSandbox) {
+      const outside = args.inputs.filter((i) => !isInside(i, args.cwd));
+      if (process.platform === "darwin") {
+        // An input may be reached through a symlink, so both spellings are allowed.
+        const readable = [...new Set([...outside, ...(await Promise.all(outside.map(realInput)))])];
+        command = SANDBOX_EXEC;
+        commandArgs = ["-p", buildCompileSandboxProfile(args.cwd, readable, toolchainReadRoots(compiler)), compiler, ...argv];
+      } else if (process.platform === "linux") {
+        const prefix = compilerPrefix(compiler);
+        const box = buildLinuxSandboxInvocation(compiler, args.cwd, privateRoots(), {
+          args: argv,
+          // A missing input is left out so the compiler, not bubblewrap, reports it.
+          readOnly: [...outside.filter((i) => existsSync(i)), ...(prefix !== null && !prefix.startsWith("/usr/") ? [prefix] : [])],
+          limits: { addressSpaceBytes: COMPILE_ADDRESS_SPACE_BYTES, cpuSeconds: Math.ceil(args.timeoutMs / 1000) + 5, fileBytes: COMPILE_FILE_BYTES },
+        });
+        command = box.command;
+        commandArgs = box.args;
+      }
+    }
+
     const run = await runProcess({
-      command: compiler,
-      args: argv,
+      command,
+      args: commandArgs,
       cwd: args.cwd,
-      env: environment(args.cwd, {}),
+      // Apple's compiler shim keeps a lookup cache; pointing it at the build folder keeps its write inside the sandbox.
+      env: environment(args.cwd, { xcrun_db: join(args.cwd, "xcrun_db") }),
       timeoutMs: args.timeoutMs,
       maxStdoutBytes: COMPILER_STDERR_CAP,
       maxStderrBytes: COMPILER_STDERR_CAP,
@@ -161,15 +220,7 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
         command = SANDBOX_EXEC;
         args = ["-p", buildSandboxProfile(dir), program];
       } else if (process.platform === "linux") {
-        const privateRoots = [realHome()];
-        if (options.studyRoot) {
-          try {
-            privateRoots.push(realpathSync(options.studyRoot));
-          } catch {
-            privateRoots.push(options.studyRoot);
-          }
-        }
-        const box = buildLinuxSandboxInvocation(program, dir, privateRoots);
+        const box = buildLinuxSandboxInvocation(program, dir, privateRoots());
         command = box.command;
         args = box.args;
       }
@@ -235,16 +286,19 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
   const runner: CppRunner = {
     async syntaxCheck(sourcePath: string): Promise<CheckResult> {
       const source = resolve(sourcePath);
-      await mkdir(options.tmpRoot, { recursive: true, mode: 0o700 });
-      const cwd = await realpath(options.tmpRoot);
-      return compile({
-        cwd,
-        inputs: [source],
-        flags: ["-fsyntax-only"],
-        output: null,
-        timeoutMs: limits.syntaxCheckTimeoutMs,
-        reports: [{ path: source, sourceText: await readSource(source), prefix: "" }],
-      });
+      const dir = await makeRunDir();
+      try {
+        return await compile({
+          cwd: dir,
+          inputs: [source],
+          flags: ["-fsyntax-only"],
+          output: null,
+          timeoutMs: limits.syntaxCheckTimeoutMs,
+          reports: [{ path: source, sourceText: await readSource(source), prefix: "" }],
+        });
+      } finally {
+        await removeDir(dir);
+      }
     },
 
     async compileAndRun(sourcePath: string): Promise<Omit<RunResult, "at">> {
@@ -334,6 +388,34 @@ function withoutProcNoise(stderr: string): string {
 /** A minimal environment: nothing from the server's own variables, such as tokens, reaches compiled code. */
 function environment(dir: string, extra: Record<string, string>): Record<string, string> {
   return { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: dir, TMPDIR: dir, LANG: "en_US.UTF-8", ...extra };
+}
+
+function isInside(path: string, dir: string): boolean {
+  const rel = relative(dir, path);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+async function realInput(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return path;
+  }
+}
+
+function notStarted(error: unknown): ProcessResult {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return {
+    exitCode: null,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    stdoutCut: false,
+    stderrCut: false,
+    timedOut: false,
+    durationMs: 0,
+    spawnError: code === undefined ? "could not start the process" : `could not start the process (${code})`,
+  };
 }
 
 async function readSource(path: string): Promise<string | null> {
