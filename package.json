@@ -2,8 +2,13 @@
   "name": "sparmate",
   "version": "0.1.0",
   "private": true,
+  "description": "Local practice room for system design (HLD) and C++ machine-coding (LLD) interviews, with an AI interviewer, judge and coach.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hardikg2907/sparmate.git"
+  },
   "type": "module",
-  "description": "Local practice room for HLD and LLD interviews with an AI interviewer and judge.",
   "engines": {
     "node": ">=22.12.0"
   },

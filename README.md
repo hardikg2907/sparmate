@@ -1,102 +1,231 @@
-# Sparmate
+<p align="center">
+  <img src="docs/logo.svg" alt="Sparmate" width="120">
+</p>
 
-A local practice room for system design (HLD) and C++ machine-coding (LLD) interviews. An AI interviewer runs
-a timed round with you on a whiteboard or in a code editor, then a judge scores the round against your target level (SDE-2 unless the `Target:` line in your `ABOUT_ME.md` says otherwise),
-a coach teaches the gaps, and a scribe drafts the study-note edits for you to approve.
+<p align="center">
+  Solo practice for system design and machine-coding interviews, against an AI interviewer, with a judge and a coach.
+</p>
 
-It runs only on this Mac, at `http://127.0.0.1:4747`, and uses your Claude Code login (no API key).
+![The Sparmate home page](docs/screens/home-dark.png)
 
-## Start and stop
+## What it does
+
+- **HLD rounds.** A timed system design round on a whiteboard. The board has one frame for each step of the round.
+- **LLD rounds.** A timed machine-coding round in a C++ editor. You compile and run your code in the page.
+- **Interview or guided mode.** Interview mode gives no help on the clock, like the real thing. Guided mode walks the steps with you and gives hints.
+- **A judge's debrief.** The judge scores the round against your target level and quotes your own words as evidence.
+- **A coach.** The coach teaches the gaps the judge found, using your study folder's rules.
+- **Study-note drafts you approve.** The app drafts edits to your notes. You pick what to keep. Nothing is written before you click Save.
+- **Voice in and out.** Speak your answers and hear the interviewer's replies.
+- **A usage page.** See tokens and cost for each round, role and model.
+
+| Home | Debrief |
+|---|---|
+| ![Home page in light theme](docs/screens/home-light.png) | ![The judge's debrief](docs/screens/debrief.png) |
+
+| HLD room | LLD room |
+|---|---|
+| ![A guided system design round](docs/screens/room-hld.png) | ![A machine-coding round with a C++ editor](docs/screens/room-lld.png) |
+
+## Requirements
+
+| Need | Details |
+|---|---|
+| Node.js | 22.12 or newer. |
+| Operating system | macOS is the main path. Linux works through the container (see below). Windows works through the container only. |
+| Claude Code login | Install Claude Code and sign in once by running `claude`. The app talks to the model through the Claude Agent SDK and uses that login. It needs no API key. |
+| A C++ compiler | `clang++` at `/usr/bin/clang++`. On macOS, install the Xcode Command Line Tools with `xcode-select --install`. |
+| Chrome | Needed for voice input. It uses the browser's on-device speech recognition. Other browsers work for everything else. |
+| Kokoro voice (optional) | Gives natural spoken replies. Without it, the app falls back to your system voice. See below. |
+
+### Optional: Kokoro speech
+
+Spoken replies use [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) through a small Python worker. The app looks for these files in the Kokoro folder:
 
 ```
-cp .env.example .env   # then set STUDY_ROOT to your study folder
-npm install        # first time only
-npm start          # builds the page, then serves http://127.0.0.1:4747
+<kokoro folder>/.venv/bin/python
+<kokoro folder>/kokoro-v1.0.onnx
+<kokoro folder>/voices-v1.0.bin
 ```
 
-Stop it with Ctrl+C in that terminal, or `pkill -f "tsx src/server/index.ts"` if it runs in the background.
+The default Kokoro folder is `kokoro/` inside your data folder. Set `SPARMATE_KOKORO_HOME` to use another place. To set it up by hand:
 
-## A round
+```sh
+python3 -m venv "$SPARMATE_KOKORO_HOME/.venv"
+"$SPARMATE_KOKORO_HOME/.venv/bin/pip" install kokoro-onnx==0.4.7 soundfile==0.13.1
+```
 
-1. **Pick a problem** on the home page. "Up next" alternates HLD and LLD and flags `[~]` problems due for a cold
-   redo. "Practise any question" turns a pasted prompt into a fully researched and verified problem: an agent
-   uses web search to ground real-world numbers and architectures, followed by an independent fact-checker pass
-   that verifies claims against sources. A setup card shows sources, checks, and corrections before starting.
-2. **Interview** is the real round: 45 minutes for HLD, 120 or 90 for LLD (Settings), no help on the clock, and
-   the extension 10 (HLD) or 15 (LLD) minutes before the end. **Guided** walks the steps with you: ask it to
-   check a step or give a hint.
-3. **HLD:** draw on the whiteboard with the component palette and talk in the chat by typing or voice (mic button
-   or Ctrl+M, on-device in Chrome; spoken interviewer replies via local Kokoro neural TTS with half-duplex speaker
-   feedback prevention and Esc to interrupt). "What the interviewer sees" shows how your diagram reads as text: fix
-   an unlabeled box or a loose arrow there.
-   The board has one frame per step: write and draw each step's answer in its frame. Click a step in the step bar
-   to move there. The step's frame comes into view whenever you or the guide move the rail. In a guided round, the
-   checklist above the chat shows how many things the step covers. Once you check the step, it ticks each one and where
-   you said, drew or wrote it ("Said at 04:12", "On the board"), and shows a missing requirement as the question to
-   ask; a ring per step in the step bar shows the progress, hovering a step there shows its checklist, and the guide
-   pins short notes on your boxes. An interview round shows none of this until the debrief, as a real interviewer would
-   not. The check runs on Sonnet when you leave a step, when the round ends and, in a guided round, when you press
-   "Check this step"; it never runs while you work in a step. "Check this step" runs the check first, and the guide
-   answers once it is done, so its feedback matches the list. In an LLD round the checker reads the code you wrote
-   while a step was on the rail: Clarify, Entities and Behaviour read only their own lines, and the build steps read
-   the whole file. If the list looks wrong or stale, tell the guide: it can re-read any step from scratch.
-4. **LLD:** type C++ in the editor (autocomplete is off on purpose) and press Run. The same file lives at
-   `lld/<problem>/attempt-<date>.cpp`, so you can switch to Zed at any time; edits in Zed show up in the browser.
-5. **Pause** when you must step away; the round also pauses about a minute after you close its tab. **Discard
-   round** deletes a round with no debrief. **End interview** ends the round and starts the debrief.
-6. **Debrief:** the verdict at your target and stretch levels, a score per dimension with your own words quoted
-   (each quote is checked against the transcript), the gaps in order, the time per phase, each step's frame with
-   what held, what is missing and the judge's pins, and for LLD the tester's scenario results against your code. "Reference answer" opens the problem's model design.
-7. **Coach:** the chat on the right teaches the gaps, following `TEACHING.md` (with voice input and spoken replies).
-   Push back if a score looks wrong.
-8. **Study notes:** "Draft study notes" proposes edits to `TRACKER.md`, `REVIEW.md` and `notes/`. Tick the
-   ones you want and click Save. Nothing is written before that, and nothing is written if a file changed since
-   the draft.
+Then download `kokoro-v1.0.onnx` and `voices-v1.0.bin` from the [kokoro-onnx model-files-v1.0 release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0) into the same folder. `container/setup.sh` shows the exact downloads and checksums.
 
-## What it writes, and where
+### Container route (Linux, Windows)
 
-| What | When | Where |
+The `container/` folder runs the server in a Podman or Docker container. It includes the C++ toolchain, the sandbox and Kokoro. Your browser stays on your own machine. See [container/README.md](container/README.md).
+
+```sh
+./container/setup.sh
+./container/start.sh
+```
+
+On Windows, run `.\setup.ps1` and then `.\start.ps1` from the `container` folder in PowerShell.
+
+## Quick start
+
+```sh
+git clone https://github.com/hardikg2907/sparmate.git
+cd sparmate
+npm install
+cp .env.example .env
+npm start
+```
+
+Open `http://127.0.0.1:4747`.
+
+In `.env`, set `STUDY_ROOT` to the folder you want for your study files. If you leave it unset, the app uses `~/sparmate-study`. The first start creates that folder from `study-kit/` when it is missing or empty.
+
+`npm start` builds the web page and then starts the server. Stop it with Ctrl+C.
+
+All settings in `.env`:
+
+| Variable | Default | Purpose |
 |---|---|---|
-| Tracker mark, Session Log row, gaps, REVIEW entry, notes | Only when you click Save on the study-notes diff | `../TRACKER.md`, `../REVIEW.md`, `../notes/` |
-| Your C++ for a round | At the start of an LLD round (a new file, never `main.cpp`) | `../lld/<problem>/attempt-<date>.cpp` |
-| Transcripts, boards, scores, settings, usage ledger | All the time | `data/` (git ignores it) |
+| `STUDY_ROOT` | `~/sparmate-study` | Your study folder. |
+| `DATA_DIR` | `<STUDY_ROOT>/rounds` | Sessions, settings, custom problems, logs and usage ledger. |
+| `PORT` | `4747` | Server port. |
+| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro` | Kokoro voice files. |
+| `SPARMATE_DENYLIST` | `~/.config/sparmate/denylist.txt` | Extra words to keep out of your files (see Privacy). |
 
-## Settings and usage
+## Your study folder
 
-Every role runs on Claude Opus 5.5 by default; the interviewer at effort `low` so replies take a few seconds.
-A round uses your Claude plan like any Claude Code session. To spend less, switch the interviewer (and the
-coach) to Sonnet in Settings; keep the judge on Opus.
+The study folder is yours. The app reads it and writes to it only in the ways listed here. You can keep it in its own private git repository. If you do, add `rounds/` to its `.gitignore`.
 
-The app tracks model call metrics in `data/usage.jsonl` (input, output, cache read and cache creation tokens,
-API-equivalent cost, duration, role and model). Check `/usage` from the header to view overall totals,
-daily cost charts, and breakdowns by problem, round, role, and model. Each debrief page also shows a card
-with token counts and cost for that specific round.
+| Path | What it is for |
+|---|---|
+| `TRACKER.md` | Your plan and progress. Each problem has a mark: `[ ]` not started, `[~]` taught but not yet recalled, `[x]` solved at the bar. |
+| `REVIEW.md` | Recall questions. The app adds new ones after a round, and the coach re-tests old ones. |
+| `TEACHING.md` | The rules the coach follows when it teaches you. Edit it to change how you are taught. |
+| `ABOUT_ME.md` | Your profile. It sets the bar for every round. |
+| `notes/` | What you have learnt, one file per topic. |
+| `lld/` | Your C++ attempts, as `lld/<problem>/attempt-<date>.cpp`. You can edit them in any editor and the page picks up the change. |
+| `rounds/` | Session transcripts, boards, scores, settings and the usage ledger. The app writes here as a round runs. |
 
-## Privacy
+**The app writes study files only when you click Save.** That covers `TRACKER.md`, `REVIEW.md` and `notes/`. It also refuses to write if a file changed after it drafted the edit. The two exceptions are `rounds/` (round data) and the new `.cpp` file that an LLD round creates.
 
-The app never names your employer. Every model prompt says not to mention your email or workplace, the study
-notes are checked against a deny-list before they can be saved (your account email's domain, plus any terms
-in `~/.config/sparmate/denylist.txt`, one per line), and the model subprocess loads none of your Claude
-Code settings or memory.
+### Set your target in `ABOUT_ME.md`
+
+One line sets the bar:
+
+```
+Target: SDE-2; stretch: senior; company: Series A to C startup
+```
+
+`stretch` is the level above your target, and `company` is the kind of employer. Each part is optional. A missing part keeps its default, which is the value shown above. The judge scores you against the target level.
+
+The rest of the file is free text. You can list stacks you know well, for example Postgres, Kafka and Kubernetes. The coach then uses them as a bridge when it explains a new idea. The comparison is never the main lesson. Keep this file short and factual.
+
+## A round, step by step
+
+1. **Pick a problem** on the home page. "Up next" alternates HLD and LLD problems. It marks problems that are due for a cold redo.
+2. **Choose a mode.** Interview mode is the real round. HLD gets 45 minutes, and LLD gets 120 (you can change both in Settings). There is no help on the clock. The interviewer adds the extension 10 minutes (HLD) or 15 minutes (LLD) before the end. In guided mode you ask the guide to check a step or give a hint.
+3. **Work through the steps.** The step bar shows where you are. Click a step to move there.
+   - **HLD:** draw on the whiteboard with the component palette and talk in the chat, typed or spoken. Each step has its own frame, and the frame comes into view when the step changes. "What the interviewer sees" shows how your diagram reads as text, so you can fix an unlabelled box or a loose arrow.
+   - **LLD:** write C++ in the editor and press Run. Autocomplete is off on purpose. The file also lives in your study folder.
+4. **Step checks.** A fast checker reads your work when you leave a step and when the round ends. In guided mode you can also press "Check this step". It ticks the checklist items you covered and shows where you covered them. Interview mode shows none of this until the debrief.
+5. **Pause or end.** Pause when you must step away. A round also pauses about a minute after you close its tab. "Discard round" deletes a round that has no debrief. "End interview" ends the round and starts the debrief.
+6. **Debrief.** You get the verdict at your target and stretch levels, a score for each dimension with your own words quoted, and the gaps in order. You also get the time for each phase and each step's frame with what held and what is missing. For LLD, the tester's scenario results run against your code. "Reference answer" opens the model design.
+7. **Coach.** The chat on the right teaches the gaps one at a time. Push back if a score looks wrong.
+8. **Study notes.** "Draft study notes" proposes edits to `TRACKER.md`, `REVIEW.md` and `notes/`. Tick the ones you want and click Save.
+
+## Privacy and safety
+
+**Local only.** The server listens on `127.0.0.1`, so only your own machine can reach it. (The container route listens on all interfaces inside the container and publishes the port to your machine.)
+
+**A deny-list keeps names out of your study files.** Before the app saves study notes, it checks the text and the file names against a list of terms. The list has two sources:
+
+- the company name taken from the domain of your Claude account email, and the part of the address before the `@`
+- any terms you add to `~/.config/sparmate/denylist.txt`, one per line (lines that start with `#` are comments)
+
+A save that contains a listed term is refused. Log files redact listed terms. The list is built in memory and is never written anywhere. Every model prompt also tells the model not to mention your email or workplace.
+
+**The model sees none of your Claude Code setup.** The model subprocess starts with no setting sources, so it loads none of your Claude Code settings or `CLAUDE.md` files. It has no tools, except that the roles that research a custom problem can search and fetch web pages. Nothing answers permission prompts, so any other tool is denied.
+
+**C++ runs in a sandbox.**
+
+| | macOS | Linux and the container |
+|---|---|---|
+| Tool | `sandbox-exec` | Bubblewrap (`bwrap`) with `prlimit` |
+| Compiling | Reads only the system folders, the toolchain, the build folder and your one source file. Writes only to the build folder. No network. | A minimal root with system libraries and compilers. No home folder, no study folder, no network. |
+| Running | Writes only to the build folder, cannot read your home folder, no network, no child processes. | The same private root, with no network and its own process space. |
+| Limits | File size and CPU time, plus a 1 GB memory cap that the app checks by polling. | File size, CPU time, process count and a 1 GB address-space limit from `prlimit`. |
+
+Honest limits:
+
+- On macOS the memory cap is polled, not enforced by the system. A program can pass 1 GB for a short time before the app stops it.
+- A program can still tell whether a file exists, for example with `__has_include`.
+
+## Cost
+
+Rounds use your Claude plan, like any Claude Code session. The default models are:
+
+| Role | Model | Effort |
+|---|---|---|
+| Interviewer and guide | Claude Opus 5.5 | low (so replies come in seconds) |
+| Judge and tester | Claude Opus 5.5 | high |
+| Coach | Claude Opus 5.5 | medium |
+| Scribe (study notes and custom problems) | Claude Opus 5.5 | medium |
+| Step checker | Claude Sonnet 5.5 (fixed) | low |
+
+To spend less, open Settings and switch the interviewer and the coach to Claude Sonnet 5.5. Keep the judge on Opus if you want the sharpest scoring.
+
+The **Usage** page (`/usage`, linked in the header) shows tokens, cost, duration and role for every model call, with daily charts and breakdowns by problem, round, role and model. Each debrief also shows the cost of its round. Costs are API-equivalent prices. When the SDK does not report a cost, the app prices the call from its tokens, and the page shows a "≈" next to totals that include such estimates.
 
 ## Problems
 
-Problem briefs live in `content/problems/{hld,lld}/`. Each is the interviewer's private answer key: hidden
-facts, expected requirements, capacity math or entities, a reference design, accepted alternatives, deep dives,
-curveballs or extensions, the level bar and traps. Check a new or edited brief with
-`npx tsx scripts/check-problems.ts`.
+Problem briefs live in `content/problems/hld/` and `content/problems/lld/`. A brief is the interviewer's private answer key. It holds:
 
-## For development
+- a frontmatter block with `id`, `track`, `title`, `difficulty`, `tags` and a `tracker` entry that names the matching bullet in `TRACKER.md` (LLD briefs also name an `lldFolder`)
+- the opening prompt and the facts to reveal only when asked
+- the expected requirements, capacity math or entities, and a reference design
+- accepted alternatives, deep dives, curveballs or extensions
+- the level bar and the common traps
 
-```
-npm run dev          # vite on :5173 with reload, server on :4747
+To add a problem:
+
+1. Copy a brief from the same track, such as `content/problems/lld/b3-lru-cache.md`, and change it. The file name must match `id`.
+2. Add a matching bullet to your `TRACKER.md` (and to `study-kit/TRACKER.md` if you want it in the starter kit).
+3. Check it:
+
+   ```sh
+   npx tsx scripts/check-problems.ts
+   ```
+
+   Pass a file path to check one brief. The script checks the frontmatter, the required sections, the tracker bullet and the length.
+
+**Practise any question.** The home page can also turn a pasted interview question into a custom problem. An agent uses web search to ground real numbers and architectures, and a second pass checks the claims against sources. A setup card shows the sources, the checks and any corrections before you start. Custom problems are stored in your data folder, not in `content/`.
+
+## Development
+
+```sh
+npm run dev          # Vite on :5173 with reload, and the server on :4747
 npm test             # unit tests
 npm run typecheck
-SPARMATE_FAKE_AGENT=1 npm start                      # no model calls: a scripted fake interviewer and judge
-node scripts/e2e/ws-fake-round.mjs             # full rounds over the WebSocket with the fake driver
-node scripts/e2e/real-round.mjs --profile strong|weak|lld   # real model, temp copy of the study folder
-node scripts/e2e/ui-tour.mjs                   # screenshots of the main pages
+SPARMATE_FAKE_AGENT=1 npm start   # no model calls: a scripted fake interviewer and judge
 ```
 
-`docs/SPEC.md` is the full design. `content/prompts/` holds every model prompt as plain Markdown;
-`content/rubrics/` holds the scoring rubrics.
+Fake mode is the safe way to try the app, change the interface or test the engine. It never calls a model.
+
+These end-to-end scripts need no model. They start their own fake-mode server on a temporary copy of the study kit. Build the page first with `npx vite build`.
+
+```sh
+node scripts/e2e/ws-fake-round.mjs    # full rounds over the WebSocket
+node scripts/e2e/ws-fake-pause.mjs    # pause and discard
+node scripts/e2e/ui-tour.mjs          # screenshots of the main pages (needs Chrome)
+node scripts/e2e/layout-check.mjs     # layout and scroll checks across screen sizes (needs Chrome)
+```
+
+`scripts/e2e/real-round.mjs --profile strong|weak|lld` runs a full round with a real model, so it uses your Claude plan. Run it only when you mean to.
+
+More detail: [docs/SPEC.md](docs/SPEC.md) is the full specification, and [docs/DESIGN.md](docs/DESIGN.md) is the design guide. `content/prompts/` holds every model prompt as plain Markdown, and `content/rubrics/` holds the scoring rubrics. See [CONTRIBUTING.md](CONTRIBUTING.md) to send a change.
+
+## License
+
+[MIT](LICENSE).
