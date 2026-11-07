@@ -1,0 +1,58 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Do not paste personal data, study files or API output that you want to keep private.
+        For a security problem, use the private report path in SECURITY.md instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the app with ...
+        2. Open ...
+        3. Click ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - HLD room (whiteboard, interviewer, debrief)
+        - LLD room (C++ editor, runner, sandbox)
+        - Voice input or output
+        - Study folder and saves
+        - Usage page
+        - Container
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: Output of `git rev-parse --short HEAD`.
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system, Node.js version and browser
+      placeholder: macOS 15, Node 22.12, Chrome 130
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove anything private first.
+      render: shell

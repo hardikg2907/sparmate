@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is hard or missing today? Describe the practice or study need, not only the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: The behaviour you expect. Add sketches or examples if they help.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: dropdown
+    id: help
+    attributes:
+      label: Can you help build it?
+      options:
+        - "Yes"
+        - With guidance
+        - "No"
+    validations:
+      required: true

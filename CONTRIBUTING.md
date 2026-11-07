@@ -2,15 +2,69 @@
 
 Thanks for helping. This guide is short on purpose.
 
-## Run the checks
+## Set up
 
 ```sh
 npm install
-npm test            # unit tests
-npm run typecheck
 ```
 
-A pull request should keep both green.
+`npm install` also sets up the git hooks (see "Git hooks" below). You need Node.js 22.12 or newer, and `clang++` for the C++ runner tests. On Linux the runner tests also need `bubblewrap`.
+
+## Scripts
+
+| Script                 | What it does                                       |
+| ---------------------- | -------------------------------------------------- |
+| `npm test`             | Runs the unit tests.                               |
+| `npm run typecheck`    | Checks types with `tsc`.                           |
+| `npm run lint`         | Runs ESLint. Warnings are allowed, errors are not. |
+| `npm run lint:fix`     | Runs ESLint and fixes what it can.                 |
+| `npm run format`       | Formats the code with Prettier.                    |
+| `npm run format:check` | Checks the formatting without changing files.      |
+| `npm run build`        | Builds the web app.                                |
+| `npm run dev`          | Starts the app with hot reload.                    |
+
+A pull request must pass typecheck, lint, format check and tests. CI runs the same four scripts.
+
+## Commit messages
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```text
+type(scope): subject
+```
+
+- The type is one of `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `build`, `ci` or `chore`.
+- The scope is optional. Use the area you changed, for example `runner`, `web` or `engine`.
+- The subject is lower case, in the imperative mood, and has no final full stop.
+- The whole first line is at most 72 characters.
+- Add a body when the reason for the change is not obvious. Explain why, not what.
+
+Examples:
+
+```text
+feat(web): show the target level on the debrief
+fix(runner): stop a program that keeps forking
+docs: explain the study folder layout
+test(engine): cover a resume after a model error
+```
+
+## Git hooks
+
+[Husky](https://typicode.github.io/husky/) installs two hooks when you run `npm install`.
+
+- `pre-commit` runs `lint-staged`. It fixes your staged files with ESLint and Prettier, so a commit never adds badly formatted code.
+- `commit-msg` runs `commitlint` and rejects a message that does not follow the rules above.
+
+The formatting commit is listed in `.git-blame-ignore-revs`. To hide it in `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+
+## Continuous integration
+
+GitHub Actions runs on every push to `main` and on every pull request.
+
+- The `check` job runs on Ubuntu and macOS. It runs `npm ci`, `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm test`. On Ubuntu it first installs `clang` and `bubblewrap`, so the sandboxed C++ runner tests run there too.
+- The `commitlint` job runs on pull requests only. It checks every commit message in the pull request.
+
+Run the same scripts locally before you push.
 
 ## Work without a model
 
