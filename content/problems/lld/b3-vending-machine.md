@@ -84,7 +84,7 @@ A sale finishes inside one `insertMoney` call. So "dispensing" and "returning ch
 
 Each cell is one branch in the code. An empty cell is an unhandled situation.
 
-The completion check, in this order:
+The completion check (pay into stock, make change, then dispense or roll back), in this order:
 
 ```
  paid < price ?   -> wait (return an empty result, state unchanged)
