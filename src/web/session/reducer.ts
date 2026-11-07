@@ -66,16 +66,21 @@ function graphFromBoard(board: PublicSession["board"]) {
   return { version: board.version, text: board.graphText, warnings: splitGraphText(board.graphText).warnings };
 }
 
-/** Drops local copies once the server transcript holds the same candidate message. */
-function reconcilePending(pending: PendingMessage[], transcript: TranscriptEntry[]): { kept: PendingMessage[]; lost: number } {
+/**
+ * Drops local copies once the server transcript holds them. Each entry stands for one message only, and an
+ * entry the page already had is the echo of an earlier message, so two identical texts need two new entries.
+ */
+function reconcilePending(pending: PendingMessage[], transcript: TranscriptEntry[], known: TranscriptEntry[]): PendingMessage[] {
+  const used = new Set(known.map((e) => e.id));
   const kept: PendingMessage[] = [];
   for (const p of pending) {
-    const match = transcript.some(
-      (e) => e.role === "candidate" && e.channel === p.channel && e.text.trim() === p.text && Date.parse(e.wall) >= p.sentAt - 5000,
+    const match = transcript.find(
+      (e) => !used.has(e.id) && e.role === "candidate" && e.channel === p.channel && e.text.trim() === p.text && Date.parse(e.wall) >= p.sentAt - 5000,
     );
-    if (!match) kept.push(p);
+    if (match) used.add(match.id);
+    else kept.push(p);
   }
-  return { kept, lost: kept.length };
+  return kept;
 }
 
 function withoutStreams(streams: SessionState["streams"], transcript: TranscriptEntry[]): SessionState["streams"] {
@@ -92,14 +97,12 @@ function applyServer(state: SessionState, msg: ServerMsg, now: number, fresh: bo
       let pending = state.pending;
       let notice = state.notice;
       if (pending.length > 0) {
-        const { kept, lost } = reconcilePending(pending, session.transcript);
-        // Still unmatched after a reconnect means the server never got it.
-        if (fresh && lost > 0) {
-          notice = lost === 1 ? "A message did not send. Please send it again." : "Some messages did not send. Please send them again.";
-          pending = [];
-        } else {
-          pending = kept;
-        }
+        const kept = reconcilePending(pending, session.transcript, state.session?.transcript ?? []);
+        // The state that opens a connection is taken before the server reads anything sent on it, so only
+        // messages sent on the closed connection can be known lost.
+        const lost = fresh ? kept.filter((p) => p.carried).length : 0;
+        if (lost > 0) notice = lost === 1 ? "A message did not send. Please send it again." : "Some messages did not send. Please send them again.";
+        pending = fresh ? kept.filter((p) => !p.carried) : kept;
       }
       const streams = fresh ? {} : withoutStreams(state.streams, session.transcript);
       const useBoard = state.graph.version === null || session.board.version >= state.graph.version;
@@ -259,7 +262,12 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, loadError: action.message };
 
     case "connection":
-      return { ...state, connection: action.status };
+      // What is still pending when a connection opens went out on the one before it.
+      return {
+        ...state,
+        connection: action.status,
+        pending: action.status === "open" && state.pending.length > 0 ? state.pending.map((p) => (p.carried ? p : { ...p, carried: true })) : state.pending,
+      };
 
     case "server":
       return applyServer(state, action.msg, action.now, action.fresh);

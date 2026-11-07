@@ -23,6 +23,8 @@ export interface PendingMessage {
   channel: Channel;
   text: string;
   sentAt: number;
+  /** Sent on a connection that has since closed, so a fresh state without it means the server never got it. */
+  carried?: boolean;
 }
 
 export interface StreamBuffer {

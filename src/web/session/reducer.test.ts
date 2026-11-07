@@ -144,9 +144,45 @@ describe("optimistic messages", () => {
   it("tells the user when a message never reached the server after a reconnect", () => {
     let state = loaded();
     state = reducer(state, { type: "pending-add", message: pending });
+    state = reducer(state, { type: "connection", status: "open" });
     state = server(state, { type: "session.state", session: session() }, { fresh: true });
     expect(state.pending).toEqual([]);
     expect(state.notice).toMatch(/did not send/i);
+  });
+
+  it("keeps one of two identical messages as unsent when the server got only one", () => {
+    let state = loaded();
+    state = reducer(state, { type: "pending-add", message: { clientMsgId: "a", channel: "interview", text: "ok", sentAt: T0 + 60_000 } });
+    state = reducer(state, { type: "pending-add", message: { clientMsgId: "b", channel: "interview", text: "ok", sentAt: T0 + 60_200 } });
+    state = reducer(state, { type: "connection", status: "open" });
+    const one = session({ transcript: [entry("e1", "interviewer", "Hi"), entry("e2", "candidate", "ok", { wall: new Date(T0 + 60_100).toISOString() })] });
+    state = server(state, { type: "session.state", session: one }, { fresh: true });
+    expect(state.notice).toBe("A message did not send. Please send it again.");
+    expect(chatItems(state, "interview").filter((i) => i.role === "candidate").map((i) => i.state)).toEqual(["done"]);
+  });
+
+  it("does not take an earlier identical message as the echo of a new one", () => {
+    let state = loaded();
+    state = server(state, { type: "chat.message", clientMsgId: "a", entry: entry("e2", "candidate", "ok", { wall: new Date(T0 + 60_000).toISOString() }) });
+    state = reducer(state, { type: "pending-add", message: { clientMsgId: "b", channel: "interview", text: "ok", sentAt: T0 + 61_000 } });
+    state = reducer(state, { type: "connection", status: "open" });
+    const before = state.session?.transcript ?? [];
+    state = server(state, { type: "session.state", session: session({ transcript: before }) }, { fresh: true });
+    expect(state.notice).toMatch(/did not send/i);
+    expect(state.pending).toEqual([]);
+  });
+
+  it("keeps a message sent between the socket opening and the first state, and settles it on the echo", () => {
+    let state = loaded();
+    state = reducer(state, { type: "connection", status: "open" });
+    state = reducer(state, { type: "pending-add", message: pending });
+    // The opening state was taken before the server read the message.
+    state = server(state, { type: "session.state", session: session() }, { fresh: true });
+    expect(state.notice).toBeNull();
+    expect(state.pending).toHaveLength(1);
+    state = server(state, { type: "chat.message", clientMsgId: "c-1", entry: entry("e2", "candidate", "My design has a CDN.") });
+    expect(state.pending).toEqual([]);
+    expect(chatItems(state, "interview").filter((i) => i.role === "candidate")).toHaveLength(1);
   });
 });
 
