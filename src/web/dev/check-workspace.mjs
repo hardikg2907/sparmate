@@ -4,7 +4,7 @@
 //   npx vite --port 5181 --strictPort &
 //   node src/web/dev/check-workspace.mjs http://127.0.0.1:5181
 //
-// The dev server has no /excalidraw-assets/, so those requests are answered from node_modules here.
+// Requests for /excalidraw-assets/ are answered from node_modules here, so the check also works against a server that lacks them.
 import puppeteer from "puppeteer-core";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
