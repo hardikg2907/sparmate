@@ -3,6 +3,10 @@ import { LIMITS } from "../../shared/protocol";
 import type { BoardPin } from "../../shared/types";
 
 /** Enough to mark every box worth a remark; a model stuck in a loop must not bury the board. */
+// Control characters are stripped on purpose so a note cannot smuggle line breaks or escapes into a prompt.
+// eslint-disable-next-line no-control-regex
+const NOTE_CONTROL_CHARS = /[\u0000-\u001f\u007f\u2028\u2029]+/g;
+
 export const MAX_PINS: Record<BoardPin["by"], number> = { guide: 30, judge: 12 };
 
 export interface PinRequest {
@@ -26,9 +30,7 @@ export function validatePin(
   if (!isPinTargetId(req.elementId)) return { error: "That is not an element id. Use an id from the pin targets list." };
   const target = pinTargets(elements).find((t) => t.id === req.elementId);
   if (!target) return { error: "No box or arrow on the board has that id. Use an id from the pin targets list." };
-  // Control characters are stripped on purpose so a note cannot smuggle line breaks or escapes into a prompt.
-  // eslint-disable-next-line no-control-regex
-  const note = req.note.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
+  const note = req.note.replace(NOTE_CONTROL_CHARS, " ").replace(/\s+/g, " ").trim();
   if (note === "") return { error: "The note is empty." };
   if (note.length > LIMITS.pinNoteChars) return { error: `Keep the note under ${LIMITS.pinNoteChars} characters.` };
   // One pin per element and author: a second note on the same box replaces the first.
