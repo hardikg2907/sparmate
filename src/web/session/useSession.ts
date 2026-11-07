@@ -4,7 +4,8 @@ import type { BoardHandle } from "../board/Board";
 import type { ClientMsg, ServerMsg } from "../../shared/protocol";
 import type { Channel, PublicSession } from "../../shared/types";
 import { CHAT_MAX_CHARS, PNG_MAX_BASE64 } from "../lib/contract";
-import { chatItems, initialState, reducer } from "./reducer";
+import { confirmVersion, decideAfterReconnect, decideOnExternal, editLedger, recordSent, settleLedger, startLedger, type CodeDecision, type CodeLedger, type CodeText } from "./codeSync";
+import { chatItems, initialState, reducer, type Action } from "./reducer";
 import type { SessionActions, SessionController, SessionSource } from "./types";
 
 const SERVER_TYPES = [
@@ -30,6 +31,7 @@ const CODE_DEBOUNCE_MS = 500;
 const RUN_GUARD_MS = 60_000;
 const NOTES_GUARD_MS = 240_000;
 const NOT_CONNECTED = "Not connected yet. Try again in a moment.";
+const CODE_CHECKING = "Saving your code first. Try again in a moment.";
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -40,9 +42,16 @@ function newId(): string {
 
 /** Everything the socket handlers and actions share but that must not cause a render when it changes. */
 interface Io {
-  codeVersion: number;
+  /** Null on a round without a code file. */
+  code: CodeLedger | null;
   codeTimer: Timer | null;
-  pendingCode: string | null;
+  /** After a reconnect the server's file is unknown until fetched, and no update may go out before that. */
+  codeStale: boolean;
+  codeChecking: boolean;
+  /** Numbers each check, so a slow fetch cannot settle the code after a newer one started. */
+  codeCheck: number;
+  /** The highest code version the server has reported, for a last save that cannot wait for the check. */
+  codeServerVersion: number;
   boardVersion: number;
   pendingBoard: { version: number; elements: readonly Record<string, unknown>[] } | null;
   /** The last scene the board reported, so the debrief that follows in this page shows the final board. */
@@ -53,12 +62,59 @@ interface Io {
   boardListeners: Set<() => void>;
 }
 
-function flushCode(io: Io, socketRef: MutableRefObject<SocketLike | null>): void {
+/** With `force`, a save that cannot wait for the check goes out above every version the server has reported. */
+function flushCode(io: Io, socketRef: MutableRefObject<SocketLike | null>, force = false): void {
   if (io.codeTimer) clearTimeout(io.codeTimer);
   io.codeTimer = null;
-  if (io.pendingCode === null) return;
-  const sent = socketRef.current?.send({ type: "code.update", version: io.codeVersion, content: io.pendingCode }) ?? false;
-  if (sent) io.pendingCode = null;
+  const ledger = io.code;
+  if (!ledger?.unsent || (io.codeStale && !force)) return;
+  const editor = force && io.codeStale ? { ...ledger.editor, version: Math.max(ledger.editor.version, io.codeServerVersion + 1) } : ledger.editor;
+  const sent = socketRef.current?.send({ type: "code.update", version: editor.version, content: editor.content }) ?? false;
+  if (sent) io.code = recordSent({ ...ledger, editor });
+}
+
+/**
+ * Settles the ledger on a code decision and sends an editor text that wins. The caller shows the server's text on
+ * "take", since a reconnect and a live outside change carry it in different messages.
+ */
+function applyCodeDecision(io: Io, socketRef: MutableRefObject<SocketLike | null>, dispatch: (action: Action) => void, decision: CodeDecision, server: CodeText): void {
+  if (!io.code) return;
+  io.code = settleLedger(io.code, decision, server);
+  if (decision.kind === "take") {
+    if (io.codeTimer) clearTimeout(io.codeTimer);
+    io.codeTimer = null;
+    return;
+  }
+  if (decision.kind !== "keep") dispatch({ type: "code-edit", content: io.code.editor.content, version: io.code.editor.version });
+  if (decision.kind === "send") flushCode(io, socketRef);
+  if (decision.kind !== "same" && decision.notice) dispatch({ type: "notice", message: decision.notice });
+}
+
+/**
+ * Fetches the server's file and settles it against the editor; until then no code update goes out. A reconnect
+ * restarts a check in flight, since the server may have moved on; an edit or a run only starts one when none runs.
+ */
+function checkCode(io: Io, source: SessionSource, socketRef: MutableRefObject<SocketLike | null>, dispatch: (action: Action) => void, restart: boolean): void {
+  if (io.codeChecking && !restart) return;
+  const check = ++io.codeCheck;
+  io.codeStale = true;
+  io.codeChecking = true;
+  if (io.codeTimer) clearTimeout(io.codeTimer);
+  io.codeTimer = null;
+  source.fetchCode().then(
+    (code) => {
+      if (check !== io.codeCheck || !io.code) return;
+      io.codeStale = io.codeChecking = false;
+      io.codeServerVersion = Math.max(io.codeServerVersion, code.version);
+      const decision = decideAfterReconnect(io.code, code);
+      applyCodeDecision(io, socketRef, dispatch, decision, code);
+      if (decision.kind === "take") dispatch({ type: "code-synced", code });
+    },
+    () => {
+      // Still stale, so the next edit, run or reconnect checks again.
+      if (check === io.codeCheck) io.codeChecking = false;
+    },
+  );
 }
 
 export function useSessionController(source: SessionSource): SessionController {
@@ -71,9 +127,12 @@ export function useSessionController(source: SessionSource): SessionController {
   const ioRef = useRef<Io | null>(null);
   if (!ioRef.current) {
     ioRef.current = {
-      codeVersion: 0,
+      code: null,
       codeTimer: null,
-      pendingCode: null,
+      codeStale: false,
+      codeChecking: false,
+      codeCheck: 0,
+      codeServerVersion: 0,
       boardVersion: 0,
       pendingBoard: null,
       latestBoard: null,
@@ -93,9 +152,11 @@ export function useSessionController(source: SessionSource): SessionController {
     source.load().then(
       (data) => {
         if (cancelled) return;
-        io.codeVersion = data.code?.version ?? 0;
+        io.code = data.code ? startLedger({ version: data.code.version, content: data.code.content }) : null;
+        io.codeStale = io.codeChecking = false;
+        io.codeCheck += 1;
+        io.codeServerVersion = data.code?.version ?? 0;
         io.boardVersion = data.board?.version ?? 0;
-        io.pendingCode = null;
         io.pendingBoard = null;
         io.latestBoard = null;
         dispatch({ type: "loaded", ...data, now: Date.now() });
@@ -141,21 +202,30 @@ export function useSessionController(source: SessionSource): SessionController {
       if (io.pendingBoard && socket.send({ type: "board.update", version: io.pendingBoard.version, elements: Array.from(io.pendingBoard.elements) })) {
         io.pendingBoard = null;
       }
-      if (io.pendingCode !== null) {
-        flushCode(io, socketRef);
-      } else if (session.code && session.code.version > io.codeVersion) {
-        source.fetchCode().then(
-          (code) => {
-            if (io.pendingCode !== null) return;
-            io.codeVersion = code.version;
-            dispatch({ type: "code-synced", code });
-          },
-          () => {},
-        );
+      if (!io.code || !session.code) return;
+      io.codeServerVersion = Math.max(io.codeServerVersion, session.code.version);
+      // An update in flight at the drop may be lost, and the file may have changed while away.
+      if (io.code.unsent || io.code.sent.length > 0 || io.codeStale || session.code.version !== io.code.base.version) {
+        checkCode(io, source, socketRef, dispatch, true);
       }
     };
 
+    const onExternal = (msg: Extract<ServerMsg, { type: "code.external" }>) => {
+      io.codeServerVersion = Math.max(io.codeServerVersion, msg.version);
+      if (!io.code) {
+        dispatch({ type: "server", msg, now: Date.now(), fresh: false });
+        return;
+      }
+      const decision = decideOnExternal(io.code, msg);
+      applyCodeDecision(io, socketRef, dispatch, decision, msg);
+      if (decision.kind === "take") dispatch({ type: "server", msg, now: Date.now(), fresh: false });
+    };
+
     const onServer = (msg: ServerMsg) => {
+      if (msg.type === "code.external") {
+        onExternal(msg);
+        return;
+      }
       const fresh = io.fresh && msg.type === "session.state";
       if (fresh) io.fresh = false;
       dispatch({ type: "server", msg, now: Date.now(), fresh });
@@ -163,12 +233,8 @@ export function useSessionController(source: SessionSource): SessionController {
         case "board.png.request":
           answerPng(msg.requestId, msg.frameId);
           break;
-        case "code.external":
-          // The editor is about to be replaced, so an unsent edit would overwrite the outside change.
-          if (io.codeTimer) clearTimeout(io.codeTimer);
-          io.codeTimer = null;
-          io.pendingCode = null;
-          io.codeVersion = msg.version;
+        case "code.diagnostics":
+          if (io.code) io.code = confirmVersion(io.code, msg.version);
           break;
         case "session.state":
           if (fresh) afterReconnect(msg.session);
@@ -201,7 +267,7 @@ export function useSessionController(source: SessionSource): SessionController {
     socket.connect();
 
     return () => {
-      flushCode(io, socketRef);
+      flushCode(io, socketRef, true);
       for (const off of offs) off();
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
@@ -226,7 +292,8 @@ export function useSessionController(source: SessionSource): SessionController {
     };
 
     const flush = () => {
-      flushCode(io, socketRef);
+      if (io.codeStale && io.code?.unsent) checkCode(io, source, socketRef, dispatch, false);
+      else flushCode(io, socketRef);
     };
 
     return {
@@ -259,7 +326,7 @@ export function useSessionController(source: SessionSource): SessionController {
           io.latestBoard = { version: io.boardVersion, elements };
           socketRef.current?.send({ type: "board.update", version: io.boardVersion, elements });
         }
-        flush();
+        flushCode(io, socketRef, true);
         send({ type: "session.end" });
       },
 
@@ -271,7 +338,7 @@ export function useSessionController(source: SessionSource): SessionController {
       },
       discard() {
         // Code typed in the last moments may not have been sent; the server keeps an attempt file that has code.
-        flush();
+        flushCode(io, socketRef, true);
         send({ type: "session.discard" });
       },
       guidedFeedback() {
@@ -305,15 +372,21 @@ export function useSessionController(source: SessionSource): SessionController {
       },
 
       editCode(content) {
-        io.codeVersion += 1;
-        io.pendingCode = content;
-        dispatch({ type: "code-edit", content, version: io.codeVersion });
+        if (!io.code) return;
+        io.code = editLedger(io.code, content);
+        dispatch({ type: "code-edit", content, version: io.code.editor.version });
         if (io.codeTimer) clearTimeout(io.codeTimer);
         io.codeTimer = setTimeout(flush, CODE_DEBOUNCE_MS);
       },
 
       runCode() {
         if (stateRef.current.code?.running) return;
+        if (io.codeStale) {
+          // The program would compile whatever the server holds, which may not be the editor's text.
+          checkCode(io, source, socketRef, dispatch, false);
+          dispatch({ type: "notice", message: CODE_CHECKING });
+          return;
+        }
         flush();
         if (!send({ type: "code.run" })) return;
         dispatch({ type: "run-start" });
