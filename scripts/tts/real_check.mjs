@@ -35,7 +35,7 @@ function request(method, path, { headers = {}, body } = {}) {
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
           const buf = Buffer.concat(chunks);
-          let json = null;
+          let json;
           try {
             json = JSON.parse(buf.toString("utf8"));
           } catch {

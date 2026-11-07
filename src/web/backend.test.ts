@@ -226,7 +226,7 @@ describe("discarding a session over REST", () => {
   });
 
   it("sends DELETE with the CSRF token and reads the answer", async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => (url === "/api/bootstrap" ? json(200, { csrfToken: "tok1" }) : json(200, { ok: true })));
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => (url === "/api/bootstrap" ? json(200, { csrfToken: "tok1" }) : json(200, { ok: true })));
     vi.stubGlobal("fetch", fetchMock);
     await getBootstrap(true);
 

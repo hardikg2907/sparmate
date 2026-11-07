@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { VoiceInputLifecycle, VoiceOutputLifecycle, detachAndAbortRecognizer } from "./voiceLifecycle";
+import { VoiceInputLifecycle, VoiceOutputLifecycle } from "./voiceLifecycle";
 
 class MockSpeechRecognition {
   starts = 0;
@@ -96,7 +96,7 @@ describe("VoiceInputLifecycle", () => {
   });
 
   it("a late onend from an old recognizer does nothing", () => {
-    let instances: MockSpeechRecognition[] = [];
+    const instances: MockSpeechRecognition[] = [];
     const session = new VoiceInputLifecycle({
       getSpeechClass: () => {
         const inst = new MockSpeechRecognition();
@@ -130,7 +130,7 @@ describe("VoiceInputLifecycle", () => {
   });
 
   it("double toggle leaves one recognizer or stops cleanly", () => {
-    let instances: MockSpeechRecognition[] = [];
+    const instances: MockSpeechRecognition[] = [];
     const session = new VoiceInputLifecycle({
       getSpeechClass: () => {
         const inst = new MockSpeechRecognition();
@@ -167,7 +167,7 @@ describe("VoiceInputLifecycle", () => {
 
   it("Ctrl+M while disabled does nothing and does not arm mic", () => {
     let disabled = true;
-    let instances: MockSpeechRecognition[] = [];
+    const instances: MockSpeechRecognition[] = [];
     const session = new VoiceInputLifecycle({
       getSpeechClass: () => {
         const inst = new MockSpeechRecognition();
@@ -209,7 +209,7 @@ describe("VoiceInputLifecycle", () => {
   });
 
   it("Ctrl+M while panel is not active/visible does nothing", () => {
-    let instances: MockSpeechRecognition[] = [];
+    const instances: MockSpeechRecognition[] = [];
     const session = new VoiceInputLifecycle({
       getSpeechClass: () => {
         const inst = new MockSpeechRecognition();
@@ -388,12 +388,8 @@ describe("VoiceOutputLifecycle", () => {
 
 describe("Tab hidden behavior", () => {
   it("tab hidden stops both mic and audio and mic does not auto-resume", () => {
-    let mockRecInstance: MockSpeechRecognition | null = null;
     const inputSession = new VoiceInputLifecycle({
-      getSpeechClass: () => {
-        mockRecInstance = new MockSpeechRecognition();
-        return MockSpeechRecognition as any;
-      },
+      getSpeechClass: () => MockSpeechRecognition as any,
       getAvailabilityStatus: () => "available",
       isDisabled: () => false,
       isActive: () => true,

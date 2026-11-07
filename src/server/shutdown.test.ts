@@ -64,7 +64,7 @@ describe("createShutdownHandler", () => {
         deadlineMs: 3000,
       });
 
-      const shutdownPromise = handler("SIGINT");
+      void handler("SIGINT");
 
       await vi.advanceTimersByTimeAsync(3000);
 

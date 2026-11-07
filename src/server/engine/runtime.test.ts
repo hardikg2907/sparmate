@@ -103,7 +103,7 @@ function newSession(mode: Session["mode"]): Session {
   };
 }
 
-function setup(driver: Driver, mode: Session["mode"] = "interview", studyRoot = "/nonexistent") {
+function setup(driver: Driver, _mode: Session["mode"] = "interview", studyRoot = "/nonexistent") {
   const store = new MemoryStore();
   const deps: RuntimeDeps = {
     config: { studyRoot } as ServerConfig,

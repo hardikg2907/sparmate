@@ -5,7 +5,6 @@ import { Alert, Button, DialogClose, Label, Segmented, Switch } from "./ui";
 import { Select } from "./Select";
 import { CheckIcon, SpinnerIcon, WarnIcon } from "./icons";
 import type { Theme } from "../theme";
-import { api } from "../backend";
 import { DEFAULT_SETTINGS } from "../lib/contract";
 import { DEFAULT_VOICE_SETTINGS, getVoiceSettings, saveVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 

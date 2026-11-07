@@ -99,7 +99,7 @@ function Shell() {
     try {
       await api.saveSettings(next);
     } catch (error) {
-      throw new Error(error instanceof ApiError && error.message ? error.message : "The settings could not be saved.");
+      throw new Error(error instanceof ApiError && error.message ? error.message : "The settings could not be saved.", { cause: error });
     }
     setBoot({ phase: "ready", bootstrap, settings: next });
   };

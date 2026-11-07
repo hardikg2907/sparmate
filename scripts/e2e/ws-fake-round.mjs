@@ -60,7 +60,7 @@ function request(method, path, { headers = {}, body } = {}) {
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
           const buf = Buffer.concat(chunks);
-          let json = null;
+          let json;
           try {
             json = JSON.parse(buf.toString("utf8"));
           } catch {
@@ -798,7 +798,6 @@ async function restartMidRound(dirs, server) {
   let mark = c2.mark();
   c2.send({ type: "session.resume" });
   await c2.waitFor((m) => m.type === "session.state" && m.session.status === "live", { since: mark, label: "live again" });
-  mark = c2.mark();
   const reply = await say(c2, "Next, the capacity math.", "r2");
   check("the round carries on after the restart", reply.reply.entry.text.length > 0 && !reply.reply.entry.text.includes("carry on"), reply.reply.entry.text);
   c2.close();

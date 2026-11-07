@@ -114,7 +114,6 @@ export function HomeView(props: HomeViewProps) {
     starting,
     startError,
     onStart,
-    onStartCustom,
     discarding,
     discardError,
     onDiscard,

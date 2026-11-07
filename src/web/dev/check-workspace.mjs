@@ -7,7 +7,7 @@
 // The dev server has no /excalidraw-assets/, so those requests are answered from node_modules here.
 import puppeteer from "puppeteer-core";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:5181";
@@ -546,7 +546,7 @@ await section("LLD relations", async () => {
   check("with one shape selected, owns starts on it and ends free, diamond first", owns.length === 1 && owns[0].start === shapes.cls && owns[0].end === null && owns[0].startArrowhead === "diamond" && owns[0].label === "owns", owns);
 
   // Moving a bound shape drags its arrow end with it (Excalidraw's own binding takes over).
-  const before = await page.evaluate((id) => {
+  const before = await page.evaluate(() => {
     const els = window.__irBoard.elements();
     const arrow = els.find((e) => e.type === "arrow" && e.customData?.kind === "inherits");
     return { x: arrow.x, y: arrow.y, w: arrow.width, h: arrow.height };

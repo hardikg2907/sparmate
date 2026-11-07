@@ -64,6 +64,8 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
     let exitCode: number | null = null;
     let signal: string | null = null;
     let finished = false;
+    // Declared up front because finish() reads it; the timer starts only after the listeners are attached.
+    // eslint-disable-next-line prefer-const
     let timeout: NodeJS.Timeout | undefined;
     let grace: NodeJS.Timeout | undefined;
     let memoryWatch: NodeJS.Timeout | undefined;

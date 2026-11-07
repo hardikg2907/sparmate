@@ -152,7 +152,7 @@ function request(method, path, { headers = {}, body } = {}) {
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
-          let json = null;
+          let json;
           try {
             json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           } catch {

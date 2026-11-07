@@ -11,7 +11,7 @@ export class ProblemFileError extends Error {
   override name = "ProblemFileError";
 }
 
-const FRONTMATTER = /^﻿?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const H2 = /^## +(.+?)\s*#*\s*$/;
 

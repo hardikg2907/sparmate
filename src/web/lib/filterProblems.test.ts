@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProblemSummary } from "../../shared/types";
-import { filterAndSortProblems, matchesStatus, type SortOption, type StatusFilter } from "./filterProblems";
+import { filterAndSortProblems, matchesStatus } from "./filterProblems";
 
 function makeProblem(overrides: Partial<ProblemSummary> & { id: string; title: string }): ProblemSummary {
   return {

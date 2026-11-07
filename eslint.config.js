@@ -48,5 +48,12 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
+  {
+    files: ["src/web/lib/voiceLifecycle.ts", "src/web/hooks/useVoiceInput.ts"],
+    rules: {
+      // The Web Speech API and its vendor-prefixed constructors are not in TypeScript's DOM types.
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
   prettier,
 );

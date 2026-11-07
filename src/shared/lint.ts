@@ -83,7 +83,7 @@ function stripMarkdown(line: string): string {
 
 function splitSentences(paragraph: string): string[] {
   return paragraph
-    .split(/(?<=[.!?])\s+(?=["'(\[]?[A-Z])/)
+    .split(/(?<=[.!?])\s+(?=["'([]?[A-Z])/)
     .map((s) => s.trim())
     .filter((s) => s !== "");
 }

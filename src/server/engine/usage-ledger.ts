@@ -137,7 +137,7 @@ export function calcCacheHitRate(inputTokens: number, cacheReadTokens: number, c
 export function parseUsageRecord(line: string): UsageRecord | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
-  let raw: any;
+  let raw: Record<string, unknown>;
   try {
     raw = JSON.parse(trimmed);
   } catch {

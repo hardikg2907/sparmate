@@ -3,7 +3,7 @@
 // policy blocks inline scripts.
 try {
   if (localStorage.getItem("sparmate-theme") !== "light") document.documentElement.classList.add("dark");
-} catch (error) {
+} catch {
   // Storage can be blocked; the new-visitor default is dark, and the app applies the saved theme once it has loaded.
   document.documentElement.classList.add("dark");
 }

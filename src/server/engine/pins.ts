@@ -26,6 +26,8 @@ export function validatePin(
   if (!isPinTargetId(req.elementId)) return { error: "That is not an element id. Use an id from the pin targets list." };
   const target = pinTargets(elements).find((t) => t.id === req.elementId);
   if (!target) return { error: "No box or arrow on the board has that id. Use an id from the pin targets list." };
+  // Control characters are stripped on purpose so a note cannot smuggle line breaks or escapes into a prompt.
+  // eslint-disable-next-line no-control-regex
   const note = req.note.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
   if (note === "") return { error: "The note is empty." };
   if (note.length > LIMITS.pinNoteChars) return { error: `Keep the note under ${LIMITS.pinNoteChars} characters.` };

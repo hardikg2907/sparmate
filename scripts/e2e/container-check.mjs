@@ -15,7 +15,6 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const CONTAINER_NAME = process.env.SPARMATE_CONTAINER_NAME ?? `ir-test-check-${Date.now()}`;
 const IMAGE_NAME = process.env.SPARMATE_IMAGE_NAME ?? "localhost/ir-test-image:latest";
 const KOKORO_VOLUME = process.env.SPARMATE_KOKORO_VOLUME ?? "ir-test-kokoro";
-const DATA_VOLUME = process.env.SPARMATE_DATA_VOLUME ?? "ir-test-data";
 const PODMAN = process.env.PODMAN_BIN ?? "/opt/podman/bin/podman";
 
 const results = [];
@@ -55,7 +54,7 @@ function request(method, path, { headers = {}, body } = {}) {
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
           const buf = Buffer.concat(chunks);
-          let json = null;
+          let json;
           try {
             json = JSON.parse(buf.toString("utf8"));
           } catch {

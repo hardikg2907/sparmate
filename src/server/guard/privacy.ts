@@ -139,7 +139,7 @@ async function readTextIfPresent(path: string): Promise<string | null> {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") return null;
-    throw new Error(`Privacy guard cannot read ${path}: ${code ?? "unknown error"}`);
+    throw new Error(`Privacy guard cannot read ${path}: ${code ?? "unknown error"}`, { cause: error });
   }
 }
 

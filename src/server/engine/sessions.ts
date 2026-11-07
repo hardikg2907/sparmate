@@ -1,21 +1,15 @@
-import { join } from "node:path";
-import { stringify as toYaml } from "yaml";
 import { deriveChecklist } from "../../shared/checklist";
 import { phasesFor, type Mode, type Track } from "../../shared/phases";
-import type { Problem, ProblemMeta } from "../../shared/problem";
+import type { Problem } from "../../shared/problem";
 import type { CreateSessionRequest } from "../../shared/protocol";
 import type { ProblemSummary, PublicSession, Session } from "../../shared/types";
 import { createAttemptFile, removeAttemptIfUntouched } from "../study/attempts";
 import { findBullet, tableTail } from "../study/tracker";
-import { dataPaths } from "./config";
-import { DriverError } from "./driver";
-import { localDate, randomId, writeFileAtomic } from "./fsutil";
-import { parseProblem, type ProblemCatalog } from "./problems";
-import { commonVars, sectionList } from "./prompts";
+import { localDate } from "./fsutil";
+import type { ProblemCatalog } from "./problems";
 import { toPublicSession } from "./public";
 import { buildProblemSummaries, lastTableRow, trackFromLogRow, type TrackerBullet } from "./recommend";
 import { ATTEMPT_PATH, SessionRuntime, type RuntimeDeps } from "./runtime";
-import { BriefWriterOutputSchema, toApiSchema, toCompatSchema } from "./schemas";
 import { readStudyFile } from "./scribe";
 import { newSessionId, SESSION_ID, type SessionSummary } from "./store";
 
@@ -33,7 +27,6 @@ export class HttpError extends Error {
 const DORMANT_AFTER_MS = 10 * 60_000;
 /** A round on one debrief gap is short: long enough to teach the gap and try it again. */
 const FOCUS_ROUND_MINUTES = 20;
-const CUSTOM_ID = /^[a-z0-9][a-z0-9-]{1,80}$/;
 
 import { CustomProblemJobManager } from "./custom-job";
 import type { CustomProblemJobStatus } from "../../shared/protocol";

@@ -110,7 +110,7 @@ async function main() {
     let lastStage = "";
     let lastSearches = -1;
     let lastPages = -1;
-    let finalStatus = null;
+    let finalStatus;
 
     while (true) {
       const res = await request("GET", `/api/custom-problems/${jobId}`, {
