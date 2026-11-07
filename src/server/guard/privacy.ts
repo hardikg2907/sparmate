@@ -37,7 +37,8 @@ const COMMON_SUBDOMAINS = new Set(["mail", "email", "webmail", "smtp", "mx", "in
 // Short fragments such as "me" or "jd" would match everyday words and make the guard unusable.
 const MIN_DERIVED_TERM_LENGTH = 3;
 
-const REDACTED = "[redacted]";
+/** What `redact` puts in place of a term; callers that must drop a redaction instead can look for it. */
+export const REDACTED = "[redacted]";
 const JSON_READ_ATTEMPTS = 3;
 const JSON_RETRY_DELAY_MS = 40;
 

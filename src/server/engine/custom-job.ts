@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { stringify as toYaml } from "yaml";
 import type { Mode, Track } from "../../shared/phases";
@@ -21,11 +22,43 @@ import { dataPaths, type ServerConfig } from "./config";
 import { writeFileAtomic } from "./fsutil";
 import { localDate } from "./fsutil";
 import type { Logger } from "./log";
-import type { PrivacyGuard } from "../guard/privacy";
+import { REDACTED, type PrivacyGuard } from "../guard/privacy";
 import type { SettingsStore } from "./settings";
 import { HttpError } from "./sessions";
 
 const CUSTOM_ID = /^[a-z0-9][a-z0-9-]{1,80}$/;
+
+/** A failure whose text is safe to show on the page as it is. */
+class JobFailure extends Error {}
+
+const UNUSABLE_TITLE = "The problem title is not usable after privacy filtering. Rephrase the prompt.";
+const UNSAVABLE_PROBLEM = "The prepared problem could not be saved after privacy filtering. Rephrase the prompt.";
+
+/** A title with every redacted term removed, so neither the page nor the id carries a placeholder. */
+function cleanTitle(guard: PrivacyGuard, title: string): string {
+  return guard.redact(title).split(REDACTED).join(" ").replace(/\s+/g, " ").trim();
+}
+
+/** Redacts the free text of a problem and drops the items a redaction would break (links, tags), before any file is built. */
+function redactMeta(guard: PrivacyGuard, meta: ProblemMeta): ProblemMeta {
+  const clean = (text: string): boolean => guard.findViolations(text).length === 0;
+  return {
+    ...meta,
+    tags: meta.tags.filter(clean),
+    ...(meta.sources ? { sources: meta.sources.filter((source) => clean(source.title) && clean(source.url)) } : {}),
+    ...(meta.confidence !== undefined ? { confidence: guard.redact(meta.confidence) } : {}),
+    ...(meta.corrections
+      ? {
+          corrections: meta.corrections.map((c) => ({
+            section: guard.redact(c.section),
+            claim: guard.redact(c.claim),
+            fix: guard.redact(c.fix),
+            source: guard.redact(c.source),
+          })),
+        }
+      : {}),
+  };
+}
 
 export function validateProblemBody(
   body: string,
@@ -350,7 +383,9 @@ export class CustomProblemJobManager {
 
       if (isJobTerminated(job)) return;
 
-      const id = this.customId(initialWriterOut.meta.title);
+      const title = cleanTitle(this.deps.guard, initialWriterOut.meta.title);
+      if (title.length < 2 || !/[a-z0-9]/i.test(title)) throw new JobFailure(UNUSABLE_TITLE);
+      const id = this.customId(title);
       const customDir = dataPaths(this.deps.config.dataDir).customProblems;
       const file = join(customDir, `${id}.md`);
 
@@ -362,10 +397,10 @@ export class CustomProblemJobManager {
         file,
       );
 
-      const meta: ProblemMeta = {
+      const meta = redactMeta(this.deps.guard, {
         id,
         track: job.track,
-        title: initialWriterOut.meta.title,
+        title,
         difficulty: initialWriterOut.meta.difficulty,
         tags: initialWriterOut.meta.tags,
         tracker: null,
@@ -375,24 +410,41 @@ export class CustomProblemJobManager {
         confidence: initialWriterOut.confidence,
         verified,
         corrections,
-      };
+      });
 
-      const text = this.deps.guard.redact(`---\n${toYaml(meta)}---\n\n${finalBody.trim()}\n`);
+      // Redaction is applied to the parts before they are serialized; redacting the YAML itself could break it.
+      const text = `---\n${toYaml(meta)}---\n\n${this.deps.guard.redact(finalBody).trim()}\n`;
+      try {
+        parseProblem(text, file, true);
+      } catch {
+        throw new JobFailure(UNSAVABLE_PROBLEM);
+      }
       await writeFileAtomic(file, text);
       await this.deps.problems.reload();
+
+      // A cancel or timeout that landed during the write wins over "ready".
+      if (isJobTerminated(job)) {
+        await unlink(file).catch(() => undefined);
+        await this.deps.problems.reload().catch(() => undefined);
+        return;
+      }
+      if (!this.deps.problems.get(id)) {
+        await unlink(file).catch(() => undefined);
+        throw new JobFailure(UNSAVABLE_PROBLEM);
+      }
 
       job.stage = "ready";
       job.problemId = id;
       job.title = meta.title;
       job.sourcesCount = meta.sources?.length ?? 0;
       job.checksCount = (meta.sources?.length ?? 0) + (corrections.length > 0 ? corrections.length : 1);
-      job.corrections = corrections;
+      job.corrections = meta.corrections ?? [];
       job.confidence = meta.confidence;
     } catch (err) {
       if (isJobTerminated(job)) return;
       this.deps.log.error("Custom problem preparation failed", err);
       job.stage = "failed";
-      job.error = "Could not prepare that problem. Try again, or rephrase the prompt.";
+      job.error = err instanceof JobFailure ? err.message : "Could not prepare that problem. Try again, or rephrase the prompt.";
     } finally {
       if (job.timeoutId) clearTimeout(job.timeoutId);
     }

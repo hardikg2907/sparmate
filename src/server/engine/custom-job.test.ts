@@ -1,4 +1,8 @@
+import { readdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loadPrivacyGuard } from "../guard/privacy";
+import { dataPaths } from "./config";
 import { makeStack, type Stack } from "./__fixtures__/stack";
 import { HttpError } from "./sessions";
 import { mergeCheckerBrief, validateProblemBody } from "./custom-job";
@@ -281,3 +285,97 @@ describe("CustomProblemJobManager state machine", () => {
   });
 });
 
+
+describe("custom problem files under the privacy guard", () => {
+  let stack: Stack;
+
+  beforeEach(async () => {
+    stack = await makeStack();
+  });
+
+  afterEach(async () => {
+    await stack.cleanup();
+  });
+
+  async function useGuard(...terms: string[]): Promise<void> {
+    const denylistPath = join(stack.root, "deny.txt");
+    await writeFile(denylistPath, terms.join("\n"));
+    stack.deps.guard = await loadPrivacyGuard({ claudeJsonPath: join(stack.root, "none.json"), denylistPath });
+  }
+
+  function writerTitle(title: string): void {
+    const origRunOnce = stack.deps.driver.runOnce.bind(stack.deps.driver);
+    vi.spyOn(stack.deps.driver, "runOnce").mockImplementation(async (setup) => {
+      const res = await origRunOnce(setup);
+      if (setup.role === "brief-writer" && res.output) (res.output as BriefWriterOutput).meta.title = title;
+      return res;
+    });
+  }
+
+  async function settle(jobId: string) {
+    let status = stack.manager.getCustomProblemJob(jobId);
+    while (status && !["ready", "failed", "cancelled"].includes(status.stage)) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      status = stack.manager.getCustomProblemJob(jobId);
+    }
+    return status!;
+  }
+
+  it("redacts a term in the title before the id and the file are built, and the file still loads", async () => {
+    await useGuard("zorblax");
+    writerTitle("Design the Zorblax cache");
+    const status = await settle(stack.manager.startCustomProblemJob("Design a cache", "hld").jobId);
+
+    expect(status.stage).toBe("ready");
+    expect(status.problemId).toMatch(/^custom-[a-z0-9-]+$/);
+    expect(status.problemId).not.toMatch(/zorblax|redacted/);
+    expect(status.title).not.toMatch(/zorblax/i);
+    const problem = stack.deps.problems.get(status.problemId!);
+    expect(problem?.meta.title).not.toMatch(/zorblax/i);
+    for (const name of await readdir(dataPaths(stack.config.dataDir).customProblems)) {
+      expect(await readFile(join(dataPaths(stack.config.dataDir).customProblems, name), "utf8")).not.toMatch(/zorblax/i);
+    }
+  });
+
+  it("fails with a clear message when nothing of the title is left after redaction", async () => {
+    await useGuard("zorblax");
+    writerTitle("Zorblax");
+    const status = await settle(stack.manager.startCustomProblemJob("Design a cache", "hld").jobId);
+
+    expect(status.stage).toBe("failed");
+    expect(status.problemId).toBeUndefined();
+    expect(status.error).toMatch(/title/i);
+    expect(status.error).not.toMatch(/zorblax/i);
+    expect(await readdir(dataPaths(stack.config.dataDir).customProblems).catch(() => [])).toEqual([]);
+  });
+
+  it("fails instead of reporting ready when the redacted file cannot be loaded", async () => {
+    await useGuard("traps");
+    const status = await settle(stack.manager.startCustomProblemJob("Design a cache", "hld").jobId);
+
+    expect(status.stage).toBe("failed");
+    expect(status.problemId).toBeUndefined();
+    expect(await readdir(dataPaths(stack.config.dataDir).customProblems).catch(() => [])).toEqual([]);
+  });
+
+  it("keeps a cancel that lands while the file is being written", async () => {
+    let jobId = "";
+    const realReload = stack.deps.problems.reload.bind(stack.deps.problems);
+    let calls = 0;
+    vi.spyOn(stack.deps.problems, "reload").mockImplementation(async () => {
+      const out = await realReload();
+      // The first call opens the job; the second follows the file write.
+      if (++calls === 2) stack.manager.cancelCustomProblemJob(jobId);
+      return out;
+    });
+    jobId = stack.manager.startCustomProblemJob("Design a cache", "hld").jobId;
+    const status = await settle(jobId);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(stack.manager.getCustomProblemJob(jobId)?.stage).toBe("cancelled");
+    expect(stack.manager.getCustomProblemJob(jobId)?.problemId).toBeUndefined();
+    expect(status.stage).toBe("cancelled");
+    expect(await readdir(dataPaths(stack.config.dataDir).customProblems)).toEqual([]);
+  });
+});
