@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Mode, Track } from "./phases";
+import { LIMITS } from "./protocol";
 
 export const MODEL_IDS = ["claude-opus-5-5", "claude-sonnet-5-5"] as const;
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -365,7 +366,8 @@ export const BookkeepingOpSchema = z.discriminatedUnion("kind", [
 ]);
 export type BookkeepingOp = z.infer<typeof BookkeepingOpSchema>;
 
-export const ScribeOutputSchema = z.strictObject({ ops: z.array(BookkeepingOpSchema) });
+// One apply message carries at most this many op ids, so a draft must never offer more.
+export const ScribeOutputSchema = z.strictObject({ ops: z.array(BookkeepingOpSchema).max(LIMITS.proposalOps) });
 
 export interface ProposalOp {
   id: string;

@@ -20,6 +20,7 @@ export const LIMITS = {
   pngBase64Bytes: 6_000_000,
   messagesPerSecond: 25,
   pinNoteChars: 200,
+  proposalOps: 50,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -70,7 +71,7 @@ export const ClientMsgSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("bookkeeping.apply"),
     proposalId: z.string().min(1).max(64),
-    opIds: z.array(z.string().min(1).max(64)).max(50),
+    opIds: z.array(z.string().min(1).max(64)).max(LIMITS.proposalOps),
   }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsgSchema>;

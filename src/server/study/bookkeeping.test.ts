@@ -3,7 +3,8 @@ import { mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { BookkeepingOp, Proposal } from "../../shared/types";
+import { ClientMsgSchema, LIMITS } from "../../shared/protocol";
+import { type BookkeepingOp, type Proposal, ScribeOutputSchema } from "../../shared/types";
 import { type PrivacyGuard, loadPrivacyGuard } from "../guard/privacy";
 import { NOTES_FILE, type TempStudyRoot, makeCustomRoot, makeStudyRoot, snapshotText } from "./__fixtures__/studyRoot";
 import { applyProposal, planProposal } from "./bookkeeping";
@@ -150,6 +151,20 @@ describe("tracker_update_bullet", () => {
     try {
       const proposal = await planProposal(custom.root, "s", [updateOp({ section: "### S.", bullet: "Same" })], guard);
       expect(proposal.ops[0]!.blocked).toMatch(/more than one/i);
+    } finally {
+      await custom.cleanup();
+    }
+  });
+});
+
+describe("a bullet that already ends with a bare arrow", () => {
+  it.each(["notes/x.md · 2026-10-30", "→ notes/x.md · 2026-10-30"])("writes one arrow when the suffix is %j", async (appendSuffix) => {
+    const custom = await makeCustomRoot({ "TRACKER.md": "### S. Section\n- [ ] Foo →\n- [ ] Bar\n" });
+    try {
+      const proposal = await planProposal(custom.root, "s", [updateOp({ section: "### S.", bullet: "Foo", mark: "[~]", appendSuffix })], guard);
+      expect(proposal.ops[0]!.blocked).toBeNull();
+      await applyProposal(custom.root, proposal, ["op-1"], guard);
+      expect(await custom.read("TRACKER.md")).toBe("### S. Section\n- [~] Foo → notes/x.md · 2026-10-30\n- [ ] Bar\n");
     } finally {
       await custom.cleanup();
     }
@@ -495,6 +510,42 @@ describe("privacy guard", () => {
     expect(await ctx.read(NOTES_FILE)).toBe(snapshotText(NOTES_FILE));
   });
 
+  it("blocks a notes file whose name holds a deny-listed term, even with clean content", async () => {
+    const strict = await makeGuard(["zorblax"]);
+    const op: BookkeepingOp = { kind: "notes_create", path: "notes/zorblax-design.md", content: `# Notes\n\n${"A clean line of text. ".repeat(5)}` };
+    const proposal = await plan([op], strict);
+    expect(proposal.ops[0]!.blocked).toMatch(/privacy deny-list/i);
+    expect(proposal.diffs).toEqual([]);
+    expect(JSON.stringify(proposal)).not.toMatch(/zorblax/i);
+    const result = await applyProposal(ctx.root, proposal, ["op-1"], strict);
+    expect(result.applied).toEqual([]);
+    expect(await readdir(join(ctx.root, "notes"))).not.toContain("zorblax-design.md");
+  });
+
+  it("blocks an append to a notes file whose name holds a joined deny-listed term", async () => {
+    const strict = await makeGuard(["zorblax corp"]);
+    const proposal = await plan([{ kind: "notes_append", path: "notes/zorblax-corp.md", content: "A clean line of text." }], strict);
+    expect(proposal.ops[0]!.blocked).toMatch(/privacy deny-list/i);
+    expect(JSON.stringify(proposal)).not.toMatch(/zorblax/i);
+  });
+
+  it("blocks a notes link in a session log row when the link holds a term", async () => {
+    const strict = await makeGuard(["zorblax"]);
+    const op: BookkeepingOp = { kind: "tracker_append_session_log_row", date: "2026-10-30", topics: "clean", outcome: "clean", notesFile: "notes/zorblax-x.md" };
+    expect((await plan([op], strict)).ops[0]!.blocked).toMatch(/privacy deny-list/i);
+  });
+
+  it("blocks text that forms a term only together with the text it is appended to", async () => {
+    const custom = await makeCustomRoot({ "notes/a.md": "# Notes\n\nMet the team at Zorblax" });
+    try {
+      const strict = await makeGuard(["zorblax corp"]);
+      const proposal = await planProposal(custom.root, "s", [{ kind: "notes_append", path: "notes/a.md", content: "Corp was friendly." }], strict);
+      expect(proposal.ops[0]!.blocked).toMatch(/privacy deny-list/i);
+    } finally {
+      await custom.cleanup();
+    }
+  });
+
   it("does not block text that only mentions a term the guard does not know", async () => {
     const proposal = await plan([{ kind: "tracker_add_subbullet", section: C2, parentBullet: "URL Shortener", text: "Perfectly ordinary sub-bullet" }]);
     expect(proposal.ops[0]!.blocked).toBeNull();
@@ -502,7 +553,7 @@ describe("privacy guard", () => {
 
   it("checks only the text an op adds, not what the file already holds", async () => {
     const strict = await makeGuard(["URL Shortener"]);
-    const proposal = await plan([updateOp({ appendSuffix: "→ notes/c2-url-shortener.md · 2026-10-30" })], strict);
+    const proposal = await plan([updateOp({ appendSuffix: "→ 2026-10-30" })], strict);
     expect(proposal.ops[0]!.blocked).toBeNull();
   });
 
@@ -583,6 +634,27 @@ describe("stale drafts", () => {
     await ctx.write("TRACKER.md", edited);
     await applyProposal(ctx.root, proposal, ["op-1"], guard);
     expect(sha256(await ctx.read("TRACKER.md"))).toBe(sha256(edited));
+  });
+});
+
+describe("how many ops a draft may hold", () => {
+  const sub = (n: number): BookkeepingOp => ({ kind: "tracker_add_subbullet", section: C2, parentBullet: "URL Shortener", text: `Gap number ${n}` });
+
+  it("offers at most as many ops as one apply call accepts", async () => {
+    const proposal = await plan(Array.from({ length: LIMITS.proposalOps + 5 }, (_, i) => sub(i)));
+    expect(proposal.ops.filter((o) => o.blocked === null)).toHaveLength(LIMITS.proposalOps);
+    expect(proposal.ops.at(-1)!.blocked).toMatch(/too many/i);
+  });
+
+  it("caps the scribe output at the same number", () => {
+    expect(ScribeOutputSchema.safeParse({ ops: Array.from({ length: LIMITS.proposalOps }, (_, i) => sub(i)) }).success).toBe(true);
+    expect(ScribeOutputSchema.safeParse({ ops: Array.from({ length: LIMITS.proposalOps + 1 }, (_, i) => sub(i)) }).success).toBe(false);
+  });
+
+  it("accepts as many ids as the cap in the apply message", () => {
+    const msg = (n: number) => ClientMsgSchema.safeParse({ type: "bookkeeping.apply", proposalId: "p", opIds: Array.from({ length: n }, (_, i) => `op-${i + 1}`) });
+    expect(msg(LIMITS.proposalOps).success).toBe(true);
+    expect(msg(LIMITS.proposalOps + 1).success).toBe(false);
   });
 });
 

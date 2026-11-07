@@ -2,6 +2,7 @@ import { createTwoFilesPatch } from "diff";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { LIMITS } from "../../shared/protocol";
 import { BookkeepingOpSchema, type BookkeepingOp, type Proposal, type ProposalOp } from "../../shared/types";
 import type { PrivacyGuard } from "../guard/privacy";
 import { atomicWrite, resolveInside, sha256 } from "./files";
@@ -12,6 +13,8 @@ const REVIEW = "REVIEW.md";
 const SESSION_LOG = "# Session Log";
 const GAPS = "# Gaps Found & Filled";
 const STALE_REASON = "The file changed since the draft; draft again";
+const PRIVACY_REASON = "The text contains a term from the privacy deny-list";
+const TOO_MANY_REASON = "Too many changes in one draft";
 
 type OpResult = { ok: true; next: string; added: string } | { ok: false; reason: string };
 
@@ -37,7 +40,7 @@ export async function planProposal(
     const id = `op-${index + 1}`;
     const parsed = BookkeepingOpSchema.safeParse(rawOp);
     if (!parsed.success) {
-      planned.push({ id, op: rawOp, file: "(invalid)", summary: "Invalid operation", blocked: "The operation is not valid" });
+      planned.push({ id, op: redactStrings(rawOp, guard), file: "(invalid)", summary: "Invalid operation", blocked: "The operation is not valid" });
       continue;
     }
     const op = parsed.data;
@@ -45,14 +48,29 @@ export async function planProposal(
     const summary = guard.redact(describe(op));
 
     let result: OpResult;
-    try {
-      const state = await loadState(studyRoot, file, states, baseHashes);
-      result = runOp(op, state.current, guard);
-      if (result.ok) state.current = result.next;
-    } catch {
-      result = { ok: false, reason: "The file cannot be read or is outside the study folder" };
+    if (index >= LIMITS.proposalOps) {
+      result = { ok: false, reason: TOO_MANY_REASON };
+    } else if (isNotesOp(op) && guard.findViolations(op.path).length > 0) {
+      // Skipped before loading so the name never becomes a key in the draft's base hashes.
+      result = { ok: false, reason: PRIVACY_REASON };
+    } else {
+      try {
+        const state = await loadState(studyRoot, file, states, baseHashes);
+        result = runOp(op, state.current, guard);
+        if (result.ok) state.current = result.next;
+      } catch {
+        result = { ok: false, reason: "The file cannot be read or is outside the study folder" };
+      }
     }
-    planned.push({ id, op, file, summary, blocked: result.ok ? null : result.reason });
+    // A blocked draft still goes to the page and to disk, so it must not carry the term it was blocked for.
+    const hidden = !result.ok && result.reason === PRIVACY_REASON;
+    planned.push({
+      id,
+      op: hidden ? redactStrings(op, guard) : op,
+      file: guard.redact(file),
+      summary,
+      blocked: result.ok ? null : result.reason,
+    });
   }
 
   const diffs: Proposal["diffs"] = [];
@@ -85,6 +103,10 @@ export async function applyProposal(
     applied: [],
     failed: selected.map((opId) => ({ opId, reason })),
   });
+  const stale = (): { proposal: Proposal; applied: string[]; failed: { opId: string; reason: string }[] } => ({
+    ...failAll(STALE_REASON),
+    proposal: { ...proposal, status: "stale" },
+  });
 
   if (proposal.status === "applied") return failAll("This draft was already saved");
   if (proposal.status === "stale") return failAll(STALE_REASON);
@@ -102,7 +124,7 @@ export async function applyProposal(
 
   for (const [file, hash] of Object.entries(proposal.baseHashes)) {
     if ((await currentHash(studyRoot, file)) !== hash) {
-      return { proposal: { ...proposal, status: "stale" }, applied: [], failed: selected.map((opId) => ({ opId, reason: STALE_REASON })) };
+      return stale();
     }
   }
 
@@ -121,6 +143,8 @@ export async function applyProposal(
     const file = targetFile(op);
     try {
       const state = await loadState(studyRoot, file, states, unusedHashes);
+      // The hash check above read the file earlier; the text used here must be the text the draft was made from.
+      if ((state.original === null ? null : sha256(state.original)) !== proposal.baseHashes[file]) return stale();
       const result = runOp(op, state.current, guard);
       if (!result.ok) {
         failed.push({ opId: planned.id, reason: result.reason });
@@ -161,8 +185,27 @@ export async function applyProposal(
 function runOp(op: BookkeepingOp, current: string | null, guard: PrivacyGuard): OpResult {
   const result = applyOp(op, current);
   if (!result.ok) return result;
-  if (guard.findViolations(result.added).length > 0) return { ok: false, reason: "The text contains a term from the privacy deny-list" };
+  if (isNotesOp(op) && guard.findViolations(op.path).length > 0) return { ok: false, reason: PRIVACY_REASON };
+  if (guard.findViolations(result.added).length > 0) return { ok: false, reason: PRIVACY_REASON };
+  // A term can also form across the join with the text already in the file.
+  if (current !== null) {
+    const already = new Set(guard.findViolations(current));
+    if (guard.findViolations(result.next).some((term) => !already.has(term))) return { ok: false, reason: PRIVACY_REASON };
+  }
   return result;
+}
+
+function isNotesOp(op: BookkeepingOp): op is Extract<BookkeepingOp, { kind: "notes_create" | "notes_append" }> {
+  return op.kind === "notes_create" || op.kind === "notes_append";
+}
+
+function redactStrings<T>(value: T, guard: PrivacyGuard): T {
+  if (typeof value === "string") return guard.redact(value) as T;
+  if (Array.isArray(value)) return value.map((item) => redactStrings(item, guard)) as T;
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactStrings(item, guard)])) as T;
+  }
+  return value;
 }
 
 function applyOp(op: BookkeepingOp, current: string | null): OpResult {
@@ -215,8 +258,11 @@ function updateBullet(text: string, op: Extract<BookkeepingOp, { kind: "tracker_
   const suffix = oneLine(op.appendSuffix ?? "");
   if (suffix !== "") {
     const base = line.trimEnd();
-    if (lookup.match.suffix !== null) line = `${base} · ${suffix.replace(/^→\s*/, "")}`;
-    else line = suffix.startsWith("→") ? `${base} ${suffix}` : `${base} → ${suffix}`;
+    const bare = suffix.replace(/^→\s*/, "");
+    if (lookup.match.suffix !== null) line = `${base} · ${bare}`;
+    // A bullet that already ends with an arrow takes the text straight after it.
+    else if (base.endsWith("→")) line = `${base} ${bare}`;
+    else line = `${base} → ${bare}`;
   }
 
   if (line === original) return { ok: false, reason: "Nothing would change" };
