@@ -103,7 +103,10 @@ export function registerSecurity(app: FastifyInstance, opts: { port: number; csr
     const verdict = checkRequest({ method: req.method, url: req.url, headers: req.headers }, opts.port, opts.csrfToken);
     if (!verdict.ok) {
       opts.onReject?.(verdict.reason, req.url.split("?")[0] ?? "");
-      return reply.code(verdict.status).type("application/json").send({ error: verdict.status === 421 ? "Unknown host" : "Forbidden" });
+      return reply
+        .code(verdict.status)
+        .type("application/json")
+        .send({ error: verdict.status === 421 ? "Unknown host" : "Forbidden" });
     }
   });
   app.addHook("onSend", async (_req, reply, payload) => {

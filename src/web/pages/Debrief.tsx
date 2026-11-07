@@ -86,7 +86,10 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
           <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         </div>
         {/* Below the md breakpoint the coach sits under the scorecard instead of beside it, so the score stays reachable on a phone. */}
-        <aside style={{ "--chat-width": `${chatWidth}px` } as CSSProperties} className="flex h-[42dvh] min-h-0 shrink-0 flex-col border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0">
+        <aside
+          style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
+          className="flex h-[42dvh] min-h-0 shrink-0 flex-col border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0"
+        >
           {coach.state === "error" ? (
             <Banner tone="bad" role="alert">
               <WarnIcon size={16} />
@@ -189,7 +192,11 @@ function StepsBar({ session, scorecard, notes, marks }: { session: PublicSession
                 <span
                   className={cn(
                     "flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-meta font-bold",
-                    step.state === "done" ? "bg-success-fill text-success-soft" : step.state === "next" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground ring-1 ring-inset ring-border",
+                    step.state === "done"
+                      ? "bg-success-fill text-success-soft"
+                      : step.state === "next"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground ring-1 ring-inset ring-border",
                   )}
                   aria-hidden="true"
                 >
@@ -209,7 +216,11 @@ function StepsBar({ session, scorecard, notes, marks }: { session: PublicSession
         <ul className="ml-auto flex flex-wrap gap-x-1 max-sm:hidden">
           {MORE_LINKS.filter((link) => available.has(link.id)).map((link) => (
             <li key={link.id}>
-              <button type="button" onClick={() => jumpTo(link.id)} className="whitespace-nowrap rounded-md px-2 py-1 text-ui font-semibold text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => jumpTo(link.id)}
+                className="whitespace-nowrap rounded-md px-2 py-1 text-ui font-semibold text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
+              >
                 {link.label}
               </button>
             </li>
@@ -282,12 +293,7 @@ function ScorecardBody({
           <span>{practiseError}</span>
         </Banner>
       ) : null}
-      <GapsSection
-        scorecard={scorecard}
-        marks={marks}
-        onTeach={(gap) => actions.sendChat("coach", teachMessage(gap))}
-        practise={{ busy: practising, onStart: practise }}
-      />
+      <GapsSection scorecard={scorecard} marks={marks} onTeach={(gap) => actions.sendChat("coach", teachMessage(gap))} practise={{ busy: practising, onStart: practise }} />
       <StudyNotes
         notes={state.notes}
         saved={session.studyNotes}

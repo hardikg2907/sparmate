@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Problem } from "../../shared/problem";
-import {
-  buildProblemSummaries,
-  daysBetween,
-  lastTableRow,
-  newestDate,
-  trackFromLogRow,
-  type TrackerBullet,
-} from "./recommend";
+import { buildProblemSummaries, daysBetween, lastTableRow, newestDate, trackFromLogRow, type TrackerBullet } from "./recommend";
 import type { SessionSummary } from "./store";
 
 function problem(id: string, track: "hld" | "lld", custom = false): Problem {

@@ -1,15 +1,7 @@
 import type { MutableRefObject } from "react";
 import type { BoardHandle } from "../board/Board";
 import type { BoardSnapshot, CodeSnapshot, SocketLike, SocketStatus } from "../backend";
-import type {
-  Channel,
-  CompileDiagnostic,
-  Proposal,
-  PublicSession,
-  Role,
-  RunResult,
-  TranscriptEntry,
-} from "../../shared/types";
+import type { Channel, CompileDiagnostic, Proposal, PublicSession, Role, RunResult, TranscriptEntry } from "../../shared/types";
 
 export type ProgressStage = "collecting" | "testing" | "judging" | "checking" | "done";
 

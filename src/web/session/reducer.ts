@@ -74,9 +74,7 @@ function reconcilePending(pending: PendingMessage[], transcript: TranscriptEntry
   const used = new Set(known.map((e) => e.id));
   const kept: PendingMessage[] = [];
   for (const p of pending) {
-    const match = transcript.find(
-      (e) => !used.has(e.id) && e.role === "candidate" && e.channel === p.channel && e.text.trim() === p.text && Date.parse(e.wall) >= p.sentAt - 5000,
-    );
+    const match = transcript.find((e) => !used.has(e.id) && e.role === "candidate" && e.channel === p.channel && e.text.trim() === p.text && Date.parse(e.wall) >= p.sentAt - 5000);
     if (match) used.add(match.id);
     else kept.push(p);
   }
@@ -158,9 +156,7 @@ function applyServer(state: SessionState, msg: ServerMsg, now: number, fresh: bo
       if (!session) return state;
       const last = session.phaseHistory[session.phaseHistory.length - 1];
       const phaseHistory =
-        last?.phase === msg.phase
-          ? session.phaseHistory
-          : [...session.phaseHistory, { phase: msg.phase, at: roundMsAt(session.clock, now + state.clockOffsetMs), by: msg.by }];
+        last?.phase === msg.phase ? session.phaseHistory : [...session.phaseHistory, { phase: msg.phase, at: roundMsAt(session.clock, now + state.clockOffsetMs), by: msg.by }];
       return { ...state, session: { ...session, phase: msg.phase, phaseHistory } };
     }
 
@@ -289,9 +285,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, board: action.board };
 
     case "code-synced":
-      return state.code
-        ? { ...state, code: { ...state.code, content: action.code.content, version: action.code.version, path: action.code.path } }
-        : state;
+      return state.code ? { ...state, code: { ...state.code, content: action.code.content, version: action.code.version, path: action.code.path } } : state;
 
     case "run-start":
       return state.code ? { ...state, code: { ...state.code, running: true } } : state;
@@ -309,9 +303,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, notes: { ...state.notes, drafting: false, applying: false } };
 
     case "graph-refreshed":
-      return state.graph.version !== null && action.board.version < state.graph.version
-        ? state
-        : { ...state, graph: graphFromBoard(action.board) };
+      return state.graph.version !== null && action.board.version < state.graph.version ? state : { ...state, graph: graphFromBoard(action.board) };
 
     case "phase-local": {
       const session = state.session;

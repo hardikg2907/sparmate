@@ -73,12 +73,7 @@ describe("KokoroManager", () => {
     expect(mockSpawn).toHaveBeenCalledTimes(1);
     const [bin, args] = mockSpawn.mock.calls[0];
     expect(bin).toBe("/valid/tts/.venv/bin/python");
-    expect(args).toEqual([
-      "-I",
-      "/valid/app/scripts/tts/kokoro_worker.py",
-      "/valid/tts/kokoro-v1.0.onnx",
-      "/valid/tts/voices-v1.0.bin",
-    ]);
+    expect(args).toEqual(["-I", "/valid/app/scripts/tts/kokoro_worker.py", "/valid/tts/kokoro-v1.0.onnx", "/valid/tts/voices-v1.0.bin"]);
     expect(wav.toString("utf8")).toBe("fake-wav-bytes");
 
     manager.shutdown();
@@ -129,9 +124,7 @@ describe("KokoroManager", () => {
     });
 
     // child1 intentionally does not reply on stdout to trigger timeout.
-    await expect(manager.synthesize({ text: "Stall", voice: "bm_george", speed: 0.95 })).rejects.toThrow(
-      "TTS request timed out",
-    );
+    await expect(manager.synthesize({ text: "Stall", voice: "bm_george", speed: 0.95 })).rejects.toThrow("TTS request timed out");
     expect(child1.kill).toHaveBeenCalledWith("SIGKILL");
 
     // Next request triggers child2 spawn and completes.
@@ -246,4 +239,3 @@ describe("KokoroManager", () => {
     manager.shutdown();
   });
 });
-

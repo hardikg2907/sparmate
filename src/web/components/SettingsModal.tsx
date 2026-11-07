@@ -251,11 +251,7 @@ export function SettingsModal({ settings, studyRoot, onClose, onSave, onApplyThe
 
             <div>
               <div className="flex items-center gap-3">
-                <Switch
-                  id="settings-headphones"
-                  checked={voiceDraft.useHeadphones}
-                  onCheckedChange={(checked) => setVoiceDraft({ ...voiceDraft, useHeadphones: checked })}
-                />
+                <Switch id="settings-headphones" checked={voiceDraft.useHeadphones} onCheckedChange={(checked) => setVoiceDraft({ ...voiceDraft, useHeadphones: checked })} />
                 <Label htmlFor="settings-headphones" className="font-medium text-foreground">
                   I use headphones
                 </Label>
@@ -318,20 +314,8 @@ function RoleRow({
         <div className="text-ui font-medium">{label}</div>
         <div className="text-meta text-muted-foreground">{hint}</div>
       </div>
-      <Select
-        label={`${label} model`}
-        className="w-full"
-        value={model}
-        options={MODEL_OPTIONS}
-        onChange={onModel}
-      />
-      <Select
-        label={`${label} effort`}
-        className="w-full"
-        value={effort}
-        options={EFFORT_OPTIONS}
-        onChange={onEffort}
-      />
+      <Select label={`${label} model`} className="w-full" value={model} options={MODEL_OPTIONS} onChange={onModel} />
+      <Select label={`${label} effort`} className="w-full" value={effort} options={EFFORT_OPTIONS} onChange={onEffort} />
     </>
   );
 }

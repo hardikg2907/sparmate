@@ -215,7 +215,12 @@ describe("fields added later", () => {
   });
 
   it("loads a debriefed session from before the checklist with its step answers and notepads intact", async () => {
-    const { checklist: _a, stepChecks: _b, pins: _c, ...old } = session({
+    const {
+      checklist: _a,
+      stepChecks: _b,
+      pins: _c,
+      ...old
+    } = session({
       status: "debriefed",
       stepNotes: { requirements: "Functional: shorten and redirect." },
       stepNotesVersion: 2,

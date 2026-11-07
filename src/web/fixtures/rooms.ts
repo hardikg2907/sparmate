@@ -61,7 +61,12 @@ export function hldRoom(mode: Mode, status: "live" | "paused" = "live", pauseRea
     e("t4", 72, "candidate", "Next, scale. How many new links a month, and what is the read to write ratio?"),
     e("t5", 90, "interviewer", "About 100 million new links a month. Roughly 100 redirects for every link created."),
     e("t6", 276, "system", "Moved to Capacity math", { kind: "phase" }),
-    e("t7", 290, "candidate", "100 million a month is about 40 writes per second, which means one Postgres primary handles writes. Reads are about 4,000 per second, which means the redirect path needs a cache."),
+    e(
+      "t7",
+      290,
+      "candidate",
+      "100 million a month is about 40 writes per second, which means one Postgres primary handles writes. Reads are about 4,000 per second, which means the redirect path needs a cache.",
+    ),
     e("t8", 322, "interviewer", "Okay, go on."),
     e("t9", 432, "system", "Moved to API", { kind: "phase" }),
     e("t10", 470, "candidate", "POST /v1/links takes the long URL, an optional alias and an optional expiry. GET /{code} answers with a redirect."),
@@ -170,7 +175,7 @@ export const HLD_SCORECARD: Scorecard = {
       score: 3,
       evidence: [
         { quote: "A 301 gets cached by browsers, so I could not count clicks or delete a link quickly. So I pick 302.", source: "candidate", at: "09:00", polarity: "plus" },
-        { quote: "[Redirect service] -> [Redis] \"lookup\"", source: "board", at: "", polarity: "plus" },
+        { quote: '[Redirect service] -> [Redis] "lookup"', source: "board", at: "", polarity: "plus" },
         { quote: "Postgres stores the code, the long URL and the owner id. I have not decided the index yet.", source: "candidate", at: "15:10", polarity: "minus" },
       ],
       whatA4LooksLike: "A 4 picks the storage from the access pattern, says why the code is the primary key, and handles duplicate creates with an idempotency key.",
@@ -336,7 +341,8 @@ const HLD_REFERENCE: NonNullable<PublicSession["reference"]> = {
     },
     {
       heading: "Level bar",
-      markdown: "At the target level, the candidate leads the first four steps, traces one request, and goes deep on one or two points when asked. A candidate at the stretch level raises the cache failure and the hot key without being asked.",
+      markdown:
+        "At the target level, the candidate leads the first four steps, traces one request, and goes deep on one or two points when asked. A candidate at the stretch level raises the cache failure and the hot key without being asked.",
     },
   ],
 };
@@ -363,7 +369,7 @@ export function hldDebrief(status: PublicSession["status"] = "debriefed"): Publi
       "c3",
       roundMs / 1000 + 62,
       "coach",
-      "Right. That is the clash. Here it is in a picture:\n\n```\n server A: counter = 1000 -> code \"g8\"\n server B: counter = 1000 -> code \"g8\"   <- two links, one code\n```\n\nThe fix is to stop each server from owning the counter alone. One way is to give each server a **block** of ids, for example 1,000 at a time. Each server then counts inside its own block.\n\nWhat do you think happens to the unused ids in a block when a server crashes?",
+      'Right. That is the clash. Here it is in a picture:\n\n```\n server A: counter = 1000 -> code "g8"\n server B: counter = 1000 -> code "g8"   <- two links, one code\n```\n\nThe fix is to stop each server from owning the counter alone. One way is to give each server a **block** of ids, for example 1,000 at a time. Each server then counts inside its own block.\n\nWhat do you think happens to the unused ids in a block when a server crashes?',
     ),
     c("c4", roundMs / 1000 + 100, "candidate", "They are lost, but that is fine. A gap in the codes costs nothing, and the next block starts above the last one."),
     divider("d2", roundMs / 1000 + 130, "What happens when the cache tier is gone"),
@@ -455,7 +461,12 @@ export const LLD_SCORECARD: Scorecard = {
       name: "Design",
       score: 3,
       evidence: [
-        { quote: "Nouns: vehicle type (enum), spot, ticket, lot, pricing. The ticket is the hidden one: it ties a spot to an entry time.", source: "candidate", at: "07:00", polarity: "plus" },
+        {
+          quote: "Nouns: vehicle type (enum), spot, ticket, lot, pricing. The ticket is the hidden one: it ties a spot to an entry time.",
+          source: "candidate",
+          at: "07:00",
+          polarity: "plus",
+        },
         { quote: "class HourlyPricing : public PricingStrategy", source: "code", at: "", polarity: "plus" },
       ],
       whatA4LooksLike: "A 4 keeps dependencies one way and adds an interface only where a change is likely.",
@@ -533,7 +544,11 @@ export const LLD_SCORECARD: Scorecard = {
     { name: "The first car exits at minute 130 and pays 150", pass: true, detail: "Fee 150, spot 2 free again." },
     { name: "A new car takes spot 2 again", pass: true, detail: "Ticket 5, spot 2." },
     { name: "Exit with an unknown ticket id is rejected", pass: false, detail: "exit(99, 10) returned 0 and freed spot 0. It should have returned an error and changed nothing." },
-    { name: "Exiting the same ticket twice frees nothing twice", pass: false, detail: "The second exit freed spot 2 again. A new car then received a spot that was already taken." },
+    {
+      name: "Exiting the same ticket twice frees nothing twice",
+      pass: false,
+      detail: "The second exit freed spot 2 again. A new car then received a spot that was already taken.",
+    },
     { name: "A fourth motorcycle takes the lowest free spot of any size", pass: true, detail: "Ticket 6, spot 3." },
     { name: "Fees at 1, 60 and 61 minutes", pass: true, detail: "20, 20 and 40 for a motorcycle." },
     { name: "Two threads admit 1,000 cars each into 500 spots", pass: true, detail: "500 tickets issued, no spot id appeared twice." },
@@ -579,9 +594,7 @@ export const LLD_SCORECARD: Scorecard = {
     { dimensionId: "code_quality", index: 0, verified: true },
     { dimensionId: "communication_time", index: 0, verified: true },
   ],
-  stepQuoteChecks: [
-    { phase: "clarify", index: 0, verified: true },
-  ],
+  stepQuoteChecks: [{ phase: "clarify", index: 0, verified: true }],
 };
 
 const LLD_REFERENCE: NonNullable<PublicSession["reference"]> = {
@@ -607,7 +620,13 @@ export function lldDebrief(status: PublicSession["status"] = "debriefed"): Publi
     e("t1", 0, "interviewer", "Design a parking lot. Build it as a running, in-memory C++ program, with a `main()` that shows it working."),
     e("t2", 25, "candidate", "Can two gates use the lot at the same moment, and does the driver pick the spot or does the system?"),
     e("t3", 48, "interviewer", "Entrances and exits run at the same moment. The system picks the spot."),
-    coachEntry(base, "c1", roundMs / 1000, "coach", "The design was clean, and the lock was in the right place. The round lost its bar on one thing: an unknown ticket freed a spot.\n\nLet's start there. What should `exit(99, 10)` do when ticket 99 was never issued?"),
+    coachEntry(
+      base,
+      "c1",
+      roundMs / 1000,
+      "coach",
+      "The design was clean, and the lock was in the right place. The round lost its bar on one thing: an unknown ticket freed a spot.\n\nLet's start there. What should `exit(99, 10)` do when ticket 99 was never issued?",
+    ),
   ];
   const session = buildSession({
     id: "20261030-1020-b3-parking-lot-fx04",

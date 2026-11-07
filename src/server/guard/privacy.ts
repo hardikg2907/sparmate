@@ -16,17 +16,7 @@ export interface PrivacyGuardOptions {
   denylistPath?: string;
 }
 
-const COMMON_MAIL_PROVIDERS = new Set([
-  "gmail",
-  "outlook",
-  "hotmail",
-  "yahoo",
-  "icloud",
-  "proton",
-  "protonmail",
-  "live",
-  "me",
-]);
+const COMMON_MAIL_PROVIDERS = new Set(["gmail", "outlook", "hotmail", "yahoo", "icloud", "proton", "protonmail", "live", "me"]);
 
 // Parts of a public suffix such as `co.in` or `com.au`; they are never a name of their own.
 const SECOND_LEVEL_SUFFIXES = new Set(["co", "com", "org", "net", "gov", "edu", "ac", "ne", "or", "go", "nic", "res", "mil", "ltd", "plc", "sch"]);
@@ -57,8 +47,7 @@ interface Span {
 
 export async function loadPrivacyGuard(options?: PrivacyGuardOptions): Promise<PrivacyGuard> {
   const claudeJsonPath = options?.claudeJsonPath ?? process.env.SPARMATE_CLAUDE_JSON ?? join(homedir(), ".claude.json");
-  const denylistPath =
-    options?.denylistPath ?? process.env.SPARMATE_DENYLIST ?? join(homedir(), ".config", "sparmate", "denylist.txt");
+  const denylistPath = options?.denylistPath ?? process.env.SPARMATE_DENYLIST ?? join(homedir(), ".config", "sparmate", "denylist.txt");
 
   const texts = new Set<string>();
   for (const term of await termsFromClaudeJson(claudeJsonPath)) texts.add(term);
@@ -126,7 +115,10 @@ async function termsFromDenylist(path: string): Promise<string[]> {
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("#")) continue;
     // A "#" inside a term (for example "c#") stays; only " #..." starts a trailing comment.
-    const term = trimmed.replace(/\s+#.*$/, "").trim().toLowerCase();
+    const term = trimmed
+      .replace(/\s+#.*$/, "")
+      .trim()
+      .toLowerCase();
     if (term !== "") terms.push(term);
   }
   return terms;
@@ -177,10 +169,49 @@ const INVISIBLE = /^[\p{Cf}\p{Cc}\u0300-\u036f\ufe00-\ufe0f\u{e0100}-\u{e01ef}\u
 
 // Letters from other scripts that read as a Latin letter; typed in place of it they hide a name.
 const CONFUSABLES: Readonly<Record<string, string>> = {
-  а: "a", в: "b", е: "e", ё: "e", к: "k", м: "m", н: "h", о: "o", ө: "o", р: "p", с: "c", т: "t", у: "y", х: "x",
-  ѕ: "s", і: "i", ј: "j", ԁ: "d", ӏ: "l", ѡ: "w", ԛ: "q",
-  α: "a", β: "b", γ: "y", ε: "e", ι: "i", κ: "k", ν: "v", ο: "o", ρ: "p", τ: "t", υ: "u", χ: "x", ω: "w", ϲ: "c",
-  ı: "i", ł: "l", ø: "o", đ: "d", ħ: "h", ŧ: "t", ɑ: "a", ɡ: "g",
+  а: "a",
+  в: "b",
+  е: "e",
+  ё: "e",
+  к: "k",
+  м: "m",
+  н: "h",
+  о: "o",
+  ө: "o",
+  р: "p",
+  с: "c",
+  т: "t",
+  у: "y",
+  х: "x",
+  ѕ: "s",
+  і: "i",
+  ј: "j",
+  ԁ: "d",
+  ӏ: "l",
+  ѡ: "w",
+  ԛ: "q",
+  α: "a",
+  β: "b",
+  γ: "y",
+  ε: "e",
+  ι: "i",
+  κ: "k",
+  ν: "v",
+  ο: "o",
+  ρ: "p",
+  τ: "t",
+  υ: "u",
+  χ: "x",
+  ω: "w",
+  ϲ: "c",
+  ı: "i",
+  ł: "l",
+  ø: "o",
+  đ: "d",
+  ħ: "h",
+  ŧ: "t",
+  ɑ: "a",
+  ɡ: "g",
 };
 
 function fold(text: string): Folded {
@@ -240,7 +271,7 @@ function compileTerm(text: string): Term | null {
 function collectSpans(terms: readonly Term[], text: string): Span[] {
   if (text.length <= SCAN_WINDOW) return scanWindow(terms, text, 0);
   const spans: Span[] = [];
-  for (let start = 0; start < text.length; ) {
+  for (let start = 0; start < text.length;) {
     let end = Math.min(text.length, start + SCAN_WINDOW);
     if (end < text.length && isLowSurrogate(text.charCodeAt(end))) end--;
     spans.push(...scanWindow(terms, text.slice(start, end), start));

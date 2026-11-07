@@ -139,8 +139,7 @@ describe("TTS routes", () => {
 });
 
 describe("DELETE /api/custom-problems/:jobId", () => {
-  const cancelJob = (jobId: string, headers: Record<string, string>) =>
-    app.inject({ method: "DELETE", url: `/api/custom-problems/${jobId}`, headers });
+  const cancelJob = (jobId: string, headers: Record<string, string>) => app.inject({ method: "DELETE", url: `/api/custom-problems/${jobId}`, headers });
 
   it("cancels a running custom problem job with valid CSRF headers", async () => {
     const { jobId } = stack.manager.startCustomProblemJob("Design a cache", "hld");
@@ -216,4 +215,3 @@ describe("Usage routes", () => {
     expect(body.hasData).toBe(false);
   });
 });
-

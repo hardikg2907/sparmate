@@ -37,12 +37,7 @@ export function phaseWindows(plan: readonly { id: string; minutes: number }[]): 
  * Every checkpoint of a round. Guided rounds keep only the phase nudges: they count up, have no end and no
  * extension. The last phase's end is left out because time-up (or nothing, in guided mode) covers it.
  */
-export function planCheckpoints(
-  track: Track,
-  mode: Mode,
-  durationMs: number,
-  plan: readonly { id: string; minutes: number }[],
-): Checkpoint[] {
+export function planCheckpoints(track: Track, mode: Mode, durationMs: number, plan: readonly { id: string; minutes: number }[]): Checkpoint[] {
   const out: Checkpoint[] = [];
   const windows = phaseWindows(plan);
   windows.slice(0, -1).forEach((w) => {
@@ -58,11 +53,7 @@ export function planCheckpoints(
 }
 
 /** Pure: which checkpoints are due now, and when the next one falls. */
-export function dueCheckpoints(
-  checkpoints: readonly Checkpoint[],
-  fired: ReadonlySet<string>,
-  nowRoundMs: number,
-): { due: Checkpoint[]; nextAtMs: number | null } {
+export function dueCheckpoints(checkpoints: readonly Checkpoint[], fired: ReadonlySet<string>, nowRoundMs: number): { due: Checkpoint[]; nextAtMs: number | null } {
   const due: Checkpoint[] = [];
   let nextAtMs: number | null = null;
   for (const cp of checkpoints) {

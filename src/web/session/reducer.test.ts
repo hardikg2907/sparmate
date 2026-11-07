@@ -136,7 +136,9 @@ describe("optimistic messages", () => {
   it("drops a local copy that a full state already holds", () => {
     let state = loaded();
     state = reducer(state, { type: "pending-add", message: pending });
-    const withMessage = session({ transcript: [entry("e1", "interviewer", "Hi"), entry("e2", "candidate", "My design has a CDN.", { wall: new Date(T0 + 61_000).toISOString() })] });
+    const withMessage = session({
+      transcript: [entry("e1", "interviewer", "Hi"), entry("e2", "candidate", "My design has a CDN.", { wall: new Date(T0 + 61_000).toISOString() })],
+    });
     state = server(state, { type: "session.state", session: withMessage });
     expect(state.pending).toEqual([]);
   });
@@ -158,7 +160,11 @@ describe("optimistic messages", () => {
     const one = session({ transcript: [entry("e1", "interviewer", "Hi"), entry("e2", "candidate", "ok", { wall: new Date(T0 + 60_100).toISOString() })] });
     state = server(state, { type: "session.state", session: one }, { fresh: true });
     expect(state.notice).toBe("A message did not send. Please send it again.");
-    expect(chatItems(state, "interview").filter((i) => i.role === "candidate").map((i) => i.state)).toEqual(["done"]);
+    expect(
+      chatItems(state, "interview")
+        .filter((i) => i.role === "candidate")
+        .map((i) => i.state),
+    ).toEqual(["done"]);
   });
 
   it("does not take an earlier identical message as the echo of a new one", () => {
@@ -255,7 +261,11 @@ describe("session.state", () => {
 describe("chat items", () => {
   it("leaves out entries meant only for the model", () => {
     const state = loaded({
-      transcript: [entry("e1", "interviewer", "Hi"), entry("e2", "system", "clock nudge", { kind: "clock", hidden: true }), entry("e3", "system", "Moved to API", { kind: "phase" })],
+      transcript: [
+        entry("e1", "interviewer", "Hi"),
+        entry("e2", "system", "clock nudge", { kind: "clock", hidden: true }),
+        entry("e3", "system", "Moved to API", { kind: "phase" }),
+      ],
     });
     expect(chatItems(state, "interview").map((i) => i.id)).toEqual(["e1", "e3"]);
   });

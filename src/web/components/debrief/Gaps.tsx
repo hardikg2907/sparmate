@@ -17,7 +17,21 @@ export interface PractiseGap {
   onStart: (gap: Gap) => void;
 }
 
-function GapCard({ gap, index, mark, next, onTeach, practise }: { gap: Gap; index: number; mark: GapMark | undefined; next: boolean; onTeach: (gap: Gap) => boolean; practise: PractiseGap }) {
+function GapCard({
+  gap,
+  index,
+  mark,
+  next,
+  onTeach,
+  practise,
+}: {
+  gap: Gap;
+  index: number;
+  mark: GapMark | undefined;
+  next: boolean;
+  onTeach: (gap: Gap) => boolean;
+  practise: PractiseGap;
+}) {
   const badge = gapBadge(mark);
   return (
     <Card
@@ -75,7 +89,17 @@ function GapCard({ gap, index, mark, next, onTeach, practise }: { gap: Gap; inde
   );
 }
 
-export function GapsSection({ scorecard, marks, onTeach, practise }: { scorecard: Scorecard; marks: ReadonlyMap<string, GapMark>; onTeach: (gap: Gap) => boolean; practise: PractiseGap }) {
+export function GapsSection({
+  scorecard,
+  marks,
+  onTeach,
+  practise,
+}: {
+  scorecard: Scorecard;
+  marks: ReadonlyMap<string, GapMark>;
+  onTeach: (gap: Gap) => boolean;
+  practise: PractiseGap;
+}) {
   const gaps = sortedGaps(scorecard);
   const next = startHere(gaps, marks);
   return (

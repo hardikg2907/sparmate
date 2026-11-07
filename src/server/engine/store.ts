@@ -66,7 +66,7 @@ const PAUSE_REASONS: readonly NonNullable<Session["pauseReason"]>[] = ["error", 
 /** Sessions saved before a field existed load with its empty value. A paused one with no reason was caught by a restart. */
 function withDefaults(s: Session): Session {
   const saved = s.pauseReason;
-  s.pauseReason = s.status !== "paused" ? null : PAUSE_REASONS.find((r) => r === saved) ?? "restart";
+  s.pauseReason = s.status !== "paused" ? null : (PAUSE_REASONS.find((r) => r === saved) ?? "restart");
   s.stepNotes ??= {};
   s.stepNotesVersion ??= 0;
   s.stepSummaries ??= {};

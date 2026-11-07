@@ -1,12 +1,5 @@
 import { z } from "zod";
-import type {
-  CompileDiagnostic,
-  Proposal,
-  PublicSession,
-  RunResult,
-  Scorecard,
-  TranscriptEntry,
-} from "./types";
+import type { CompileDiagnostic, Proposal, PublicSession, RunResult, Scorecard, TranscriptEntry } from "./types";
 
 // One WebSocket per open session page: ws://<host>/ws/session/<sessionId>
 // The first client message must be "hello" with the CSRF token from GET /api/bootstrap.
@@ -112,14 +105,15 @@ export interface BootstrapResponse {
 }
 
 export const CreateSessionSchema = z.strictObject({
-  problemId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,80}$/).optional(),
+  problemId: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{1,80}$/)
+    .optional(),
   customPrompt: z.string().min(10).max(4000).optional(),
   customTrack: z.enum(["hld", "lld"]).optional(),
   mode: z.enum(["interview", "guided"]),
   /** A short guided round on one debrief gap. Needs problemId and mode "guided". */
-  focus: z
-    .strictObject({ title: z.string().min(2).max(200), goodLooksLike: z.string().min(2).max(1500) })
-    .optional(),
+  focus: z.strictObject({ title: z.string().min(2).max(200), goodLooksLike: z.string().min(2).max(1500) }).optional(),
 });
 export type CreateSessionRequest = z.infer<typeof CreateSessionSchema>;
 
@@ -146,4 +140,3 @@ export interface CustomProblemJobStatus {
   confidence?: string;
   costUsd?: number;
 }
-

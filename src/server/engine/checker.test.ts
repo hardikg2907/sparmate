@@ -21,10 +21,7 @@ const evidence = (over: Partial<CheckerEvidence> = {}): CheckerEvidence => ({
     { id: "requirements-2", label: "Redirect adds under 50 ms at p99" },
     { id: "requirements-3", label: "99.99% availability for redirects" },
   ],
-  chat: [
-    entry("a", 10_000, "interviewer", "What do you need from it?"),
-    entry("b", 252_000, "candidate", "Users create short links. A redirect should add under 50 ms at p99."),
-  ],
+  chat: [entry("a", 10_000, "interviewer", "What do you need from it?"), entry("b", 252_000, "candidate", "Users create short links. A redirect should add under 50 ms at p99.")],
   boardText: 'Text on the board:\n- "99.99% available" in frame "Requirements"',
   codeText: "",
   imageAttached: false,
@@ -113,10 +110,7 @@ describe("mergeCheck", () => {
     const check = mergeCheck(
       undefined,
       {
-        items: [
-          claim("requirements-1", "covered", "chat", "Users create short links"),
-          claim("requirements-2", "partial", "board", "99.99% available", "no target for redirects"),
-        ],
+        items: [claim("requirements-1", "covered", "chat", "Users create short links"), claim("requirements-2", "partial", "board", "99.99% available", "no target for redirects")],
       },
       evidence(),
       1,

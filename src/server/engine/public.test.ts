@@ -61,7 +61,10 @@ describe("publicSteps in a guided round", () => {
 
   it("shows the requirement itself in a step the check left idle once it has a check time", () => {
     const step = publicSteps(input("guided", "live", { capacity: { status: "done", checkedAt: 5, usedImage: false, items: {} } })).capacity;
-    expect(step?.items.map((i) => [i.label, i.question])).toEqual([["Writes", false], ["Reads", false]]);
+    expect(step?.items.map((i) => [i.label, i.question])).toEqual([
+      ["Writes", false],
+      ["Reads", false],
+    ]);
   });
 
   it("shows an unchecked step's items again once the round is over", () => {
@@ -87,7 +90,20 @@ describe("publicSteps outside a guided round", () => {
 
 describe("the browser's copy of a session", () => {
   it("leaves out the hidden notes held for the interviewer", () => {
-    const session = { ...input("interview", "paused"), pendingEvents: ["the candidate paused the clock at 02:00"], transcript: [], hints: [], board: { version: 0, graphText: "", updatedAt: null }, track: "hld", durationMs: 45 * 60_000, startedAt: "", pausedMs: 0, pauseStartedAt: null, sdk: {}, pins: [] } as unknown as Session;
+    const session = {
+      ...input("interview", "paused"),
+      pendingEvents: ["the candidate paused the clock at 02:00"],
+      transcript: [],
+      hints: [],
+      board: { version: 0, graphText: "", updatedAt: null },
+      track: "hld",
+      durationMs: 45 * 60_000,
+      startedAt: "",
+      pausedMs: 0,
+      pauseStartedAt: null,
+      sdk: {},
+      pins: [],
+    } as unknown as Session;
     expect("pendingEvents" in toPublicSession(session, undefined)).toBe(false);
   });
 });

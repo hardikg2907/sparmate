@@ -7,15 +7,7 @@ import type { CustomProblemJobStatus } from "../../shared/protocol";
 import type { Problem } from "../../shared/problem";
 import { parseProblem, type ProblemCatalog } from "./problems";
 import { commonVars, sectionList, type PromptLoader } from "./prompts";
-import {
-  BriefCheckerOutputSchema,
-  BriefWriterOutputSchema,
-  toApiSchema,
-  toCompatSchema,
-  type BriefCheckerOutput,
-  type BriefCorrection,
-  type BriefWriterOutput,
-} from "./schemas";
+import { BriefCheckerOutputSchema, BriefWriterOutputSchema, toApiSchema, toCompatSchema, type BriefCheckerOutput, type BriefCorrection, type BriefWriterOutput } from "./schemas";
 import type { ProblemMeta } from "../../shared/problem";
 import { DriverError, type Driver, type OneShotResult } from "./driver";
 import { dataPaths, type ServerConfig } from "./config";
@@ -60,12 +52,7 @@ function redactMeta(guard: PrivacyGuard, meta: ProblemMeta): ProblemMeta {
   };
 }
 
-export function validateProblemBody(
-  body: string,
-  track: Track,
-  id = "test-problem",
-  file = "custom-problems/test-problem.md",
-): { valid: boolean; error?: string } {
+export function validateProblemBody(body: string, track: Track, id = "test-problem", file = "custom-problems/test-problem.md"): { valid: boolean; error?: string } {
   try {
     const dummyMeta: ProblemMeta = {
       id,
@@ -389,13 +376,7 @@ export class CustomProblemJobManager {
       const customDir = dataPaths(this.deps.config.dataDir).customProblems;
       const file = join(customDir, `${id}.md`);
 
-      const { body: finalBody, verified, corrections } = mergeCheckerBrief(
-        initialWriterOut,
-        checkerOut,
-        job.track,
-        id,
-        file,
-      );
+      const { body: finalBody, verified, corrections } = mergeCheckerBrief(initialWriterOut, checkerOut, job.track, id, file);
 
       const meta = redactMeta(this.deps.guard, {
         id,

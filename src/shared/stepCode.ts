@@ -21,7 +21,11 @@ function fileLines(content: string): string[] {
 }
 
 function trimmedSet(content: string): Set<string> {
-  return new Set(fileLines(content).map((l) => l.trim()).filter((l) => l !== ""));
+  return new Set(
+    fileLines(content)
+      .map((l) => l.trim())
+      .filter((l) => l !== ""),
+  );
 }
 
 /** The trimmed text of each non-blank line in `after` that `before` does not hold, once each, in file order. */

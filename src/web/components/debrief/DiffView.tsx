@@ -22,12 +22,7 @@ function kindOf(line: string): LineKind {
 export function DiffView({ file, diff }: { file: string; diff: string }) {
   const lines = diff.replace(/\n$/, "").split("\n");
   return (
-    <div
-      role="region"
-      aria-label={`Changes to ${file}`}
-      tabIndex={0}
-      className="max-h-96 overflow-auto rounded-md border border-border bg-card font-mono text-ui leading-5"
-    >
+    <div role="region" aria-label={`Changes to ${file}`} tabIndex={0} className="max-h-96 overflow-auto rounded-md border border-border bg-card font-mono text-ui leading-5">
       <div className="min-w-max">
         {lines.map((line, index) => (
           <div key={index} className={cn("whitespace-pre px-3", LINE_CLASS[kindOf(line)])}>

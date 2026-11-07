@@ -5,7 +5,11 @@ import { z } from "zod";
 
 export const ProblemSourceSchema = z.strictObject({
   title: z.string().min(1).max(200),
-  url: z.string().url().regex(/^https:\/\//, "Sources must use https:").max(500),
+  url: z
+    .string()
+    .url()
+    .regex(/^https:\/\//, "Sources must use https:")
+    .max(500),
 });
 export type ProblemSource = z.infer<typeof ProblemSourceSchema>;
 
@@ -32,7 +36,10 @@ export const ProblemMetaSchema = z.strictObject({
     .nullable(),
   notesFile: z.string().regex(/^notes\/[a-z0-9][a-z0-9-]*\.md$/),
   /** LLD only: folder under lld/ that holds attempt files. */
-  lldFolder: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
+  lldFolder: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]*$/)
+    .optional(),
   sources: z.array(ProblemSourceSchema).max(20).optional(),
   confidence: z.string().max(1000).optional(),
   verified: z.boolean().optional(),

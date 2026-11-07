@@ -73,10 +73,7 @@ describe("custom problem validation and merge", () => {
   });
 
   it("rejects a body with a section under 40 characters", () => {
-    const shortSection = makeLongBody().replace(
-      "Let's design a distributed cache system for high throughput and low latency.",
-      "Short."
-    );
+    const shortSection = makeLongBody().replace("Let's design a distributed cache system for high throughput and low latency.", "Short.");
     expect(validateProblemBody(shortSection, "hld").valid).toBe(false);
   });
 
@@ -284,7 +281,6 @@ describe("CustomProblemJobManager state machine", () => {
     }
   });
 });
-
 
 describe("custom problem files under the privacy guard", () => {
   let stack: Stack;

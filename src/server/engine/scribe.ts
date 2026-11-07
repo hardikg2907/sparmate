@@ -75,9 +75,7 @@ export async function buildScribeInput({ studyRoot, problem, session, date }: Sc
     `track: ${session.track}`,
     `mode: ${session.mode}`,
     `notes file: ${problem.meta.notesFile} (${notes === null ? "does not exist yet" : "exists"})`,
-    problem.meta.tracker
-      ? `tracker section: ${problem.meta.tracker.section}\ntracker bullet: ${problem.meta.tracker.bullet}`
-      : "tracker: this problem has no tracker bullet",
+    problem.meta.tracker ? `tracker section: ${problem.meta.tracker.section}\ntracker bullet: ${problem.meta.tracker.bullet}` : "tracker: this problem has no tracker bullet",
   ].join("\n");
 
   const text = [

@@ -164,7 +164,17 @@ function ProposalView({ proposal, notes, enabled, onDraft, onApply }: { proposal
           <span className="text-ui text-muted-foreground" aria-live="polite">
             {toSave.length === 0 ? "Nothing ticked" : `${toSave.length} ${toSave.length === 1 ? "change" : "changes"} ticked`}
           </span>
-          <Button variant="default" busy={notes.applying} disabled={toSave.length === 0 || locked || !enabled} onClick={() => onApply(proposal.id, toSave.map((op) => op.id))}>
+          <Button
+            variant="default"
+            busy={notes.applying}
+            disabled={toSave.length === 0 || locked || !enabled}
+            onClick={() =>
+              onApply(
+                proposal.id,
+                toSave.map((op) => op.id),
+              )
+            }
+          >
             Save selected
           </Button>
         </div>

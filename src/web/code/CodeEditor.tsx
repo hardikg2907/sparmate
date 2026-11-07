@@ -142,9 +142,7 @@ export function CodeEditor(props: CodeEditorProps) {
         if (ranges.length === state.data.length) {
           state.data = state.data.map((marker, i) => {
             const r = ranges[i];
-            return r
-              ? { ...marker, startLineNumber: r.startLineNumber, startColumn: r.startColumn, endLineNumber: r.endLineNumber, endColumn: r.endColumn }
-              : marker;
+            return r ? { ...marker, startLineNumber: r.startLineNumber, startColumn: r.startColumn, endLineNumber: r.endLineNumber, endColumn: r.endColumn } : marker;
           });
           monaco.editor.setModelMarkers(current, MARKER_OWNER, state.data);
         }

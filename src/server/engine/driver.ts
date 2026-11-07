@@ -24,12 +24,7 @@ export interface RoomTool {
   run(args: unknown): Promise<ToolOutput>;
 }
 
-export function defineTool<S extends z.ZodRawShape>(
-  name: string,
-  description: string,
-  shape: S,
-  handler: (args: z.infer<z.ZodObject<S>>) => Promise<ToolOutput>,
-): RoomTool {
+export function defineTool<S extends z.ZodRawShape>(name: string, description: string, shape: S, handler: (args: z.infer<z.ZodObject<S>>) => Promise<ToolOutput>): RoomTool {
   const schema = z.strictObject(shape);
   return {
     name,

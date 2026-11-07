@@ -16,17 +16,7 @@ const MISSING_LABEL: Record<Evidence["source"], string> = {
   code: "Not found in the code",
 };
 
-export function EvidenceItem({
-  evidence,
-  verified,
-  point,
-  dimensionName,
-}: {
-  evidence: Evidence;
-  verified: boolean | undefined;
-  point?: string;
-  dimensionName?: string;
-}) {
+export function EvidenceItem({ evidence, verified, point, dimensionName }: { evidence: Evidence; verified: boolean | undefined; point?: string; dimensionName?: string }) {
   const plus = evidence.polarity === "plus";
   return (
     <li className="flex gap-2.5">

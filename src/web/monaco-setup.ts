@@ -38,7 +38,12 @@ function token(style: CSSStyleDeclaration | null, name: TokenName, mode: Mode): 
 
 // Monaco takes #rrggbbaa, so the alpha is appended as two hex digits.
 function withAlpha(hex: string, alpha: number): string {
-  return hex + Math.round(alpha * 255).toString(16).padStart(2, "0");
+  return (
+    hex +
+    Math.round(alpha * 255)
+      .toString(16)
+      .padStart(2, "0")
+  );
 }
 
 function editorTheme(mode: Mode): monaco.editor.IStandaloneThemeData {

@@ -30,7 +30,7 @@ export function daysBetween(from: string, to: string): number {
 export function newestDate(text: string | null): string | null {
   if (!text) return null;
   const dates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? [];
-  return dates.length === 0 ? null : dates.sort().at(-1) ?? null;
+  return dates.length === 0 ? null : (dates.sort().at(-1) ?? null);
 }
 
 /** Reads the track from a Session Log row: the first of B3 or C2 in the topic cell, else anywhere in the row. */
@@ -64,12 +64,7 @@ export function openingSummary(opening: string): string {
   return sentence.length > 160 ? `${sentence.slice(0, 157).trimEnd()}…` : sentence;
 }
 
-export function buildProblemSummaries(
-  problems: readonly Problem[],
-  tracker: TrackerView,
-  history: readonly SessionSummary[],
-  today: string = localDate(),
-): ProblemSummary[] {
+export function buildProblemSummaries(problems: readonly Problem[], tracker: TrackerView, history: readonly SessionSummary[], today: string = localDate()): ProblemSummary[] {
   const latestByProblem = new Map<string, SessionSummary>();
   for (const s of history) {
     const prev = latestByProblem.get(s.problemId);
@@ -79,9 +74,7 @@ export function buildProblemSummaries(
   const rows = problems.map((p) => {
     const bullet = p.meta.tracker ? (tracker.bullets.get(p.meta.id) ?? null) : null;
     const latest = latestByProblem.get(p.meta.id) ?? null;
-    const lastAttempt = latest
-      ? { sessionId: latest.id, date: localDate(new Date(latest.createdAt)), mode: latest.mode, verdict: latest.verdict }
-      : null;
+    const lastAttempt = latest ? { sessionId: latest.id, date: localDate(new Date(latest.createdAt)), mode: latest.mode, verdict: latest.verdict } : null;
     let badge: ProblemSummary["badge"] = null;
     if (bullet?.mark === "[~]") {
       const since = lastAttempt?.date ?? newestDate(bullet.suffix);

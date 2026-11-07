@@ -91,14 +91,9 @@ const BASE_FLAGS = [
 // The harness is compiled as one translation unit with the candidate's file included, so the candidate's classes
 // are visible and its own main() is renamed out of the way. "#line 1" makes the tester's diagnostics count from
 // the first line of its own code.
-const HARNESS_HEADER = [
-  "#define main candidate_main",
-  '#include "candidate.cpp"',
-  "#undef main",
-  "// harness written by the tester follows",
-  '#line 1 "harness.cpp"',
-  "",
-].join("\n");
+const HARNESS_HEADER = ["#define main candidate_main", '#include "candidate.cpp"', "#undef main", "// harness written by the tester follows", '#line 1 "harness.cpp"', ""].join(
+  "\n",
+);
 
 /** Compile limits: far above what a single-file build needs, low enough to stop a runaway one. */
 const COMPILE_ADDRESS_SPACE_BYTES = 4 * 1024 * 1024 * 1024;
@@ -486,7 +481,10 @@ function describeFailure(run: ProcessResult, stderr: string, timeoutMs: number, 
   if (/Undefined symbols/.test(stderr)) {
     const symbols = [...stderr.matchAll(/^\s+"(.+)", referenced from:/gm)].map((m) => m[1] ?? "");
     if (symbols.includes("_main")) return "Link error: the program has no main() function.";
-    const shown = symbols.slice(0, 3).map((s) => `"${s}"`).join(", ");
+    const shown = symbols
+      .slice(0, 3)
+      .map((s) => `"${s}"`)
+      .join(", ");
     return `Link error: undefined ${symbols.length === 1 ? "symbol" : "symbols"} ${shown}${symbols.length > 3 ? ", ..." : ""}`;
   }
   const lines = stderr.split(/\r?\n/).map((l) => l.trim());

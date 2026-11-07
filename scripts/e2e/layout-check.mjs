@@ -97,92 +97,102 @@ try {
         await page.goto(url, { waitUntil: "networkidle0" });
         await sleep(350);
 
-        const checkResult = await page.evaluate((isRoomTarget) => {
-          const doc = document.documentElement;
-          const body = document.body;
-          const root = document.querySelector("#root");
-          const errors = [];
+        const checkResult = await page.evaluate(
+          (isRoomTarget) => {
+            const doc = document.documentElement;
+            const body = document.body;
+            const root = document.querySelector("#root");
+            const errors = [];
 
-          // 1. Horizontal overflow of body or document
-          const hOverflow = doc.scrollWidth > window.innerWidth || body.scrollWidth > window.innerWidth;
-          if (hOverflow) {
-            errors.push(`Horizontal overflow: doc.scrollWidth=${doc.scrollWidth}, body.scrollWidth=${body.scrollWidth}, innerWidth=${window.innerWidth}`);
-          }
+            // 1. Horizontal overflow of body or document
+            const hOverflow = doc.scrollWidth > window.innerWidth || body.scrollWidth > window.innerWidth;
+            if (hOverflow) {
+              errors.push(`Horizontal overflow: doc.scrollWidth=${doc.scrollWidth}, body.scrollWidth=${body.scrollWidth}, innerWidth=${window.innerWidth}`);
+            }
 
-          // 2. Room page must never scroll as a whole; only panes scroll
-          if (isRoomTarget) {
-            if (doc.scrollHeight > window.innerHeight) {
-              errors.push(`Room page doc scrolls: doc.scrollHeight=${doc.scrollHeight} > innerHeight=${window.innerHeight}`);
-            }
-            if (body.scrollHeight > window.innerHeight) {
-              errors.push(`Room page body scrolls: body.scrollHeight=${body.scrollHeight} > innerHeight=${window.innerHeight}`);
-            }
-            if (root && root.scrollHeight > root.clientHeight) {
-              errors.push(`Room page #root scrolls: root.scrollHeight=${root.scrollHeight} > clientHeight=${root.clientHeight}`);
-            }
-            const roomView = document.querySelector("main")?.closest(".flex.h-full");
-            if (roomView && roomView.scrollHeight > roomView.clientHeight + 1) {
-              errors.push(`Room view root scrolls as a whole: scrollHeight=${roomView.scrollHeight} > clientHeight=${roomView.clientHeight}`);
-            }
-          }
-
-          // 3. Nested scroll containers scrolling in same direction
-          const allEls = Array.from(document.querySelectorAll("*"));
-          const vScrollers = [];
-          for (const el of allEls) {
-            if (el.closest("[inert]") || el.closest(".pane-hidden") || el.classList.contains("sr-only")) continue;
-            const style = window.getComputedStyle(el);
-            if (style.display === "none" || style.visibility === "hidden") continue;
-
-            const hasVScroll = (style.overflowY === "auto" || style.overflowY === "scroll") && el.scrollHeight > el.clientHeight + 1;
-            if (hasVScroll) {
-              vScrollers.push({ el, tag: el.tagName, cls: el.className, scrollH: el.scrollHeight, clientH: el.clientHeight });
-            }
-          }
-
-          // Check if any v-scroller has an ancestor that also has active v-scroll
-          for (const sc of vScrollers) {
-            let parent = sc.el.parentElement;
-            while (parent) {
-              const pStyle = window.getComputedStyle(parent);
-              if ((pStyle.overflowY === "auto" || pStyle.overflowY === "scroll") && parent.scrollHeight > parent.clientHeight + 1) {
-                errors.push(`Nested vertical scroll container: <${sc.tag} class="${sc.cls}"> inside <${parent.tagName} class="${parent.className}">`);
-                break;
+            // 2. Room page must never scroll as a whole; only panes scroll
+            if (isRoomTarget) {
+              if (doc.scrollHeight > window.innerHeight) {
+                errors.push(`Room page doc scrolls: doc.scrollHeight=${doc.scrollHeight} > innerHeight=${window.innerHeight}`);
               }
-              parent = parent.parentElement;
-            }
-          }
-
-          // 4. Elements overflowing the viewport
-          function isClipped(el) {
-            let p = el.parentElement;
-            while (p && p !== body && p !== doc) {
-              const st = window.getComputedStyle(p);
-              const clips = st.overflow === "hidden" || st.overflowX === "hidden" || st.overflow === "clip" || st.overflowX === "clip" ||
-                            st.overflow === "auto" || st.overflowX === "auto" || st.overflow === "scroll" || st.overflowX === "scroll";
-              if (clips) {
-                const pr = p.getBoundingClientRect();
-                if (pr.right <= window.innerWidth + 1) return true;
+              if (body.scrollHeight > window.innerHeight) {
+                errors.push(`Room page body scrolls: body.scrollHeight=${body.scrollHeight} > innerHeight=${window.innerHeight}`);
               }
-              p = p.parentElement;
-            }
-            return false;
-          }
-
-          for (const el of allEls) {
-            if (el.closest("[inert]") || el.closest(".pane-hidden") || el.classList.contains("sr-only")) continue;
-            const st = window.getComputedStyle(el);
-            if (st.display === "none" || st.visibility === "hidden") continue;
-            const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0 && r.right > window.innerWidth + 1) {
-              if (!isClipped(el)) {
-                errors.push(`Element overflows viewport horizontally: <${el.tagName} class="${el.className}"> right=${r.right} > innerWidth=${window.innerWidth}`);
+              if (root && root.scrollHeight > root.clientHeight) {
+                errors.push(`Room page #root scrolls: root.scrollHeight=${root.scrollHeight} > clientHeight=${root.clientHeight}`);
+              }
+              const roomView = document.querySelector("main")?.closest(".flex.h-full");
+              if (roomView && roomView.scrollHeight > roomView.clientHeight + 1) {
+                errors.push(`Room view root scrolls as a whole: scrollHeight=${roomView.scrollHeight} > clientHeight=${roomView.clientHeight}`);
               }
             }
-          }
 
-          return errors;
-        }, target.name.includes("room") || target.name.includes("round"));
+            // 3. Nested scroll containers scrolling in same direction
+            const allEls = Array.from(document.querySelectorAll("*"));
+            const vScrollers = [];
+            for (const el of allEls) {
+              if (el.closest("[inert]") || el.closest(".pane-hidden") || el.classList.contains("sr-only")) continue;
+              const style = window.getComputedStyle(el);
+              if (style.display === "none" || style.visibility === "hidden") continue;
+
+              const hasVScroll = (style.overflowY === "auto" || style.overflowY === "scroll") && el.scrollHeight > el.clientHeight + 1;
+              if (hasVScroll) {
+                vScrollers.push({ el, tag: el.tagName, cls: el.className, scrollH: el.scrollHeight, clientH: el.clientHeight });
+              }
+            }
+
+            // Check if any v-scroller has an ancestor that also has active v-scroll
+            for (const sc of vScrollers) {
+              let parent = sc.el.parentElement;
+              while (parent) {
+                const pStyle = window.getComputedStyle(parent);
+                if ((pStyle.overflowY === "auto" || pStyle.overflowY === "scroll") && parent.scrollHeight > parent.clientHeight + 1) {
+                  errors.push(`Nested vertical scroll container: <${sc.tag} class="${sc.cls}"> inside <${parent.tagName} class="${parent.className}">`);
+                  break;
+                }
+                parent = parent.parentElement;
+              }
+            }
+
+            // 4. Elements overflowing the viewport
+            function isClipped(el) {
+              let p = el.parentElement;
+              while (p && p !== body && p !== doc) {
+                const st = window.getComputedStyle(p);
+                const clips =
+                  st.overflow === "hidden" ||
+                  st.overflowX === "hidden" ||
+                  st.overflow === "clip" ||
+                  st.overflowX === "clip" ||
+                  st.overflow === "auto" ||
+                  st.overflowX === "auto" ||
+                  st.overflow === "scroll" ||
+                  st.overflowX === "scroll";
+                if (clips) {
+                  const pr = p.getBoundingClientRect();
+                  if (pr.right <= window.innerWidth + 1) return true;
+                }
+                p = p.parentElement;
+              }
+              return false;
+            }
+
+            for (const el of allEls) {
+              if (el.closest("[inert]") || el.closest(".pane-hidden") || el.classList.contains("sr-only")) continue;
+              const st = window.getComputedStyle(el);
+              if (st.display === "none" || st.visibility === "hidden") continue;
+              const r = el.getBoundingClientRect();
+              if (r.width > 0 && r.height > 0 && r.right > window.innerWidth + 1) {
+                if (!isClipped(el)) {
+                  errors.push(`Element overflows viewport horizontally: <${el.tagName} class="${el.className}"> right=${r.right} > innerWidth=${window.innerWidth}`);
+                }
+              }
+            }
+
+            return errors;
+          },
+          target.name.includes("room") || target.name.includes("round"),
+        );
 
         if (checkResult.length > 0) {
           totalFailures += checkResult.length;

@@ -105,11 +105,14 @@ await section("HLD board, hooks, palette and export", async () => {
     b.insertShape("object_storage");
     const family = { 3: "Cascadia", 5: "Excalifont" };
     const ctx = document.createElement("canvas").getContext("2d");
-    return b.elements().filter((e) => e.type === "text" && e.containerId).map((t) => {
-      ctx.font = `${t.fontSize}px ${family[t.fontFamily]}`;
-      const real = Math.max(...t.text.split("\n").map((line) => ctx.measureText(line).width));
-      return { text: t.text.split("\n")[0], stored: Math.round(t.width), real: Math.round(real), loaded: document.fonts.check(ctx.font, t.text) };
-    });
+    return b
+      .elements()
+      .filter((e) => e.type === "text" && e.containerId)
+      .map((t) => {
+        ctx.font = `${t.fontSize}px ${family[t.fontFamily]}`;
+        const real = Math.max(...t.text.split("\n").map((line) => ctx.measureText(line).width));
+        return { text: t.text.split("\n")[0], stored: Math.round(t.width), real: Math.round(real), loaded: document.fonts.check(ctx.font, t.text) };
+      });
   });
   check("labels are sized with the loaded font, so nothing clips", fit.length === 3 && fit.every((f) => f.loaded && f.stored >= f.real - 1), fit);
 
@@ -133,7 +136,11 @@ await section("HLD board, hooks, palette and export", async () => {
     };
     const hasBound = (shape, id, type) => (shape.boundElements ?? []).some((b) => b.id === id && b.type === type);
     const out = {};
-    for (const [key, kind] of [["lb", "load_balancer"], ["svc", "service"], ["db", "database"]]) {
+    for (const [key, kind] of [
+      ["lb", "load_balancer"],
+      ["svc", "service"],
+      ["db", "database"],
+    ]) {
       const shape = byId.get(ids[key]);
       const label = textOf(shape.id);
       out[key] = { kind: shape.customData?.kind === kind, shapeType: shape.type, labelBound: Boolean(label) && hasBound(shape, label.id, "text"), label: label?.text };
@@ -163,7 +170,11 @@ await section("HLD board, hooks, palette and export", async () => {
   }, ids);
   check("shapes carry customData.kind", structure.lb.kind && structure.svc.kind && structure.db.kind, structure);
   check("shape types: diamond, rectangle, ellipse", structure.lb.shapeType === "diamond" && structure.svc.shapeType === "rectangle" && structure.db.shapeType === "ellipse");
-  check("each shape has a bound label with the text given", structure.lb.labelBound && structure.svc.labelBound && structure.db.labelBound && structure.lb.label === "Load balancer" && structure.db.label === "Postgres", { lb: structure.lb, svc: structure.svc, db: structure.db });
+  check(
+    "each shape has a bound label with the text given",
+    structure.lb.labelBound && structure.svc.labelBound && structure.db.labelBound && structure.lb.label === "Load balancer" && structure.db.label === "Postgres",
+    { lb: structure.lb, svc: structure.svc, db: structure.db },
+  );
   check("arrows bind start and end to the right shapes", structure.arrow1.start && structure.arrow1.end && structure.arrow2.start && structure.arrow2.end);
   check("shapes list their arrows in boundElements", structure.arrow1.shapesList && structure.arrow2.shapesList && structure.serviceListsBoth);
   check("arrows carry bound labels", structure.arrow1.label === "HTTPS" && structure.arrow2.label === "SQL" && structure.arrow1.labelListed && structure.arrow2.labelListed);
@@ -196,8 +207,19 @@ await section("HLD board, hooks, palette and export", async () => {
   const before = await page.evaluate(() => window.__irBoard.elements().length);
   await page.keyboard.press("Enter");
   await sleep(300);
-  const afterKey = await page.evaluate(() => ({ n: window.__irBoard.elements().length, kinds: window.__irBoard.elements().map((e) => e.customData?.kind).filter(Boolean), active: document.activeElement?.dataset?.kind }));
-  check("Enter inserts the focused kind and keeps focus on the palette", afterKey.n === before + 2 && afterKey.kinds.includes("api_gateway") && afterKey.active === "api_gateway", afterKey);
+  const afterKey = await page.evaluate(() => ({
+    n: window.__irBoard.elements().length,
+    kinds: window.__irBoard
+      .elements()
+      .map((e) => e.customData?.kind)
+      .filter(Boolean),
+    active: document.activeElement?.dataset?.kind,
+  }));
+  check(
+    "Enter inserts the focused kind and keeps focus on the palette",
+    afterKey.n === before + 2 && afterKey.kinds.includes("api_gateway") && afterKey.active === "api_gateway",
+    afterKey,
+  );
   await page.keyboard.press("End");
   const endFocus = await page.evaluate(() => document.activeElement?.dataset?.kind);
   check("End goes to the last item", endFocus === "external", endFocus);
@@ -256,7 +278,16 @@ await section("editor and console", async () => {
   const page = await openPage("editor", "view=code", { wait: ["editor"] });
 
   const markers = await page.evaluate(() => window.__irDev.markers());
-  check("three markers with owner clang and the right severities", markers.length === 3 && markers.every((m) => m.owner === "clang") && markers.map((m) => m.severity).sort().join() === "2,4,8", markers);
+  check(
+    "three markers with owner clang and the right severities",
+    markers.length === 3 &&
+      markers.every((m) => m.owner === "clang") &&
+      markers
+        .map((m) => m.severity)
+        .sort()
+        .join() === "2,4,8",
+    markers,
+  );
   const squiggles = await page.evaluate(() => ({
     error: document.querySelectorAll(".squiggly-error").length,
     warning: document.querySelectorAll(".squiggly-warning").length,
@@ -296,28 +327,56 @@ await section("editor and console", async () => {
   });
   await page.mouse.move(squiggleBox.x, squiggleBox.y);
   await sleep(900);
-  const hover = await page.evaluate(() => [...document.querySelectorAll(".monaco-hover")].some((el) => getComputedStyle(el).visibility !== "hidden" && el.getBoundingClientRect().width > 0 && !el.classList.contains("hidden")));
+  const hover = await page.evaluate(() =>
+    [...document.querySelectorAll(".monaco-hover")].some(
+      (el) => getComputedStyle(el).visibility !== "hidden" && el.getBoundingClientRect().width > 0 && !el.classList.contains("hidden"),
+    ),
+  );
   check("hovering a squiggle shows no hover widget", !hover);
 
   // The markers followed the text when a line was added below them.
   const typedMarkers = await page.evaluate(() => window.__irDev.markers());
-  check("markers stay put when text is added after them", typedMarkers.map((m) => m.line).sort((a, b) => a - b).join() === "4,12,13", typedMarkers.map((m) => m.line));
+  check(
+    "markers stay put when text is added after them",
+    typedMarkers
+      .map((m) => m.line)
+      .sort((a, b) => a - b)
+      .join() === "4,12,13",
+    typedMarkers.map((m) => m.line),
+  );
 
   // Outside edit
   await page.evaluate(() => window.__irDev.setCursor(13, 5));
   const cursorBefore = await page.evaluate(() => window.__irDev.cursor());
   const changesBefore = await page.evaluate(() => window.__irDev.editorChanges());
-  const markersBefore = await page.evaluate(() => window.__irDev.markers().map((m) => m.line).sort((a, b) => a - b));
+  const markersBefore = await page.evaluate(() =>
+    window.__irDev
+      .markers()
+      .map((m) => m.line)
+      .sort((a, b) => a - b),
+  );
   await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.startsWith("Outside edit")).click());
   await sleep(500);
   const cursorAfter = await page.evaluate(() => window.__irDev.cursor());
   const textAfter = await page.evaluate(() => window.__irDev.editorText());
   const changesAfter = await page.evaluate(() => window.__irDev.editorChanges());
-  const markersAfter = await page.evaluate(() => window.__irDev.markers().map((m) => m.line).sort((a, b) => a - b));
+  const markersAfter = await page.evaluate(() =>
+    window.__irDev
+      .markers()
+      .map((m) => m.line)
+      .sort((a, b) => a - b),
+  );
   check("outside edit replaces the text", textAfter.startsWith("// edited outside\n#include <iostream>"), textAfter.slice(0, 60));
-  check("outside edit keeps the cursor on the same code (one line down, same column)", cursorAfter.line === cursorBefore.line + 1 && cursorAfter.column === cursorBefore.column, { cursorBefore, cursorAfter });
+  check("outside edit keeps the cursor on the same code (one line down, same column)", cursorAfter.line === cursorBefore.line + 1 && cursorAfter.column === cursorBefore.column, {
+    cursorBefore,
+    cursorAfter,
+  });
   check("outside edit does not call onChange", changesAfter === changesBefore, { changesBefore, changesAfter });
-  check("outside edit moves the markers with their code", markersAfter.every((line, i) => line === markersBefore[i] + 1), { markersBefore, markersAfter });
+  check(
+    "outside edit moves the markers with their code",
+    markersAfter.every((line, i) => line === markersBefore[i] + 1),
+    { markersBefore, markersAfter },
+  );
 
   // Long file: scroll position survives an outside edit.
   await page.evaluate(() => window.__irDev.setCursor(100000, 1));
@@ -328,11 +387,19 @@ await section("editor and console", async () => {
   await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.startsWith("Outside edit")).click());
   await sleep(500);
   const scrolledAfter = await page.evaluate(() => window.__irDev.cursor());
-  check("outside edit keeps the scroll position", scrolled.scrollTop > 100 && Math.abs(scrolledAfter.scrollTop - scrolled.scrollTop) <= 24 && scrolledAfter.line === scrolled.line + 1, { scrolled, scrolledAfter });
+  check(
+    "outside edit keeps the scroll position",
+    scrolled.scrollTop > 100 && Math.abs(scrolledAfter.scrollTop - scrolled.scrollTop) <= 24 && scrolledAfter.line === scrolled.line + 1,
+    { scrolled, scrolledAfter },
+  );
 
   // Console states
   const initialConsole = await text(page, ".ir-console");
-  check("console starts with a not-run state and a Run button", /Not run yet/.test(initialConsole) && /Nothing has run yet/.test(initialConsole) && /Run/.test(initialConsole), initialConsole.slice(0, 120));
+  check(
+    "console starts with a not-run state and a Run button",
+    /Not run yet/.test(initialConsole) && /Nothing has run yet/.test(initialConsole) && /Run/.test(initialConsole),
+    initialConsole.slice(0, 120),
+  );
 
   async function run(name) {
     await page.evaluate((n) => window.__irDev.pickRun(n), name);
@@ -352,11 +419,23 @@ await section("editor and console", async () => {
   }
 
   const ok = await run("success");
-  check("running state marks Run disabled, keeps its focus, and says Running", ok.during.disabled && ok.during.focusKept && /Running/.test(ok.during.label) && /Running/.test(ok.during.status) && ok.during.busy === "true", ok.during);
-  check("success shows exit code, duration, stdout", /Exit code 0/.test(ok.out) && /12 ms/.test(ok.out) && /Ticket 1 -> spot 7/.test(ok.out) && /Exit code 0 in 12 ms/.test(ok.status), ok.status);
+  check(
+    "running state marks Run disabled, keeps its focus, and says Running",
+    ok.during.disabled && ok.during.focusKept && /Running/.test(ok.during.label) && /Running/.test(ok.during.status) && ok.during.busy === "true",
+    ok.during,
+  );
+  check(
+    "success shows exit code, duration, stdout",
+    /Exit code 0/.test(ok.out) && /12 ms/.test(ok.out) && /Ticket 1 -> spot 7/.test(ok.out) && /Exit code 0 in 12 ms/.test(ok.status),
+    ok.status,
+  );
 
   const compileFailed = await run("compileError");
-  check("compile error lists diagnostics and says the program did not run", /Compile failed: 1 error, 1 warning/.test(compileFailed.status) && /use of undeclared identifier 'total'/.test(compileFailed.out) && /did not run/.test(compileFailed.out), compileFailed.status);
+  check(
+    "compile error lists diagnostics and says the program did not run",
+    /Compile failed: 1 error, 1 warning/.test(compileFailed.status) && /use of undeclared identifier 'total'/.test(compileFailed.out) && /did not run/.test(compileFailed.out),
+    compileFailed.status,
+  );
   await shot(page, "editor-compile-error");
   await page.click("button.ir-diag--error");
   await sleep(400);
@@ -435,7 +514,11 @@ await section("dark theme screenshot", async () => {
     return { b64, corner: [...corner], width: img.width, height: img.height, whiteShare: Math.round((bright / (all.length / 4)) * 100) };
   });
   writeFileSync(`${SHOTS}-export-dark.png`, Buffer.from(exported.b64, "base64"));
-  check("a dark-theme export is on a white background", exported.corner.join() === "255,255,255,255" && exported.whiteShare > 40, { corner: exported.corner, size: `${exported.width}x${exported.height}`, whiteShare: exported.whiteShare });
+  check("a dark-theme export is on a white background", exported.corner.join() === "255,255,255,255" && exported.whiteShare > 40, {
+    corner: exported.corner,
+    size: `${exported.width}x${exported.height}`,
+    whiteShare: exported.whiteShare,
+  });
   await page.close();
 });
 
@@ -466,7 +549,12 @@ await section("remount and read-only", async () => {
   await sleep(1800);
   const logLater = await page.evaluate(() => window.__irDev.sceneLog());
   check("restoring a scene does not emit a change", logAfter.length === logLater.length, { logAfter: logAfter.length, logLater: logLater.length });
-  await page.evaluate(() => [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Read-only")).querySelector("input").click());
+  await page.evaluate(() =>
+    [...document.querySelectorAll("label")]
+      .find((l) => l.textContent.includes("Read-only"))
+      .querySelector("input")
+      .click(),
+  );
   await sleep(500);
   const roPalette = await page.$(".ir-palette");
   check("read-only hides the palette", roPalette === null);
@@ -522,7 +610,11 @@ await section("LLD relations", async () => {
   await sleep(300);
   const inherits = await arrowsOf("inherits");
   check("inherits joins the first selected shape to the second", inherits.length === 1 && inherits[0].start === shapes.cls && inherits[0].end === shapes.iface, inherits);
-  check("inherits is a solid line with a hollow triangle and its label", inherits[0]?.strokeStyle === "solid" && inherits[0]?.endArrowhead === "triangle_outline" && inherits[0]?.label === "inherits", inherits[0]);
+  check(
+    "inherits is a solid line with a hollow triangle and its label",
+    inherits[0]?.strokeStyle === "solid" && inherits[0]?.endArrowhead === "triangle_outline" && inherits[0]?.label === "inherits",
+    inherits[0],
+  );
   const listed = await page.evaluate((ids) => {
     const els = window.__irBoard.elements();
     const has = (id, arrowId) => (els.find((e) => e.id === id).boundElements ?? []).some((b) => b.id === arrowId && b.type === "arrow");
@@ -536,14 +628,22 @@ await section("LLD relations", async () => {
   await page.click('.ir-palette__item[data-kind="uses"]');
   await sleep(300);
   const uses = await arrowsOf("uses");
-  check("with nothing selected, uses is a free dashed arrow with its label", uses.length === 1 && uses[0].start === null && uses[0].end === null && uses[0].strokeStyle === "dashed" && uses[0].label === "uses", uses);
+  check(
+    "with nothing selected, uses is a free dashed arrow with its label",
+    uses.length === 1 && uses[0].start === null && uses[0].end === null && uses[0].strokeStyle === "dashed" && uses[0].label === "uses",
+    uses,
+  );
 
   // One shape selected: bound at the start, free at the end.
   await page.mouse.click(box.cx - 110, box.cy);
   await page.click('.ir-palette__item[data-kind="owns"]');
   await sleep(300);
   const owns = await arrowsOf("owns");
-  check("with one shape selected, owns starts on it and ends free, diamond first", owns.length === 1 && owns[0].start === shapes.cls && owns[0].end === null && owns[0].startArrowhead === "diamond" && owns[0].label === "owns", owns);
+  check(
+    "with one shape selected, owns starts on it and ends free, diamond first",
+    owns.length === 1 && owns[0].start === shapes.cls && owns[0].end === null && owns[0].startArrowhead === "diamond" && owns[0].label === "owns",
+    owns,
+  );
 
   // Moving a bound shape drags its arrow end with it (Excalidraw's own binding takes over).
   const before = await page.evaluate(() => {

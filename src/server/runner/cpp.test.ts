@@ -6,13 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  type CppRunner,
-  OUTPUT_CUT_PATTERN,
-  createCppRunner,
-  createCppRunnerWithLimits,
-  detectSanitizers,
-} from "./cpp";
+import { type CppRunner, OUTPUT_CUT_PATTERN, createCppRunner, createCppRunnerWithLimits, detectSanitizers } from "./cpp";
 import { buildCompileSandboxProfile, buildLinuxSandboxInvocation, buildSandboxProfile, sandboxAvailable, withProcessLimits } from "./sandbox";
 
 const run = promisify(execFile);
@@ -150,18 +144,14 @@ describe("compileAndRun", () => {
     const result = await runner.compileAndRun(fixture("broken.cpp"));
     expect(result.run).toBeNull();
     expect(result.compile.ok).toBe(false);
-    expect(result.compile.diagnostics).toEqual([
-      { line: 4, column: 16, endLine: 4, endColumn: 29, severity: "error", message: "use of undeclared identifier 'missing_value'" },
-    ]);
+    expect(result.compile.diagnostics).toEqual([{ line: 4, column: 16, endLine: 4, endColumn: 29, severity: "error", message: "use of undeclared identifier 'missing_value'" }]);
     expect(result.compile.stderr).toContain("error: use of undeclared identifier 'missing_value'");
   });
 
   it("keeps warnings as diagnostics when the build succeeds", async () => {
     const result = await runner.compileAndRun(fixture("warning_only.cpp"));
     expect(result.compile.ok).toBe(true);
-    expect(result.compile.diagnostics).toEqual([
-      { line: 4, column: 7, endLine: 4, endColumn: 13, severity: "warning", message: "unused variable 'unused' [-Wunused-variable]" },
-    ]);
+    expect(result.compile.diagnostics).toEqual([{ line: 4, column: 7, endLine: 4, endColumn: 13, severity: "warning", message: "unused variable 'unused' [-Wunused-variable]" }]);
     expect(result.run).toMatchObject({ exitCode: 0, stdout: "compiles with a warning\n" });
   });
 
@@ -170,17 +160,13 @@ describe("compileAndRun", () => {
     expect(result.run).toBeNull();
     expect(result.compile.ok).toBe(false);
     expect(result.compile.stderr).toContain("Undefined symbols");
-    expect(result.compile.diagnostics).toEqual([
-      { line: 1, column: 1, endLine: 1, endColumn: 2, severity: "error", message: "Link error: the program has no main() function." },
-    ]);
+    expect(result.compile.diagnostics).toEqual([{ line: 1, column: 1, endLine: 1, endColumn: 2, severity: "error", message: "Link error: the program has no main() function." }]);
   });
 
   it("names the missing symbol for other link errors", async () => {
     const path = await program("undefined_function.cpp", "int helper(int x);\nint main() { return helper(2); }\n");
     const result = await runner.compileAndRun(path);
-    expect(result.compile.diagnostics).toEqual([
-      expect.objectContaining({ severity: "error", message: 'Link error: undefined symbol "helper(int)"' }),
-    ]);
+    expect(result.compile.diagnostics).toEqual([expect.objectContaining({ severity: "error", message: 'Link error: undefined symbol "helper(int)"' })]);
   });
 
   it("gives the program no stdin", async () => {
@@ -209,7 +195,10 @@ describe("compileAndRun", () => {
   it("does not hand the server's environment to compiled programs", async () => {
     process.env.SPARMATE_RUNNER_TEST_SECRET = "should-not-leak";
     try {
-      const path = await program("env.cpp", '#include <cstdio>\n#include <cstdlib>\nint main() {\n  const char* v = std::getenv("SPARMATE_RUNNER_TEST_SECRET");\n  std::printf("secret=%s\\n", v ? v : "(unset)");\n}\n');
+      const path = await program(
+        "env.cpp",
+        '#include <cstdio>\n#include <cstdlib>\nint main() {\n  const char* v = std::getenv("SPARMATE_RUNNER_TEST_SECRET");\n  std::printf("secret=%s\\n", v ? v : "(unset)");\n}\n',
+      );
       expect((await runner.compileAndRun(path)).run!.stdout).toBe("secret=(unset)\n");
     } finally {
       delete process.env.SPARMATE_RUNNER_TEST_SECRET;
@@ -286,7 +275,12 @@ describe("output caps", () => {
     const body = ran!.stdout.replace(/\n\[output cut at \d+ KB\]\n$/, "");
     expect(Buffer.byteLength(body, "utf8")).toBeLessThanOrEqual(64 * 1024);
     expect(Buffer.byteLength(body, "utf8")).toBeGreaterThan(64 * 1024 - 100);
-    expect(body.split("\n").slice(0, -1).every((line, i) => line.startsWith(`line ${String(i).padStart(5, "0")} `))).toBe(true);
+    expect(
+      body
+        .split("\n")
+        .slice(0, -1)
+        .every((line, i) => line.startsWith(`line ${String(i).padStart(5, "0")} `)),
+    ).toBe(true);
 
     expect(OUTPUT_CUT_PATTERN.test(ran!.stderr)).toBe(true);
     expect(ran!.stderr.startsWith("err 00000 ")).toBe(true);
@@ -326,9 +320,7 @@ describe("syntaxCheck", () => {
   it("reports the same diagnostics as a build", async () => {
     const result = await runner.syntaxCheck(fixture("broken.cpp"));
     expect(result.ok).toBe(false);
-    expect(result.diagnostics).toEqual([
-      { line: 4, column: 16, endLine: 4, endColumn: 29, severity: "error", message: "use of undeclared identifier 'missing_value'" },
-    ]);
+    expect(result.diagnostics).toEqual([{ line: 4, column: 16, endLine: 4, endColumn: 29, severity: "error", message: "use of undeclared identifier 'missing_value'" }]);
   });
 
   it("treats warnings as success", async () => {
@@ -411,18 +403,14 @@ describe("harness runs", () => {
     expect(result.run).toBeNull();
     expect(result.compile.ok).toBe(false);
     const errors = result.compile.diagnostics.filter((d) => d.severity === "error");
-    expect(errors).toEqual([
-      { line: 3, column: 11, endLine: 3, endColumn: 15, severity: "error", message: "(harness) no member named 'nope' in 'Counter'" },
-    ]);
+    expect(errors).toEqual([{ line: 3, column: 11, endLine: 3, endColumn: 15, severity: "error", message: "(harness) no member named 'nope' in 'Counter'" }]);
     expect(result.compile.stderr).toContain("harness.cpp:3:11");
   });
 
   it("reports a compile error in the candidate's file with the candidate's own line numbers and no prefix", async () => {
     const result = await runner.runHarness(fixture("candidate_broken.cpp"), "int main() {\n  Counter c;\n  return c.total();\n}\n");
     expect(result.run).toBeNull();
-    expect(result.compile.diagnostics).toEqual([
-      expect.objectContaining({ line: 5, severity: "error", message: "use of undeclared identifier 'missing_total'" }),
-    ]);
+    expect(result.compile.diagnostics).toEqual([expect.objectContaining({ line: 5, severity: "error", message: "use of undeclared identifier 'missing_total'" })]);
   });
 
   it("rejects a harness over 100 KB and an unreadable candidate", async () => {
@@ -534,12 +522,14 @@ describe("the sandbox", () => {
     const src = join(build, "r.cpp");
     writeFileSync(
       src,
-      '#include <fstream>\n#include <iostream>\nint main(int, char** argv) {\n' +
-        '  std::ifstream a(argv[1]); std::ifstream b(argv[2]);\n' +
+      "#include <fstream>\n#include <iostream>\nint main(int, char** argv) {\n" +
+        "  std::ifstream a(argv[1]); std::ifstream b(argv[2]);\n" +
         '  std::cout << (a.good() ? "secret-read" : "secret-denied") << " " << (b.good() ? "own-read" : "own-denied");\n}\n',
     );
     execFileSync("/usr/bin/clang++", ["-std=c++17", "-o", join(build, "r"), src]);
-    const out = execFileSync("/usr/bin/sandbox-exec", ["-p", buildSandboxProfile(build, root), join(build, "r"), join(root, "secret.txt"), join(build, "own.txt")], { cwd: build }).toString();
+    const out = execFileSync("/usr/bin/sandbox-exec", ["-p", buildSandboxProfile(build, root), join(build, "r"), join(root, "secret.txt"), join(build, "own.txt")], {
+      cwd: build,
+    }).toString();
     rmSync(root, { recursive: true, force: true });
     expect(out).toBe("secret-denied own-read");
   });
@@ -667,7 +657,7 @@ describe("the compile sandbox", () => {
   const includeProgram = (): string => `#include "${secret}"\nint main() { return 0; }\n`;
   const incbinProgram = (): string =>
     "#include <cstdio>\n" +
-    "#ifdef __APPLE__\n#define BLOB \"_blob\"\n#define DATA \".const\"\n#else\n#define BLOB \"blob\"\n#define DATA \".section .rodata\"\n#endif\n" +
+    '#ifdef __APPLE__\n#define BLOB "_blob"\n#define DATA ".const"\n#else\n#define BLOB "blob"\n#define DATA ".section .rodata"\n#endif\n' +
     `__asm__(DATA "\\n.globl " BLOB "\\n" BLOB ":\\n.incbin \\"${secret}\\"\\n.byte 0\\n");\n` +
     'extern "C" const char blob[];\nint main() { std::fputs(blob, stdout); }\n';
   const leaks = (result: { stderr: string; diagnostics: { message: string }[] }): boolean =>
@@ -799,7 +789,7 @@ describe("the compile sandbox", () => {
     expect(profile).toContain('(literal "/study/lld/a/attempt.cpp")');
     expect(profile).not.toContain('(subpath "/study');
     expect(profile).not.toContain("process-fork");
-    expect(profile).not.toContain("/dev/zero\")");
+    expect(profile).not.toContain('/dev/zero")');
   });
 });
 

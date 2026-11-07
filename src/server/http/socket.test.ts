@@ -63,9 +63,7 @@ describe("WebSocket heartbeat", () => {
       expect(mockSocket.on).toHaveBeenCalledWith("pong", expect.any(Function));
 
       // Authenticate with hello message to clear helloTimer
-      listeners["message"]?.forEach((cb) =>
-        cb(Buffer.from(JSON.stringify({ type: "hello", token: csrfToken })), false)
-      );
+      listeners["message"]?.forEach((cb) => cb(Buffer.from(JSON.stringify({ type: "hello", token: csrfToken })), false));
 
       // Advance by 1 interval: first ping sent, 1 missed pong
       await vi.advanceTimersByTimeAsync(1000);

@@ -197,7 +197,10 @@ async function runDebrief(c, label) {
   const mark = c.mark();
   c.send({ type: "session.end" });
   const ready = await c.waitFor((m) => m.type === "debrief.ready", { since: mark, timeout: 60_000, label: `${label} debrief.ready` });
-  const stages = c.msgs.slice(mark).filter((m) => m.type === "debrief.progress").map((m) => m.stage);
+  const stages = c.msgs
+    .slice(mark)
+    .filter((m) => m.type === "debrief.progress")
+    .map((m) => m.stage);
   const state = await c.waitFor((m) => m.type === "session.state" && m.session.status === "debriefed", { since: mark, timeout: 10_000, label: `${label} debriefed state` });
   return { scorecard: ready.scorecard, stages, state: state.session, mark };
 }
@@ -231,9 +234,35 @@ async function bookkeeping(c, studyRoot, label) {
 function scene() {
   const base = { angle: 0, isDeleted: false, groupIds: [], frameId: null, strokeStyle: "solid", fillStyle: "solid", roughness: 1, opacity: 100, version: 1 };
   return [
-    { ...base, id: "lb", type: "rectangle", x: 0, y: 0, width: 180, height: 70, boundElements: [{ id: "lb-t", type: "text" }, { id: "a1", type: "arrow" }], customData: { kind: "load_balancer" } },
+    {
+      ...base,
+      id: "lb",
+      type: "rectangle",
+      x: 0,
+      y: 0,
+      width: 180,
+      height: 70,
+      boundElements: [
+        { id: "lb-t", type: "text" },
+        { id: "a1", type: "arrow" },
+      ],
+      customData: { kind: "load_balancer" },
+    },
     { ...base, id: "lb-t", type: "text", x: 20, y: 25, width: 140, height: 20, containerId: "lb", text: "Load balancer", originalText: "Load balancer" },
-    { ...base, id: "svc", type: "rectangle", x: 320, y: 0, width: 180, height: 70, boundElements: [{ id: "svc-t", type: "text" }, { id: "a1", type: "arrow" }], customData: { kind: "service" } },
+    {
+      ...base,
+      id: "svc",
+      type: "rectangle",
+      x: 320,
+      y: 0,
+      width: 180,
+      height: 70,
+      boundElements: [
+        { id: "svc-t", type: "text" },
+        { id: "a1", type: "arrow" },
+      ],
+      customData: { kind: "service" },
+    },
     { ...base, id: "svc-t", type: "text", x: 340, y: 25, width: 140, height: 20, containerId: "svc", text: "Redirect service", originalText: "Redirect service" },
     {
       ...base,
@@ -325,7 +354,11 @@ async function prepare() {
   await mkdir(data, { recursive: true });
   await copyStudyKit(study);
   // An earlier attempt's notes file makes the scribe append to it instead of creating a new one.
-  await writeFile(join(study, "notes", "b3-parking-lot.md"), "# B3 — Parking Lot\n\n**Date:** 2026-10-25 · **Tracker:** B3 Parking Lot · **Status:** [~]\n\n## What to fix next time\n\n- Write the exit flow first.\n", "utf8");
+  await writeFile(
+    join(study, "notes", "b3-parking-lot.md"),
+    "# B3 — Parking Lot\n\n**Date:** 2026-10-25 · **Tracker:** B3 Parking Lot · **Status:** [~]\n\n## What to fix next time\n\n- Write the exit flow first.\n",
+    "utf8",
+  );
   await writeFile(join(root, "claude.json"), JSON.stringify({ oauthAccount: { emailAddress: "test.person@examplecorp.dev" } }));
   await writeFile(join(root, "denylist.txt"), "secretterm\n");
   return { root, study, data };
@@ -398,13 +431,21 @@ async function securityChecks() {
   check("unknown Host gets 421", badHost.status === 421, `status ${badHost.status}`);
   const noOrigin = await request("POST", "/api/sessions", { headers: { "x-csrf-token": TOKEN }, body: { problemId: "c2-url-shortener", mode: "interview" } });
   check("POST without Origin gets 403", noOrigin.status === 403, `status ${noOrigin.status}`);
-  const badToken = await request("POST", "/api/sessions", { headers: { origin: ORIGIN, "x-csrf-token": "x".repeat(43) }, body: { problemId: "c2-url-shortener", mode: "interview" } });
+  const badToken = await request("POST", "/api/sessions", {
+    headers: { origin: ORIGIN, "x-csrf-token": "x".repeat(43) },
+    body: { problemId: "c2-url-shortener", mode: "interview" },
+  });
   check("POST with a wrong CSRF token gets 403", badToken.status === 403, `status ${badToken.status}`);
   const badBody = await api.post("/api/sessions", { problemId: "c2-url-shortener", mode: "interview", extra: 1 });
   check("POST with an unknown key gets 400", badBody.status === 400, `status ${badBody.status}`);
   const boot = await api.get("/api/bootstrap");
   check("no CORS headers", !Object.keys(boot.headers).some((h) => h.startsWith("access-control-")));
-  check("security headers present", boot.headers["x-frame-options"] === "DENY" && boot.headers["cross-origin-opener-policy"] === "same-origin" && String(boot.headers["content-security-policy"]).includes("frame-ancestors 'none'"));
+  check(
+    "security headers present",
+    boot.headers["x-frame-options"] === "DENY" &&
+      boot.headers["cross-origin-opener-policy"] === "same-origin" &&
+      String(boot.headers["content-security-policy"]).includes("frame-ancestors 'none'"),
+  );
   const page = await api.get("/session/anything");
   check("SPA fallback serves index.html", page.status === 200 && String(page.headers["content-type"]).includes("text/html"), `status ${page.status}`);
 }
@@ -443,13 +484,24 @@ async function hldRound(dirs) {
 
   const first = await say(c, "I'd start with requirements: users create short links and get redirects, about 100 million new links a month.", "c1");
   check("candidate message echoed with its clientMsgId", first.echo.entry.role === "candidate" && first.echo.entry.channel === "interview");
-  check("interviewer reply streamed in chunks then stored", first.deltas.length >= 2 && first.deltas.map((d) => d.textDelta).join("") === first.reply.entry.text, `${first.deltas.length} deltas`);
-  check("a second tab receives the broadcast", second.msgs.some((m) => m.type === "chat.message" && m.clientMsgId === "c1"));
+  check(
+    "interviewer reply streamed in chunks then stored",
+    first.deltas.length >= 2 && first.deltas.map((d) => d.textDelta).join("") === first.reply.entry.text,
+    `${first.deltas.length} deltas`,
+  );
+  check(
+    "a second tab receives the broadcast",
+    second.msgs.some((m) => m.type === "chat.message" && m.clientMsgId === "c1"),
+  );
 
   let mark = c.mark();
   c.send({ type: "board.update", version: 1, elements: scene() });
   const graph = await c.waitFor((m) => m.type === "board.graph" && m.version === 1, { since: mark, label: "board.graph" });
-  check("board update builds the graph text", graph.graphText.includes("Load balancer") && graph.graphText.includes("Redirect service"), graph.graphText.split("\n").slice(0, 4).join(" | "));
+  check(
+    "board update builds the graph text",
+    graph.graphText.includes("Load balancer") && graph.graphText.includes("Redirect service"),
+    graph.graphText.split("\n").slice(0, 4).join(" | "),
+  );
   c.send({ type: "board.update", version: 1, elements: [] });
 
   const look = await say(c, "Can you look at the board?", "c2");
@@ -483,13 +535,20 @@ async function hldRound(dirs) {
     "an interview round sends the browser no checklist and no pins during the round",
     statesSince.length > 0 && statesSince.every((m) => Object.keys(m.session.steps).length === 0 && m.session.pins.length === 0),
   );
-  check("a coverage claim with words he never said is refused", savedChecks.requirements?.status === "done" && !JSON.stringify(savedChecks).includes("I covered this in detail earlier"));
+  check(
+    "a coverage claim with words he never said is refused",
+    savedChecks.requirements?.status === "done" && !JSON.stringify(savedChecks).includes("I covered this in detail earlier"),
+  );
 
   mark = c.mark();
   c.send({ type: "phase.set", phase: "design" });
   await c.waitFor((m) => m.type === "session.state" && m.session.phase === "design", { since: mark, label: "state after design" });
   mark = c.mark();
-  c.send({ type: "board.update", version: 3, elements: [...framedScene(), { angle: 0, isDeleted: false, groupIds: [], frameId: null, id: "blank2", type: "rectangle", x: 1100, y: 900, width: 100, height: 60 }] });
+  c.send({
+    type: "board.update",
+    version: 3,
+    elements: [...framedScene(), { angle: 0, isDeleted: false, groupIds: [], frameId: null, id: "blank2", type: "rectangle", x: 1100, y: 900, width: 100, height: 60 }],
+  });
   await new Promise((r) => setTimeout(r, 6_000));
   check(
     "drawing in a step does not start a check while he stays in it",
@@ -501,7 +560,10 @@ async function hldRound(dirs) {
   c.send({ type: "phase.set", phase: "capacity" });
   const changed = await c.waitFor((m) => m.type === "phase.changed", { since: mark, label: "phase.changed" });
   const stateAfter = await c.waitFor((m) => m.type === "session.state" && m.session.phase === "capacity", { since: mark, label: "state after phase" });
-  check("phase.set records the candidate's move", changed.phase === "capacity" && changed.by === "candidate" && stateAfter.session.phaseHistory.some((h) => h.phase === "capacity" && h.by === "candidate"));
+  check(
+    "phase.set records the candidate's move",
+    changed.phase === "capacity" && changed.by === "candidate" && stateAfter.session.phaseHistory.some((h) => h.phase === "capacity" && h.by === "candidate"),
+  );
 
   mark = c.mark();
   c.send({ type: "phase.set", phase: "not-a-phase" });
@@ -518,21 +580,32 @@ async function hldRound(dirs) {
   const secondMark = second.mark();
   c.send({ type: "notes.update", phase: "requirements", text: req, version: 1 });
   const shared = await second.waitFor((m) => m.type === "notes.changed", { since: secondMark, label: "notes.changed on the second tab" });
-  check("notes.update is broadcast to the other tab only", shared.phase === "requirements" && shared.text === req && shared.version === 1 && !c.msgs.slice(mark).some((m) => m.type === "notes.changed"));
+  check(
+    "notes.update is broadcast to the other tab only",
+    shared.phase === "requirements" && shared.text === req && shared.version === 1 && !c.msgs.slice(mark).some((m) => m.type === "notes.changed"),
+  );
   c.send({ type: "notes.update", phase: "requirements", text: "stale write", version: 1 });
   mark = c.mark();
   c.send({ type: "notes.update", phase: "nope", text: "x", version: 2 });
   const notesErr = await c.waitFor((m) => m.type === "error", { since: mark, label: "bad notes phase error" });
   check("notes for an unknown phase are refused, socket stays open", notesErr.code === "bad_phase" && !c.closeInfo);
   const withNotes = await say(c, "What do my notes say?", "n1");
-  check("the interviewer's envelope carries the notes block once", withNotes.reply.entry.text.includes("I read your notes") && withNotes.reply.entry.text.includes("[Requirements] / Functional: shorten and redirect."), withNotes.reply.entry.text);
+  check(
+    "the interviewer's envelope carries the notes block once",
+    withNotes.reply.entry.text.includes("I read your notes") && withNotes.reply.entry.text.includes("[Requirements] / Functional: shorten and redirect."),
+    withNotes.reply.entry.text,
+  );
   const again = await say(c, "What do my notes say?", "n2");
   check("the notes block is left out while the notes are unchanged", again.reply.entry.text.includes("no notes block"), again.reply.entry.text);
   c.send({ type: "notes.update", phase: "capacity", text: "400 reads/s, which means one cache.", version: 2 });
   await new Promise((r) => setTimeout(r, 1500));
   const reopened = await openRoom(id, "hld-reload");
   const reloadState = reopened.msgs.find((m) => m.type === "session.state").session;
-  check("notes survive a reload and the stale write was ignored", reloadState.stepNotes.requirements === req && reloadState.stepNotes.capacity.startsWith("400 reads/s") && reloadState.stepNotesVersion === 2, JSON.stringify(reloadState.stepNotes));
+  check(
+    "notes survive a reload and the stale write was ignored",
+    reloadState.stepNotes.requirements === req && reloadState.stepNotes.capacity.startsWith("400 reads/s") && reloadState.stepNotesVersion === 2,
+    JSON.stringify(reloadState.stepNotes),
+  );
   const onDisk = JSON.parse(await readFile(join(dirs.data, "sessions", id, "session.json"), "utf8"));
   check("notes are saved to the session file", onDisk.stepNotes.requirements === req && onDisk.stepNotesVersion === 2);
   reopened.close();
@@ -545,19 +618,33 @@ async function hldRound(dirs) {
   check("a notes text over 8,000 characters is rejected", closedLong?.code === 4400, JSON.stringify(closedLong));
 
   const sessionBefore = await api.get(`/api/sessions/${id}`);
-  check("GET session returns the public session without sdk ids", sessionBefore.status === 200 && sessionBefore.json.sdk === undefined && sessionBefore.json.reference === null && Array.isArray(sessionBefore.json.phasePlan));
+  check(
+    "GET session returns the public session without sdk ids",
+    sessionBefore.status === 200 && sessionBefore.json.sdk === undefined && sessionBefore.json.reference === null && Array.isArray(sessionBefore.json.phasePlan),
+  );
 
   const debrief = await runDebrief(c, "HLD");
-  check("debrief runs collect, judge, check, done", ["collecting", "judging", "checking", "done"].every((s) => debrief.stages.includes(s)), debrief.stages.join(","));
+  check(
+    "debrief runs collect, judge, check, done",
+    ["collecting", "judging", "checking", "done"].every((s) => debrief.stages.includes(s)),
+    debrief.stages.join(","),
+  );
   const qc = debrief.scorecard.quoteChecks ?? [];
   const failedQuotes = qc.filter((q) => !q.verified).length;
   check("quote checks: real quotes verified, the invented one failed", qc.length >= 2 && failedQuotes === 1, `${qc.length} checks, ${failedQuotes} failed`);
-  check("scorecard has phase timing and lint issues", Array.isArray(debrief.scorecard.phaseTiming) && debrief.scorecard.phaseTiming.length === 6 && Array.isArray(debrief.scorecard.lintIssues));
+  check(
+    "scorecard has phase timing and lint issues",
+    Array.isArray(debrief.scorecard.phaseTiming) && debrief.scorecard.phaseTiming.length === 6 && Array.isArray(debrief.scorecard.lintIssues),
+  );
   check("reference answer appears once debriefed", debrief.state.reference && debrief.state.reference.sections.some((s) => s.heading === "Reference design"));
   const png = await api.get(`/api/sessions/${id}/board-final.png`);
   check("final board PNG saved", png.status === 200 && png.headers["content-type"] === "image/png" && png.buf.subarray(1, 4).toString() === "PNG");
 
-  const coachOpen = await c.waitFor((m) => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach", { since: debrief.mark, timeout: 15_000, label: "coach opening" });
+  const coachOpen = await c.waitFor((m) => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach", {
+    since: debrief.mark,
+    timeout: 15_000,
+    label: "coach opening",
+  });
   check("coach opens after the debrief", coachOpen.entry.text.includes("Let's start with"), coachOpen.entry.text.slice(0, 80));
   mark = c.mark();
   c.send({ type: "chat.send", channel: "coach", clientMsgId: "k1", text: "Can you explain the capacity gap?" });
@@ -568,19 +655,36 @@ async function hldRound(dirs) {
   const notesBefore = await readFile(notesPath, "utf8").catch(() => null);
   const bk = await bookkeeping(c, dirs.study, "HLD");
   const kinds = bk.proposal.ops.map((o) => o.op.kind);
-  check("scribe drafts tracker, log, review and a new notes file", ["tracker_update_bullet", "tracker_append_session_log_row", "review_append_entry", "notes_create"].every((k) => kinds.includes(k)) && notesBefore === null, kinds.join(","));
+  check(
+    "scribe drafts tracker, log, review and a new notes file",
+    ["tracker_update_bullet", "tracker_append_session_log_row", "review_append_entry", "notes_create"].every((k) => kinds.includes(k)) && notesBefore === null,
+    kinds.join(","),
+  );
   check("every drafted op applied", bk.applied.applied.length === bk.opIds.length && bk.applied.failed.length === 0, JSON.stringify(bk.applied.failed));
   check("files changed exactly as the diffs planned", bk.exact, bk.mismatches.join(","));
   const tracker = await readFile(join(dirs.study, "TRACKER.md"), "utf8");
   check("tracker bullet now carries the mark and suffix", tracker.includes(`- [~] URL Shortener → notes/c2-url-shortener.md · ${today()}`));
 
   const history = await api.get("/api/sessions");
-  check("history lists the session with its verdict", history.json.some((h) => h.id === id && h.verdict === "lean_no_hire" && h.status === "debriefed"));
+  check(
+    "history lists the session with its verdict",
+    history.json.some((h) => h.id === id && h.verdict === "lean_no_hire" && h.status === "debriefed"),
+  );
   const savedSession = await api.get(`/api/sessions/${id}`);
-  check("the saved state of the study notes survives and shows in history", savedSession.json.studyNotes?.status === "applied" && savedSession.json.studyNotes.appliedCount === bk.opIds.length && history.json.find((h) => h.id === id)?.notesSaved === true, JSON.stringify(savedSession.json.studyNotes));
+  check(
+    "the saved state of the study notes survives and shows in history",
+    savedSession.json.studyNotes?.status === "applied" &&
+      savedSession.json.studyNotes.appliedCount === bk.opIds.length &&
+      history.json.find((h) => h.id === id)?.notesSaved === true,
+    JSON.stringify(savedSession.json.studyNotes),
+  );
   const problems = await api.get("/api/problems");
   const shortener = problems.json.find((p) => p.id === "c2-url-shortener");
-  check("each problem carries the first sentence of its opening prompt", shortener?.summary === "Let's design a URL shortener, something like bit.ly." && !/Hidden|reference/i.test(shortener.summary), shortener?.summary);
+  check(
+    "each problem carries the first sentence of its opening prompt",
+    shortener?.summary === "Let's design a URL shortener, something like bit.ly." && !/Hidden|reference/i.test(shortener.summary),
+    shortener?.summary,
+  );
   c.close();
   second.close();
 }
@@ -592,7 +696,11 @@ async function lldRound(dirs) {
   const id = created.json.sessionId;
   const code0 = await api.get(`/api/sessions/${id}/code`);
   const header = `// Parking Lot — ${today()}`;
-  check("attempt file created with its one-line header", code0.status === 200 && code0.json.version === 0 && code0.json.content.trim() === header && code0.json.path.endsWith(`lld/parking-lot/attempt-${today()}.cpp`), JSON.stringify(code0.json));
+  check(
+    "attempt file created with its one-line header",
+    code0.status === 200 && code0.json.version === 0 && code0.json.content.trim() === header && code0.json.path.endsWith(`lld/parking-lot/attempt-${today()}.cpp`),
+    JSON.stringify(code0.json),
+  );
   const attempt = code0.json.path;
   const hostAttempt = attempt.startsWith("/study/") ? join(dirs.study, attempt.slice("/study/".length)) : attempt;
 
@@ -608,7 +716,8 @@ async function lldRound(dirs) {
   } catch (err) {
     check("syntax check runs after a code update (C++ runner)", false, String(err));
   }
-  if (diag) check("syntax check runs after a code update (C++ runner)", diag.diagnostics.filter((d) => d.severity === "error").length === 0, `${diag.diagnostics.length} diagnostics`);
+  if (diag)
+    check("syntax check runs after a code update (C++ runner)", diag.diagnostics.filter((d) => d.severity === "error").length === 0, `${diag.diagnostics.length} diagnostics`);
   check("code update written to the attempt file", (await readFile(hostAttempt, "utf8")) === v1);
 
   const v2 = v1.replace("car got spot", "a car got spot");
@@ -637,7 +746,11 @@ async function lldRound(dirs) {
   const debrief = await runDebrief(c, "LLD");
   check("LLD debrief runs the tester", debrief.stages.includes("testing"), debrief.stages.join(","));
   const scen = debrief.scorecard.lldScenarios;
-  check("tester scenarios reach the scorecard (one pass, one fail when the code compiles)", scen.length === 2 && scen.filter((s) => s.pass).length === 1, JSON.stringify(scen.map((s) => s.pass)));
+  check(
+    "tester scenarios reach the scorecard (one pass, one fail when the code compiles)",
+    scen.length === 2 && scen.filter((s) => s.pass).length === 1,
+    JSON.stringify(scen.map((s) => s.pass)),
+  );
   const frozen = await api.get(`/api/sessions/${id}/code`);
   check("after the round, the code endpoint shows the frozen copy", frozen.json?.content === v2);
 
@@ -665,7 +778,11 @@ async function guidedRound() {
   c.send({ type: "guided.feedback" });
   const fb = await c.waitFor(isInterviewerMsg, { since: mark, label: "feedback reply" });
   check("a step check gets feedback", fb.entry.text.includes("most important fix"));
-  const guidedCheck = await c.waitFor((m) => m.type === "session.state" && m.session.steps.requirements?.status === "done", { since: mark, timeout: 10_000, label: "checklist after a guided check" });
+  const guidedCheck = await c.waitFor((m) => m.type === "session.state" && m.session.steps.requirements?.status === "done", {
+    since: mark,
+    timeout: 10_000,
+    label: "checklist after a guided check",
+  });
   check("a guided step check also runs the checker on the current step", guidedCheck.session.steps.requirements.checkedAt !== null);
   const pinned = await c.waitFor((m) => m.type === "session.state" && m.session.pins.length > 0, { since: mark, label: "guide pin" });
   check(
@@ -708,7 +825,11 @@ async function gapRound() {
   const created = await api.post("/api/sessions", { problemId: "c2-url-shortener", mode: "guided", focus });
   check("a gap round starts as a 20-minute guided round", created.status === 200, JSON.stringify(created.json));
   const session = (await api.get(`/api/sessions/${created.json.sessionId}`)).json;
-  check("the gap round keeps its focus and its short length", session.mode === "guided" && session.durationMs === 20 * 60_000 && session.focus?.title === focus.title, JSON.stringify(session.focus));
+  check(
+    "the gap round keeps its focus and its short length",
+    session.mode === "guided" && session.durationMs === 20 * 60_000 && session.focus?.title === focus.title,
+    JSON.stringify(session.focus),
+  );
   const wrong = await api.post("/api/sessions", { problemId: "c2-url-shortener", mode: "interview", focus });
   check("a focus on an interview round is refused", wrong.status === 400);
   const normal = (await api.get(`/api/sessions/${(await api.post("/api/sessions", { problemId: "c2-url-shortener", mode: "guided" })).json.sessionId}`)).json;
@@ -724,7 +845,11 @@ async function interviewModeRules() {
   const paused = await c.waitFor((m) => m.type === "session.state" && m.session.status === "paused", { since: mark, label: "interview pause" });
   check("interview rounds can be paused by the user", paused.session.pauseReason === "user" && paused.session.pauseStartedAt !== null, paused.session.pauseReason);
   const listed = (await api.get("/api/sessions")).json.find((h) => h.id === created.json.sessionId);
-  check("history says why a round paused and how much time is left", listed?.pause?.reason === "user" && listed.pause.timeLeftMs > 40 * 60_000 && listed.pause.timeLeftMs <= 45 * 60_000, JSON.stringify(listed?.pause));
+  check(
+    "history says why a round paused and how much time is left",
+    listed?.pause?.reason === "user" && listed.pause.timeLeftMs > 40 * 60_000 && listed.pause.timeLeftMs <= 45 * 60_000,
+    JSON.stringify(listed?.pause),
+  );
   c.close();
 }
 
@@ -743,7 +868,11 @@ async function customPrompt(dirs) {
     await new Promise((r) => setTimeout(r, 100));
   }
   check("preparation job reaches ready stage", jobStatus?.stage === "ready", JSON.stringify(jobStatus));
-  check("preparation job reports research and check stats", (jobStatus?.searches ?? 0) >= 1 && (jobStatus?.pages ?? 0) >= 1, `searches=${jobStatus?.searches}, pages=${jobStatus?.pages}`);
+  check(
+    "preparation job reports research and check stats",
+    (jobStatus?.searches ?? 0) >= 1 && (jobStatus?.pages ?? 0) >= 1,
+    `searches=${jobStatus?.searches}, pages=${jobStatus?.pages}`,
+  );
   check("preparation job returns problem metadata", typeof jobStatus?.problemId === "string" && typeof jobStatus?.title === "string", JSON.stringify(jobStatus));
 
   const jobSession = await api.post("/api/sessions", { problemId: jobStatus.problemId, mode: "interview" });
@@ -765,7 +894,11 @@ async function customPrompt(dirs) {
   check("a pasted prompt becomes a session through the brief-writer", created.status === 200, JSON.stringify(created.json));
   const problems = await api.get("/api/problems");
   const custom = problems.json.find((p) => p.custom);
-  check("the custom problem is listed without a tracker mark", custom && custom.trackerMark === null && custom.badge === null && custom.id.startsWith("custom-"), JSON.stringify(custom));
+  check(
+    "the custom problem is listed without a tracker mark",
+    custom && custom.trackerMark === null && custom.badge === null && custom.id.startsWith("custom-"),
+    JSON.stringify(custom),
+  );
   const file = await readFile(join(dirs.data, "custom-problems", `${custom?.id}.md`), "utf8").catch(() => "");
   check("the custom problem file is saved in the data folder", file.startsWith("---\n") && file.includes("## Opening prompt"));
 }
@@ -847,7 +980,11 @@ async function main() {
     const usageLines = usageFile.trim().split("\n").filter(Boolean);
     check("the round wrote usage lines to data/usage.jsonl", usageLines.length > 0, `${usageLines.length} lines`);
     const checkerLines = usageLines.map((l) => JSON.parse(l)).filter((u) => u.role === "checker");
-    check("checker calls are on the usage ledger, on Sonnet", checkerLines.length > 0 && checkerLines.every((u) => u.model === "claude-sonnet-5-5"), `${checkerLines.length} checker calls`);
+    check(
+      "checker calls are on the usage ledger, on Sonnet",
+      checkerLines.length > 0 && checkerLines.every((u) => u.model === "claude-sonnet-5-5"),
+      `${checkerLines.length} checker calls`,
+    );
 
     const usageRes = await api.get("/api/usage");
     check(

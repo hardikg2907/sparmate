@@ -112,7 +112,9 @@ function App() {
       sceneLog: () => sceneLog.current,
       editorChanges: () => editorChanges.current,
       markers: () =>
-        monaco.editor.getModelMarkers({ owner: "clang" }).map((m) => ({ owner: m.owner, severity: m.severity, line: m.startLineNumber, column: m.startColumn, message: m.message })),
+        monaco.editor
+          .getModelMarkers({ owner: "clang" })
+          .map((m) => ({ owner: m.owner, severity: m.severity, line: m.startLineNumber, column: m.startColumn, message: m.message })),
       editorText: () => monaco.editor.getModels()[0]?.getValue() ?? "",
       cursor: () => {
         const editor = monaco.editor.getEditors()[0];
@@ -140,24 +142,40 @@ function App() {
       <header className="dev__bar">
         <strong>Workspace check</strong>
         <div className="dev__group" role="group" aria-label="Palette">
-          <button type="button" aria-pressed={track === "hld"} onClick={() => setTrack("hld")}>HLD palette</button>
-          <button type="button" aria-pressed={track === "lld"} onClick={() => setTrack("lld")}>LLD palette</button>
+          <button type="button" aria-pressed={track === "hld"} onClick={() => setTrack("hld")}>
+            HLD palette
+          </button>
+          <button type="button" aria-pressed={track === "lld"} onClick={() => setTrack("lld")}>
+            LLD palette
+          </button>
         </div>
         <div className="dev__group" role="group" aria-label="Theme">
-          <button type="button" aria-pressed={theme === "light"} onClick={() => setTheme("light")}>Light</button>
-          <button type="button" aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>Dark</button>
+          <button type="button" aria-pressed={theme === "light"} onClick={() => setTheme("light")}>
+            Light
+          </button>
+          <button type="button" aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>
+            Dark
+          </button>
         </div>
         <div className="dev__group" role="group" aria-label="Layout">
-          <button type="button" aria-pressed={view === "both"} onClick={() => setView("both")}>Both</button>
-          <button type="button" aria-pressed={view === "board"} onClick={() => setView("board")}>Board</button>
-          <button type="button" aria-pressed={view === "code"} onClick={() => setView("code")}>Code</button>
+          <button type="button" aria-pressed={view === "both"} onClick={() => setView("both")}>
+            Both
+          </button>
+          <button type="button" aria-pressed={view === "board"} onClick={() => setView("board")}>
+            Board
+          </button>
+          <button type="button" aria-pressed={view === "code"} onClick={() => setView("code")}>
+            Code
+          </button>
         </div>
         <label className="dev__check">
           <input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} /> Read-only
         </label>
         <div className="dev__group" role="group" aria-label="Samples">
           {(Object.keys(SAMPLE_LABELS) as SampleName[]).map((name) => (
-            <button key={name} type="button" onClick={() => void loadSample(name)}>{SAMPLE_LABELS[name]}</button>
+            <button key={name} type="button" onClick={() => void loadSample(name)}>
+              {SAMPLE_LABELS[name]}
+            </button>
           ))}
         </div>
         <button
@@ -173,7 +191,9 @@ function App() {
         <span className="dev__readout" data-testid="scene-stats">
           scene changes: {sceneStats.calls} (version {sceneStats.version}, {sceneStats.elements} elements)
         </span>
-        <span className="dev__readout" data-testid="png-info">{pngInfo}</span>
+        <span className="dev__readout" data-testid="png-info">
+          {pngInfo}
+        </span>
       </header>
       <main className="dev__main" data-view={view}>
         {view !== "code" && (
@@ -208,15 +228,11 @@ function App() {
               </button>
               <div className="dev__check inline-flex items-center gap-1.5">
                 <span>Next run</span>
-                <Select
-                  label="Next run"
-                  size="sm"
-                  value={runName}
-                  options={SAMPLE_RUN_OPTIONS}
-                  onChange={setRunName}
-                />
+                <Select label="Next run" size="sm" value={runName} options={SAMPLE_RUN_OPTIONS} onChange={setRunName} />
               </div>
-              <span className="dev__readout" data-testid="editor-stats">editor onChange: {editorChangeCount}</span>
+              <span className="dev__readout" data-testid="editor-stats">
+                editor onChange: {editorChangeCount}
+              </span>
             </div>
             <div className="dev__editor">
               <CodeEditor

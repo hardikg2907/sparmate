@@ -4,22 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { BoardGraph } from "../types";
 import { graphToText, sceneToGraph } from "./sceneToGraph";
-import {
-  type Element,
-  arrow,
-  boundText,
-  deleted,
-  flat,
-  frame,
-  freeText,
-  freedraw,
-  image,
-  inGroup,
-  polyline,
-  rect,
-  shape,
-  withKind,
-} from "./__fixtures__/scene";
+import { type Element, arrow, boundText, deleted, flat, frame, freeText, freedraw, image, inGroup, polyline, rect, shape, withKind } from "./__fixtures__/scene";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -70,9 +55,7 @@ describe("rule 2: groups collapse to one node", () => {
   });
 
   it("keeps two separate groups as two nodes and ungrouped shapes as their own nodes", () => {
-    const graph = sceneToGraph(
-      flat(inGroup(rect("a", 0, 0, 100, 50, "A"), "g1"), inGroup(rect("b", 300, 0, 100, 50, "B"), "g2"), rect("c", 600, 0, 100, 50, "C")),
-    );
+    const graph = sceneToGraph(flat(inGroup(rect("a", 0, 0, 100, 50, "A"), "g1"), inGroup(rect("b", 300, 0, 100, 50, "B"), "g2"), rect("c", 600, 0, 100, 50, "C")));
     expect(graph.nodes.map((n) => [n.key, n.label])).toEqual([
       ["g1", "A"],
       ["g2", "B"],
@@ -106,10 +89,7 @@ describe("rule 2: groups collapse to one node", () => {
   });
 
   it("maps an arrow bound to a primitive inside a group onto the group's node", () => {
-    const parts = inGroup(
-      [...shape("ellipse", "p1", 400, 100, 80, 40), ...shape("rectangle", "p2", 400, 140, 80, 60), freeText("lbl", "Store", 410, 210)],
-      "icon",
-    );
+    const parts = inGroup([...shape("ellipse", "p1", 400, 100, 80, 40), ...shape("rectangle", "p2", 400, 140, 80, 60), freeText("lbl", "Store", 410, 210)], "icon");
     const client = rect("client", 100, 120, 120, 60, "Client");
     const scene = flat(client, parts, arrow("e", [220, 150], [400, 170], { from: client[0]!, to: parts[1] }));
     const graph = sceneToGraph(scene);
@@ -125,10 +105,7 @@ describe("rule 2: groups collapse to one node", () => {
   });
 
   it("drops an arrow that is part of a group's own artwork", () => {
-    const artwork = inGroup(
-      [...rect("body", 100, 100, 120, 80, "Widget"), ...arrow("stub", [110, 140], [210, 140], { from: undefined })],
-      "icon",
-    );
+    const artwork = inGroup([...rect("body", 100, 100, 120, 80, "Widget"), ...arrow("stub", [110, 140], [210, 140], { from: undefined })], "icon");
     const graph = sceneToGraph(flat(artwork));
     expect(graph.nodes).toHaveLength(1);
     expect(graph.edges).toEqual([]);
@@ -588,9 +565,7 @@ describe("graphToText", () => {
       arrow("e2", [200, 130], [500, 130], { from: a[0]!, to: b[0]!, startArrowhead: "arrow" }),
       arrow("e3", [200, 140], [500, 140], { from: a[0]!, to: b[0]!, endArrowhead: null }),
     );
-    expect(graphToText(sceneToGraph(scene))).toBe(
-      ["Nodes:", "- [A]", "- [B]", "Edges:", "- [A] <- [B] (dotted, guessed)", "- [A] <-> [B]", "- [A] -- [B]"].join("\n"),
-    );
+    expect(graphToText(sceneToGraph(scene))).toBe(["Nodes:", "- [A]", "- [B]", "Edges:", "- [A] <- [B] (dotted, guessed)", "- [A] <-> [B]", "- [A] -- [B]"].join("\n"));
   });
 
   it("quotes edge labels and free text safely", () => {

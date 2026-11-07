@@ -578,8 +578,7 @@ body {
   .page-canvas {
     background-color: var(--sunken);
     background-image:
-      radial-gradient(56rem 34rem at 6% -8rem, var(--glow-1), transparent 70%),
-      radial-gradient(46rem 30rem at 100% 2rem, var(--glow-2), transparent 70%),
+      radial-gradient(56rem 34rem at 6% -8rem, var(--glow-1), transparent 70%), radial-gradient(46rem 30rem at 100% 2rem, var(--glow-2), transparent 70%),
       radial-gradient(60rem 36rem at 45% calc(100% + 10rem), var(--glow-3), transparent 70%);
   }
 
@@ -679,8 +678,7 @@ body {
     background-image:
       radial-gradient(60% 60% at 100% 0%, var(--mesh-corner) 0%, transparent 72%),
       radial-gradient(110% 58% at 50% 116%, var(--mesh-glow-edge) 0%, var(--mesh-glow-body) 50%, transparent 88%),
-      radial-gradient(60% 80% at 0% 40%, var(--mesh-violet) 0%, transparent 75%),
-      radial-gradient(75% 60% at 52% 48%, var(--mesh-brand) 0%, transparent 78%);
+      radial-gradient(60% 80% at 0% 40%, var(--mesh-violet) 0%, transparent 75%), radial-gradient(75% 60% at 52% 48%, var(--mesh-brand) 0%, transparent 78%);
     box-shadow:
       inset 0 0 0 1px var(--mesh-ring),
       inset 0 1px 0 rgb(255 255 255 / 0.14),
@@ -729,9 +727,7 @@ body {
   .band-good,
   .band-warn,
   .band-bad {
-    background-image:
-      radial-gradient(32rem 14rem at 0% 0%, color-mix(in srgb, var(--band-light) 10%, transparent), transparent 70%),
-      var(--band);
+    background-image: radial-gradient(32rem 14rem at 0% 0%, color-mix(in srgb, var(--band-light) 10%, transparent), transparent 70%), var(--band);
   }
   .band-good {
     --band: var(--band-good);
@@ -1030,9 +1026,7 @@ body {
  */
 .room-canvas {
   background-color: var(--sunken);
-  background-image:
-    radial-gradient(48rem 18rem at 4% -6rem, var(--glow-1), transparent 70%),
-    radial-gradient(40rem 16rem at 100% -4rem, var(--glow-2), transparent 70%);
+  background-image: radial-gradient(48rem 18rem at 4% -6rem, var(--glow-1), transparent 70%), radial-gradient(40rem 16rem at 100% -4rem, var(--glow-2), transparent 70%);
 }
 .room-header {
   position: relative;

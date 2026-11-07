@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  checkSpeechRecognitionAvailability,
-  REASON_ON_DEVICE_UNAVAILABLE,
-  type SpeechRecognitionConstructor,
-} from "./speechRecognitionAvailability";
+import { checkSpeechRecognitionAvailability, REASON_ON_DEVICE_UNAVAILABLE, type SpeechRecognitionConstructor } from "./speechRecognitionAvailability";
 
 describe("checkSpeechRecognitionAvailability", () => {
   it("returns unavailable when no SpeechRecognition class exists", async () => {

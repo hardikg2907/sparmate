@@ -249,14 +249,7 @@ export function buildSession(o: BuildOptions): PublicSession {
   };
 }
 
-export function entry(
-  startedAtMs: number,
-  id: string,
-  atSec: number,
-  role: TranscriptEntry["role"],
-  text: string,
-  extra: Partial<TranscriptEntry> = {},
-): TranscriptEntry {
+export function entry(startedAtMs: number, id: string, atSec: number, role: TranscriptEntry["role"], text: string, extra: Partial<TranscriptEntry> = {}): TranscriptEntry {
   return {
     id,
     at: atSec * 1000,

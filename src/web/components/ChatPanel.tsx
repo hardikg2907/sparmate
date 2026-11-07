@@ -31,20 +31,7 @@ interface ChatPanelProps {
   headerExtra?: ReactNode;
 }
 
-export function ChatPanel({
-  heading,
-  speaker,
-  items,
-  agent,
-  onSend,
-  inputLabel,
-  placeholder,
-  disabled,
-  empty,
-  tools,
-  showTimes,
-  headerExtra,
-}: ChatPanelProps) {
+export function ChatPanel({ heading, speaker, items, agent, onSend, inputLabel, placeholder, disabled, empty, tools, showTimes, headerExtra }: ChatPanelProps) {
   const panelRef = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -272,7 +259,12 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
           <span className="font-semibold">You</span>
           {time}
         </div>
-        <div className={cn("chat-bubble max-w-full rounded-lg rounded-br-sm bg-primary-soft px-3.5 py-2.5 text-body text-primary-soft-foreground", item.state === "pending" && "opacity-70")}>
+        <div
+          className={cn(
+            "chat-bubble max-w-full rounded-lg rounded-br-sm bg-primary-soft px-3.5 py-2.5 text-body text-primary-soft-foreground",
+            item.state === "pending" && "opacity-70",
+          )}
+        >
           <p className="whitespace-pre-wrap break-words">{item.text}</p>
         </div>
         {item.state === "pending" ? <span className="mt-0.5 px-1 text-meta text-faint">Sending…</span> : null}
@@ -284,12 +276,7 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
   const extension = item.kind === "extension";
   return (
     <li className={cn("flex flex-col", ENTER, !extension && "pr-2")} aria-busy={item.state === "streaming" ? true : undefined}>
-      <div
-        className={cn(
-          "flex flex-col",
-          extension && "chat-extension surface-raised rounded-lg bg-raised p-3 pl-4 attention",
-        )}
-      >
+      <div className={cn("flex flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 pl-4 attention")}>
         <div className="mb-1 flex items-center gap-2 text-meta text-muted-foreground">
           <span aria-hidden="true" className="chat-avatar size-2 rounded-full" />
           <span className="font-semibold text-foreground">{speaker}</span>
@@ -429,11 +416,7 @@ function Composer({
               </Button>
             </Tooltip>
           ) : null}
-          <Tooltip
-            content={voiceInput.isListening ? "Turn the microphone off" : "Turn the microphone on"}
-            shortcut={["Ctrl", "M"]}
-            side="top"
-          >
+          <Tooltip content={voiceInput.isListening ? "Turn the microphone off" : "Turn the microphone on"} shortcut={["Ctrl", "M"]} side="top">
             <Button
               type="button"
               variant={voiceInput.isListening ? "destructive" : "secondary"}

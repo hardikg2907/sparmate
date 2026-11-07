@@ -146,7 +146,13 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
   let index = -1;
   return (
     <aside className="ir-palette flex w-44 shrink-0 flex-col text-ui text-foreground" data-theme={theme} aria-label="Board palette">
-      <div className="ir-palette__list min-h-0 flex-1 overflow-y-auto px-1.5 pt-2" role="toolbar" aria-orientation="vertical" aria-label={track === "hld" ? "Add a component" : "Add a class or relation"} onKeyDown={onKeyDown}>
+      <div
+        className="ir-palette__list min-h-0 flex-1 overflow-y-auto px-1.5 pt-2"
+        role="toolbar"
+        aria-orientation="vertical"
+        aria-label={track === "hld" ? "Add a component" : "Add a class or relation"}
+        onKeyDown={onKeyDown}
+      >
         {sections.map((section) => (
           <div key={section.heading} role="group" aria-label={section.heading} className="ir-palette__group mt-2 first:mt-0">
             <div className="ir-palette__heading px-2 pt-0.5 pb-1.5 text-meta font-semibold text-muted-foreground" aria-hidden="true">
@@ -179,9 +185,7 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
         ))}
       </div>
       <p className="ir-palette__hint shrink-0 border-t border-border px-3 pt-2 pb-2.5 text-meta text-faint">
-        {track === "hld"
-          ? "Double-click a shape to rename it."
-          : "Select one or two shapes, then pick a relation. The first shape selected is the start."}
+        {track === "hld" ? "Double-click a shape to rename it." : "Select one or two shapes, then pick a relation. The first shape selected is the start."}
       </p>
     </aside>
   );

@@ -198,7 +198,20 @@ interface ChannelState {
 }
 
 function newChannel(name: Channel): ChannelState {
-  return { name, conv: null, queue: [], busy: false, status: "idle", error: null, freshResume: false, replayNext: false, closed: false, boardSeen: -1, notesSeen: -1, codeSeen: -1 };
+  return {
+    name,
+    conv: null,
+    queue: [],
+    busy: false,
+    status: "idle",
+    error: null,
+    freshResume: false,
+    replayNext: false,
+    closed: false,
+    boardSeen: -1,
+    notesSeen: -1,
+    codeSeen: -1,
+  };
 }
 
 function newEntryId(): string {
@@ -763,11 +776,7 @@ export class SessionRuntime {
     const boardText = unframed ? this.boardText() : frame?.frameId ? frame.text : "";
     const scope = codeScopeFor(s.track, phase);
     const codeText =
-      scope === "step"
-        ? stepCodeText(this.codeContent, s.stepCode[phase] ?? [])
-        : scope === "file" && this.codeContent.trim() !== ""
-          ? numberedCode(this.codeContent)
-          : "";
+      scope === "step" ? stepCodeText(this.codeContent, s.stepCode[phase] ?? []) : scope === "file" && this.codeContent.trim() !== "" ? numberedCode(this.codeContent) : "";
     const said = chat.some((e) => e.role === "candidate");
     const drawn = unframed ? s.board.graphText.trim() !== "" : frame !== null && !frame.empty;
     return {
@@ -929,7 +938,10 @@ export class SessionRuntime {
     this.sendState();
     if (by === "time") {
       // The interviewer closes in a line or two first; the debrief starts once that reply is in (or fails).
-      this.enqueue(this.interview, this.clockQueued({ id: "time_up", kind: "time_up", atMs: s.durationMs }, () => this.startDebrief()));
+      this.enqueue(
+        this.interview,
+        this.clockQueued({ id: "time_up", kind: "time_up", atMs: s.durationMs }, () => this.startDebrief()),
+      );
     } else {
       this.closeChannel(this.interview);
       void this.startDebrief();
@@ -1267,7 +1279,14 @@ export class SessionRuntime {
         };
       },
       after: async (text) => {
-        const label = cp.kind === "phase_end" ? `clock: planned end of phase "${cp.phase}"` : cp.kind === "extension" ? "clock: extension point" : cp.kind === "five_minutes" ? "clock: five minutes left" : "clock: time up";
+        const label =
+          cp.kind === "phase_end"
+            ? `clock: planned end of phase "${cp.phase}"`
+            : cp.kind === "extension"
+              ? "clock: extension point"
+              : cp.kind === "five_minutes"
+                ? "clock: five minutes left"
+                : "clock: time up";
         this.addEntry({ channel: "interview", role: "system", kind: "clock", hidden: true, text: label });
         if (cp.kind === "extension" && text) {
           this.session.extension = { at: this.roundNow(), text };
@@ -1413,7 +1432,12 @@ export class SessionRuntime {
           const png = await this.requestPng();
           const text = guided ? `${this.boardText()}\n\n${this.pinTargetsBlock()}` : this.boardText();
           if (!png) return textOutput(`The image was unavailable, so here is the text form only.\n\n${text}`);
-          return { content: [{ type: "image", data: png.toString("base64"), mimeType: "image/png" }, { type: "text", text }] };
+          return {
+            content: [
+              { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+              { type: "text", text },
+            ],
+          };
         },
       ),
       defineTool(
@@ -1560,7 +1584,12 @@ export class SessionRuntime {
         ch.boardSeen = this.session.board.version;
         const png = await this.deps.store.readFinalPng(this.session.id);
         if (!png) return textOutput(`No image of the final board was saved, so here is the text form only.\n\n${this.boardText()}`);
-        return { content: [{ type: "image", data: png.toString("base64"), mimeType: "image/png" }, { type: "text", text: this.boardText() }] };
+        return {
+          content: [
+            { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+            { type: "text", text: this.boardText() },
+          ],
+        };
       }),
     ];
     if (this.session.track === "lld") {
@@ -1751,7 +1780,12 @@ export class SessionRuntime {
       const result: RunResult = { at: this.roundNow(), ...raw };
       code.lastRun = result;
       if (by === "candidate") this.pendingRun = result;
-      this.addEntry({ channel: "interview", role: "system", kind: "run", text: `${by === "candidate" ? "Ran the program" : "The interviewer ran the program"}: ${runSummary(result)}.` });
+      this.addEntry({
+        channel: "interview",
+        role: "system",
+        kind: "run",
+        text: `${by === "candidate" ? "Ran the program" : "The interviewer ran the program"}: ${runSummary(result)}.`,
+      });
       this.broadcast({ type: "code.run.result", result });
       return result;
     } finally {
@@ -2015,7 +2049,8 @@ export class SessionRuntime {
       const res = await this.deps.driver.runOnce({
         role: "scribe",
         ...this.roleModel("scribe"),
-        systemPrompt: async () => this.deps.prompts.render("scribe", { ...(await this.baseVars()), teaching_md: await this.deps.prompts.teachingMd(), max_ops: String(LIMITS.proposalOps) }),
+        systemPrompt: async () =>
+          this.deps.prompts.render("scribe", { ...(await this.baseVars()), teaching_md: await this.deps.prompts.teachingMd(), max_ops: String(LIMITS.proposalOps) }),
         tools: [],
         fake: { problem: this.problem, scorecard: s.scorecard, notesFileExists, date, mode: s.mode, track: s.track },
         usage: { sessionId: s.id, problemId: s.problemId, track: s.track, mode: s.mode },
@@ -2076,7 +2111,10 @@ export class SessionRuntime {
     }
   }
 
-  private addEntry(e: { id?: string; channel: Channel; role: TranscriptEntry["role"]; text: string; kind?: TranscriptEntry["kind"]; hidden?: boolean }, clientMsgId?: string): TranscriptEntry {
+  private addEntry(
+    e: { id?: string; channel: Channel; role: TranscriptEntry["role"]; text: string; kind?: TranscriptEntry["kind"]; hidden?: boolean },
+    clientMsgId?: string,
+  ): TranscriptEntry {
     const entry: TranscriptEntry = {
       id: e.id ?? newEntryId(),
       at: this.roundNow(),

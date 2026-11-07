@@ -70,14 +70,26 @@ export function fixtureProposal(): Proposal {
         file: "TRACKER.md",
         summary: "Mark URL Shortener as partly done and link its notes",
         blocked: null,
-        op: { kind: "tracker_update_bullet", section: "### C2. Classic HLD Problems", bullet: "URL Shortener", mark: "[~]", appendSuffix: "→ notes/c2-url-shortener.md · 2026-10-30" },
+        op: {
+          kind: "tracker_update_bullet",
+          section: "### C2. Classic HLD Problems",
+          bullet: "URL Shortener",
+          mark: "[~]",
+          appendSuffix: "→ notes/c2-url-shortener.md · 2026-10-30",
+        },
       },
       {
         id: "op2",
         file: "TRACKER.md",
         summary: "Add a Session Log row for 2026-10-30",
         blocked: null,
-        op: { kind: "tracker_append_session_log_row", date: "2026-10-30", topics: "URL shortener", outcome: "[~] unique codes across servers, cache failure", notesFile: "notes/c2-url-shortener.md" },
+        op: {
+          kind: "tracker_append_session_log_row",
+          date: "2026-10-30",
+          topics: "URL shortener",
+          outcome: "[~] unique codes across servers, cache failure",
+          notesFile: "notes/c2-url-shortener.md",
+        },
       },
       {
         id: "op3",
@@ -105,7 +117,11 @@ export function fixtureProposal(): Proposal {
         file: "notes/c2-url-shortener.md",
         summary: "Create the notes file for URL Shortener",
         blocked: null,
-        op: { kind: "notes_create", path: "notes/c2-url-shortener.md", content: "# URL Shortener\n\n## The reference design\n\n- CDN in front, then a stateless redirect service.\n- Redis holds the hot set." },
+        op: {
+          kind: "notes_create",
+          path: "notes/c2-url-shortener.md",
+          content: "# URL Shortener\n\n## The reference design\n\n- CDN in front, then a stateless redirect service.\n- Redis holds the hot set.",
+        },
       },
     ],
     diffs: [

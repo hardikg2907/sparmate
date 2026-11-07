@@ -27,12 +27,7 @@ export function finalRoundMs(session: Pick<PublicSession, "clock" | "endedAt">):
 type PhaseHistory = PublicSession["phaseHistory"];
 
 /** Milliseconds spent in each phase. A phase can be visited more than once, so segments add up. */
-export function phaseSpentMs(
-  history: PhaseHistory,
-  firstPhase: string | undefined,
-  currentPhase: string,
-  roundMs: number,
-): Record<string, number> {
+export function phaseSpentMs(history: PhaseHistory, firstPhase: string | undefined, currentPhase: string, roundMs: number): Record<string, number> {
   const spent: Record<string, number> = {};
   let phase = firstPhase ?? currentPhase;
   let since = 0;

@@ -13,7 +13,11 @@ const MAX_LINE = 2000;
 
 export function describeError(err: unknown): string {
   if (err instanceof Error) {
-    const frames = (err.stack ?? "").split("\n").slice(1, 4).map((l) => l.trim()).join(" | ");
+    const frames = (err.stack ?? "")
+      .split("\n")
+      .slice(1, 4)
+      .map((l) => l.trim())
+      .join(" | ");
     return frames ? `${err.name}: ${err.message} (${frames})` : `${err.name}: ${err.message}`;
   }
   return String(err);

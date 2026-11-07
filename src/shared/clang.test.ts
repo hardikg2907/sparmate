@@ -13,9 +13,7 @@ const parse = (name: string) => parseClangDiagnostics(fixture(name), pathOf(name
 
 describe("parseClangDiagnostics on real clang output", () => {
   it("parses an undeclared identifier and marks the identifier", () => {
-    expect(parse("undeclared")).toEqual([
-      { line: 9, column: 16, endLine: 9, endColumn: 21, severity: "error", message: "use of undeclared identifier 'bonus'" },
-    ]);
+    expect(parse("undeclared")).toEqual([{ line: 9, column: 16, endLine: 9, endColumn: 21, severity: "error", message: "use of undeclared identifier 'bonus'" }]);
   });
 
   it("parses a missing semicolon, which has no range, as a one-character mark", () => {
@@ -48,9 +46,7 @@ describe("parseClangDiagnostics on real clang output", () => {
   });
 
   it("trusts a range that starts exactly at the caret", () => {
-    expect(parse("missing_header")).toEqual([
-      { line: 2, column: 10, endLine: 2, endColumn: 21, severity: "error", message: "'optionall' file not found" },
-    ]);
+    expect(parse("missing_header")).toEqual([{ line: 2, column: 10, endLine: 2, endColumn: 21, severity: "error", message: "'optionall' file not found" }]);
   });
 
   it("parses warnings with their flag and maps notes and remarks to the note severity", () => {
@@ -165,9 +161,7 @@ describe("parseClangDiagnostics on synthetic input", () => {
 
   it("treats a multi-line range as ending on its own end line", () => {
     const stderr = "/a/b.cpp:3:5:{3:5-5:2}: error: unterminated thing\n";
-    expect(parseClangDiagnostics(stderr, "/a/b.cpp")).toEqual([
-      { line: 3, column: 5, endLine: 5, endColumn: 2, severity: "error", message: "unterminated thing" },
-    ]);
+    expect(parseClangDiagnostics(stderr, "/a/b.cpp")).toEqual([{ line: 3, column: 5, endLine: 5, endColumn: 2, severity: "error", message: "unterminated thing" }]);
   });
 
   it("guarantees an end column at least one past the start", () => {

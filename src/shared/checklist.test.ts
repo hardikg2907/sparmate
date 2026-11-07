@@ -5,8 +5,7 @@ import { deriveChecklist, firstSentence, plainLabel } from "./checklist";
 const HLD_BRIEF = {
   "Expected requirements": "1. Create a short link\n2. Redirect adds under 50 ms at p99\n3. Links expire",
   "Capacity math": "- **Writes:** 40 per second.\n- **Reads:** 400 per second.\n- **Storage:** 5 TB.",
-  "API and entities":
-    "External API:\n- `POST /urls` with a long URL returns a code.\n- `GET /{code}` redirects.\n\nCore entities:\n- `Link {code, url}` is the source of truth.",
+  "API and entities": "External API:\n- `POST /urls` with a long URL returns a code.\n- `GET /{code}` redirects.\n\nCore entities:\n- `Link {code, url}` is the source of truth.",
   "Reference design": "Walk one redirect: client, CDN, service, cache.\nWalk one create: client, service, database.",
   "Deep dives": "### Generating unique short codes\ntext\n### Fast redirects\ntext",
 };
@@ -32,7 +31,10 @@ describe("deriveChecklist", () => {
   });
 
   it("never names the curveball before it is delivered", () => {
-    const wrap = deriveChecklist("hld", HLD_BRIEF).wrap_up?.map((i) => i.label).join(" ") ?? "";
+    const wrap =
+      deriveChecklist("hld", HLD_BRIEF)
+        .wrap_up?.map((i) => i.label)
+        .join(" ") ?? "";
     expect(wrap).not.toMatch(/celebrity|Redis is down|Asia/i);
   });
 
@@ -79,7 +81,8 @@ describe("deriveChecklist", () => {
   });
 
   it("cuts long labels at a natural clause boundary without cutting inside brackets or code spans", () => {
-    const markdown = "Redirect replies name the right node: MOVED node when ownership changed for good (update routes on client), ASK node during a migration (one-off fetch, do not update routes).";
+    const markdown =
+      "Redirect replies name the right node: MOVED node when ownership changed for good (update routes on client), ASK node during a migration (one-off fetch, do not update routes).";
     const label = plainLabel(markdown);
     expect(label.endsWith("…")).toBe(true);
     expect(label).not.toMatch(/\([^)]*…/);
@@ -141,8 +144,8 @@ describe("deriveChecklist", () => {
         "- `makeChange` walks the stock.",
         "",
         "Questions to ask once the code runs:",
-        "- \"What does your win check cost on a 1,000 by 1,000 board with K = 5?\"",
-        "- \"What happens if K is 4 on a 5 by 5 board?\"",
+        '- "What does your win check cost on a 1,000 by 1,000 board with K = 5?"',
+        '- "What happens if K is 4 on a 5 by 5 board?"',
       ].join("\n"),
     });
     const labels = list.behaviour?.map((i) => i.label) ?? [];
@@ -214,7 +217,14 @@ describe("deriveChecklist with questions", () => {
   });
 
   it("reads the LLD clarify step the same way", () => {
-    const lld = ["Core:", "1. Entry returns a ticket, or rejects when nothing fits. *Ask: What if the lot is full?*", "2. Exit computes the fee.", "", "Extras:", "- Reservations."].join("\n");
+    const lld = [
+      "Core:",
+      "1. Entry returns a ticket, or rejects when nothing fits. *Ask: What if the lot is full?*",
+      "2. Exit computes the fee.",
+      "",
+      "Extras:",
+      "- Reservations.",
+    ].join("\n");
     const items = deriveChecklist("lld", { "Expected requirements": lld }).clarify ?? [];
     expect(items).toEqual([
       { id: "clarify-1", label: "Entry returns a ticket, or rejects when nothing fits", ask: "What if the lot is full?" },
@@ -231,7 +241,9 @@ describe("deriveChecklist with questions", () => {
   });
 
   it("leaves a line alone when the italic tail is not a well-formed ask", () => {
-    const items = deriveChecklist("hld", { "Expected requirements": ["1. Keep *Ask: a* thing *emphasised*", "2. Empty ask. *Ask:*", "3. Plain question? *Ask: Why?*"].join("\n") }).requirements ?? [];
+    const items =
+      deriveChecklist("hld", { "Expected requirements": ["1. Keep *Ask: a* thing *emphasised*", "2. Empty ask. *Ask:*", "3. Plain question? *Ask: Why?*"].join("\n") })
+        .requirements ?? [];
     expect(items.map((i) => i.ask)).toEqual([undefined, undefined, "Why?"]);
   });
 
@@ -245,8 +257,7 @@ describe("deriveChecklist with questions", () => {
   });
 });
 
-const behaviourLabels = (text: string) =>
-  deriveChecklist("lld", { ...LLD_BRIEF, "Behaviour and states": text }).behaviour?.map((i) => i.label) ?? [];
+const behaviourLabels = (text: string) => deriveChecklist("lld", { ...LLD_BRIEF, "Behaviour and states": text }).behaviour?.map((i) => i.label) ?? [];
 
 describe("behaviour items", () => {
   it("keeps one item per method when a table row, a bullet and a bare name repeat it", () => {

@@ -183,7 +183,9 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                 {warningCount > 0 ? (
                   <span className="tint ml-0.5 rounded-full bg-warning-soft px-1.5 font-mono text-meta text-warning">
                     <span aria-hidden="true">{warningCount}</span>
-                    <span className="sr-only">, {warningCount} {warningCount === 1 ? "warning" : "warnings"}</span>
+                    <span className="sr-only">
+                      , {warningCount} {warningCount === 1 ? "warning" : "warnings"}
+                    </span>
                   </span>
                 ) : null}
               </Button>
@@ -191,101 +193,106 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
           </div>
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="relative min-h-0 min-w-0 flex-1 bg-background overflow-hidden">
-            <Pane active={!lld || tab === "diagram"} id="pane-diagram" labelledBy={lld ? "tab-diagram" : undefined}>
-              {state.board ? (
-                <Board
-                  ref={ctl.boardRef}
-                  sessionId={session.id}
-                  initialElements={state.board.elements}
-                  initialVersion={state.board.version}
-                  track={session.track}
-                  theme={theme}
-                  readOnly={ended}
-                  pins={session.pins}
-                  initialStep={frameStep}
-                  onSceneChange={actions.onBoardChange}
-                />
-              ) : (
-                <LoadFailed what="board" onReload={ctl.reload} />
-              )}
-            </Pane>
-
-            {lld ? (
-              <Pane active={tab === "code"} id="pane-code" labelledBy="tab-code" column>
-                {state.code ? (
-                  <>
-                    <AttemptPath path={session.code?.path ?? state.code.path} studyRoot={studyRoot} />
-                    <div className="relative min-h-0 flex-1">
-                      <div className="absolute inset-0 [&>*]:h-full [&>*]:w-full">
-                        <CodeEditor
-                          value={state.code.content}
-                          version={state.code.version}
-                          diagnostics={state.code.diagnostics}
-                          theme={theme}
-                          readOnly={ended}
-                          onChange={actions.editCode}
-                          revealLine={reveal}
-                        />
-                      </div>
-                    </div>
-                    <div className="room-console h-56 shrink-0 overflow-hidden [&>*]:h-full">
-                      <Console lastRun={state.code.lastRun} running={state.code.running} onRun={actions.runCode} onJumpTo={jumpTo} disabled={!connected || ended} />
-                    </div>
-                  </>
+            <div className="relative min-h-0 min-w-0 flex-1 bg-background overflow-hidden">
+              <Pane active={!lld || tab === "diagram"} id="pane-diagram" labelledBy={lld ? "tab-diagram" : undefined}>
+                {state.board ? (
+                  <Board
+                    ref={ctl.boardRef}
+                    sessionId={session.id}
+                    initialElements={state.board.elements}
+                    initialVersion={state.board.version}
+                    track={session.track}
+                    theme={theme}
+                    readOnly={ended}
+                    pins={session.pins}
+                    initialStep={frameStep}
+                    onSceneChange={actions.onBoardChange}
+                  />
                 ) : (
-                  <LoadFailed what="code file" onReload={ctl.reload} />
+                  <LoadFailed what="board" onReload={ctl.reload} />
                 )}
               </Pane>
-            ) : null}
 
-            {/* It floats over the work area: shrinking the board below about 500 px tall flips Excalidraw into its phone layout. */}
-            {graphOpen ? <GraphPanel graph={state.graph} actions={actions} onClose={() => setGraphOpen(false)} /> : null}
-          </div>
+              {lld ? (
+                <Pane active={tab === "code"} id="pane-code" labelledBy="tab-code" column>
+                  {state.code ? (
+                    <>
+                      <AttemptPath path={session.code?.path ?? state.code.path} studyRoot={studyRoot} />
+                      <div className="relative min-h-0 flex-1">
+                        <div className="absolute inset-0 [&>*]:h-full [&>*]:w-full">
+                          <CodeEditor
+                            value={state.code.content}
+                            version={state.code.version}
+                            diagnostics={state.code.diagnostics}
+                            theme={theme}
+                            readOnly={ended}
+                            onChange={actions.editCode}
+                            revealLine={reveal}
+                          />
+                        </div>
+                      </div>
+                      <div className="room-console h-56 shrink-0 overflow-hidden [&>*]:h-full">
+                        <Console lastRun={state.code.lastRun} running={state.code.running} onRun={actions.runCode} onJumpTo={jumpTo} disabled={!connected || ended} />
+                      </div>
+                    </>
+                  ) : (
+                    <LoadFailed what="code file" onReload={ctl.reload} />
+                  )}
+                </Pane>
+              ) : null}
+
+              {/* It floats over the work area: shrinking the board below about 500 px tall flips Excalidraw into its phone layout. */}
+              {graphOpen ? <GraphPanel graph={state.graph} actions={actions} onClose={() => setGraphOpen(false)} /> : null}
+            </div>
           </div>
         </main>
 
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside style={{ width: chatWidth }} className="room-side flex min-h-0 shrink-0 flex-col overflow-hidden" inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
           {session.mode === "guided" ? (
-            <StepChecklist
-              stepLabel={phaseLabel}
-              step={session.steps[session.phase]}
-              reads={checkerReads(session.track, session.phase, frameStep !== null)}
-              className="shrink-0"
-            />
+            <StepChecklist stepLabel={phaseLabel} step={session.steps[session.phase]} reads={checkerReads(session.track, session.phase, frameStep !== null)} className="shrink-0" />
           ) : null}
           <div className="min-h-0 flex-1">
-          <ChatPanel
-            heading={speaker}
-            speaker={speaker}
-            items={ctl.chat.interview}
-            agent={agent}
-            showTimes
-            disabled={chatLocked}
-            inputLabel={`Message to the ${speaker.toLowerCase()}`}
-            placeholder={ended ? "The round is over." : needsRetry ? "Retry to continue the round." : chatLocked ? "Resume to continue the round." : guided ? "Reply to the guide…" : "Reply to the interviewer…"}
-            empty={guided ? "The guide starts with the first step in a moment." : "The interviewer opens the conversation in a moment."}
-            onSend={(text) => actions.sendChat("interview", text)}
-            tools={
-              guided ? (
-                <>
-                  <Button size="sm" variant="outline" onClick={actions.guidedFeedback} disabled={agent.state === "thinking" || chatLocked || !connected}>
-                    <CheckIcon size={14} className="text-primary-text" />
-                    Check this step
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={actions.guidedHint} disabled={agent.state === "thinking" || chatLocked || !connected}>
-                    Hint
-                  </Button>
-                  {session.hints.length > 0 ? (
-                    <span className="ml-auto text-meta text-muted-foreground">
-                      {session.hints.length} {session.hints.length === 1 ? "hint" : "hints"} used
-                    </span>
-                  ) : null}
-                </>
-              ) : null
-            }
-          />
+            <ChatPanel
+              heading={speaker}
+              speaker={speaker}
+              items={ctl.chat.interview}
+              agent={agent}
+              showTimes
+              disabled={chatLocked}
+              inputLabel={`Message to the ${speaker.toLowerCase()}`}
+              placeholder={
+                ended
+                  ? "The round is over."
+                  : needsRetry
+                    ? "Retry to continue the round."
+                    : chatLocked
+                      ? "Resume to continue the round."
+                      : guided
+                        ? "Reply to the guide…"
+                        : "Reply to the interviewer…"
+              }
+              empty={guided ? "The guide starts with the first step in a moment." : "The interviewer opens the conversation in a moment."}
+              onSend={(text) => actions.sendChat("interview", text)}
+              tools={
+                guided ? (
+                  <>
+                    <Button size="sm" variant="outline" onClick={actions.guidedFeedback} disabled={agent.state === "thinking" || chatLocked || !connected}>
+                      <CheckIcon size={14} className="text-primary-text" />
+                      Check this step
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={actions.guidedHint} disabled={agent.state === "thinking" || chatLocked || !connected}>
+                      Hint
+                    </Button>
+                    {session.hints.length > 0 ? (
+                      <span className="ml-auto text-meta text-muted-foreground">
+                        {session.hints.length} {session.hints.length === 1 ? "hint" : "hints"} used
+                      </span>
+                    ) : null}
+                  </>
+                ) : null
+              }
+            />
           </div>
         </aside>
 
@@ -499,7 +506,10 @@ function PauseCover({
           "animate-in fade-in-0 zoom-in-[0.95] slide-in-from-bottom-2 duration-[260ms] ease-out-quick",
         )}
       >
-        <span className={cn("tint flex size-12 items-center justify-center rounded-full", tone === "bad" ? "bg-destructive-soft text-destructive" : "bg-warning-soft text-warning")} aria-hidden="true">
+        <span
+          className={cn("tint flex size-12 items-center justify-center rounded-full", tone === "bad" ? "bg-destructive-soft text-destructive" : "bg-warning-soft text-warning")}
+          aria-hidden="true"
+        >
           {tone === "bad" ? <WarnIcon size={22} /> : <PauseIcon size={22} />}
         </span>
         <h2 className="text-title font-bold">{title}</h2>
@@ -631,12 +641,7 @@ function LoadFailed({ what, onReload }: { what: string; onReload: () => void }) 
   // The pane stretches its direct child to full size, so the wrapper stops the empty state from filling the pane.
   return (
     <div className="flex h-full items-center justify-center p-8">
-      <EmptyState
-        className="w-full max-w-sm"
-        icon={<WarnIcon size={18} />}
-        title={`The ${what} could not be loaded.`}
-        action={<Button onClick={onReload}>Try again</Button>}
-      />
+      <EmptyState className="w-full max-w-sm" icon={<WarnIcon size={18} />} title={`The ${what} could not be loaded.`} action={<Button onClick={onReload}>Try again</Button>} />
     </div>
   );
 }

@@ -157,11 +157,7 @@ export function frameEvidence(elements: readonly Raw[], step: string): FrameEvid
   const reasons: string[] = [];
   if (sub.opaque.length > 0) reasons.push("freehand drawing");
   const looseArrow = members.some(
-    (el) =>
-      EDGE_TYPES.has(String(el.type)) &&
-      str(el.frameId) === frameId &&
-      !isClosedLine(el) &&
-      (bindingOf(el.startBinding) === null || bindingOf(el.endBinding) === null),
+    (el) => EDGE_TYPES.has(String(el.type)) && str(el.frameId) === frameId && !isClosedLine(el) && (bindingOf(el.startBinding) === null || bindingOf(el.endBinding) === null),
   );
   if (looseArrow) reasons.push("an arrow not joined at both ends");
   if (graph.nodes.some((n) => inFrame.has(n.key) && n.label === "" && n.shape !== "text")) reasons.push("a shape with no label");
@@ -192,7 +188,9 @@ export function pinTargets(elements: readonly Raw[]): PinTarget[] {
   for (const el of members) {
     const container = str(el.containerId);
     if (el.type !== "text" || container === null) continue;
-    const text = String(el.originalText ?? el.text ?? "").replace(/\s+/g, " ").trim();
+    const text = String(el.originalText ?? el.text ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
     if (text !== "") labels.set(container, text.length > MAX_TARGET_LABEL ? `${text.slice(0, MAX_TARGET_LABEL - 1)}…` : text);
   }
   const out: PinTarget[] = [];
@@ -211,9 +209,7 @@ export function pinTargets(elements: readonly Raw[]): PinTarget[] {
 
 export function pinTargetsText(targets: readonly PinTarget[]): string {
   if (targets.length === 0) return "No boxes or arrows on the board yet.";
-  return targets
-    .map((t) => `- ${t.id}: ${t.kind}${t.label ? ` ${JSON.stringify(t.label)}` : " (no label)"}${t.step ? ` in step ${t.step}` : ""}`)
-    .join("\n");
+  return targets.map((t) => `- ${t.id}: ${t.kind}${t.label ? ` ${JSON.stringify(t.label)}` : " (no label)"}${t.step ? ` in step ${t.step}` : ""}`).join("\n");
 }
 
 export function isPinTargetId(id: string): boolean {

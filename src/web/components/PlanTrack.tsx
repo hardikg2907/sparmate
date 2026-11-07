@@ -24,7 +24,12 @@ const STEP_TIP_SURFACE =
 
 /** The step's label and goal, then its checklist when the round shares one. Looking costs nothing: only a click moves the rail. */
 function StepTip({ label, goal, step }: { label: string; goal: string | undefined; step: PublicStepCheck | undefined }) {
-  if (!step) return <><span className="font-semibold">{label}.</span> {goal}.</>;
+  if (!step)
+    return (
+      <>
+        <span className="font-semibold">{label}.</span> {goal}.
+      </>
+    );
   return (
     <span className="block">
       <span className="block text-ui text-muted-foreground">
@@ -102,7 +107,9 @@ export function PlanTrack({
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     {steps ? <StepRing view={ringView(steps[phase.id])} size={16} className="hidden @[5rem]:inline-grid" /> : null}
-                    <span className={cn("truncate text-ui font-semibold", current ? "text-primary-soft-foreground" : visited ? "text-foreground" : "text-muted-foreground")}>{phase.label}</span>
+                    <span className={cn("truncate text-ui font-semibold", current ? "text-primary-soft-foreground" : visited ? "text-foreground" : "text-muted-foreground")}>
+                      {phase.label}
+                    </span>
                     <span
                       aria-hidden="true"
                       className={cn(
@@ -128,7 +135,11 @@ export function PlanTrack({
           );
         })}
       </ol>
-      <span className="plan-needle pointer-events-none absolute bottom-0 h-3 w-0.5 -translate-x-1/2 rounded-full bg-primary" style={{ left: `${needle * 100}%` }} aria-hidden="true" />
+      <span
+        className="plan-needle pointer-events-none absolute bottom-0 h-3 w-0.5 -translate-x-1/2 rounded-full bg-primary"
+        style={{ left: `${needle * 100}%` }}
+        aria-hidden="true"
+      />
     </nav>
   );
 }

@@ -112,13 +112,10 @@ export const api = {
   problems: () => request<ProblemSummary[]>("GET", "/api/problems"),
   history: () => request<SessionHistoryItem[]>("GET", "/api/sessions"),
   createSession: (body: CreateSessionRequest) => request<{ sessionId: string }>("POST", "/api/sessions", body),
-  prepareCustomProblem: (body: { prompt: string; track: Track }) =>
-    request<{ jobId: string }>("POST", "/api/custom-problems", body),
+  prepareCustomProblem: (body: { prompt: string; track: Track }) => request<{ jobId: string }>("POST", "/api/custom-problems", body),
   currentCustomProblemJob: () => request<{ job: CustomProblemJobStatus | null }>("GET", "/api/custom-problems"),
-  customProblemJob: (jobId: string) =>
-    request<CustomProblemJobStatus>("GET", `/api/custom-problems/${enc(jobId)}`),
-  cancelCustomProblemJob: (jobId: string) =>
-    request<CustomProblemJobStatus>("DELETE", `/api/custom-problems/${enc(jobId)}`),
+  customProblemJob: (jobId: string) => request<CustomProblemJobStatus>("GET", `/api/custom-problems/${enc(jobId)}`),
+  cancelCustomProblemJob: (jobId: string) => request<CustomProblemJobStatus>("DELETE", `/api/custom-problems/${enc(jobId)}`),
   discardSession: (id: string) => request<{ ok: true }>("DELETE", `/api/sessions/${enc(id)}`),
   session: (id: string) => request<PublicSession>("GET", `/api/sessions/${enc(id)}`),
   board: (id: string) => request<BoardSnapshot>("GET", `/api/sessions/${enc(id)}/board`),
@@ -127,10 +124,7 @@ export const api = {
   settings: () => request<Settings>("GET", "/api/settings"),
   saveSettings: (settings: Settings) => request<unknown>("PUT", "/api/settings", settings),
   ttsStatus: () => request<{ available: boolean }>("GET", "/api/tts/status"),
-  synthesizeSpeech: async (
-    body: { text: string; voice: string; speed: number },
-    signal?: AbortSignal,
-  ): Promise<Blob> => {
+  synthesizeSpeech: async (body: { text: string; voice: string; speed: number }, signal?: AbortSignal): Promise<Blob> => {
     const send = async (refresh: boolean) => {
       const token = (await getBootstrap(refresh)).csrfToken;
       const headers: Record<string, string> = {
@@ -446,9 +440,7 @@ export class SessionSocket implements SocketLike {
       return;
     }
     this.setStatus("reconnecting");
-    const delay = this.heard
-      ? QUICK_RETRY_MS
-      : Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (this.silentAttempts - 1)) * (0.75 + Math.random() * 0.5);
+    const delay = this.heard ? QUICK_RETRY_MS : Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (this.silentAttempts - 1)) * (0.75 + Math.random() * 0.5);
     this.heard = false;
     this.timer = setTimeout(() => {
       this.timer = null;

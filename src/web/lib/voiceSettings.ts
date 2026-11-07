@@ -40,10 +40,7 @@ export function getVoiceSettings(): VoiceSettings {
     // One voice for everyone: the engine and the voice are fixed, so a stored choice is ignored.
     const engine: VoiceEngine = "kokoro";
     const kokoroVoice: KokoroVoice = KOKORO_DEFAULT_VOICE;
-    const kokoroSpeed =
-      typeof parsed.kokoroSpeed === "number" && parsed.kokoroSpeed >= 0.6 && parsed.kokoroSpeed <= 1.6
-        ? parsed.kokoroSpeed
-        : KOKORO_DEFAULT_SPEED;
+    const kokoroSpeed = typeof parsed.kokoroSpeed === "number" && parsed.kokoroSpeed >= 0.6 && parsed.kokoroSpeed <= 1.6 ? parsed.kokoroSpeed : KOKORO_DEFAULT_SPEED;
     const useHeadphones = Boolean(parsed.useHeadphones);
 
     return {

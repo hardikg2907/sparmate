@@ -70,8 +70,16 @@ describe("stepCodeText", () => {
   it("numbers exactly as the whole file is numbered, padding included", () => {
     const long = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join("\n");
     expect(stepCodeText(long, ["line 3", "line 11"])).toBe(" 3 | line 3\n11 | line 11");
-    const all = file.split("\n").map((l) => l.trim()).filter((l) => l !== "");
-    expect(stepCodeText(file, all)).toBe(numberedCode(file).split("\n").filter((l) => !/^\s*\d+ \| \s*$/.test(l)).join("\n"));
+    const all = file
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "");
+    expect(stepCodeText(file, all)).toBe(
+      numberedCode(file)
+        .split("\n")
+        .filter((l) => !/^\s*\d+ \| \s*$/.test(l))
+        .join("\n"),
+    );
   });
 
   it("is empty when the step wrote nothing or its lines are gone", () => {

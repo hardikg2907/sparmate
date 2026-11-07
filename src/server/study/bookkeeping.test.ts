@@ -186,9 +186,7 @@ describe("tracker_add_subbullet", () => {
     const proposal = await plan([subOp()]);
     const result = await applyProposal(ctx.root, proposal, ["op-1"], guard);
     expect(result.failed).toEqual([]);
-    expectInserted(before, await ctx.read("TRACKER.md"), parent.lineIndex + 1, [
-      "  - [ ] Custom aliases — collisions with generated codes, reserved words (added)",
-    ]);
+    expectInserted(before, await ctx.read("TRACKER.md"), parent.lineIndex + 1, ["  - [ ] Custom aliases — collisions with generated codes, reserved words (added)"]);
   });
 
   it("does not double the added tag", async () => {
@@ -252,9 +250,7 @@ describe("table rows", () => {
 
   it("does not escape a pipe that is already escaped, and flattens line breaks", async () => {
     const before = await ctx.read("TRACKER.md");
-    const proposal = await plan([
-      { kind: "tracker_append_session_log_row", date: "2026-10-30", topics: "first\nsecond \\| kept", outcome: "line one\n\nline two", notesFile: "" },
-    ]);
+    const proposal = await plan([{ kind: "tracker_append_session_log_row", date: "2026-10-30", topics: "first\nsecond \\| kept", outcome: "line one\n\nline two", notesFile: "" }]);
     await applyProposal(ctx.root, proposal, ["op-1"], guard);
     expect(await ctx.read("TRACKER.md")).toBe(`${before}| 2026-10-30 | first second \\| kept | line one line two | — |\n`);
   });
@@ -275,11 +271,19 @@ describe("table rows", () => {
   it("blocks a row when the table is missing", async () => {
     const custom = await makeCustomRoot({ "TRACKER.md": "# Nothing here\n" });
     try {
-      const proposal = await planProposal(custom.root, "s", [
-        { kind: "tracker_append_session_log_row", date: "2026-10-30", topics: "abc", outcome: "abc", notesFile: "" },
-        { kind: "tracker_append_gap_row", date: "2026-10-30", gap: "abc", cameUpWhile: "abc", filled: "Yes" },
-      ], guard);
-      expect(proposal.ops.map((o) => o.blocked)).toEqual([expect.stringMatching(/Session Log table was not found/), expect.stringMatching(/Gaps Found & Filled table was not found/)]);
+      const proposal = await planProposal(
+        custom.root,
+        "s",
+        [
+          { kind: "tracker_append_session_log_row", date: "2026-10-30", topics: "abc", outcome: "abc", notesFile: "" },
+          { kind: "tracker_append_gap_row", date: "2026-10-30", gap: "abc", cameUpWhile: "abc", filled: "Yes" },
+        ],
+        guard,
+      );
+      expect(proposal.ops.map((o) => o.blocked)).toEqual([
+        expect.stringMatching(/Session Log table was not found/),
+        expect.stringMatching(/Gaps Found & Filled table was not found/),
+      ]);
     } finally {
       await custom.cleanup();
     }
@@ -290,7 +294,10 @@ describe("table rows", () => {
     const without = await makeCustomRoot({ "TRACKER.md": "# Session Log\n\n| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |" });
     const op: BookkeepingOp = { kind: "tracker_append_session_log_row", date: "2026-10-30", topics: "abc", outcome: "def", notesFile: "x" };
     try {
-      for (const [custom, ending] of [[withNewline, "\n"], [without, ""]] as const) {
+      for (const [custom, ending] of [
+        [withNewline, "\n"],
+        [without, ""],
+      ] as const) {
         const proposal = await planProposal(custom.root, "s", [op], guard);
         await applyProposal(custom.root, proposal, ["op-1"], guard);
         expect(await custom.read("TRACKER.md")).toBe(`# Session Log\n\n| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |\n| 2026-10-30 | abc | def | x |${ending}`);
@@ -303,7 +310,8 @@ describe("table rows", () => {
 });
 
 describe("review_append_entry", () => {
-  const entry = "## C2 — URL Shortener · taught 2026-10-30\n1. Explain to a junior: why is a counter not enough?\n2. Finish it: \"I'd pick hashing over a counter when ___.\"\n3. Transfer: custom aliases.\n\nResult: not yet asked.";
+  const entry =
+    '## C2 — URL Shortener · taught 2026-10-30\n1. Explain to a junior: why is a counter not enough?\n2. Finish it: "I\'d pick hashing over a counter when ___."\n3. Transfer: custom aliases.\n\nResult: not yet asked.';
 
   it("appends after a separator, the way existing entries are separated", async () => {
     const before = await ctx.read("REVIEW.md");
@@ -458,10 +466,7 @@ describe("missing target files", () => {
   it("blocks tracker and review ops when the files are missing", async () => {
     const custom = await makeCustomRoot({ "notes/n.md": "note text\n" });
     try {
-      const proposal = await planProposal(custom.root, "s", [
-        updateOp(),
-        { kind: "review_append_entry", markdown: "## entry text here" },
-      ], guard);
+      const proposal = await planProposal(custom.root, "s", [updateOp(), { kind: "review_append_entry", markdown: "## entry text here" }], guard);
       expect(proposal.ops.map((o) => o.blocked)).toEqual([expect.stringMatching(/TRACKER\.md is missing/), expect.stringMatching(/REVIEW\.md is missing/)]);
     } finally {
       await custom.cleanup();

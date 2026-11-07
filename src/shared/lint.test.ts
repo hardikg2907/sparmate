@@ -45,16 +45,7 @@ describe("lintProse", () => {
     });
 
     it("ignores em-dashes in inline code, fenced code and table rows", () => {
-      const text = [
-        "Use `a — b — c` as the literal.",
-        "",
-        "```",
-        "x — y — z",
-        "```",
-        "",
-        "| a — b — c | d |",
-        "|---|---|",
-      ].join("\n");
+      const text = ["Use `a — b — c` as the literal.", "", "```", "x — y — z", "```", "", "| a — b — c | d |", "|---|---|"].join("\n");
       expect(lintProse(text)).toEqual([]);
     });
   });
@@ -79,17 +70,7 @@ describe("lintProse", () => {
     });
 
     it("ignores the symbols inside inline code, fenced code and tables", () => {
-      const text = [
-        "Write `5 × 3` in the code.",
-        "",
-        "```text",
-        "a → b ≈ c ⇒ d × e",
-        "```",
-        "",
-        "| step | cost |",
-        "|---|---|",
-        "| read → write | 3 × more |",
-      ].join("\n");
+      const text = ["Write `5 × 3` in the code.", "", "```text", "a → b ≈ c ⇒ d × e", "```", "", "| step | cost |", "|---|---|", "| read → write | 3 × more |"].join("\n");
       expect(lintProse(text)).toEqual([]);
     });
 

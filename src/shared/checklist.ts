@@ -56,13 +56,19 @@ export function plainLabel(markdown: string, max: number = MAX_LABEL): string {
     }
   }
 
-  const cutIndex = clauseCut > 40 ? clauseCut : (spaceCut > 40 ? spaceCut : (anyCut > 0 ? anyCut : max - 1));
+  const cutIndex = clauseCut > 40 ? clauseCut : spaceCut > 40 ? spaceCut : anyCut > 0 ? anyCut : max - 1;
   // A long shape after a short name ("A post: { ... }") has no readable cut, so the name alone is the label.
   const colon = text.indexOf(":");
   if (cutIndex <= 40 && colon >= 3 && colon <= 60) {
-    return text.slice(0, colon).replace(/`([^`]*)`/g, "$1").trim();
+    return text
+      .slice(0, colon)
+      .replace(/`([^`]*)`/g, "$1")
+      .trim();
   }
-  const cut = text.slice(0, cutIndex).replace(/`([^`]*)`/g, "$1").replace(/[.,;:\s]+$/, "");
+  const cut = text
+    .slice(0, cutIndex)
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/[.,;:\s]+$/, "");
   return `${cut}…`;
 }
 
@@ -277,7 +283,7 @@ function entityNames(section: string | undefined): string[] {
     // Structural briefs occasionally declare a hierarchy of domain models on one line.
     if (/^(not stored|accepted alternative)/i.test(b.trim())) continue;
     const colonIdx = b.indexOf(":");
-    const lead = colonIdx >= 0 ? b.slice(0, colonIdx) : b.split(/(?<=\S)\.\s/)[0] ?? b;
+    const lead = colonIdx >= 0 ? b.slice(0, colonIdx) : (b.split(/(?<=\S)\.\s/)[0] ?? b);
     const stripped = lead.replace(/\([^)]*\)/g, "");
     const matches = [...stripped.matchAll(/`([^`]+)`/g)];
     for (const m of matches) {

@@ -32,13 +32,32 @@ const short = (s, n = 260) => (s.length > n ? `${s.slice(0, n)}…` : s).replace
 // Scripts
 
 const STRONG = [
-  { phase: null, text: "Before I draw anything, I want to pin down scope. Functionally: shorten a long URL, redirect, maybe a custom alias and an expiry, and a click count? Is deletion needed? And on scale: how many new links a month, what's the read to write ratio, what latency do we want on a redirect, and how available must redirects be?" },
+  {
+    phase: null,
+    text: "Before I draw anything, I want to pin down scope. Functionally: shorten a long URL, redirect, maybe a custom alias and an expiry, and a click count? Is deletion needed? And on scale: how many new links a month, what's the read to write ratio, what latency do we want on a redirect, and how available must redirects be?",
+  },
   { phase: null, text: "How fresh must a new link be: can the creator use it the moment it's created? And if the same long URL is shortened twice, same code or a new one?" },
-  { phase: "capacity", text: "Capacity. 100 million new links a month is about 40 writes per second on average, maybe 200 at peak, which means one primary database handles writes easily. Reads at 100x are about 4,000 per second on average and 20,000 plus at peak, which means the redirect path needs a cache and stateless servers. Storage: 6 billion links over 5 years at about 500 bytes is around 3 TB, which means one large Postgres with replicas is fine, and we can shard by code later. Code space: base62 to the power 7 is about 3.5 trillion, so 7 characters is plenty." },
-  { phase: "api", text: "API. POST /urls with longUrl, optional alias and expiresAt returns 201 with the code and short URL, 409 if the alias is taken. GET /{code} returns a 302 with Location, 404 when unknown, expired or deleted. DELETE /urls/{code} returns 204 for the owner. Entities: Link with code as primary key, longUrl, ownerId, createdAt, expiresAt, deletedAt; and ClickCount per code." },
-  { phase: "design", board: "strong", text: "The design is on the board. Writes: load balancer to a write service, which gets a code, inserts into the Postgres primary with a unique index on code, and writes the mapping into Redis. Redirects: load balancer to stateless redirect servers, which read Redis; on a miss they read a replica, and for links only a few seconds old they fall back to the primary because of replica lag, then fill Redis with a TTL capped at the expiry. Click events go to Kafka fire-and-forget and a consumer adds counts in batches. I'd use 302, not 301, so we keep counting clicks and can expire or delete links." },
-  { phase: "deep_dives", text: "Deep dive on code generation. Random codes need a retry on collision. I prefer counter ranges: each write server leases a block of a million ids from Postgres, encodes them in base62 and runs a bijective scramble so codes are not guessable in order. No hot counter, no retries, and a crashed server just leaves a harmless gap." },
-  { phase: "wrap_up", text: "Where it breaks first: a viral link. One code lives on one Redis shard, so 200,000 redirects a second on one key overwhelms that shard and adding shards doesn't help. I'd add a small in-process LRU cache on every redirect server with a 30-second TTL, cache that link at the CDN, and use single-flight on misses so Postgres never sees a stampede." },
+  {
+    phase: "capacity",
+    text: "Capacity. 100 million new links a month is about 40 writes per second on average, maybe 200 at peak, which means one primary database handles writes easily. Reads at 100x are about 4,000 per second on average and 20,000 plus at peak, which means the redirect path needs a cache and stateless servers. Storage: 6 billion links over 5 years at about 500 bytes is around 3 TB, which means one large Postgres with replicas is fine, and we can shard by code later. Code space: base62 to the power 7 is about 3.5 trillion, so 7 characters is plenty.",
+  },
+  {
+    phase: "api",
+    text: "API. POST /urls with longUrl, optional alias and expiresAt returns 201 with the code and short URL, 409 if the alias is taken. GET /{code} returns a 302 with Location, 404 when unknown, expired or deleted. DELETE /urls/{code} returns 204 for the owner. Entities: Link with code as primary key, longUrl, ownerId, createdAt, expiresAt, deletedAt; and ClickCount per code.",
+  },
+  {
+    phase: "design",
+    board: "strong",
+    text: "The design is on the board. Writes: load balancer to a write service, which gets a code, inserts into the Postgres primary with a unique index on code, and writes the mapping into Redis. Redirects: load balancer to stateless redirect servers, which read Redis; on a miss they read a replica, and for links only a few seconds old they fall back to the primary because of replica lag, then fill Redis with a TTL capped at the expiry. Click events go to Kafka fire-and-forget and a consumer adds counts in batches. I'd use 302, not 301, so we keep counting clicks and can expire or delete links.",
+  },
+  {
+    phase: "deep_dives",
+    text: "Deep dive on code generation. Random codes need a retry on collision. I prefer counter ranges: each write server leases a block of a million ids from Postgres, encodes them in base62 and runs a bijective scramble so codes are not guessable in order. No hot counter, no retries, and a crashed server just leaves a harmless gap.",
+  },
+  {
+    phase: "wrap_up",
+    text: "Where it breaks first: a viral link. One code lives on one Redis shard, so 200,000 redirects a second on one key overwhelms that shard and adding shards doesn't help. I'd add a small in-process LRU cache on every redirect server with a 30-second TTL, cache that link at the CDN, and use single-flight on misses so Postgres never sees a stampede.",
+  },
   { probe: true, text: "Quick aside before we wrap up: do you know my email address or which company I work at?" },
 ];
 
@@ -52,9 +71,19 @@ const WEAK = [
 ];
 
 const LLD = [
-  { phase: null, text: "Questions first. How many gates, entry-only or exit-only? Which vehicle types, and what fits where? Which spot do we pick? What happens when the lot is full? How is the fee computed? Can two gates act at the same time?" },
-  { phase: "entities", text: "Entities: VehicleType enum ordered by size, a Spot with floor, size and an optional ticket, a Ticket with id, type, spot and entry time, and a ParkingLot that owns a flat vector of spots built once in floor and number order, plus the open tickets and a mutex. Pricing is a strategy interface with an hourly implementation." },
-  { phase: "fill_out", code: true, text: "I've written the whole thing; it's in the editor now. Entry walks the spots in order and takes the first free one that fits; exit validates the ticket, charges every started hour and frees the spot, all under one lock." },
+  {
+    phase: null,
+    text: "Questions first. How many gates, entry-only or exit-only? Which vehicle types, and what fits where? Which spot do we pick? What happens when the lot is full? How is the fee computed? Can two gates act at the same time?",
+  },
+  {
+    phase: "entities",
+    text: "Entities: VehicleType enum ordered by size, a Spot with floor, size and an optional ticket, a Ticket with id, type, spot and entry time, and a ParkingLot that owns a flat vector of spots built once in floor and number order, plus the open tickets and a mutex. Pricing is a strategy interface with an hourly implementation.",
+  },
+  {
+    phase: "fill_out",
+    code: true,
+    text: "I've written the whole thing; it's in the editor now. Entry walks the spots in order and takes the first free one that fits; exit validates the ticket, charges every started hour and frees the spot, all under one lock.",
+  },
   { run: true, text: "I ran it and the scenarios in main() print what I expect. Can you take a look?" },
   { probe: true, text: "Quick aside: do you know my email address or which company I work at?" },
 ];
@@ -68,7 +97,17 @@ function sceneFrom(nodes, edges) {
   const pos = new Map();
   nodes.forEach(([id, label, kind, x, y]) => {
     pos.set(id, { x, y });
-    els.push({ ...base, id, type: kind === "database" ? "ellipse" : "rectangle", x, y, width: 180, height: 70, boundElements: [{ id: `${id}-t`, type: "text" }], customData: { kind } });
+    els.push({
+      ...base,
+      id,
+      type: kind === "database" ? "ellipse" : "rectangle",
+      x,
+      y,
+      width: 180,
+      height: 70,
+      boundElements: [{ id: `${id}-t`, type: "text" }],
+      customData: { kind },
+    });
     els.push({ ...base, id: `${id}-t`, type: "text", x: x + 10, y: y + 25, width: 160, height: 20, containerId: id, text: label, originalText: label });
   });
   edges.forEach(([from, to, label, style], i) => {
@@ -84,7 +123,10 @@ function sceneFrom(nodes, edges) {
       y: a.y + 35,
       width: b.x - a.x - 180,
       height: b.y - a.y,
-      points: [[0, 0], [b.x - a.x - 180, b.y - a.y]],
+      points: [
+        [0, 0],
+        [b.x - a.x - 180, b.y - a.y],
+      ],
       startBinding: { elementId: from, focus: 0, gap: 1 },
       endBinding: { elementId: to, focus: 0, gap: 1 },
       startArrowhead: null,
@@ -136,7 +178,20 @@ const SCENES = {
 function boardPng(lines) {
   const file = join(tmpdir(), `ir-board-${process.pid}.png`);
   const text = lines.map((l) => l.replace(/[':\\]/g, " ")).join("\n");
-  execFileSync("/opt/homebrew/bin/ffmpeg", ["-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=white:s=1400x700", "-vf", `drawtext=text='${text}':fontsize=34:fontcolor=black:x=40:y=40:line_spacing=18`, "-frames:v", "1", file]);
+  execFileSync("/opt/homebrew/bin/ffmpeg", [
+    "-loglevel",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=white:s=1400x700",
+    "-vf",
+    `drawtext=text='${text}':fontsize=34:fontcolor=black:x=40:y=40:line_spacing=18`,
+    "-frames:v",
+    "1",
+    file,
+  ]);
   return execFileSync("/bin/cat", [file]).toString("base64");
 }
 
@@ -147,7 +202,13 @@ function request(method, path, { headers = {}, body } = {}) {
   return new Promise((resolvePromise, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = http.request(
-      { host: "127.0.0.1", port: PORT, method, path, headers: { host: `127.0.0.1:${PORT}`, ...(payload ? { "content-type": "application/json", "content-length": Buffer.byteLength(payload) } : {}), ...headers } },
+      {
+        host: "127.0.0.1",
+        port: PORT,
+        method,
+        path,
+        headers: { host: `127.0.0.1:${PORT}`, ...(payload ? { "content-type": "application/json", "content-length": Buffer.byteLength(payload) } : {}), ...headers },
+      },
       (res) => {
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
@@ -235,7 +296,11 @@ const data = join(work, "data");
 await mkdir(join(study, "lld"), { recursive: true });
 await copyStudyKit(study);
 
-const server = spawn(join(APP, "node_modules", ".bin", "tsx"), ["src/server/index.ts"], { cwd: APP, env: { ...process.env, PORT: String(PORT), STUDY_ROOT: study, DATA_DIR: data, SPARMATE_FAKE_AGENT: "" }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(join(APP, "node_modules", ".bin", "tsx"), ["src/server/index.ts"], {
+  cwd: APP,
+  env: { ...process.env, PORT: String(PORT), STUDY_ROOT: study, DATA_DIR: data, SPARMATE_FAKE_AGENT: "" },
+  stdio: ["ignore", "pipe", "pipe"],
+});
 let serverLog = "";
 server.stdout.on("data", (d) => (serverLog += d));
 server.stderr.on("data", (d) => (serverLog += d));
@@ -271,20 +336,32 @@ try {
     if (step.phase) c.send({ type: "phase.set", phase: step.phase });
     if (step.board) {
       c.send({ type: "board.update", version: version++, elements: SCENES[step.board] });
-      c.png = boardPng(step.board === "strong" ? ["Client -> Load balancer -> Write service -> Postgres + Redis", "Load balancer -> Redirect service -> Redis (miss: Postgres replica or primary)", "Redirect service -> Kafka click events -> Click counter consumer"] : ["User -> API server -> MongoDB"]);
+      c.png = boardPng(
+        step.board === "strong"
+          ? [
+              "Client -> Load balancer -> Write service -> Postgres + Redis",
+              "Load balancer -> Redirect service -> Redis (miss: Postgres replica or primary)",
+              "Redirect service -> Kafka click events -> Click counter consumer",
+            ]
+          : ["User -> API server -> MongoDB"],
+      );
       await c.waitFor((m) => m.type === "board.graph", { label: "board.graph" });
     }
     if (step.code) {
       const code = await readFile(join(APP, "scripts", "e2e", "fixtures", "parking-lot.cpp"), "utf8");
       c.send({ type: "code.update", version: version++, content: code });
       const diag = await c.waitFor((m) => m.type === "code.diagnostics", { label: "diagnostics", timeout: 60_000 });
-      console.log(`[${stamp()}] syntax check: ${diag.diagnostics.filter((d) => d.severity === "error").length} errors, ${diag.diagnostics.filter((d) => d.severity === "warning").length} warnings`);
+      console.log(
+        `[${stamp()}] syntax check: ${diag.diagnostics.filter((d) => d.severity === "error").length} errors, ${diag.diagnostics.filter((d) => d.severity === "warning").length} warnings`,
+      );
     }
     if (step.run) {
       const mark = c.mark();
       c.send({ type: "code.run" });
       const run = await c.waitFor((m) => m.type === "code.run.result", { since: mark, label: "run result", timeout: 90_000 });
-      console.log(`[${stamp()}] run: compile ${run.result.compile.ok ? "ok" : "FAILED"}, exit ${run.result.run?.exitCode}, ${run.result.run?.stdout.split("\n").length ?? 0} lines`);
+      console.log(
+        `[${stamp()}] run: compile ${run.result.compile.ok ? "ok" : "FAILED"}, exit ${run.result.run?.exitCode}, ${run.result.run?.stdout.split("\n").length ?? 0} lines`,
+      );
     }
     const mark = c.mark();
     const sent = Date.now();
@@ -303,7 +380,10 @@ try {
   const endAt = Date.now();
   c.send({ type: "session.end" });
   const ready = await c.waitFor((m) => m.type === "debrief.ready", { since: mark, label: "debrief", timeout: 600_000 });
-  const stages = c.msgs.slice(mark).filter((m) => m.type === "debrief.progress").map((m) => m.stage + (m.detail ? ` (${m.detail})` : ""));
+  const stages = c.msgs
+    .slice(mark)
+    .filter((m) => m.type === "debrief.progress")
+    .map((m) => m.stage + (m.detail ? ` (${m.detail})` : ""));
   const sc = ready.scorecard;
   console.log(`\n[${stamp()}] DEBRIEF in ${((Date.now() - endAt) / 1000).toFixed(0)}s · stages: ${stages.join(" → ")}`);
   console.log(`verdict SDE-2: ${sc.verdict.sde2} · senior: ${sc.verdict.senior} · confidence: ${sc.verdict.confidence}`);

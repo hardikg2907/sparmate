@@ -17,15 +17,7 @@ describe("claude driver role tool isolation", () => {
     clientApp: "test/1.0",
   };
 
-  const standardRoles: RoleName[] = [
-    "interviewer",
-    "guide",
-    "tester",
-    "judge",
-    "coach",
-    "scribe",
-    "checker",
-  ];
+  const standardRoles: RoleName[] = ["interviewer", "guide", "tester", "judge", "coach", "scribe", "checker"];
 
   it("assigns empty builtin tools and configures MCP server for standard roles", () => {
     for (const role of standardRoles) {
@@ -38,13 +30,7 @@ describe("claude driver role tool isolation", () => {
         tools: [dummyTool],
       };
 
-      const options = baseOptions(
-        setup,
-        dummyOpts,
-        "You are an assistant.",
-        new AbortController(),
-        new StderrTail(dummyOpts.log, role)
-      );
+      const options = baseOptions(setup, dummyOpts, "You are an assistant.", new AbortController(), new StderrTail(dummyOpts.log, role));
       expect(options.tools).toEqual([]);
       expect(options.allowedTools).toEqual(["mcp__room__dummy_tool"]);
       expect(options.mcpServers).toBeDefined();
@@ -64,13 +50,7 @@ describe("claude driver role tool isolation", () => {
         tools: [dummyTool],
       };
 
-      const options = baseOptions(
-        setup,
-        dummyOpts,
-        "You are a researcher.",
-        new AbortController(),
-        new StderrTail(dummyOpts.log, role)
-      );
+      const options = baseOptions(setup, dummyOpts, "You are a researcher.", new AbortController(), new StderrTail(dummyOpts.log, role));
       expect(options.tools).toEqual(["WebSearch", "WebFetch"]);
       expect(options.allowedTools).toEqual(["WebSearch", "WebFetch"]);
       expect(options.mcpServers).toEqual({});

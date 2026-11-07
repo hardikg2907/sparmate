@@ -9,16 +9,7 @@ type Limits = typeof LIMITS;
 export const CHAT_MAX_CHARS: Limits["chatChars"] = 8000;
 export const PNG_MAX_BASE64: Limits["pngBase64Bytes"] = 6_000_000;
 
-export const KOKORO_VOICES = [
-  "bm_george",
-  "bm_lewis",
-  "bf_emma",
-  "bf_isabella",
-  "am_michael",
-  "am_adam",
-  "af_heart",
-  "af_bella",
-] as const;
+export const KOKORO_VOICES = ["bm_george", "bm_lewis", "bf_emma", "bf_isabella", "am_michael", "am_adam", "af_heart", "af_bella"] as const;
 
 export type KokoroVoice = (typeof KOKORO_VOICES)[number];
 
@@ -35,7 +26,6 @@ export const KOKORO_VOICE_LABELS: Record<KokoroVoice, string> = {
 
 export const KOKORO_DEFAULT_VOICE: KokoroVoice = "bm_george";
 export const KOKORO_DEFAULT_SPEED = 0.95;
-
 
 /** Equal to the server's defaults; a test keeps the two in step. */
 export const DEFAULT_SETTINGS: Settings = {

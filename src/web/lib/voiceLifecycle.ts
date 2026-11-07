@@ -119,7 +119,7 @@ export class VoiceInputLifecycle {
     const SpeechClass = this.options.getSpeechClass
       ? this.options.getSpeechClass()
       : typeof window !== "undefined"
-        ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
         : undefined;
 
     if (!SpeechClass) return false;
@@ -324,11 +324,13 @@ export interface VoiceOutputLifecycleOptions {
   synthesizeSpeech?: (params: { text: string; voice: string; speed: number }, signal?: AbortSignal) => Promise<Blob>;
   createBlobUrl?: (blob: Blob) => string;
   revokeBlobUrl?: (url: string) => void;
-  getSpeechSynthesis?: () => {
-    speaking: boolean;
-    speak: (utterance: any) => void;
-    cancel: () => void;
-  } | undefined;
+  getSpeechSynthesis?: () =>
+    | {
+        speaking: boolean;
+        speak: (utterance: any) => void;
+        cancel: () => void;
+      }
+    | undefined;
   getVoiceSettings: () => VoiceSettings;
   getVoices: () => SpeechSynthesisVoice[];
   onSpeakingChange?: (isSpeaking: boolean) => void;
@@ -532,9 +534,7 @@ export class VoiceOutputLifecycle {
     const voiceSettings = this.options.getVoiceSettings();
 
     const SpeechUtterance =
-      (typeof SpeechSynthesisUtterance !== "undefined"
-        ? SpeechSynthesisUtterance
-        : (globalThis as any).SpeechSynthesisUtterance) ||
+      (typeof SpeechSynthesisUtterance !== "undefined" ? SpeechSynthesisUtterance : (globalThis as any).SpeechSynthesisUtterance) ||
       class {
         rate = 1;
         voice: any = null;

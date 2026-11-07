@@ -15,14 +15,7 @@ describe("study kit creation", () => {
     try {
       expect(await isDirectoryEmpty(studyRoot)).toBe(true);
       const res = await initStudyKit({ studyRoot, templateDir });
-      expect(res.created).toEqual([
-        "TRACKER.md",
-        "REVIEW.md",
-        "TEACHING.md",
-        "ABOUT_ME.md",
-        "notes/_TEMPLATE.md",
-        "lld/compile_flags.txt",
-      ]);
+      expect(res.created).toEqual(["TRACKER.md", "REVIEW.md", "TEACHING.md", "ABOUT_ME.md", "notes/_TEMPLATE.md", "lld/compile_flags.txt"]);
       expect(existsSync(join(studyRoot, "TRACKER.md"))).toBe(true);
       expect(existsSync(join(studyRoot, "REVIEW.md"))).toBe(true);
       expect(existsSync(join(studyRoot, "TEACHING.md"))).toBe(true);

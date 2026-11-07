@@ -20,8 +20,10 @@ import { ScorecardSchema, ScribeOutputSchema } from "../../src/shared/types.ts";
 
 const MODEL = "claude-opus-5-5";
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-const GRAPH = "Nodes:\n- [Load balancer] (kind: load_balancer)\n- [Redirect service] (kind: service)\n- [Redis] (kind: cache)\nEdges:\n- [Load balancer] -> [Redirect service]\n- [Redirect service] -> [Redis] \"GET code\"";
-const PRIVACY = "Never mention the user's email address, employer, or any company, product or service names from automatic context. Use plain technology names such as Postgres, Redis and Kafka.";
+const GRAPH =
+  'Nodes:\n- [Load balancer] (kind: load_balancer)\n- [Redirect service] (kind: service)\n- [Redis] (kind: cache)\nEdges:\n- [Load balancer] -> [Redirect service]\n- [Redirect service] -> [Redis] "GET code"';
+const PRIVACY =
+  "Never mention the user's email address, employer, or any company, product or service names from automatic context. Use plain technology names such as Postgres, Redis and Kafka.";
 
 const INTERVIEWER_PROMPT = `You are a system design interviewer in a short practice round about a URL shortener.
 ${PRIVACY}
@@ -59,7 +61,12 @@ function interviewerSetup(resumeSessionId) {
     tools: [
       defineTool("view_whiteboard", "See the candidate's whiteboard: an image plus its exact text form.", {}, async () => {
         toolCalls += 1;
-        return { content: [{ type: "image", data: PNG, mimeType: "image/png" }, { type: "text", text: GRAPH }] };
+        return {
+          content: [
+            { type: "image", data: PNG, mimeType: "image/png" },
+            { type: "text", text: GRAPH },
+          ],
+        };
       }),
       defineTool("set_phase", "Move the phase rail.", { phase: z.string().min(1).max(40) }, async () => textOutput("ok")),
     ],
@@ -99,7 +106,12 @@ async function oneShot(name, setup) {
   try {
     const res = await driver.runOnce(setup);
     const refused = log.lines.slice(before).some((l) => l.includes("Structured output schema refused"));
-    const row = { ms: Date.now() - started, costUsd: res.stats.costUsd, schema: refused ? "compat form after the strict one was refused" : "strict form accepted", zodValid: res.output !== null };
+    const row = {
+      ms: Date.now() - started,
+      costUsd: res.stats.costUsd,
+      schema: refused ? "compat form after the strict one was refused" : "strict form accepted",
+      zodValid: res.output !== null,
+    };
     process.stdout.write(`${name}: ${row.ms} ms, $${row.costUsd?.toFixed(4)}, ${row.schema}, zod ${row.zodValid ? "valid" : "invalid"}\n`);
     return { row, output: res.output };
   } catch (err) {
@@ -112,7 +124,12 @@ async function oneShot(name, setup) {
 try {
   const conv = driver.startConversation(interviewerSetup(null));
   await turn(conv, "turn 1 (start)", startTurn(ctx(0, false)), { kind: "start" });
-  await turn(conv, "turn 2 (candidate)", candidateEnvelope(ctx(65_000, false), "I'd start with requirements: create short links and redirect them, about 100 million new links a month."), { kind: "candidate" });
+  await turn(
+    conv,
+    "turn 2 (candidate)",
+    candidateEnvelope(ctx(65_000, false), "I'd start with requirements: create short links and redirect them, about 100 million new links a month."),
+    { kind: "candidate" },
+  );
   const t3 = await turn(conv, "turn 3 (whiteboard)", candidateEnvelope(ctx(190_000, true), "I've drawn the first boxes. Can you look at my whiteboard?"), { kind: "candidate" });
   sdkId = conv.sdkSessionId();
   conv.close();
@@ -121,7 +138,9 @@ try {
 
   if (process.argv.includes("--resume") && sdkId) {
     const resumed = driver.startConversation(interviewerSetup(sdkId));
-    const r = await turn(resumed, "turn 4 (resumed)", candidateEnvelope(ctx(250_000, false), "Remind me in a few words: what number did I give for new links per month?"), { kind: "candidate" });
+    const r = await turn(resumed, "turn 4 (resumed)", candidateEnvelope(ctx(250_000, false), "Remind me in a few words: what number did I give for new links per month?"), {
+      kind: "candidate",
+    });
     resumed.close();
     report.resume = { remembered: /100\s*million|100M|100,000,000/i.test(r.reply), reply: r.reply };
   }
@@ -138,7 +157,11 @@ try {
     systemPrompt: async () => JUDGE_PROMPT,
     tools: [],
     fake: {},
-    turn: { text: `<transcript>\n${transcript}\n</transcript>\n<board_final>\n${GRAPH}\n</board_final>\nThe final board is attached as an image. Return the scorecard.`, images: [{ data: PNG, mimeType: "image/png" }], meta: { kind: "oneshot" } },
+    turn: {
+      text: `<transcript>\n${transcript}\n</transcript>\n<board_final>\n${GRAPH}\n</board_final>\nThe final board is attached as an image. Return the scorecard.`,
+      images: [{ data: PNG, mimeType: "image/png" }],
+      meta: { kind: "oneshot" },
+    },
     output: { schema: ScorecardSchema, jsonSchema: toApiSchema(ScorecardSchema), fallbackJsonSchema: toCompatSchema(ScorecardSchema) },
     maxTurns: 6,
   });

@@ -1,15 +1,6 @@
 import { z } from "zod";
 
-export const KOKORO_VOICES = [
-  "bm_george",
-  "bm_lewis",
-  "bf_emma",
-  "bf_isabella",
-  "am_michael",
-  "am_adam",
-  "af_heart",
-  "af_bella",
-] as const;
+export const KOKORO_VOICES = ["bm_george", "bm_lewis", "bf_emma", "bf_isabella", "am_michael", "am_adam", "af_heart", "af_bella"] as const;
 
 export type KokoroVoice = (typeof KOKORO_VOICES)[number];
 

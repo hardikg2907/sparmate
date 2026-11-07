@@ -133,9 +133,7 @@ function Shell() {
           </div>
         ) : null}
       </div>
-      {settingsOpen ? (
-        <SettingsModal settings={settings} studyRoot={bootstrap.studyRoot} onClose={() => setSettingsOpen(false)} onSave={save} onApplyTheme={applyTheme} />
-      ) : null}
+      {settingsOpen ? <SettingsModal settings={settings} studyRoot={bootstrap.studyRoot} onClose={() => setSettingsOpen(false)} onSave={save} onApplyTheme={applyTheme} /> : null}
     </>
   );
 }

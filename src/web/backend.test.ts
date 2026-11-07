@@ -256,7 +256,9 @@ describe("discarding a session over REST", () => {
   it("surfaces the server's message when it refuses", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => (url === "/api/bootstrap" ? json(200, { csrfToken: "tok1" }) : json(409, { error: "The debrief is running. Wait for it to finish, then discard the round." }))),
+      vi.fn(async (url: string) =>
+        url === "/api/bootstrap" ? json(200, { csrfToken: "tok1" }) : json(409, { error: "The debrief is running. Wait for it to finish, then discard the round." }),
+      ),
     );
     await getBootstrap(true);
     await expect(api.discardSession(ID)).rejects.toMatchObject({ status: 409, message: "The debrief is running. Wait for it to finish, then discard the round." });

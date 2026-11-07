@@ -340,7 +340,13 @@ export const BookkeepingOpSchema = z.discriminatedUnion("kind", [
     section: z.string().min(3).max(200).describe("The exact heading line, for example '### C2. Classic HLD Problems'."),
     bullet: z.string().min(2).max(300).describe("The bullet text after the mark and before any ' → ' suffix."),
     mark: MARK.optional(),
-    appendSuffix: z.string().max(300).optional().describe("Text appended to the bullet line without a leading arrow, for example 'notes/c2-url-shortener.md · 2026-10-30', or just '2026-11-06' on a redo of the same notes file. The app adds ' → ' or ' · ' in front."),
+    appendSuffix: z
+      .string()
+      .max(300)
+      .optional()
+      .describe(
+        "Text appended to the bullet line without a leading arrow, for example 'notes/c2-url-shortener.md · 2026-10-30', or just '2026-11-06' on a redo of the same notes file. The app adds ' → ' or ' · ' in front.",
+      ),
   }),
   z.strictObject({
     kind: z.literal("tracker_add_subbullet"),

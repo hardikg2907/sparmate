@@ -51,13 +51,8 @@ export interface ContextView {
 }
 
 export function timeLine(t: TimeView): string {
-  const clock = t.guided
-    ? `${formatClock(t.roundMs)} (guided practice, no time limit)`
-    : `${formatClock(t.roundMs)} of ${formatClock(t.durationMs)}`;
-  const planned =
-    t.plannedStartMs !== null && t.plannedEndMs !== null
-      ? ` (planned ${formatClock(t.plannedStartMs)}–${formatClock(t.plannedEndMs)})`
-      : "";
+  const clock = t.guided ? `${formatClock(t.roundMs)} (guided practice, no time limit)` : `${formatClock(t.roundMs)} of ${formatClock(t.durationMs)}`;
+  const planned = t.plannedStartMs !== null && t.plannedEndMs !== null ? ` (planned ${formatClock(t.plannedStartMs)}–${formatClock(t.plannedEndMs)})` : "";
   return `time: ${clock} · phase: ${t.phaseId}${planned}`;
 }
 
@@ -263,12 +258,7 @@ export function stepSummariesText(phases: readonly { id: string; label: string }
 }
 
 /** Interview chat made while `phase` was the current step, across every visit to it. */
-export function stepEntries(
-  entries: readonly TranscriptEntry[],
-  history: readonly { phase: string; at: number }[],
-  phase: string,
-  endAt: number,
-): TranscriptEntry[] {
+export function stepEntries(entries: readonly TranscriptEntry[], history: readonly { phase: string; at: number }[], phase: string, endAt: number): TranscriptEntry[] {
   const spans = history.flatMap((h, i) => (h.phase === phase ? [[h.at, history[i + 1]?.at ?? endAt] as const] : []));
   return entries.filter((e) => e.channel === "interview" && !e.hidden && e.kind !== "phase" && spans.some(([from, to]) => e.at >= from && e.at <= to));
 }

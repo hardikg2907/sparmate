@@ -38,7 +38,7 @@ function request(method, path, { headers = {}, body } = {}) {
           } catch {}
           resolvePromise({ status: res.statusCode, headers: res.headers, text, json });
         });
-      }
+      },
     );
     req.on("error", reject);
     if (payload) req.write(payload);
@@ -163,18 +163,10 @@ async function main() {
 
   try {
     // Run 1: Niche problem
-    const nicheResult = await runPrep(
-      "Niche Problem",
-      "Design the backend for a live sports score app with 10 million concurrent viewers",
-      "hld"
-    );
+    const nicheResult = await runPrep("Niche Problem", "Design the backend for a live sports score app with 10 million concurrent viewers", "hld");
 
     // Run 2: Classic problem
-    const classicResult = await runPrep(
-      "Classic Problem",
-      "Design an in-memory key-value database with persistence and replication (like Redis)",
-      "hld"
-    );
+    const classicResult = await runPrep("Classic Problem", "Design an in-memory key-value database with persistence and replication (like Redis)", "hld");
 
     console.log("\n========================================");
     console.log("SUMMARY OF REAL RUNS:");

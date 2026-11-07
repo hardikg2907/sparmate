@@ -79,14 +79,14 @@ async function markdownFiles(dir: string, recursive: boolean): Promise<string[]>
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
   }
-  return names.filter((n) => n.endsWith(".md")).sort().map((n) => join(dir, n));
+  return names
+    .filter((n) => n.endsWith(".md"))
+    .sort()
+    .map((n) => join(dir, n));
 }
 
 /** Loads every problem file. A broken file is skipped with a warning so one bad file never hides the rest. */
-export async function loadProblems(
-  sources: { dir: string; custom: boolean; recursive: boolean }[],
-  log: Logger,
-): Promise<Problem[]> {
+export async function loadProblems(sources: { dir: string; custom: boolean; recursive: boolean }[], log: Logger): Promise<Problem[]> {
   const out: Problem[] = [];
   const seen = new Set<string>();
   for (const source of sources) {

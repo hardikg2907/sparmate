@@ -26,17 +26,7 @@ export function renderPrompt(template: string, vars: Readonly<Record<string, str
   return template.replace(PLACEHOLDER, (_m, key: string) => vars[key] ?? "");
 }
 
-export const COMMON_VARS = [
-  "date",
-  "problem_title",
-  "track",
-  "mode",
-  "duration_min",
-  "candidate_profile",
-  "target_level",
-  "stretch_level",
-  "target_company",
-] as const;
+export const COMMON_VARS = ["date", "problem_title", "track", "mode", "duration_min", "candidate_profile", "target_level", "stretch_level", "target_company"] as const;
 
 /** Each prompt file and the variables it may use, besides the common ones. */
 export const PROMPT_VARS = {
@@ -134,7 +124,9 @@ export function extensionMinute(track: Track, durationMin: number): number {
 }
 
 export function sectionList(track: Track): string {
-  return requiredSections(track).map((s) => `## ${s}`).join("\n");
+  return requiredSections(track)
+    .map((s) => `## ${s}`)
+    .join("\n");
 }
 
 export function commonVars(input: {

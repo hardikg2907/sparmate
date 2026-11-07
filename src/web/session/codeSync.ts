@@ -27,8 +27,7 @@ export type CodeDecision =
   /** A newer editor text is already on its way and will replace the outside change. */
   | { kind: "keep"; notice: string };
 
-export const OUTSIDE_CHANGE_NOTICE =
-  "The code file changed outside the editor at the same time as your edits. Your editor text was kept and saved over it.";
+export const OUTSIDE_CHANGE_NOTICE = "The code file changed outside the editor at the same time as your edits. Your editor text was kept and saved over it.";
 
 const SENT_LIMIT = 20;
 

@@ -38,7 +38,8 @@ export function RoundUsageCard({ sessionId }: { sessionId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    api.sessionUsage(sessionId)
+    api
+      .sessionUsage(sessionId)
       .then((res) => {
         if (!cancelled) {
           setData(res);
@@ -68,9 +69,7 @@ export function RoundUsageCard({ sessionId }: { sessionId: string }) {
           <h2 className="text-lead font-semibold text-foreground">This round used</h2>
           <p className="text-ui text-muted-foreground">Estimated API-equivalent token and cost usage for this round.</p>
         </div>
-        <div className="font-mono text-title font-semibold tabular-nums text-foreground">
-          ${totals.costUsd < 0.01 ? totals.costUsd.toFixed(4) : totals.costUsd.toFixed(3)}
-        </div>
+        <div className="font-mono text-title font-semibold tabular-nums text-foreground">${totals.costUsd < 0.01 ? totals.costUsd.toFixed(4) : totals.costUsd.toFixed(3)}</div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 py-4 sm:grid-cols-4">
@@ -115,9 +114,7 @@ export function RoundUsageCard({ sessionId }: { sessionId: string }) {
                   <td className="py-2 text-right text-muted-foreground">{role.outputTokens.toLocaleString()}</td>
                   <td className="py-2 text-right text-muted-foreground">{role.cacheReadTokens.toLocaleString()}</td>
                   <td className="py-2 text-right text-muted-foreground">{(role.cacheHitRate * 100).toFixed(1)}%</td>
-                  <td className="py-2 text-right font-semibold text-foreground">
-                    ${role.costUsd < 0.01 ? role.costUsd.toFixed(4) : role.costUsd.toFixed(3)}
-                  </td>
+                  <td className="py-2 text-right font-semibold text-foreground">${role.costUsd < 0.01 ? role.costUsd.toFixed(4) : role.costUsd.toFixed(3)}</td>
                 </tr>
               ))}
             </tbody>

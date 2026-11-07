@@ -65,7 +65,10 @@ function CheckStatus({ step, reads }: { step: PublicStepCheck | undefined; reads
           : "Checked when you press Check this step or move on.";
   return (
     <p className="mt-1 flex items-center gap-1.5 border-t border-border px-1 pt-2 text-meta text-muted-foreground">
-      <span className={cn("size-1.5 shrink-0 rounded-full", step?.status === "checking" ? "animate-pulse bg-primary" : step?.checkedAt != null ? "bg-success-fill" : "bg-input")} aria-hidden="true" />
+      <span
+        className={cn("size-1.5 shrink-0 rounded-full", step?.status === "checking" ? "animate-pulse bg-primary" : step?.checkedAt != null ? "bg-success-fill" : "bg-input")}
+        aria-hidden="true"
+      />
       {text}
     </p>
   );

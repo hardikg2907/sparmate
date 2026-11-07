@@ -14,7 +14,8 @@ export function UsagePage({ initial }: { initial?: UsageSummaryResponse } = {}) 
   const load = () => {
     setLoading(true);
     setError(null);
-    api.usage()
+    api
+      .usage()
       .then((res) => {
         setData(res);
         setLoading(false);
@@ -42,7 +43,16 @@ export function UsagePage({ initial }: { initial?: UsageSummaryResponse } = {}) 
         {loading ? (
           <UsageSkeleton />
         ) : error ? (
-          <Alert tone="bad" role="alert" title="Failed to load usage" actions={<Button variant="default" onClick={load}>Try again</Button>}>
+          <Alert
+            tone="bad"
+            role="alert"
+            title="Failed to load usage"
+            actions={
+              <Button variant="default" onClick={load}>
+                Try again
+              </Button>
+            }
+          >
             {error}
           </Alert>
         ) : !data || data.totals.calls === 0 ? (
@@ -122,7 +132,10 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
           <div className="flex flex-col justify-between gap-4">
             <div>
               <p className="text-ui font-semibold text-hero-muted">API-equivalent cost</p>
-              <p className="text-mega font-bold tabular-nums tracking-[-0.02em]">{estimatedCalls > 0 ? "≈" : ""}{money(cost, 2, totals.costUsd)}</p>
+              <p className="text-mega font-bold tabular-nums tracking-[-0.02em]">
+                {estimatedCalls > 0 ? "≈" : ""}
+                {money(cost, 2, totals.costUsd)}
+              </p>
               <p className="mt-1 text-meta text-hero-muted">
                 {estimatedCalls > 0
                   ? `Calculated from API rates; ${estimatedCalls.toLocaleString()} ${estimatedCalls === 1 ? "call is" : "calls are"} estimated from tokens`
@@ -190,9 +203,7 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-foreground">{p.problemTitle}</span>
-                        {p.track ? (
-                          <Badge tone={p.track === "hld" ? "accent" : "good"}>{TRACK_LABEL[p.track]}</Badge>
-                        ) : null}
+                        {p.track ? <Badge tone={p.track === "hld" ? "accent" : "good"}>{TRACK_LABEL[p.track]}</Badge> : null}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{p.rounds}</td>
@@ -200,9 +211,7 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{p.inputTokens.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{p.outputTokens.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{(p.cacheHitRate * 100).toFixed(1)}%</td>
-                    <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">
-                      ${p.costUsd < 0.01 ? p.costUsd.toFixed(4) : p.costUsd.toFixed(3)}
-                    </td>
+                    <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">${p.costUsd < 0.01 ? p.costUsd.toFixed(4) : p.costUsd.toFixed(3)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -249,9 +258,7 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{s.inputTokens.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{s.outputTokens.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{(s.cacheHitRate * 100).toFixed(1)}%</td>
-                    <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">
-                      ${s.costUsd < 0.01 ? s.costUsd.toFixed(4) : s.costUsd.toFixed(3)}
-                    </td>
+                    <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">${s.costUsd < 0.01 ? s.costUsd.toFixed(4) : s.costUsd.toFixed(3)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -342,7 +349,10 @@ function money(value: number, digits: number, scale = value): string {
 
 function StatCell({ index, label, value, subtext, meter }: { index: number; label: string; value: string; subtext: string; meter?: number }) {
   return (
-    <div className="reveal flex flex-col gap-1 p-5 [&:nth-child(3)]:max-sm:col-span-2 [&:nth-child(3)]:max-sm:border-t [&:nth-child(3)]:max-sm:border-border" style={{ "--i": index } as CSSProperties}>
+    <div
+      className="reveal flex flex-col gap-1 p-5 [&:nth-child(3)]:max-sm:col-span-2 [&:nth-child(3)]:max-sm:border-t [&:nth-child(3)]:max-sm:border-border"
+      style={{ "--i": index } as CSSProperties}
+    >
       <div className="text-ui font-semibold text-muted-foreground">{label}</div>
       <div className="text-title font-bold tabular-nums text-foreground">{value}</div>
       {meter !== undefined ? (

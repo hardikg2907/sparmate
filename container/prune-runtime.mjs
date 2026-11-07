@@ -21,4 +21,8 @@ if (missing.length > 0) {
   console.error(`Server packages missing from dependencies: ${missing.join(", ")}`);
   process.exit(1);
 }
-process.stdout.write(Object.keys(pkg.dependencies ?? {}).filter((name) => !SERVER_PACKAGES.has(name)).join(" "));
+process.stdout.write(
+  Object.keys(pkg.dependencies ?? {})
+    .filter((name) => !SERVER_PACKAGES.has(name))
+    .join(" "),
+);

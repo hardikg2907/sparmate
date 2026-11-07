@@ -90,9 +90,7 @@
     "strokeStyle": "solid",
     "roughness": 1,
     "opacity": 100,
-    "groupIds": [
-      "grp-db"
-    ],
+    "groupIds": ["grp-db"],
     "frameId": null,
     "index": "a0",
     "roundness": {
@@ -127,9 +125,7 @@
     "strokeStyle": "solid",
     "roughness": 1,
     "opacity": 100,
-    "groupIds": [
-      "grp-db"
-    ],
+    "groupIds": ["grp-db"],
     "frameId": null,
     "index": "a0",
     "roundness": {
@@ -159,9 +155,7 @@
     "strokeStyle": "solid",
     "roughness": 1,
     "opacity": 100,
-    "groupIds": [
-      "grp-db"
-    ],
+    "groupIds": ["grp-db"],
     "frameId": null,
     "index": "a0",
     "roundness": {
@@ -191,9 +185,7 @@
     "strokeStyle": "solid",
     "roughness": 1,
     "opacity": 100,
-    "groupIds": [
-      "grp-db"
-    ],
+    "groupIds": ["grp-db"],
     "frameId": null,
     "index": "a0",
     "roundness": null,
@@ -206,14 +198,8 @@
     "link": null,
     "locked": false,
     "points": [
-      [
-        0,
-        0
-      ],
-      [
-        0,
-        90
-      ]
+      [0, 0],
+      [0, 90]
     ],
     "lastCommittedPoint": null,
     "startBinding": null,
@@ -236,9 +222,7 @@
     "strokeStyle": "solid",
     "roughness": 1,
     "opacity": 100,
-    "groupIds": [
-      "grp-db"
-    ],
+    "groupIds": ["grp-db"],
     "frameId": null,
     "index": "a0",
     "roundness": null,
@@ -251,14 +235,8 @@
     "link": null,
     "locked": false,
     "points": [
-      [
-        0,
-        0
-      ],
-      [
-        0,
-        90
-      ]
+      [0, 0],
+      [0, 90]
     ],
     "lastCommittedPoint": null,
     "startBinding": null,
@@ -281,9 +259,7 @@
     "strokeStyle": "solid",
     "roughness": 1,
     "opacity": 100,
-    "groupIds": [
-      "grp-db"
-    ],
+    "groupIds": ["grp-db"],
     "frameId": null,
     "index": "a0",
     "roundness": null,
@@ -340,14 +316,8 @@
     "link": null,
     "locked": false,
     "points": [
-      [
-        0,
-        0
-      ],
-      [
-        120,
-        0
-      ]
+      [0, 0],
+      [120, 0]
     ],
     "lastCommittedPoint": null,
     "startBinding": {

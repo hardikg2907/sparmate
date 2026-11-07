@@ -173,17 +173,7 @@ describe("joined and look-alike forms", () => {
     expect(multi.findViolations(`we met ${text} today`)).toEqual(["zorblax corp"]);
   });
 
-  it.each([
-    "zor​blax",
-    "zor­blax",
-    "zor⁠blax",
-    "zor﻿blax",
-    "ｚｏｒｂｌａｘ",
-    "ZORBLAX",
-    "zоrblаx",
-    "zorblax́",
-    "ZorblaxService",
-  ])("finds the one-word term in %j", (text) => {
+  it.each(["zor​blax", "zor­blax", "zor⁠blax", "zor﻿blax", "ｚｏｒｂｌａｘ", "ZORBLAX", "zоrblаx", "zorblax́", "ZorblaxService"])("finds the one-word term in %j", (text) => {
     expect(single.findViolations(`we met ${text} today`)).toEqual(["zorblax"]);
   });
 

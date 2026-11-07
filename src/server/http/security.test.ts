@@ -9,7 +9,8 @@ const good = { host: `127.0.0.1:${PORT}`, origin: `http://127.0.0.1:${PORT}` };
 describe("allowlists", () => {
   it("accepts only the four local hosts", () => {
     for (const h of [`127.0.0.1:${PORT}`, `localhost:${PORT}`, "127.0.0.1:5173", "localhost:5173", `LOCALHOST:${PORT}`]) expect(hostAllowed(h, PORT), h).toBe(true);
-    for (const h of [undefined, "evil.example", `evil.example:${PORT}`, "127.0.0.1", `0.0.0.0:${PORT}`, `127.0.0.1:${PORT}.evil`]) expect(hostAllowed(h, PORT), String(h)).toBe(false);
+    for (const h of [undefined, "evil.example", `evil.example:${PORT}`, "127.0.0.1", `0.0.0.0:${PORT}`, `127.0.0.1:${PORT}.evil`])
+      expect(hostAllowed(h, PORT), String(h)).toBe(false);
   });
 
   it("accepts only http origins of those hosts", () => {
@@ -29,7 +30,12 @@ describe("CSRF token", () => {
   it("compares safely, including wrong lengths and types", () => {
     expect(tokenMatches(TOKEN, TOKEN)).toBe(true);
     expect(tokenMatches(TOKEN, `${TOKEN}x`)).toBe(false);
-    expect(tokenMatches(TOKEN, TOKEN.replace(/.$/, (c) => (c === "A" ? "B" : "A")))).toBe(false);
+    expect(
+      tokenMatches(
+        TOKEN,
+        TOKEN.replace(/.$/, (c) => (c === "A" ? "B" : "A")),
+      ),
+    ).toBe(false);
     expect(tokenMatches(TOKEN, undefined)).toBe(false);
     expect(tokenMatches(TOKEN, ["x"])).toBe(false);
   });
@@ -134,4 +140,3 @@ describe("container mode Host and Origin rules", () => {
     expect(checkRequest({ method: "GET", url: "/api/ping", headers: { host: `localhost:${DEV_PORT}` } }, PORT, TOKEN, true)).toEqual({ ok: false, status: 421, reason: "host" });
   });
 });
-

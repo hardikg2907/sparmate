@@ -1,13 +1,4 @@
-import {
-  createSdkMcpServer,
-  query,
-  tool,
-  type Options,
-  type Query,
-  type SDKMessage,
-  type SDKResultMessage,
-  type SDKUserMessage,
-} from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, query, tool, type Options, type Query, type SDKMessage, type SDKResultMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   DriverError,
   type Conversation,
@@ -63,9 +54,7 @@ function toSdkTool(t: RoomTool) {
   return tool(t.name, t.description, t.shape, async (args) => {
     const out = await t.run(args);
     return {
-      content: out.content.map((c) =>
-        c.type === "text" ? { type: "text" as const, text: c.text } : { type: "image" as const, data: c.data, mimeType: c.mimeType },
-      ),
+      content: out.content.map((c) => (c.type === "text" ? { type: "text" as const, text: c.text } : { type: "image" as const, data: c.data, mimeType: c.mimeType })),
       ...(out.isError ? { isError: true } : {}),
     };
   });
@@ -172,9 +161,7 @@ export function baseOptions(
 ): Options {
   const isWebResearchRole = setup.role === "brief-writer" || setup.role === "brief-checker";
 
-  const allowed = isWebResearchRole
-    ? ["WebSearch", "WebFetch"]
-    : setup.tools.map((t) => `mcp__${MCP_SERVER}__${t.name}`);
+  const allowed = isWebResearchRole ? ["WebSearch", "WebFetch"] : setup.tools.map((t) => `mcp__${MCP_SERVER}__${t.name}`);
 
   const mcpServers: Options["mcpServers"] =
     !isWebResearchRole && setup.tools.length > 0
@@ -459,7 +446,10 @@ async function runOnceAttempt<T>(
         if (!setup.output) return { text, output: null, stats };
         const parsed = setup.output.schema.safeParse(msg.structured_output);
         if (!parsed.success) {
-          const issues = parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+          const issues = parsed.error.issues
+            .slice(0, 5)
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
           throw attachFailureStats(new DriverError("The model returned data in the wrong shape. Retry.", `structured output failed validation: ${issues}`), stats);
         }
         return { text, output: parsed.data, stats };

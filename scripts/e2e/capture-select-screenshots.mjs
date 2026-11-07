@@ -20,21 +20,17 @@ await mkdir(OUT, { recursive: true });
 
 await copyStudyKit(study);
 
-const server = spawn(
-  process.execPath,
-  [join(APP, "node_modules", "tsx", "dist", "cli.mjs"), join(APP, "src", "server", "index.ts")],
-  {
-    cwd: APP,
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      STUDY_ROOT: study,
-      DATA_DIR: join(work, "data"),
-      SPARMATE_FAKE_AGENT: "1",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
+const server = spawn(process.execPath, [join(APP, "node_modules", "tsx", "dist", "cli.mjs"), join(APP, "src", "server", "index.ts")], {
+  cwd: APP,
+  env: {
+    ...process.env,
+    PORT: String(PORT),
+    STUDY_ROOT: study,
+    DATA_DIR: join(work, "data"),
+    SPARMATE_FAKE_AGENT: "1",
   },
-);
+  stdio: ["ignore", "pipe", "pipe"],
+});
 
 let log = "";
 server.stdout.on("data", (d) => (log += d));
@@ -126,7 +122,6 @@ try {
   const homeStatusPath = join(OUT, "home-status-select-open.png");
   await page.screenshot({ path: homeStatusPath });
   console.log(`Saved: ${homeStatusPath}`);
-
 } finally {
   await browser.close();
   server.kill();

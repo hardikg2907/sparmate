@@ -6,14 +6,34 @@ const board = [
   { id: "f-design", type: "frame", x: 0, y: 500, width: 1560, height: 820, name: "High-level design", customData: { step: "design" } },
   { id: "lb", type: "rectangle", x: 100, y: 700, width: 160, height: 60 },
   { id: "lb-t", type: "text", x: 110, y: 720, width: 140, height: 20, text: "Load balancer", containerId: "lb" },
-  { id: "a1", type: "arrow", x: 260, y: 730, width: 300, height: 0, points: [[0, 0], [300, 0]], startBinding: { elementId: "lb" }, endBinding: null },
+  {
+    id: "a1",
+    type: "arrow",
+    x: 260,
+    y: 730,
+    width: 300,
+    height: 0,
+    points: [
+      [0, 0],
+      [300, 0],
+    ],
+    startBinding: { elementId: "lb" },
+    endBinding: null,
+  },
   { id: "note", type: "text", x: 900, y: 900, width: 100, height: 20, text: "a free note" },
   { id: "fd", type: "freedraw", x: 900, y: 1000, width: 60, height: 30 },
 ];
 
 let n = 0;
 const ids = () => `pin${++n}`;
-const req = (over: Partial<Parameters<typeof validatePin>[2]> = {}) => ({ elementId: "lb", note: "Say how it fails over.", tone: "note" as const, by: "guide" as const, at: 5, ...over });
+const req = (over: Partial<Parameters<typeof validatePin>[2]> = {}) => ({
+  elementId: "lb",
+  note: "Say how it fails over.",
+  tone: "note" as const,
+  by: "guide" as const,
+  at: 5,
+  ...over,
+});
 
 describe("validatePin", () => {
   it("pins a box or an arrow and records the step of its frame", () => {

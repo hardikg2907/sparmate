@@ -284,15 +284,9 @@ async function main() {
     }
 
     // Normal C++ execution check
-    const normalRes = await runCodeSnippet(
-      "normal C++",
-      `#include <iostream>\nint main() { std::cout << "NORMAL_CPP_RUN_OK" << std::endl; return 0; }\n`,
-    );
+    const normalRes = await runCodeSnippet("normal C++", `#include <iostream>\nint main() { std::cout << "NORMAL_CPP_RUN_OK" << std::endl; return 0; }\n`);
     const normalOk =
-      normalRes.type === "code.run.result" &&
-      normalRes.result.compile.ok &&
-      normalRes.result.run?.exitCode === 0 &&
-      normalRes.result.run.stdout.includes("NORMAL_CPP_RUN_OK");
+      normalRes.type === "code.run.result" && normalRes.result.compile.ok && normalRes.result.run?.exitCode === 0 && normalRes.result.run.stdout.includes("NORMAL_CPP_RUN_OK");
     check("C++ runner compiles and runs inside container sandbox", normalOk, normalRes.result?.run?.stdout ?? normalRes.message);
 
     // Sandbox Escape 1: open a TCP connection (must fail)
@@ -325,7 +319,11 @@ async function main() {
       `#include <dirent.h>\n#include <fstream>\n#include <iostream>\n#include <iterator>\n#include <string>\nint main() {\n  DIR* d = opendir("/proc");\n  if (!d) return 1;\n  while (dirent* e = readdir(d)) {\n    std::string p = std::string("/proc/") + e->d_name + "/environ";\n    std::ifstream f(p, std::ios::binary);\n    std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());\n    if (s.find("SPARMATE_IN_CONTAINER") != std::string::npos) { std::cout << "ESCAPE_SERVER_ENV" << std::endl; return 0; }\n  }\n  return 2;\n}\n`,
     );
     const procEscaped = procRes.result?.run?.stdout?.includes("ESCAPE_SERVER_ENV");
-    check("sandbox escape: the server's environment is not readable through /proc", procRes.type === "code.run.result" && !procEscaped, `exitCode: ${procRes.result?.run?.exitCode}`);
+    check(
+      "sandbox escape: the server's environment is not readable through /proc",
+      procRes.type === "code.run.result" && !procEscaped,
+      `exitCode: ${procRes.result?.run?.exitCode}`,
+    );
 
     // Sandbox Escape 4: fork bomb or run past time limit (must fail/time out)
     const timeoutRes = await runCodeSnippet(
@@ -350,11 +348,7 @@ async function main() {
         speed: 1.0,
       },
     });
-    const ttsOk =
-      ttsRes.status === 200 &&
-      ttsRes.headers["content-type"] === "audio/wav" &&
-      ttsRes.buf.length > 1000 &&
-      ttsRes.buf.subarray(0, 4).toString("ascii") === "RIFF";
+    const ttsOk = ttsRes.status === 200 && ttsRes.headers["content-type"] === "audio/wav" && ttsRes.buf.length > 1000 && ttsRes.buf.subarray(0, 4).toString("ascii") === "RIFF";
     check("real Kokoro TTS synthesis via POST /api/tts in container succeeds", ttsOk, `bytes: ${ttsRes.buf.length}`);
   } finally {
     if (containerStarted) {

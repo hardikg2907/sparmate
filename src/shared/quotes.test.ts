@@ -21,7 +21,7 @@ const sources = {
     "Then we add a cache.   The cache sits in front of the\ndatabase and absorbs the hot keys.",
     "“At-least-once” delivery, with an idempotency key.",
   ].join("\n"),
-  board: "Nodes:\n- [API service] (kind: service)\n- [Postgres] (kind: database)\nEdges:\n- [API service] -> [Postgres] \"SQL\"",
+  board: 'Nodes:\n- [API service] (kind: service)\n- [Postgres] (kind: database)\nEdges:\n- [API service] -> [Postgres] "SQL"',
   code: "class Lot {\n  std::mutex mu_;\n  int free = 3;\n  void enter() { std::lock_guard<std::mutex> g(mu_); --free; }\n};",
 };
 
@@ -36,11 +36,11 @@ describe("normalizeQuote", () => {
   });
 
   it("turns curly quotes into straight quotes", () => {
-    expect(normalizeQuote("it’s a “quote” inside")).toBe("it's a \"quote\" inside");
+    expect(normalizeQuote("it’s a “quote” inside")).toBe('it\'s a "quote" inside');
   });
 
   it("trims surrounding quote marks and trailing punctuation", () => {
-    expect(normalizeQuote("\"we shard by user id.\"")).toBe("we shard by user id");
+    expect(normalizeQuote('"we shard by user id."')).toBe("we shard by user id");
     expect(normalizeQuote("“we shard by user id!”")).toBe("we shard by user id");
     expect(normalizeQuote("'text', ")).toBe("text");
     expect(normalizeQuote("trailing ellipsis...")).toBe("trailing ellipsis");
@@ -57,7 +57,7 @@ describe("normalizeQuote", () => {
   });
 
   it("returns an empty string for text that is only marks", () => {
-    expect(normalizeQuote(" \"\" ... ")).toBe("");
+    expect(normalizeQuote(' "" ... ')).toBe("");
   });
 });
 
@@ -69,7 +69,7 @@ describe("checkQuotes", () => {
   it("ignores case, curly quotes and spacing differences", () => {
     expect(verify("I WOULD   SHARD by user id, because a user's reads stay on one shard")).toBe(true);
     expect(verify("the cache sits in front of the database")).toBe(true);
-    expect(verify("\"At-least-once\" delivery")).toBe(true);
+    expect(verify('"At-least-once" delivery')).toBe(true);
   });
 
   it("ignores surrounding quote marks and trailing punctuation", () => {
@@ -85,7 +85,7 @@ describe("checkQuotes", () => {
   it("rejects an empty quote and a quote of only marks", () => {
     expect(verify("")).toBe(false);
     expect(verify("   ")).toBe(false);
-    expect(verify("\"...\"")).toBe(false);
+    expect(verify('"..."')).toBe(false);
   });
 
   it("treats an ellipsis as parts that must all appear in order", () => {
@@ -122,7 +122,13 @@ describe("checkQuotes", () => {
   it("returns one result per evidence item with the dimension id and index", () => {
     const results = checkQuotes(
       card([
-        { id: "design", quotes: [{ quote: "add a cache", source: "candidate" }, { quote: "made up words", source: "candidate" }] },
+        {
+          id: "design",
+          quotes: [
+            { quote: "add a cache", source: "candidate" },
+            { quote: "made up words", source: "candidate" },
+          ],
+        },
         { id: "working_code", quotes: [] },
         { id: "concurrency", quotes: [{ quote: "std::mutex mu_;", source: "code" }] },
       ]),

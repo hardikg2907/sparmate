@@ -79,7 +79,11 @@ export function sceneToGraph(elements: readonly Record<string, unknown>[]): Boar
   const frameNames = new Map<string, string>();
   frameElements.forEach((frame, index) => frameNames.set(frame.id, frame.frameName ?? `Frame ${index + 1}`));
   const frameNameOf = (frameId: string | null): string | null => (frameId === null ? null : (frameNames.get(frameId) ?? null));
-  const orderedFrames = readingSort(frameElements, () => 0, (f) => center(f.box));
+  const orderedFrames = readingSort(
+    frameElements,
+    () => 0,
+    (f) => center(f.box),
+  );
   const frameRank = new Map(orderedFrames.map((f, index) => [f.id, index]));
   const rankOfFrame = (frameId: string | null): number => (frameId === null ? -1 : (frameRank.get(frameId) ?? -1));
 
@@ -170,9 +174,7 @@ export function sceneToGraph(elements: readonly Record<string, unknown>[]): Boar
   // Free text inside an unlabeled shape labels it; the smallest containing box wins.
   const containedTexts = new Map<string, Element[]>();
   const stillFree: Element[] = [];
-  const candidates = [...nodes.values()]
-    .filter((n) => n.shape !== "text")
-    .flatMap((node) => node.rects.map((rect) => ({ node, rect, area: rect.w * rect.h })));
+  const candidates = [...nodes.values()].filter((n) => n.shape !== "text").flatMap((node) => node.rects.map((rect) => ({ node, rect, area: rect.w * rect.h })));
   for (const text of remainingFree) {
     const middle = center(text.box);
     let best: (typeof candidates)[number] | null = null;
@@ -252,19 +254,31 @@ export function sceneToGraph(elements: readonly Record<string, unknown>[]): Boar
   }
 
   // Order everything: by frame, then top to bottom, left to right.
-  const sortedNodes = readingSort(nodeList, (n) => rankOfFrame(n.frameId), (n) => center(n.extent));
+  const sortedNodes = readingSort(
+    nodeList,
+    (n) => rankOfFrame(n.frameId),
+    (n) => center(n.extent),
+  );
   const nodeRank = new Map(sortedNodes.map((n, index) => [n.key, index]));
   const rankOfNode = (key: string | null): number => (key === null ? Number.MAX_SAFE_INTEGER : (nodeRank.get(key) ?? Number.MAX_SAFE_INTEGER));
   edges.sort((a, b) => rankOfNode(a.edge.from) - rankOfNode(b.edge.from) || rankOfNode(a.edge.to) - rankOfNode(b.edge.to) || a.seq - b.seq);
 
-  const sortedFree = readingSort(stillFree, (t) => rankOfFrame(t.frameId), (t) => center(t.box));
+  const sortedFree = readingSort(
+    stillFree,
+    (t) => rankOfFrame(t.frameId),
+    (t) => center(t.box),
+  );
 
   const opaqueItems = parsed.filter((e) => {
     const group = outerGroup(e);
     if (group !== null && nodeGroups.has(group)) return false;
     return e.cls === "opaque" || (e.cls === "edge" && e.closed);
   });
-  const sortedOpaque = readingSort(opaqueItems, (e) => rankOfFrame(e.frameId), (e) => center(e.box));
+  const sortedOpaque = readingSort(
+    opaqueItems,
+    (e) => rankOfFrame(e.frameId),
+    (e) => center(e.box),
+  );
 
   // Warnings
   const warnings: string[] = [];
@@ -291,18 +305,12 @@ export function sceneToGraph(elements: readonly Record<string, unknown>[]): Boar
     }
     for (const node of sortedNodes) {
       if (connected.has(node.key)) continue;
-      warnings.push(
-        node.label === ""
-          ? `node near (${Math.round(node.extent.x)}, ${Math.round(node.extent.y)}) has no connections`
-          : `node [${node.label}] has no connections`,
-      );
+      warnings.push(node.label === "" ? `node near (${Math.round(node.extent.x)}, ${Math.round(node.extent.y)}) has no connections` : `node [${node.label}] has no connections`);
     }
   }
 
   return {
-    nodes: sortedNodes.map(
-      (n): GraphNode => ({ key: n.key, label: n.label, kind: n.kind, shape: n.shape, frame: frameNameOf(n.frameId) }),
-    ),
+    nodes: sortedNodes.map((n): GraphNode => ({ key: n.key, label: n.label, kind: n.kind, shape: n.shape, frame: frameNameOf(n.frameId) })),
     edges: edges.map((e) => e.edge),
     freeText: sortedFree.map((t) => ({ text: clip(t.text, MAX_FREE_TEXT_CHARS), frame: frameNameOf(t.frameId) })),
     frames: orderedFrames.map((f) => frameNames.get(f.id) ?? ""),
@@ -313,13 +321,7 @@ export function sceneToGraph(elements: readonly Record<string, unknown>[]): Boar
 
 /** Renders a graph in the stable text form the models read (see docs/SPEC.md section 7.2). Pure. */
 export function graphToText(graph: BoardGraph): string {
-  if (
-    graph.nodes.length === 0 &&
-    graph.edges.length === 0 &&
-    graph.freeText.length === 0 &&
-    graph.opaque.length === 0 &&
-    graph.warnings.length === 0
-  ) {
+  if (graph.nodes.length === 0 && graph.edges.length === 0 && graph.freeText.length === 0 && graph.opaque.length === 0 && graph.warnings.length === 0) {
     return "The board is empty.";
   }
 
@@ -327,7 +329,12 @@ export function graphToText(graph: BoardGraph): string {
   const endName = (key: string | null): string => (key === null ? "?" : `[${labelOf.get(key) ?? "?"}]`);
   const lines: string[] = [];
 
-  lines.push(...section("Nodes", graph.nodes.map((n) => `- [${n.label === "" ? "(no label)" : n.label}]${nodeSuffix(n)}${frameSuffix(n.frame)}`)));
+  lines.push(
+    ...section(
+      "Nodes",
+      graph.nodes.map((n) => `- [${n.label === "" ? "(no label)" : n.label}]${nodeSuffix(n)}${frameSuffix(n.frame)}`),
+    ),
+  );
   lines.push(
     ...section(
       "Edges",
@@ -533,7 +540,11 @@ function readingSort<T>(items: readonly T[], rank: (item: T) => number, middle: 
 }
 
 function joinTexts(texts: readonly Element[]): string {
-  const ordered = readingSort(texts, () => 0, (t) => center(t.box));
+  const ordered = readingSort(
+    texts,
+    () => 0,
+    (t) => center(t.box),
+  );
   return collapse(ordered.map((t) => t.text).join(" "));
 }
 

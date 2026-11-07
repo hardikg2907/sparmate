@@ -18,7 +18,12 @@ const OPTION = /^(stretch|company)[ \t]*:[ \t]*(.*)$/i;
 
 /** Values reach prompts, so keep them to one short line of plain words. */
 function cleanValue(raw: string): string | null {
-  const value = raw.replace(/[`{}<>\\]/g, "").replace(/\s+/g, " ").trim().slice(0, MAX_VALUE).trim();
+  const value = raw
+    .replace(/[`{}<>\\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_VALUE)
+    .trim();
   return value === "" ? null : value;
 }
 

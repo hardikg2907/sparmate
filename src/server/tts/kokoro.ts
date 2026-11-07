@@ -72,12 +72,7 @@ export class KokoroManager {
 
   /** Returns true only when every required binary, model and worker file is present on disk. */
   isAvailable(): boolean {
-    return (
-      existsSync(this.paths.python) &&
-      existsSync(this.paths.onnx) &&
-      existsSync(this.paths.voices) &&
-      existsSync(this.paths.workerScript)
-    );
+    return existsSync(this.paths.python) && existsSync(this.paths.onnx) && existsSync(this.paths.voices) && existsSync(this.paths.workerScript);
   }
 
   /** Synthesizes text into 16-bit mono WAV audio bytes. */
@@ -258,13 +253,14 @@ export class KokoroManager {
       const child = this.ensureWorker();
       const id = randomUUID();
       const lang = kokoroVoiceLang(item.req.voice);
-      const payload = JSON.stringify({
-        id,
-        text: item.req.text,
-        voice: item.req.voice,
-        speed: item.req.speed,
-        lang,
-      }) + "\n";
+      const payload =
+        JSON.stringify({
+          id,
+          text: item.req.text,
+          voice: item.req.voice,
+          speed: item.req.speed,
+          lang,
+        }) + "\n";
 
       const timer = setTimeout(() => {
         this.handleTimeout();

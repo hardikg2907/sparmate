@@ -25,14 +25,7 @@ export async function initStudyKit(options: StudyKitOptions): Promise<{ created:
     return { created: [] };
   }
 
-  const files = [
-    "TRACKER.md",
-    "REVIEW.md",
-    "TEACHING.md",
-    "ABOUT_ME.md",
-    "notes/_TEMPLATE.md",
-    "lld/compile_flags.txt",
-  ];
+  const files = ["TRACKER.md", "REVIEW.md", "TEACHING.md", "ABOUT_ME.md", "notes/_TEMPLATE.md", "lld/compile_flags.txt"];
 
   const created: string[] = [];
   for (const rel of files) {

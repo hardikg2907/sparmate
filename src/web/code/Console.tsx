@@ -167,10 +167,7 @@ export function Console({ lastRun, running, onRun, onJumpTo, disabled }: Console
         </div>
       </header>
       <div
-        className={cn(
-          "ir-console__body min-h-0 flex-1 overflow-auto px-3 pt-2 pb-3 transition-opacity duration-150 focus-visible:outline-offset-[-2px]",
-          running && "opacity-55",
-        )}
+        className={cn("ir-console__body min-h-0 flex-1 overflow-auto px-3 pt-2 pb-3 transition-opacity duration-150 focus-visible:outline-offset-[-2px]", running && "opacity-55")}
         tabIndex={0}
         role="region"
         aria-label="Console output"
@@ -178,7 +175,11 @@ export function Console({ lastRun, running, onRun, onJumpTo, disabled }: Console
         {lastRun ? (
           <>
             <CompileSection compile={lastRun.compile} onJumpTo={onJumpTo} />
-            {lastRun.run ? <RunSection run={lastRun.run} /> : !lastRun.compile.ok && <p className="mt-4 text-ui text-muted-foreground">The program did not run because it did not compile.</p>}
+            {lastRun.run ? (
+              <RunSection run={lastRun.run} />
+            ) : (
+              !lastRun.compile.ok && <p className="mt-4 text-ui text-muted-foreground">The program did not run because it did not compile.</p>
+            )}
           </>
         ) : (
           <p className="text-ui text-muted-foreground">Nothing has run yet. Press Run to compile and run your program. Compiler messages and program output appear here.</p>

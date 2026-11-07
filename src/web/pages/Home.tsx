@@ -30,13 +30,7 @@ import {
   Tooltip,
   cn,
 } from "../components/ui";
-import {
-  filterAndSortProblems,
-  SORT_OPTION_LABELS,
-  STATUS_FILTER_LABELS,
-  type SortOption,
-  type StatusFilter,
-} from "../lib/filterProblems";
+import { filterAndSortProblems, SORT_OPTION_LABELS, STATUS_FILTER_LABELS, type SortOption, type StatusFilter } from "../lib/filterProblems";
 
 const STATUS_OPTIONS = (Object.keys(STATUS_FILTER_LABELS) as StatusFilter[]).map((key) => ({
   value: key,
@@ -47,17 +41,7 @@ const SORT_OPTIONS = (Object.keys(SORT_OPTION_LABELS) as SortOption[]).map((key)
   value: key,
   label: SORT_OPTION_LABELS[key],
 }));
-import {
-  MARK_LABEL,
-  MODE_LABEL,
-  TRACK_LABEL,
-  TRACK_TITLE,
-  VERDICT_TONE,
-  daysSince,
-  formatDate,
-  formatDateTime,
-  type Tone,
-} from "../lib/format";
+import { MARK_LABEL, MODE_LABEL, TRACK_LABEL, TRACK_TITLE, VERDICT_TONE, daysSince, formatDate, formatDateTime, type Tone } from "../lib/format";
 import { useCountUp } from "../hooks/useCountUp";
 import { pauseText } from "../lib/pause";
 import { VERDICT_LABEL } from "../lib/verdict";
@@ -106,21 +90,7 @@ function fillStep(index: number, at?: number): CSSProperties {
 }
 
 export function HomeView(props: HomeViewProps) {
-  const {
-    problems,
-    history,
-    error,
-    onRetry,
-    starting,
-    startError,
-    onStart,
-    discarding,
-    discardError,
-    onDiscard,
-    fakeAgent,
-    onOpenSettings,
-    durations,
-  } = props;
+  const { problems, history, error, onRetry, starting, startError, onStart, discarding, discardError, onDiscard, fakeAgent, onOpenSettings, durations } = props;
   const busy = starting !== null;
   const recommended = (problems ?? []).filter((p) => p.badge === "next");
   const redos = (problems ?? []).filter((p) => p.badge === "redo");
@@ -241,13 +211,7 @@ export function HomeView(props: HomeViewProps) {
         {discardError ? <ErrorLine text={discardError} /> : null}
 
         {error ? (
-          <Alert
-            tone="bad"
-            role="alert"
-            icon={<WarnIcon size={16} />}
-            title="The problem list could not be loaded"
-            actions={<Button onClick={onRetry}>Try again</Button>}
-          >
+          <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />} title="The problem list could not be loaded" actions={<Button onClick={onRetry}>Try again</Button>}>
             {error}
           </Alert>
         ) : null}
@@ -525,7 +489,10 @@ function OpenRound({ item, discarding, onDiscard }: { item: SessionHistoryItem; 
   const label = `${item.title}, ${formatDateTime(item.createdAt)}`;
   return (
     <div className="lift tint flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-warning-fill/40 bg-warning-soft px-5 py-4 text-warning">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning-fill bg-linear-to-b from-white/25 to-transparent text-warning-soft shadow-[0_4px_14px_-4px_var(--warning-fill)]" aria-hidden="true">
+      <span
+        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning-fill bg-linear-to-b from-white/25 to-transparent text-warning-soft shadow-[0_4px_14px_-4px_var(--warning-fill)]"
+        aria-hidden="true"
+      >
         {paused ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
       </span>
       <div className="min-w-[min(100%,16rem)] flex-1">
@@ -533,8 +500,7 @@ function OpenRound({ item, discarding, onDiscard }: { item: SessionHistoryItem; 
           {item.title} is {paused ? "paused" : "still open"}.
         </p>
         <p className="text-ui text-muted-foreground">
-          {MODE_LABEL[item.mode]} round on {TRACK_LABEL[item.track]}, started {formatDateTime(item.createdAt)}.
-          {paused ? ` ${pausedText(item)}` : ""}
+          {MODE_LABEL[item.mode]} round on {TRACK_LABEL[item.track]}, started {formatDateTime(item.createdAt)}.{paused ? ` ${pausedText(item)}` : ""}
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -614,23 +580,11 @@ function StartButtons({
   const labels = startLabels(problem);
   return (
     <div className="flex shrink-0 items-center gap-2">
-      <Button
-        size={size}
-        variant={emphasis ? "default" : "secondary"}
-        disabled={busy}
-        aria-label={labels.interview}
-        onClick={() => onChoose(problem, "interview")}
-      >
+      <Button size={size} variant={emphasis ? "default" : "secondary"} disabled={busy} aria-label={labels.interview} onClick={() => onChoose(problem, "interview")}>
         Start interview
       </Button>
       <Tooltip content={GUIDED_HINT}>
-        <Button
-          size={size}
-          variant={onHero ? "secondary" : "outline"}
-          disabled={busy}
-          aria-label={labels.guided}
-          onClick={() => onChoose(problem, "guided")}
-        >
+        <Button size={size} variant={onHero ? "secondary" : "outline"} disabled={busy} aria-label={labels.guided} onClick={() => onChoose(problem, "guided")}>
           Guided
         </Button>
       </Tooltip>
@@ -909,7 +863,13 @@ function StartDialog({
       width="max-w-2xl"
       footer={
         <>
-          {busy ? <Spinner label="Preparing the interviewer…" className="mr-auto text-ui" /> : <span className="mr-auto text-meta text-faint">Press <Kbd>Enter</Kbd> to start</span>}
+          {busy ? (
+            <Spinner label="Preparing the interviewer…" className="mr-auto text-ui" />
+          ) : (
+            <span className="mr-auto text-meta text-faint">
+              Press <Kbd>Enter</Kbd> to start
+            </span>
+          )}
           {busy ? (
             <Button disabled>Cancel</Button>
           ) : (
@@ -1137,11 +1097,7 @@ function CustomPrompt({
               </div>
             ) : null}
 
-            {job.confidence ? (
-              <p className="text-ui text-muted-foreground italic">
-                Confidence: {job.confidence}
-              </p>
-            ) : null}
+            {job.confidence ? <p className="text-ui text-muted-foreground italic">Confidence: {job.confidence}</p> : null}
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <Button
@@ -1202,19 +1158,30 @@ function CustomPrompt({
           <Card className="flex flex-col gap-4 p-5">
             <h3 className="text-ui font-semibold text-foreground">Preparing the interviewer brief</h3>
             <ol className="space-y-2.5 text-ui">
-              <li className={cn("flex items-center gap-2.5 transition-colors duration-200",job?.stage === "researching" ? "font-semibold text-foreground" : (job?.stage === "writing" || job?.stage === "checking") ? "text-muted-foreground" : "text-faint")}>
+              <li
+                className={cn(
+                  "flex items-center gap-2.5 transition-colors duration-200",
+                  job?.stage === "researching" ? "font-semibold text-foreground" : job?.stage === "writing" || job?.stage === "checking" ? "text-muted-foreground" : "text-faint",
+                )}
+              >
                 {job?.stage === "researching" ? (
                   <Spinner label="" className="size-4" />
-                ) : (job?.stage === "writing" || job?.stage === "checking") ? (
+                ) : job?.stage === "writing" || job?.stage === "checking" ? (
                   <CheckIcon size={16} className="text-success" />
                 ) : (
                   <span className="size-4 rounded-full border border-border inline-block" />
                 )}
                 <span>
-                  Researching{job && job.searches + job.pages > 0 ? `: ${job.searches} ${job.searches === 1 ? "search" : "searches"}, ${job.pages} ${job.pages === 1 ? "page" : "pages"}` : ""}
+                  Researching
+                  {job && job.searches + job.pages > 0 ? `: ${job.searches} ${job.searches === 1 ? "search" : "searches"}, ${job.pages} ${job.pages === 1 ? "page" : "pages"}` : ""}
                 </span>
               </li>
-              <li className={cn("flex items-center gap-2.5 transition-colors duration-200",job?.stage === "writing" ? "font-semibold text-foreground" : job?.stage === "checking" ? "text-muted-foreground" : "text-faint")}>
+              <li
+                className={cn(
+                  "flex items-center gap-2.5 transition-colors duration-200",
+                  job?.stage === "writing" ? "font-semibold text-foreground" : job?.stage === "checking" ? "text-muted-foreground" : "text-faint",
+                )}
+              >
                 {job?.stage === "writing" ? (
                   <Spinner label="" className="size-4" />
                 ) : job?.stage === "checking" ? (
@@ -1224,23 +1191,14 @@ function CustomPrompt({
                 )}
                 <span>Writing the brief</span>
               </li>
-              <li className={cn("flex items-center gap-2.5 transition-colors duration-200",job?.stage === "checking" ? "font-semibold text-foreground" : "text-faint")}>
-                {job?.stage === "checking" ? (
-                  <Spinner label="" className="size-4" />
-                ) : (
-                  <span className="size-4 rounded-full border border-border inline-block" />
-                )}
+              <li className={cn("flex items-center gap-2.5 transition-colors duration-200", job?.stage === "checking" ? "font-semibold text-foreground" : "text-faint")}>
+                {job?.stage === "checking" ? <Spinner label="" className="size-4" /> : <span className="size-4 rounded-full border border-border inline-block" />}
                 <span>Checking facts</span>
               </li>
             </ol>
             <p className="text-meta text-faint">Web search and verification take about a minute.</p>
             <div className="pt-1">
-              <Button
-                variant="ghost"
-                disabled={busy || cancelling}
-                busy={cancelling}
-                onClick={cancelPreparation}
-              >
+              <Button variant="ghost" disabled={busy || cancelling} busy={cancelling} onClick={cancelPreparation}>
                 Cancel
               </Button>
             </div>
@@ -1360,7 +1318,8 @@ function HistorySection({
                     <tr key={item.id} className="transition-colors hover:bg-accent/40">
                       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-meta tabular-nums text-muted-foreground">{formatDateTime(item.createdAt)}</td>
                       <td className="px-4 py-2.5">
-                        <span className="text-body font-semibold">{item.title}</span> <span className="ml-1 text-meta font-semibold text-muted-foreground">{TRACK_LABEL[item.track]}</span>
+                        <span className="text-body font-semibold">{item.title}</span>{" "}
+                        <span className="ml-1 text-meta font-semibold text-muted-foreground">{TRACK_LABEL[item.track]}</span>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">{MODE_LABEL[item.mode]}</td>
                       <td className="px-4 py-2.5">

@@ -40,11 +40,7 @@ export function matchesStatus(problem: ProblemSummary, filter: StatusFilter): bo
 }
 
 /** Pure filter and sort pipeline for a track problem list. */
-export function filterAndSortProblems(
-  problems: ProblemSummary[],
-  filter: StatusFilter,
-  sort: SortOption,
-): ProblemSummary[] {
+export function filterAndSortProblems(problems: ProblemSummary[], filter: StatusFilter, sort: SortOption): ProblemSummary[] {
   const filtered = filter === "all" ? problems.slice() : problems.filter((p) => matchesStatus(p, filter));
 
   if (sort === "tracker") {

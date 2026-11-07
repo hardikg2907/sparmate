@@ -23,12 +23,7 @@ export function ReferenceAnswer({ reference }: { reference: NonNullable<PublicSe
                 <ul className="space-y-1 text-ui">
                   {reference.sources.map((s, idx) => (
                     <li key={idx} className="flex flex-wrap items-baseline gap-x-2">
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="text-primary-text hover:underline"
-                      >
+                      <a href={s.url} target="_blank" rel="noreferrer noopener" className="text-primary-text hover:underline">
                         {s.title}
                       </a>
                       <span className="break-all text-meta text-muted-foreground">({s.url})</span>

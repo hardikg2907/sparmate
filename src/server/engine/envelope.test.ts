@@ -134,14 +134,27 @@ describe("transcript and code text", () => {
       { id: "3", at: 70_000, wall: "", channel: "interview", role: "system", text: "clock: phase end", kind: "clock", hidden: true },
       { id: "4", at: 80_000, wall: "", channel: "coach", role: "coach", text: "not here" },
     ];
-    expect(transcriptLines(entries, "interview")).toBe(
-      "[00:00] interviewer: Let's start.\n[01:05] candidate: Requirements first.\n[01:10] (event) clock: phase end",
-    );
+    expect(transcriptLines(entries, "interview")).toBe("[00:00] interviewer: Let's start.\n[01:05] candidate: Requirements first.\n[01:10] (event) clock: phase end");
   });
 
   it("keeps only the interview chat from every visit to a step", () => {
-    const e = (id: string, at: number, extra: Partial<TranscriptEntry> = {}): TranscriptEntry => ({ id, at, wall: "", channel: "interview", role: "candidate", text: id, ...extra });
-    const entries = [e("a", 10), e("b", 120), e("c", 130, { hidden: true, role: "system" }), e("d", 140, { channel: "coach" }), e("e", 250), e("f", 260, { kind: "phase", role: "system" })];
+    const e = (id: string, at: number, extra: Partial<TranscriptEntry> = {}): TranscriptEntry => ({
+      id,
+      at,
+      wall: "",
+      channel: "interview",
+      role: "candidate",
+      text: id,
+      ...extra,
+    });
+    const entries = [
+      e("a", 10),
+      e("b", 120),
+      e("c", 130, { hidden: true, role: "system" }),
+      e("d", 140, { channel: "coach" }),
+      e("e", 250),
+      e("f", 260, { kind: "phase", role: "system" }),
+    ];
     const history = [
       { phase: "requirements", at: 0 },
       { phase: "capacity", at: 100 },
@@ -168,9 +181,9 @@ describe("transcript and code text", () => {
   });
 
   it("summarizes compile failures and timeouts", () => {
-    expect(
-      runSummary({ compile: { ok: false, diagnostics: [{ line: 1, column: 1, severity: "error", message: "x" }], stderr: "", durationMs: 1 }, run: null }),
-    ).toBe("compile failed with 1 error");
+    expect(runSummary({ compile: { ok: false, diagnostics: [{ line: 1, column: 1, severity: "error", message: "x" }], stderr: "", durationMs: 1 }, run: null })).toBe(
+      "compile failed with 1 error",
+    );
     expect(
       runSummary({
         compile: { ok: true, diagnostics: [], stderr: "", durationMs: 1 },

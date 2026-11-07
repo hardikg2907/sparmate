@@ -13,7 +13,11 @@ export interface DictationUpdate {
   hearing: boolean;
 }
 
-const join = (...parts: string[]) => parts.map((p) => p.trim()).filter(Boolean).join(" ");
+const join = (...parts: string[]) =>
+  parts
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(" ");
 
 /**
  * The chat box while he dictates: the text it held, then each finished phrase, then the phrase still being heard.

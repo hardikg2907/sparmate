@@ -1,15 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { phasePlan } from "../../shared/phases";
-import {
-  CheckpointScheduler,
-  dueCheckpoints,
-  formatClock,
-  formatStamp,
-  phaseWindows,
-  planCheckpoints,
-  roundTimeMs,
-  type Checkpoint,
-} from "./clock";
+import { CheckpointScheduler, dueCheckpoints, formatClock, formatStamp, phaseWindows, planCheckpoints, roundTimeMs, type Checkpoint } from "./clock";
 
 const MIN = 60_000;
 

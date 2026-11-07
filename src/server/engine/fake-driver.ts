@@ -39,7 +39,10 @@ async function streamOut(text: string, handlers: TurnHandlers, chunkDelayMs: num
 }
 
 function findPhase(phases: readonly PhaseDef[], wanted: string): PhaseDef | undefined {
-  const w = wanted.trim().toLowerCase().replace(/[.!?]+$/, "");
+  const w = wanted
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/, "");
   return phases.find((p) => w.startsWith(p.label.toLowerCase()) || w.startsWith(p.id.replace(/_/g, " ")) || w.startsWith(p.id));
 }
 
@@ -48,8 +51,16 @@ export function firstItem(section: string | undefined): string {
   const line = (section ?? "").split("\n").find((l) => /^\s*1\.\s/.test(l)) ?? "";
   const quoted = /"([^"]{10,})"/.exec(line);
   if (quoted?.[1]) return quoted[1];
-  const plain = line.replace(/^\s*1\.\s*/, "").replace(/\*\*[^*]*\*\*\s*/, "").trim();
-  return plain.split(/(?<=\.)\s/).slice(0, 2).join(" ") || "Let's add one new requirement.";
+  const plain = line
+    .replace(/^\s*1\.\s*/, "")
+    .replace(/\*\*[^*]*\*\*\s*/, "")
+    .trim();
+  return (
+    plain
+      .split(/(?<=\.)\s/)
+      .slice(0, 2)
+      .join(" ") || "Let's add one new requirement."
+  );
 }
 
 function currentPhase(facts: FakeFacts): PhaseDef | undefined {
@@ -263,7 +274,29 @@ function fakeScorecard(facts: FakeFacts): Scorecard {
   };
 }
 
-const STOP_WORDS = new Set(["about", "every", "their", "there", "which", "would", "after", "before", "with", "through", "under", "where", "while", "given", "within", "without", "never", "demo", "entity", "walk", "box"]);
+const STOP_WORDS = new Set([
+  "about",
+  "every",
+  "their",
+  "there",
+  "which",
+  "would",
+  "after",
+  "before",
+  "with",
+  "through",
+  "under",
+  "where",
+  "while",
+  "given",
+  "within",
+  "without",
+  "never",
+  "demo",
+  "entity",
+  "walk",
+  "box",
+]);
 
 function keywords(label: string): string[] {
   return [...new Set(label.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) ?? [])].filter((w) => !STOP_WORDS.has(w));
@@ -286,18 +319,27 @@ function boardQuote(line: string): string | null {
  * carries fewer. It always claims one more item with a quote he never said, so the server's quote check must
  * refuse that claim.
  */
-function fakeCheck(facts: FakeFacts): { items: { id: string; state: "covered" | "partial" | "missing"; source: "chat" | "board" | "code" | "none"; quote: string; detail: string }[] } {
+function fakeCheck(facts: FakeFacts): {
+  items: { id: string; state: "covered" | "partial" | "missing"; source: "chat" | "board" | "code" | "none"; quote: string; detail: string }[];
+} {
   const lines = (facts.candidateLines ?? []).map((l) => l.trim()).filter((l) => l !== "");
   const labels = (facts.frameText ?? "").split("\n").flatMap((l) => {
     const q = boardQuote(l);
     return q ? [q] : [];
   });
-  const code = (facts.codeText ?? "").split("\n").map((l) => l.trim()).filter((l) => l !== "");
+  const code = (facts.codeText ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
   let invented = false;
   const items = (facts.checkItems ?? []).map((item) => {
     const words = keywords(item.label);
     const need = Math.max(1, Math.ceil(words.length / 2));
-    const sources: ["chat" | "board" | "code", readonly string[]][] = [["chat", lines], ["board", labels], ["code", code]];
+    const sources: ["chat" | "board" | "code", readonly string[]][] = [
+      ["chat", lines],
+      ["board", labels],
+      ["code", code],
+    ];
     let best: { source: "chat" | "board" | "code"; quote: string; hits: number } | null = null;
     for (const [source, texts] of sources) {
       for (const text of texts) {
@@ -350,11 +392,7 @@ function fakeScribeOps(facts: FakeFacts): BookkeepingOp[] {
       "Result: not yet asked.",
     ].join("\n"),
   });
-  const body = [
-    `The round practised ${p.meta.title} in ${facts.mode ?? "interview"} mode.`,
-    "",
-    `Top gap: ${facts.scorecard?.gaps[0]?.title ?? "none recorded"}.`,
-  ].join("\n");
+  const body = [`The round practised ${p.meta.title} in ${facts.mode ?? "interview"} mode.`, "", `Top gap: ${facts.scorecard?.gaps[0]?.title ?? "none recorded"}.`].join("\n");
   if (facts.notesFileExists) {
     ops.push({ kind: "notes_append", path: p.meta.notesFile, content: `## Practice round · ${date}\n\n${body}\n` });
   } else {
@@ -400,15 +438,18 @@ async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
     case "brief-writer": {
       const example = facts.exampleProblem;
       if (!example) throw new DriverError("No example problem to copy.");
-      const words = (setup.turn.meta.candidateText ?? "Practice problem").replace(/[^A-Za-z0-9 ]+/g, " ").trim().split(/\s+/).slice(0, 5).join(" ");
+      const words = (setup.turn.meta.candidateText ?? "Practice problem")
+        .replace(/[^A-Za-z0-9 ]+/g, " ")
+        .trim()
+        .split(/\s+/)
+        .slice(0, 5)
+        .join(" ");
       setup.onToolUse?.("WebSearch", { query: words });
       setup.onToolUse?.("WebFetch", { url: "https://example.com/system-design" });
       return {
         meta: { title: `Custom: ${words}`.slice(0, 120), difficulty: example.meta.difficulty, tags: [...example.meta.tags] },
         body: example.body,
-        sources: [
-          { title: "Example Architecture Reference", url: "https://example.com/system-design" },
-        ],
+        sources: [{ title: "Example Architecture Reference", url: "https://example.com/system-design" }],
         confidence: "Verified against standard industry reference architectures.",
       };
     }

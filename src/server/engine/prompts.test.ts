@@ -3,18 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LIMITS } from "../../shared/protocol";
 import { APP_ROOT } from "./config";
-import {
-  COMMON_VARS,
-  PROMPT_VARS,
-  PromptError,
-  PromptLoader,
-  extensionMinute,
-  formatPhasePlan,
-  renderPrompt,
-  commonVars,
-  sectionList,
-  type PromptName,
-} from "./prompts";
+import { COMMON_VARS, PROMPT_VARS, PromptError, PromptLoader, extensionMinute, formatPhasePlan, renderPrompt, commonVars, sectionList, type PromptName } from "./prompts";
 
 describe("renderPrompt", () => {
   it("replaces every known placeholder", () => {
@@ -112,7 +101,6 @@ describe("candidate profile lookup", () => {
     }
   });
 });
-
 
 describe("target level in prompts", () => {
   const input = { date: "2026-01-01", problemTitle: "Cache", track: "hld", mode: "interview", durationMin: 45 } as const;

@@ -6,7 +6,12 @@ export const Tabs = TabsPrimitive.Root;
 
 /** Pill tabs on a muted track, for switching between views of the same list. */
 export function TabsList({ className, ...rest }: ComponentProps<typeof TabsPrimitive.List>) {
-  return <TabsPrimitive.List className={cn("inline-flex h-9 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground ring-1 ring-inset ring-border-strong/50", className)} {...rest} />;
+  return (
+    <TabsPrimitive.List
+      className={cn("inline-flex h-9 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground ring-1 ring-inset ring-border-strong/50", className)}
+      {...rest}
+    />
+  );
 }
 
 export function TabsTrigger({ className, ...rest }: ComponentProps<typeof TabsPrimitive.Trigger>) {
@@ -39,5 +44,7 @@ export function TabsUnderlineTrigger({ className, ...rest }: ComponentProps<type
 }
 
 export function TabsContent({ className, ...rest }: ComponentProps<typeof TabsPrimitive.Content>) {
-  return <TabsPrimitive.Content className={cn("outline-none data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:duration-200", className)} {...rest} />;
+  return (
+    <TabsPrimitive.Content className={cn("outline-none data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:duration-200", className)} {...rest} />
+  );
 }

@@ -102,12 +102,7 @@ interface ArrowOptions extends Base {
 }
 
 /** An arrow drawn between two absolute points. Pass `from` and `to` shapes to bind the ends like the editor does. */
-export function arrow(
-  id: string,
-  start: [number, number],
-  end: [number, number],
-  options: ArrowOptions & { from?: Element; to?: Element } = {},
-): Element[] {
+export function arrow(id: string, start: [number, number], end: [number, number], options: ArrowOptions & { from?: Element; to?: Element } = {}): Element[] {
   const type = options.type ?? "arrow";
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];

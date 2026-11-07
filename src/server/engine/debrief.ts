@@ -82,12 +82,7 @@ export function stepSources(
       .filter((e) => e.role === "candidate")
       .map((e) => e.text);
     const scope = codeScopeFor(session.track, p.id);
-    const code =
-      finalCode === null || scope === null
-        ? ""
-        : scope === "file"
-          ? finalCode
-          : unnumberedCode(stepCodeText(finalCode, session.stepCode?.[p.id] ?? []));
+    const code = finalCode === null || scope === null ? "" : scope === "file" ? finalCode : unnumberedCode(stepCodeText(finalCode, session.stepCode?.[p.id] ?? []));
     out[p.id] = {
       candidate: chat.concat(session.stepNotes?.[p.id] ?? []).join("\n"),
       board: opts.stepBoard?.[p.id] ?? session.board.graphText,
@@ -161,21 +156,14 @@ export function judgeMessage(input: JudgeInput, retryNote: string | null = null)
   return parts.join("\n");
 }
 
-export function failedRatio(
-  checks: readonly { verified: boolean }[],
-  stepChecks: readonly { verified: boolean }[] = [],
-): number {
+export function failedRatio(checks: readonly { verified: boolean }[], stepChecks: readonly { verified: boolean }[] = []): number {
   const total = checks.length + stepChecks.length;
   if (total === 0) return 0;
   const failed = checks.filter((c) => !c.verified).length + stepChecks.filter((c) => !c.verified).length;
   return failed / total;
 }
 
-export function failedQuoteNote(
-  card: JudgedCard,
-  checks: readonly QuoteCheck[],
-  stepChecks: readonly StepQuoteCheck[] = [],
-): string {
+export function failedQuoteNote(card: JudgedCard, checks: readonly QuoteCheck[], stepChecks: readonly StepQuoteCheck[] = []): string {
   const lines: string[] = [];
   for (const c of checks) {
     if (!c.verified) {
@@ -241,14 +229,7 @@ function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions
         : at("navigation") === 1 || at("design") === 1 || ones >= 2 || count(3) < 3
           ? "no_hire"
           : "lean_no_hire";
-  const senior: Verdict =
-    allThree && four >= 5
-      ? "strong_hire"
-      : allThree && four >= 3 && fours("depth", "scale_reliability")
-        ? "hire"
-        : !allThree
-          ? "no_hire"
-          : "lean_no_hire";
+  const senior: Verdict = allThree && four >= 5 ? "strong_hire" : allThree && four >= 3 && fours("depth", "scale_reliability") ? "hire" : !allThree ? "no_hire" : "lean_no_hire";
   return { sde2, senior };
 }
 

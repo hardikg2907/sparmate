@@ -19,23 +19,14 @@ export const DIALOG_CONTENT_MOTION =
 export const DIALOG_SURFACE =
   "fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-border bg-card bg-linear-to-b from-raised to-card to-40% text-card-foreground surface-float outline-none";
 
-export function DialogContent({
-  className,
-  children,
-  hideClose,
-  onEscapeKeyDown,
-  ...rest
-}: ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
+export function DialogContent({ className, children, hideClose, onEscapeKeyDown, ...rest }: ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content className={cn(DIALOG_SURFACE, DIALOG_CONTENT_MOTION, "max-w-xl", className)} onEscapeKeyDown={containEscape(onEscapeKeyDown)} {...rest}>
         {/* First in the DOM, so a dialog with no chosen focus target opens with focus on Close, not on a choice. */}
         {hideClose ? null : (
-          <DialogPrimitive.Close
-            aria-label="Close"
-            className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
+          <DialogPrimitive.Close aria-label="Close" className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             <CrossIcon size={18} />
           </DialogPrimitive.Close>
         )}

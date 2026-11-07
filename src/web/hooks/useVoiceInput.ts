@@ -37,17 +37,7 @@ export interface VoiceInputState {
 }
 
 /** Provides continuous on-device speech-to-text input with half-duplex pause detection. */
-export function useVoiceInput({
-  disabled,
-  isActive = true,
-  isSpeaking,
-  useHeadphones,
-  sendMode,
-  onSend,
-  onBargeIn,
-  draft,
-  setDraft,
-}: UseVoiceInputProps): VoiceInputState {
+export function useVoiceInput({ disabled, isActive = true, isSpeaking, useHeadphones, sendMode, onSend, onBargeIn, draft, setDraft }: UseVoiceInputProps): VoiceInputState {
   const [availability, setAvailability] = useState<SpeechRecognitionAvailability>({
     status: "unavailable",
     reason: REASON_ON_DEVICE_UNAVAILABLE,
@@ -100,8 +90,7 @@ export function useVoiceInput({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const SpeechClass = ((window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition) as SpeechRecognitionConstructor | undefined;
+    const SpeechClass = ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) as SpeechRecognitionConstructor | undefined;
     void checkSpeechRecognitionAvailability(SpeechClass).then(setAvailability);
   }, []);
 
@@ -330,12 +319,7 @@ export function useVoiceInput({
     }
   }, [availability]);
 
-  const disabledReason =
-    disabled || !isActive
-      ? "Voice input is paused"
-      : availability.status !== "available"
-        ? REASON_ON_DEVICE_UNAVAILABLE
-        : null;
+  const disabledReason = disabled || !isActive ? "Voice input is paused" : availability.status !== "available" ? REASON_ON_DEVICE_UNAVAILABLE : null;
 
   return {
     availability,

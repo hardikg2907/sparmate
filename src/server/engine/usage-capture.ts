@@ -146,10 +146,7 @@ const PRICES_PER_MTOK: Record<string, ModelPrice> = {
 export const DEAREST_MODEL = "claude-opus-5-5";
 
 /** Cost of a call from its token counts, or null for a model with no known price. */
-export function estimateCostUsd(
-  model: string,
-  t: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number },
-): number | null {
+export function estimateCostUsd(model: string, t: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number }): number | null {
   const p = PRICES_PER_MTOK[model.replace(/\[.*$/, "")];
   if (!p) return null;
   return (t.inputTokens * p.input + t.outputTokens * p.output + t.cacheReadTokens * p.cacheRead + t.cacheCreationTokens * p.cacheWrite) / 1_000_000;

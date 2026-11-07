@@ -145,8 +145,7 @@ function setup(driver: Driver, _mode: Session["mode"] = "interview", studyRoot =
   };
 }
 
-const interviewerTexts = (msgs: ServerMsg[]) =>
-  msgs.flatMap((m) => (m.type === "chat.message" && m.entry.role === "interviewer" ? [m.entry.text] : []));
+const interviewerTexts = (msgs: ServerMsg[]) => msgs.flatMap((m) => (m.type === "chat.message" && m.entry.role === "interviewer" ? [m.entry.text] : []));
 
 describe("a full interview round on the clock", () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
@@ -553,7 +552,6 @@ describe("pausing when nobody is watching", () => {
     rt.dispose();
   });
 });
-
 
 describe("the step checker", () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
@@ -1128,7 +1126,15 @@ describe("the coach and the scorecard gaps", () => {
   it("opens the coach again after a restart when only a divider was saved", async () => {
     const { rt, session } = await coachRoom();
     rt.dispose();
-    session.transcript.splice(0, session.transcript.length, { id: "d1", at: 0, wall: new Date().toISOString(), channel: "coach", role: "system", kind: "gap", text: "Now on: Hot keys" });
+    session.transcript.splice(0, session.transcript.length, {
+      id: "d1",
+      at: 0,
+      wall: new Date().toISOString(),
+      channel: "coach",
+      role: "system",
+      kind: "gap",
+      text: "Now on: Hot keys",
+    });
     const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
     const again = new SessionRuntime(t.deps, session, await urlShortener());
     await again.init();

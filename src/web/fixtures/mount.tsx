@@ -117,7 +117,15 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
       timeUp,
     });
   } else if (name === "debrief-hld") {
-    server = new FakeServer({ session: legacy(hldDebrief(status)), board: board.hldBoard(), code: null, boardImageUrl: hldImage, proposal: fixtureProposal(), staleOnApply, offline });
+    server = new FakeServer({
+      session: legacy(hldDebrief(status)),
+      board: board.hldBoard(),
+      code: null,
+      boardImageUrl: hldImage,
+      proposal: fixtureProposal(),
+      staleOnApply,
+      offline,
+    });
   } else {
     server = new FakeServer({
       session: legacy(lldDebrief(status)),
@@ -160,9 +168,7 @@ function FixtureHome({
   const [open, setOpen] = useState(openSettings);
   const [settings, setSettings] = useState(fixtureSettings(theme));
   const [starting, setStarting] = useState<string | null>(preparing ? "custom:interview" : null);
-  const [history, setHistory] = useState(() =>
-    noUnfinished ? fixtureHistory.filter((item) => item.status === "debriefed" || item.status === "failed") : fixtureHistory,
-  );
+  const [history, setHistory] = useState(() => (noUnfinished ? fixtureHistory.filter((item) => item.status === "debriefed" || item.status === "failed") : fixtureHistory));
 
   const pretendToStart = (key: string) => {
     setStarting(key);

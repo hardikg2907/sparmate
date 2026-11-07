@@ -158,9 +158,7 @@ export function buildLinuxSandboxInvocation(
   const bwrap = findExecutable([BWRAP_EXEC, "/usr/local/bin/bwrap", "/bin/bwrap"]) ?? BWRAP_EXEC;
   const prlimit = findExecutable([PRLIMIT_EXEC, "/usr/local/bin/prlimit", "/bin/prlimit"]);
 
-  const args: string[] = [
-    "--ro-bind", "/usr", "/usr",
-  ];
+  const args: string[] = ["--ro-bind", "/usr", "/usr"];
 
   for (const name of ["bin", "lib", "lib64", "sbin"]) {
     const rootPath = `/${name}`;
@@ -186,20 +184,10 @@ export function buildLinuxSandboxInvocation(
   args.push("--tmpfs", "/tmp");
 
   for (const path of options.readOnly ?? []) args.push("--ro-bind", path, path);
-  args.push(
-    "--bind", writableDir, writableDir,
-    "--unshare-all",
-    "--die-with-parent",
-  );
+  args.push("--bind", writableDir, writableDir, "--unshare-all", "--die-with-parent");
 
   if (prlimit) {
-    args.push(
-      prlimit,
-      `--as=${limits.addressSpaceBytes}`,
-      `--cpu=${limits.cpuSeconds}`,
-      `--nproc=${limits.processes}`,
-      `--fsize=${limits.fileBytes}`,
-    );
+    args.push(prlimit, `--as=${limits.addressSpaceBytes}`, `--cpu=${limits.cpuSeconds}`, `--nproc=${limits.processes}`, `--fsize=${limits.fileBytes}`);
   }
   args.push(program, ...(options.args ?? []));
 
@@ -215,8 +203,7 @@ export function realHome(): string {
   }
 }
 
-const DEVICE_WRITES =
-  '(allow file-write* (literal "/dev/null") (literal "/dev/tty") (literal "/dev/stdout") (literal "/dev/stderr") (literal "/dev/dtracehelper"))';
+const DEVICE_WRITES = '(allow file-write* (literal "/dev/null") (literal "/dev/tty") (literal "/dev/stdout") (literal "/dev/stderr") (literal "/dev/dtracehelper"))';
 
 function quote(path: string): string {
   if (/\p{Cc}/u.test(path)) throw new Error("Unsafe path for a sandbox profile");

@@ -33,12 +33,7 @@ interface ActiveStream {
 }
 
 /** Streams incoming interviewer, guide and coach replies sentence by sentence via Kokoro TTS or system voice. */
-export function useVoiceOutput({
-  items,
-  disabled,
-  voiceSettings,
-  voices,
-}: UseVoiceOutputProps): VoiceOutputState {
+export function useVoiceOutput({ items, disabled, voiceSettings, voices }: UseVoiceOutputProps): VoiceOutputState {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   // History is marked heard on the first render that has any, so a reload never reads old replies aloud.

@@ -13,7 +13,15 @@ const STAGES: { id: Exclude<ProgressStage, "done">; label: string; lldOnly?: boo
 
 export function DebriefProgress({ track, debrief, children }: { track: Track; debrief: DebriefState; children?: ReactNode }) {
   const stages = STAGES.filter((stage) => !stage.lldOnly || track === "lld");
-  const current = debrief.stage === null ? 0 : debrief.stage === "done" ? stages.length : Math.max(0, stages.findIndex((s) => s.id === debrief.stage));
+  const current =
+    debrief.stage === null
+      ? 0
+      : debrief.stage === "done"
+        ? stages.length
+        : Math.max(
+            0,
+            stages.findIndex((s) => s.id === debrief.stage),
+          );
   return (
     <div className="space-y-10">
       <section role="status" aria-live="polite">

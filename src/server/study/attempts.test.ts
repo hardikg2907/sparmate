@@ -25,11 +25,7 @@ describe("createAttemptFile", () => {
     const first = await createAttemptFile(root, "parking-lot", "Parking Lot", "2026-10-30");
     const second = await createAttemptFile(root, "parking-lot", "Parking Lot", "2026-10-30");
     const third = await createAttemptFile(root, "parking-lot", "Parking Lot", "2026-10-30");
-    expect([first, second, third]).toEqual([
-      "lld/parking-lot/attempt-2026-10-30.cpp",
-      "lld/parking-lot/attempt-2026-10-30-2.cpp",
-      "lld/parking-lot/attempt-2026-10-30-3.cpp",
-    ]);
+    expect([first, second, third]).toEqual(["lld/parking-lot/attempt-2026-10-30.cpp", "lld/parking-lot/attempt-2026-10-30-2.cpp", "lld/parking-lot/attempt-2026-10-30-3.cpp"]);
   });
 
   it("keeps the user's own edits when the same day starts again", async () => {
@@ -159,17 +155,22 @@ describe("removeAttemptIfUntouched", () => {
     expect(await removeAttemptIfUntouched(root, "lld/not-there/attempt-2026-10-30.cpp", "Parking Lot")).toBe("missing");
   });
 
-  it.each(["TRACKER.md", "notes/x.md", "lld/parking-lot/other.cpp", "lld/../TRACKER.md", "/etc/passwd", "lld/parking-lot/attempt-2026-10-30.cpp/../../../TRACKER.md", "lld//attempt-2026-10-30.cpp"])(
-    "refuses the path %j without touching anything",
-    async (path) => {
-      await writeFile(join(root, "TRACKER.md"), "- [ ] keep\n");
-      await mkdir(join(root, "notes"), { recursive: true });
-      await writeFile(join(root, "notes", "x.md"), "keep\n");
-      await expect(removeAttemptIfUntouched(root, path, "T")).rejects.toThrow("Invalid attempt file path");
-      expect(await readFile(join(root, "TRACKER.md"), "utf8")).toBe("- [ ] keep\n");
-      expect(await readFile(join(root, "notes", "x.md"), "utf8")).toBe("keep\n");
-    },
-  );
+  it.each([
+    "TRACKER.md",
+    "notes/x.md",
+    "lld/parking-lot/other.cpp",
+    "lld/../TRACKER.md",
+    "/etc/passwd",
+    "lld/parking-lot/attempt-2026-10-30.cpp/../../../TRACKER.md",
+    "lld//attempt-2026-10-30.cpp",
+  ])("refuses the path %j without touching anything", async (path) => {
+    await writeFile(join(root, "TRACKER.md"), "- [ ] keep\n");
+    await mkdir(join(root, "notes"), { recursive: true });
+    await writeFile(join(root, "notes", "x.md"), "keep\n");
+    await expect(removeAttemptIfUntouched(root, path, "T")).rejects.toThrow("Invalid attempt file path");
+    expect(await readFile(join(root, "TRACKER.md"), "utf8")).toBe("- [ ] keep\n");
+    expect(await readFile(join(root, "notes", "x.md"), "utf8")).toBe("keep\n");
+  });
 
   it("never deletes through a symlink at the file name, even one pointing at a header-only file", async () => {
     const real = join(root, "lld", "parking-lot", "real.txt");

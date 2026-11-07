@@ -7,11 +7,7 @@ export interface BulletMatch {
   suffix: string | null;
 }
 
-export type BulletLookup =
-  | { status: "ok"; match: BulletMatch }
-  | { status: "no_section" }
-  | { status: "not_found" }
-  | { status: "ambiguous" };
+export type BulletLookup = { status: "ok"; match: BulletMatch } | { status: "no_section" } | { status: "not_found" } | { status: "ambiguous" };
 
 export interface TableLocation {
   headerIndex: number;

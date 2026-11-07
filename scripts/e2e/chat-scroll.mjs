@@ -77,8 +77,7 @@ try {
       if (!busy) return;
     }
   };
-  const view = () =>
-    page.$eval(log$, (el) => ({ top: el.scrollTop, fromEnd: el.scrollHeight - el.scrollTop - el.clientHeight }));
+  const view = () => page.$eval(log$, (el) => ({ top: el.scrollTop, fromEnd: el.scrollHeight - el.scrollTop - el.clientHeight }));
 
   // Fill the log well past one screen so there is room to scroll.
   await idle();

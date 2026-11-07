@@ -48,7 +48,9 @@ describe("claude driver failure stats", () => {
 
   it("attaches stats to a one-shot result error", async () => {
     scripted.messages = [[result({ subtype: "error_during_execution", is_error: true })]];
-    const err = await driver().runOnce({ ...base, output: null }).catch((e) => e);
+    const err = await driver()
+      .runOnce({ ...base, output: null })
+      .catch((e) => e);
     expect(failureStats(err)?.outputTokens).toBe(40);
     expect(failureStats(err)?.costUsd).toBeCloseTo(0.05);
   });
@@ -56,7 +58,9 @@ describe("claude driver failure stats", () => {
   it("attaches stats to a schema-validation failure", async () => {
     scripted.messages = [[result({ structured_output: { a: "nope" } })]];
     const output = { schema: z.object({ a: z.number() }), jsonSchema: {}, fallbackJsonSchema: null };
-    const err = await driver().runOnce({ ...base, output }).catch((e) => e);
+    const err = await driver()
+      .runOnce({ ...base, output })
+      .catch((e) => e);
     expect(failureStats(err)?.inputTokens).toBe(3);
   });
 

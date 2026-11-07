@@ -291,57 +291,72 @@ export class UsageLedger {
     let estimatedCalls = 0;
     const sessionIds = new Set<string>();
 
-    const sessionMap = new Map<string, {
-      problemId: string | null;
-      date: string;
-      mode: Mode | null;
-      track: Track | null;
-      cost: number;
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadTokens: number;
-      cacheCreationTokens: number;
-      calls: number;
-      durationMs: number;
-    }>();
+    const sessionMap = new Map<
+      string,
+      {
+        problemId: string | null;
+        date: string;
+        mode: Mode | null;
+        track: Track | null;
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        calls: number;
+        durationMs: number;
+      }
+    >();
 
-    const problemMap = new Map<string, {
-      track: Track | null;
-      cost: number;
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadTokens: number;
-      cacheCreationTokens: number;
-      calls: number;
-      sessions: Set<string>;
-    }>();
+    const problemMap = new Map<
+      string,
+      {
+        track: Track | null;
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        calls: number;
+        sessions: Set<string>;
+      }
+    >();
 
-    const roleMap = new Map<string, {
-      cost: number;
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadTokens: number;
-      cacheCreationTokens: number;
-      calls: number;
-    }>();
+    const roleMap = new Map<
+      string,
+      {
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        calls: number;
+      }
+    >();
 
-    const modelMap = new Map<string, {
-      cost: number;
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadTokens: number;
-      cacheCreationTokens: number;
-      calls: number;
-    }>();
+    const modelMap = new Map<
+      string,
+      {
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        calls: number;
+      }
+    >();
 
-    const dayMap = new Map<string, {
-      cost: number;
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadTokens: number;
-      cacheCreationTokens: number;
-      calls: number;
-    }>();
+    const dayMap = new Map<
+      string,
+      {
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        calls: number;
+      }
+    >();
 
     for (const r of records) {
       const cost = r.costUsd ?? 0;
@@ -594,14 +609,17 @@ export class UsageLedger {
     let failedCalls = 0;
     let estimatedCalls = 0;
 
-    const roleMap = new Map<string, {
-      cost: number;
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadTokens: number;
-      cacheCreationTokens: number;
-      calls: number;
-    }>();
+    const roleMap = new Map<
+      string,
+      {
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        calls: number;
+      }
+    >();
 
     for (const r of roundRecords) {
       const cost = r.costUsd ?? 0;

@@ -395,15 +395,7 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
       )}
       <div className="ir-board__canvas">
         <div className="ir-board__canvas-inner">
-          <Excalidraw
-            excalidrawAPI={setApi}
-            initialData={initialData}
-            theme={theme}
-            viewModeEnabled={readOnly}
-            aiEnabled={false}
-            UIOptions={UI_OPTIONS}
-            onChange={handleChange}
-          >
+          <Excalidraw excalidrawAPI={setApi} initialData={initialData} theme={theme} viewModeEnabled={readOnly} aiEnabled={false} UIOptions={UI_OPTIONS} onChange={handleChange}>
             <MainMenu>
               <MainMenu.DefaultItems.SaveAsImage />
               <MainMenu.DefaultItems.ClearCanvas />

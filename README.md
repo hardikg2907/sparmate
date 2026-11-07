@@ -19,24 +19,24 @@
 - **Voice in and out.** Speak your answers and hear the interviewer's replies.
 - **A usage page.** See tokens and cost for each round, role and model.
 
-| Home | Debrief |
-|---|---|
+| Home                                                     | Debrief                                          |
+| -------------------------------------------------------- | ------------------------------------------------ |
 | ![Home page in light theme](docs/screens/home-light.png) | ![The judge's debrief](docs/screens/debrief.png) |
 
-| HLD room | LLD room |
-|---|---|
+| HLD room                                                   | LLD room                                                               |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- |
 | ![A guided system design round](docs/screens/room-hld.png) | ![A machine-coding round with a C++ editor](docs/screens/room-lld.png) |
 
 ## Requirements
 
-| Need | Details |
-|---|---|
-| Node.js | 22.12 or newer. |
-| Operating system | macOS is the main path. Linux works through the container (see below). Windows works through the container only. |
-| Claude Code login | Install Claude Code and sign in once by running `claude`. The app talks to the model through the Claude Agent SDK and uses that login. It needs no API key. |
-| A C++ compiler | `clang++` at `/usr/bin/clang++`. On macOS, install the Xcode Command Line Tools with `xcode-select --install`. |
-| Chrome | Needed for voice input. It uses the browser's on-device speech recognition. Other browsers work for everything else. |
-| Kokoro voice (optional) | Gives natural spoken replies. Without it, the app falls back to your system voice. See below. |
+| Need                    | Details                                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js                 | 22.12 or newer.                                                                                                                                             |
+| Operating system        | macOS is the main path. Linux works through the container (see below). Windows works through the container only.                                            |
+| Claude Code login       | Install Claude Code and sign in once by running `claude`. The app talks to the model through the Claude Agent SDK and uses that login. It needs no API key. |
+| A C++ compiler          | `clang++` at `/usr/bin/clang++`. On macOS, install the Xcode Command Line Tools with `xcode-select --install`.                                              |
+| Chrome                  | Needed for voice input. It uses the browser's on-device speech recognition. Other browsers work for everything else.                                        |
+| Kokoro voice (optional) | Gives natural spoken replies. Without it, the app falls back to your system voice. See below.                                                               |
 
 ### Optional: Kokoro speech
 
@@ -86,27 +86,27 @@ In `.env`, set `STUDY_ROOT` to the folder you want for your study files. If you 
 
 All settings in `.env`:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `STUDY_ROOT` | `~/sparmate-study` | Your study folder. |
-| `DATA_DIR` | `<STUDY_ROOT>/rounds` | Sessions, settings, custom problems, logs and usage ledger. |
-| `PORT` | `4747` | Server port. |
-| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro` | Kokoro voice files. |
-| `SPARMATE_DENYLIST` | `~/.config/sparmate/denylist.txt` | Extra words to keep out of your files (see Privacy). |
+| Variable               | Default                           | Purpose                                                     |
+| ---------------------- | --------------------------------- | ----------------------------------------------------------- |
+| `STUDY_ROOT`           | `~/sparmate-study`                | Your study folder.                                          |
+| `DATA_DIR`             | `<STUDY_ROOT>/rounds`             | Sessions, settings, custom problems, logs and usage ledger. |
+| `PORT`                 | `4747`                            | Server port.                                                |
+| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro`               | Kokoro voice files.                                         |
+| `SPARMATE_DENYLIST`    | `~/.config/sparmate/denylist.txt` | Extra words to keep out of your files (see Privacy).        |
 
 ## Your study folder
 
 The study folder is yours. The app reads it and writes to it only in the ways listed here. You can keep it in its own private git repository. If you do, add `rounds/` to its `.gitignore`.
 
-| Path | What it is for |
-|---|---|
-| `TRACKER.md` | Your plan and progress. Each problem has a mark: `[ ]` not started, `[~]` taught but not yet recalled, `[x]` solved at the bar. |
-| `REVIEW.md` | Recall questions. The app adds new ones after a round, and the coach re-tests old ones. |
-| `TEACHING.md` | The rules the coach follows when it teaches you. Edit it to change how you are taught. |
-| `ABOUT_ME.md` | Your profile. It sets the bar for every round. |
-| `notes/` | What you have learnt, one file per topic. |
-| `lld/` | Your C++ attempts, as `lld/<problem>/attempt-<date>.cpp`. You can edit them in any editor and the page picks up the change. |
-| `rounds/` | Session transcripts, boards, scores, settings and the usage ledger. The app writes here as a round runs. |
+| Path          | What it is for                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `TRACKER.md`  | Your plan and progress. Each problem has a mark: `[ ]` not started, `[~]` taught but not yet recalled, `[x]` solved at the bar. |
+| `REVIEW.md`   | Recall questions. The app adds new ones after a round, and the coach re-tests old ones.                                         |
+| `TEACHING.md` | The rules the coach follows when it teaches you. Edit it to change how you are taught.                                          |
+| `ABOUT_ME.md` | Your profile. It sets the bar for every round.                                                                                  |
+| `notes/`      | What you have learnt, one file per topic.                                                                                       |
+| `lld/`        | Your C++ attempts, as `lld/<problem>/attempt-<date>.cpp`. You can edit them in any editor and the page picks up the change.     |
+| `rounds/`     | Session transcripts, boards, scores, settings and the usage ledger. The app writes here as a round runs.                        |
 
 **The app writes study files only when you click Save.** That covers `TRACKER.md`, `REVIEW.md` and `notes/`. It also refuses to write if a file changed after it drafted the edit. The two exceptions are `rounds/` (round data) and the new `.cpp` file that an LLD round creates.
 
@@ -150,12 +150,12 @@ A save that contains a listed term is refused. Log files redact listed terms. Th
 
 **C++ runs in a sandbox.**
 
-| | macOS | Linux and the container |
-|---|---|---|
-| Tool | `sandbox-exec` | Bubblewrap (`bwrap`) with `prlimit` |
+|           | macOS                                                                                                                                 | Linux and the container                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Tool      | `sandbox-exec`                                                                                                                        | Bubblewrap (`bwrap`) with `prlimit`                                                              |
 | Compiling | Reads only the system folders, the toolchain, the build folder and your one source file. Writes only to the build folder. No network. | A minimal root with system libraries and compilers. No home folder, no study folder, no network. |
-| Running | Writes only to the build folder, cannot read your home folder, no network, no child processes. | The same private root, with no network and its own process space. |
-| Limits | File size and CPU time, plus a 1 GB memory cap that the app checks by polling. | File size, CPU time, process count and a 1 GB address-space limit from `prlimit`. |
+| Running   | Writes only to the build folder, cannot read your home folder, no network, no child processes.                                        | The same private root, with no network and its own process space.                                |
+| Limits    | File size and CPU time, plus a 1 GB memory cap that the app checks by polling.                                                        | File size, CPU time, process count and a 1 GB address-space limit from `prlimit`.                |
 
 Honest limits:
 
@@ -166,13 +166,13 @@ Honest limits:
 
 Rounds use your Claude plan, like any Claude Code session. The default models are:
 
-| Role | Model | Effort |
-|---|---|---|
-| Interviewer and guide | Claude Opus 5.5 | low (so replies come in seconds) |
-| Judge and tester | Claude Opus 5.5 | high |
-| Coach | Claude Opus 5.5 | medium |
-| Scribe (study notes and custom problems) | Claude Opus 5.5 | medium |
-| Step checker | Claude Sonnet 5.5 (fixed) | low |
+| Role                                     | Model                     | Effort                           |
+| ---------------------------------------- | ------------------------- | -------------------------------- |
+| Interviewer and guide                    | Claude Opus 5.5           | low (so replies come in seconds) |
+| Judge and tester                         | Claude Opus 5.5           | high                             |
+| Coach                                    | Claude Opus 5.5           | medium                           |
+| Scribe (study notes and custom problems) | Claude Opus 5.5           | medium                           |
+| Step checker                             | Claude Sonnet 5.5 (fixed) | low                              |
 
 To spend less, open Settings and switch the interviewer and the coach to Claude Sonnet 5.5. Keep the judge on Opus if you want the sharpest scoring.
 

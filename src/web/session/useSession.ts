@@ -5,7 +5,19 @@ import type { ClientMsg, ServerMsg } from "../../shared/protocol";
 import type { Channel, PublicSession } from "../../shared/types";
 import { CHAT_MAX_CHARS, PNG_MAX_BASE64 } from "../lib/contract";
 import { roundMsAt } from "../lib/timing";
-import { confirmVersion, decideAfterReconnect, decideOnExternal, decideOnRejected, editLedger, recordSent, settleLedger, startLedger, type CodeDecision, type CodeLedger, type CodeText } from "./codeSync";
+import {
+  confirmVersion,
+  decideAfterReconnect,
+  decideOnExternal,
+  decideOnRejected,
+  editLedger,
+  recordSent,
+  settleLedger,
+  startLedger,
+  type CodeDecision,
+  type CodeLedger,
+  type CodeText,
+} from "./codeSync";
 import { chatItems, initialState, reducer, type Action } from "./reducer";
 import type { SessionActions, SessionController, SessionSource } from "./types";
 
@@ -194,8 +206,7 @@ export function useSessionController(source: SessionSource): SessionController {
     socketRef.current = socket;
 
     const answerPng = (requestId: string, frameId?: string) => {
-      const reply = (pngBase64: string | null, error: string | null) =>
-        socket.send({ type: "board.png.result", requestId, pngBase64, error });
+      const reply = (pngBase64: string | null, error: string | null) => socket.send({ type: "board.png.result", requestId, pngBase64, error });
       const handle = boardRef.current;
       if (!handle) {
         reply(null, "The board is not open in this page.");
@@ -379,7 +390,6 @@ export function useSessionController(source: SessionSource): SessionController {
       guidedHint() {
         send({ type: "guided.hint" });
       },
-
 
       onBoardChange(elements, version) {
         io.boardVersion = version;

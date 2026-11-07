@@ -26,12 +26,7 @@ interface FileState {
 }
 
 /** Applies ops to in-memory copies, checks each with the guard, and returns a draft with diffs and base hashes. */
-export async function planProposal(
-  studyRoot: string,
-  sessionId: string,
-  ops: BookkeepingOp[],
-  guard: PrivacyGuard,
-): Promise<Proposal> {
+export async function planProposal(studyRoot: string, sessionId: string, ops: BookkeepingOp[], guard: PrivacyGuard): Promise<Proposal> {
   const states = new Map<string, FileState>();
   const baseHashes: Record<string, string | null> = {};
   const planned: ProposalOp[] = [];
@@ -315,12 +310,7 @@ function appendReview(current: string, entry: string): string {
 // ---------------------------------------------------------------------------
 // Files
 
-async function loadState(
-  studyRoot: string,
-  file: string,
-  states: Map<string, FileState>,
-  hashes: Record<string, string | null>,
-): Promise<FileState> {
+async function loadState(studyRoot: string, file: string, states: Map<string, FileState>, hashes: Record<string, string | null>): Promise<FileState> {
   const existing = states.get(file);
   if (existing) return existing;
   const path = await resolveInside(studyRoot, file);

@@ -145,7 +145,7 @@ describe("UsageLedger file operations and aggregations", () => {
 
     // Manually inject bad lines into the file:
     const content = await readFile(filePath, "utf8");
-    const corrupted = content + "\nnot-valid-json\n{\"missing\":\"fields\"}\n\n";
+    const corrupted = content + '\nnot-valid-json\n{"missing":"fields"}\n\n';
     await writeFile(filePath, corrupted, "utf8");
 
     const r2: UsageRecord = {

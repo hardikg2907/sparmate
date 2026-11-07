@@ -7,7 +7,10 @@ export function Separator({ className, orientation = "horizontal", decorative = 
     <SeparatorPrimitive.Root
       decorative={decorative}
       orientation={orientation}
-      className={cn("shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px", className)}
+      className={cn(
+        "shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
+        className,
+      )}
       {...rest}
     />
   );

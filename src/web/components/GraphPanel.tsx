@@ -29,7 +29,10 @@ export function GraphPanel({ graph, actions, onClose }: { graph: GraphState; act
   const body = parsed.body.trim();
 
   return (
-    <section aria-label="What the interviewer sees" className="absolute inset-x-0 bottom-0 z-30 flex max-h-[52%] min-h-[9rem] animate-in fade-in-0 slide-in-from-bottom-1 duration-200 flex-col rounded-t-lg border-x border-t border-border bg-card shadow-md">
+    <section
+      aria-label="What the interviewer sees"
+      className="absolute inset-x-0 bottom-0 z-30 flex max-h-[52%] min-h-[9rem] animate-in fade-in-0 slide-in-from-bottom-1 duration-200 flex-col rounded-t-lg border-x border-t border-border bg-card shadow-md"
+    >
       <header className="flex items-center justify-between gap-3 px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <EyeIcon size={16} className="shrink-0 text-muted-foreground" />
@@ -39,7 +42,9 @@ export function GraphPanel({ graph, actions, onClose }: { graph: GraphState; act
               {warnings.length === 1 ? "1 warning" : `${warnings.length} warnings`}
             </Badge>
           ) : null}
-          <span className="hidden min-w-0 truncate text-meta text-muted-foreground md:inline">The text form of your board. Label every box and connect every arrow so it reads correctly.</span>
+          <span className="hidden min-w-0 truncate text-meta text-muted-foreground md:inline">
+            The text form of your board. Label every box and connect every arrow so it reads correctly.
+          </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button size="sm" variant="ghost" onClick={actions.refreshGraph}>
@@ -65,7 +70,9 @@ export function GraphPanel({ graph, actions, onClose }: { graph: GraphState; act
         {body ? (
           <pre className="whitespace-pre-wrap break-words rounded-lg border border-border bg-muted p-3 font-mono text-ui leading-relaxed text-foreground">{body}</pre>
         ) : (
-          <p className="rounded-lg border border-dashed border-input px-3 py-4 text-ui text-muted-foreground">The board is empty. The interviewer sees nothing until something is drawn.</p>
+          <p className="rounded-lg border border-dashed border-input px-3 py-4 text-ui text-muted-foreground">
+            The board is empty. The interviewer sees nothing until something is drawn.
+          </p>
         )}
       </div>
     </section>

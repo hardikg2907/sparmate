@@ -279,7 +279,11 @@ async function userPause(mode) {
   let mark = c.mark();
   c.send({ type: "session.pause" });
   const paused = await c.waitFor((m) => m.type === "session.state" && m.session.status === "paused", { since: mark, label: "paused state" });
-  check(`${mode} round: pause stops the clock with reason "user"`, paused.session.pauseReason === "user" && paused.session.pauseStartedAt !== null, String(paused.session.pauseReason));
+  check(
+    `${mode} round: pause stops the clock with reason "user"`,
+    paused.session.pauseReason === "user" && paused.session.pauseStartedAt !== null,
+    String(paused.session.pauseReason),
+  );
 
   mark = c.mark();
   c.send({ type: "chat.send", channel: "interview", clientMsgId: "p1", text: "anyone there?" });
@@ -294,7 +298,11 @@ async function userPause(mode) {
   mark = c.mark();
   c.send({ type: "session.resume" });
   const live = await c.waitFor((m) => m.type === "session.state" && m.session.status === "live", { since: mark, label: "live again" });
-  check(`${mode} round: resume clears the reason and adds the pause to pausedMs`, live.session.pauseReason === null && live.session.pauseStartedAt === null && live.session.pausedMs >= AWAY_MS, `${live.session.pausedMs} ms`);
+  check(
+    `${mode} round: resume clears the reason and adds the pause to pausedMs`,
+    live.session.pauseReason === null && live.session.pauseStartedAt === null && live.session.pausedMs >= AWAY_MS,
+    `${live.session.pausedMs} ms`,
+  );
   const reply = await say(c, "Back again. Let me start with requirements.", "p2");
   check(`${mode} round: the interviewer answers after resume`, reply.entry.text.length > 0);
   c.close();
@@ -313,7 +321,11 @@ async function awayPause() {
   check("a round with no socket is still live before the window ends", early.json.status === "live", early.json.status);
 
   const settled = await pollSession(id, (r) => r.json?.status === "paused");
-  check('a round left with no socket becomes paused with reason "away"', settled?.json.status === "paused" && settled.json.pauseReason === "away", `${settled?.json.status}/${settled?.json.pauseReason}`);
+  check(
+    'a round left with no socket becomes paused with reason "away"',
+    settled?.json.status === "paused" && settled.json.pauseReason === "away",
+    `${settled?.json.status}/${settled?.json.pauseReason}`,
+  );
 
   const back = await openRoom(id, "away-return");
   const state = back.msgs.find((m) => m.type === "session.state");
@@ -335,7 +347,11 @@ async function awayPause() {
   const again = await openRoom(id, "away-quick-return");
   await sleep(AWAY_MS * 2);
   const live2 = await api.get(`/api/sessions/${id}`);
-  check("a socket that reconnects inside the window keeps the round live", live2.json.status === "live" && live2.json.pauseReason === null, `${live2.json.status}/${live2.json.pauseReason}`);
+  check(
+    "a socket that reconnects inside the window keeps the round live",
+    live2.json.status === "live" && live2.json.pauseReason === null,
+    `${live2.json.status}/${live2.json.pauseReason}`,
+  );
   again.close();
 }
 
@@ -377,7 +393,11 @@ async function discardOverRest(dirs) {
   const noToken = await api.del(`/api/sessions/${id}`, { origin: ORIGIN });
   const badToken = await api.del(`/api/sessions/${id}`, { origin: ORIGIN, "x-csrf-token": "z".repeat(43) });
   const badHost = await api.del(`/api/sessions/${id}`, { ...good(), host: "attacker.example" });
-  check("DELETE without Origin, with a foreign Origin, or with a bad token is refused with 403", [noOrigin, foreign, noToken, badToken].every((r) => r.status === 403), [noOrigin, foreign, noToken, badToken].map((r) => r.status).join(","));
+  check(
+    "DELETE without Origin, with a foreign Origin, or with a bad token is refused with 403",
+    [noOrigin, foreign, noToken, badToken].every((r) => r.status === 403),
+    [noOrigin, foreign, noToken, badToken].map((r) => r.status).join(","),
+  );
   check("DELETE with a foreign Host gets 421", badHost.status === 421, `status ${badHost.status}`);
   const badId = await api.del("/api/sessions/not-a-session-id");
   const traversal = await api.del("/api/sessions/..%2F..%2Fsettings.json");

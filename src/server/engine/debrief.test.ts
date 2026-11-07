@@ -10,7 +10,18 @@ const MIN = 60_000;
 function card(over: Partial<JudgedCard> = {}): JudgedCard {
   return {
     verdict: { sde2: "hire", senior: "lean_no_hire", confidence: "medium", summary: "Clear round — good pace — fine." },
-    dimensions: [{ id: "design", name: "Design", score: 3, evidence: [{ quote: "a cache", source: "candidate", at: "01:00", polarity: "plus" }, { quote: "made up", source: "candidate", at: "", polarity: "minus" }], whatA4LooksLike: "x" }],
+    dimensions: [
+      {
+        id: "design",
+        name: "Design",
+        score: 3,
+        evidence: [
+          { quote: "a cache", source: "candidate", at: "01:00", polarity: "plus" },
+          { quote: "made up", source: "candidate", at: "", polarity: "minus" },
+        ],
+        whatA4LooksLike: "x",
+      },
+    ],
     steps: [
       {
         phase: "design",
@@ -39,7 +50,14 @@ describe("phaseTiming", () => {
   it("adds up time per phase, counting revisits", () => {
     const plan = phasePlan("hld", 45);
     const timing = phaseTiming(
-      { phaseHistory: [{ phase: "requirements", at: 0, by: "candidate" }, { phase: "capacity", at: 6 * MIN, by: "candidate" }, { phase: "requirements", at: 9 * MIN, by: "candidate" }, { phase: "api", at: 10 * MIN, by: "interviewer" }] },
+      {
+        phaseHistory: [
+          { phase: "requirements", at: 0, by: "candidate" },
+          { phase: "capacity", at: 6 * MIN, by: "candidate" },
+          { phase: "requirements", at: 9 * MIN, by: "candidate" },
+          { phase: "api", at: 10 * MIN, by: "interviewer" },
+        ],
+      },
       plan,
       15 * MIN,
     );
@@ -178,7 +196,15 @@ describe("judgeMessage", () => {
     } as unknown as Session;
     const problem = { meta: { title: "Parking Lot" } } as unknown as Problem;
     const text = judgeMessage(
-      { session, problem, timing: [{ phase: "clarify", label: "Clarify", plannedMinutes: 5, actualMinutes: 7 }], finalGraphText: "Nodes:", finalCode: "int main() {}\n", tester: null, hasImage: false },
+      {
+        session,
+        problem,
+        timing: [{ phase: "clarify", label: "Clarify", plannedMinutes: 5, actualMinutes: 7 }],
+        finalGraphText: "Nodes:",
+        finalCode: "int main() {}\n",
+        tester: null,
+        hasImage: false,
+      },
       "fix quotes",
     );
     expect(text).toContain("[01:01] candidate: Spot is a class.");
@@ -275,7 +301,10 @@ describe("verdict and confidence rules", () => {
 
   it("sets the HLD verdicts from the scores", () => {
     expect(verdictOf(HLD_IDS, { depth: 4, design: 4 })).toMatchObject({ sde2: "strong_hire", senior: "lean_no_hire" });
-    expect(verdictOf(HLD_IDS, { depth: 4, design: 4, navigation: 4, scale_reliability: 4, communication: 4, drive_time: 4 })).toMatchObject({ sde2: "strong_hire", senior: "strong_hire" });
+    expect(verdictOf(HLD_IDS, { depth: 4, design: 4, navigation: 4, scale_reliability: 4, communication: 4, drive_time: 4 })).toMatchObject({
+      sde2: "strong_hire",
+      senior: "strong_hire",
+    });
     expect(verdictOf(HLD_IDS, { depth: 4, scale_reliability: 4, design: 4 })).toMatchObject({ sde2: "strong_hire", senior: "hire" });
     expect(verdictOf(HLD_IDS, { navigation: 1 })).toMatchObject({ sde2: "no_hire", senior: "no_hire" });
     expect(verdictOf(HLD_IDS, { depth: 2, communication: 2, drive_time: 2, scale_reliability: 2 })).toMatchObject({ sde2: "no_hire" });
@@ -324,7 +353,12 @@ describe("stepSources", () => {
       { phase: "requirements", at: 8 * MIN, by: "candidate" },
       { phase: "design", at: 10 * MIN, by: "candidate" },
     ],
-    transcript: [entry("1", MIN, "latency under 50 ms"), entry("2", 6 * MIN, "POST /links"), entry("3", 9 * MIN, "also 99.9 percent uptime"), entry("4", 11 * MIN, "I add a cache")],
+    transcript: [
+      entry("1", MIN, "latency under 50 ms"),
+      entry("2", 6 * MIN, "POST /links"),
+      entry("3", 9 * MIN, "also 99.9 percent uptime"),
+      entry("4", 11 * MIN, "I add a cache"),
+    ],
     stepNotes: { api: "returns 201" },
     stepCode: {},
     board: { version: 1, graphText: "", updatedAt: null },

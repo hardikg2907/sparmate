@@ -19,21 +19,17 @@ await mkdir(join(study, "lld"), { recursive: true });
 
 await copyStudyKit(study);
 
-const server = spawn(
-  join(APP, "node_modules", ".bin", "tsx"),
-  ["src/server/index.ts"],
-  {
-    cwd: APP,
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      STUDY_ROOT: study,
-      DATA_DIR: join(work, "data"),
-      SPARMATE_FAKE_AGENT: "1",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
+const server = spawn(join(APP, "node_modules", ".bin", "tsx"), ["src/server/index.ts"], {
+  cwd: APP,
+  env: {
+    ...process.env,
+    PORT: String(PORT),
+    STUDY_ROOT: study,
+    DATA_DIR: join(work, "data"),
+    SPARMATE_FAKE_AGENT: "1",
   },
-);
+  stdio: ["ignore", "pipe", "pipe"],
+});
 
 let log = "";
 server.stdout.on("data", (d) => (log += d));
@@ -51,11 +47,7 @@ if (!log.includes("running at")) {
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
-  args: [
-    "--no-first-run",
-    "--use-fake-ui-for-media-stream",
-    "--use-fake-device-for-media-stream",
-  ],
+  args: ["--no-first-run", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
 });
 
 let failed = false;

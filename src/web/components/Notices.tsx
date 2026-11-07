@@ -8,7 +8,15 @@ export function ConnectionBanner({ status, onRetry }: { status: SocketStatus; on
   const waiting = useDelayed(status === "connecting" || status === "reconnecting", 700);
   if (status === "closed") {
     return (
-      <Banner tone="bad" role="alert" actions={<Button size="sm" onClick={onRetry}>Try again</Button>}>
+      <Banner
+        tone="bad"
+        role="alert"
+        actions={
+          <Button size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+        }
+      >
         <WarnIcon size={16} />
         <span>The connection to the server was lost.</span>
       </Banner>
@@ -28,13 +36,28 @@ export function MessageBanners({ state, actions }: { state: SessionState; action
   return (
     <>
       {state.error ? (
-        <Banner tone="bad" role="alert" actions={<Button size="sm" variant="ghost" onClick={actions.dismissError}>Dismiss</Button>}>
+        <Banner
+          tone="bad"
+          role="alert"
+          actions={
+            <Button size="sm" variant="ghost" onClick={actions.dismissError}>
+              Dismiss
+            </Button>
+          }
+        >
           <WarnIcon size={16} />
           <span>{state.error}</span>
         </Banner>
       ) : null}
       {state.notice ? (
-        <Banner tone="info" actions={<Button size="sm" variant="ghost" onClick={actions.dismissNotice}>Dismiss</Button>}>
+        <Banner
+          tone="info"
+          actions={
+            <Button size="sm" variant="ghost" onClick={actions.dismissNotice}>
+              Dismiss
+            </Button>
+          }
+        >
           <InfoIcon size={16} />
           <span>{state.notice}</span>
         </Banner>

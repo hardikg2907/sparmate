@@ -1,10 +1,7 @@
 export const REASON_ON_DEVICE_UNAVAILABLE = "Voice input needs on-device speech recognition in Chrome";
 
 export type SpeechRecognitionAvailability =
-  | { status: "available" }
-  | { status: "downloadable"; install: () => Promise<void> }
-  | { status: "downloading" }
-  | { status: "unavailable"; reason: string };
+  { status: "available" } | { status: "downloadable"; install: () => Promise<void> } | { status: "downloading" } | { status: "unavailable"; reason: string };
 
 export interface SpeechRecognitionConstructor {
   new (): unknown;
@@ -13,9 +10,7 @@ export interface SpeechRecognitionConstructor {
 }
 
 /** Checks for on-device speech recognition capability without network fallback. */
-export async function checkSpeechRecognitionAvailability(
-  RecognitionClass?: SpeechRecognitionConstructor | null,
-): Promise<SpeechRecognitionAvailability> {
+export async function checkSpeechRecognitionAvailability(RecognitionClass?: SpeechRecognitionConstructor | null): Promise<SpeechRecognitionAvailability> {
   if (!RecognitionClass || typeof RecognitionClass.available !== "function") {
     return { status: "unavailable", reason: REASON_ON_DEVICE_UNAVAILABLE };
   }

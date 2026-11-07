@@ -89,7 +89,13 @@ export function Steps({ scorecard, track, steps = {}, pins = [], elements = null
                   {held.length > 0 ? (
                     <ul className="mt-2 space-y-3">
                       {held.map(({ t, i }) => (
-                        <EvidenceItem key={i} evidence={t.evidence} verified={stepChecks.get(`${phase.id}:${i}`)} point={t.point} dimensionName={dimMap.get(t.dimensionId) ?? t.dimensionId} />
+                        <EvidenceItem
+                          key={i}
+                          evidence={t.evidence}
+                          verified={stepChecks.get(`${phase.id}:${i}`)}
+                          point={t.point}
+                          dimensionName={dimMap.get(t.dimensionId) ?? t.dimensionId}
+                        />
                       ))}
                     </ul>
                   ) : (
@@ -112,7 +118,13 @@ export function Steps({ scorecard, track, steps = {}, pins = [], elements = null
                         {against.length > 0 ? (
                           <ul className="mt-3 space-y-3">
                             {against.map(({ t, i }) => (
-                              <EvidenceItem key={i} evidence={t.evidence} verified={stepChecks.get(`${phase.id}:${i}`)} point={t.point} dimensionName={dimMap.get(t.dimensionId) ?? t.dimensionId} />
+                              <EvidenceItem
+                                key={i}
+                                evidence={t.evidence}
+                                verified={stepChecks.get(`${phase.id}:${i}`)}
+                                point={t.point}
+                                dimensionName={dimMap.get(t.dimensionId) ?? t.dimensionId}
+                              />
                             ))}
                           </ul>
                         ) : null}

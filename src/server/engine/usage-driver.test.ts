@@ -35,7 +35,10 @@ describe("wrapDriverWithLedger", () => {
   afterEach(() => rm(dir, { recursive: true, force: true }));
 
   it("estimates the cost of a turn whose cost is unknown instead of storing 0", async () => {
-    const d = wrapDriverWithLedger(driverWith(async () => ({ stats: { durationMs: 5, costUsd: null, ...tokens, model: "claude-haiku-5-5" } })), ledger);
+    const d = wrapDriverWithLedger(
+      driverWith(async () => ({ stats: { durationMs: 5, costUsd: null, ...tokens, model: "claude-haiku-5-5" } })),
+      ledger,
+    );
     await d.startConversation(setup).send(turn, { onTextDelta() {} });
     const [row] = await ledger.readAll();
     expect(row!.costUsd).toBeGreaterThan(0);
@@ -74,7 +77,12 @@ describe("wrapDriverWithLedger", () => {
   });
 
   it("writes nothing when the call failed before any model result", async () => {
-    const d = wrapDriverWithLedger(driverWith(async () => { throw new DriverError("aborted"); }), ledger);
+    const d = wrapDriverWithLedger(
+      driverWith(async () => {
+        throw new DriverError("aborted");
+      }),
+      ledger,
+    );
     await expect(d.runOnce(setup as OneShotSetup<unknown>)).rejects.toThrow("aborted");
     expect(await ledger.readAll()).toHaveLength(0);
   });

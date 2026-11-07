@@ -69,25 +69,21 @@ async function main() {
   await mkdir(sampleDir, { recursive: true });
   const samplePath = join(sampleDir, "kokoro-sample.wav");
 
-  const child = spawn(
-    process.execPath,
-    [join(APP, "node_modules", "tsx", "dist", "cli.mjs"), join(APP, "src", "server", "index.ts")],
-    {
-      cwd: APP,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        SPARMATE_FAKE_AGENT: "1",
-        PORT: String(PORT),
-        STUDY_ROOT: dirs.study,
-        DATA_DIR: dirs.data,
-        SPARMATE_CLAUDE_JSON: join(dirs.root, "claude.json"),
-        SPARMATE_DENYLIST: join(dirs.root, "denylist.txt"),
-        SPARMATE_KOKORO_HOME: KOKORO_HOME,
-      },
+  const child = spawn(process.execPath, [join(APP, "node_modules", "tsx", "dist", "cli.mjs"), join(APP, "src", "server", "index.ts")], {
+    cwd: APP,
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      SPARMATE_FAKE_AGENT: "1",
+      PORT: String(PORT),
+      STUDY_ROOT: dirs.study,
+      DATA_DIR: dirs.data,
+      SPARMATE_CLAUDE_JSON: join(dirs.root, "claude.json"),
+      SPARMATE_DENYLIST: join(dirs.root, "denylist.txt"),
+      SPARMATE_KOKORO_HOME: KOKORO_HOME,
     },
-  );
+  });
 
   let output = "";
   child.stdout?.on("data", (d) => (output += d));

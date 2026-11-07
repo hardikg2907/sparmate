@@ -38,8 +38,7 @@ export interface FakeServerOptions {
   timeUp?: boolean;
 }
 
-const INTERVIEWER_REPLY =
-  "Okay. Now suppose the cache tier is gone for an hour. What does that do to the database, and what would you do about it?";
+const INTERVIEWER_REPLY = "Okay. Now suppose the cache tier is gone for an hour. What does that do to the database, and what would you do about it?";
 const COACH_REPLY =
   "Good. A crashed server leaves its block unused, and that is fine.\n\nThe code space is huge, so a few thousand wasted ids cost nothing. The real risk is the opposite: **reusing** an id. A server must never restart with an old block.\n\n```\n coordinator: next block = 5000\n server A takes 3000..3999   (crashes at 3412)\n server B takes 4000..4999\n restart A -> asks the coordinator -> gets 5000..5999\n```\n\nWhat does the coordinator need to store so a restart never hands out an old block?";
 
@@ -184,10 +183,9 @@ export class FakeServer {
         log("code.run");
         const diagnostics = this.diagnosticsFor(this.lastCode ?? this.options.code?.content ?? "");
         const at = this.nowRound();
-        const result: RunResult =
-          diagnostics.some((d) => d.severity === "error")
-            ? { at, compile: { ok: false, diagnostics, stderr: diagnostics.map((d) => `${d.line}:${d.column}: ${d.severity}: ${d.message}`).join("\n"), durationMs: 780 }, run: null }
-            : { ...LLD_GOOD_RUN, at };
+        const result: RunResult = diagnostics.some((d) => d.severity === "error")
+          ? { at, compile: { ok: false, diagnostics, stderr: diagnostics.map((d) => `${d.line}:${d.column}: ${d.severity}: ${d.message}`).join("\n"), durationMs: 780 }, run: null }
+          : { ...LLD_GOOD_RUN, at };
         this.later(700, () => {
           this.session = this.session.code ? { ...this.session, code: { ...this.session.code, lastRun: result } } : this.session;
           this.emit({ type: "code.run.result", result });
@@ -311,7 +309,15 @@ export class FakeServer {
     this.later(1200 * (stages.length + 1), () => {
       const debrief = this.options.debrief;
       if (!debrief?.scorecard) return;
-      this.session = { ...this.session, status: "debriefed", scorecard: debrief.scorecard, reference: debrief.reference, steps: debrief.steps, pins: debrief.pins, transcript: [...this.session.transcript, ...debrief.transcript.filter((e) => e.channel === "coach")] };
+      this.session = {
+        ...this.session,
+        status: "debriefed",
+        scorecard: debrief.scorecard,
+        reference: debrief.reference,
+        steps: debrief.steps,
+        pins: debrief.pins,
+        transcript: [...this.session.transcript, ...debrief.transcript.filter((e) => e.channel === "coach")],
+      };
       this.emit({ type: "debrief.progress", stage: "done" });
       this.emit({ type: "debrief.ready", scorecard: debrief.scorecard });
       this.emit({ type: "session.state", session: this.state() });

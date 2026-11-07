@@ -91,13 +91,7 @@ function utf8Length(codePoint: number): number {
  * not the member), so a range is used only when it starts exactly at the reported position. Otherwise the word
  * under the caret is marked, read from the source snippet clang prints under the diagnostic.
  */
-function extent(
-  ranges: string,
-  line: number,
-  column: number,
-  lines: readonly string[],
-  diagnosticIndex: number,
-): Pick<CompileDiagnostic, "endLine" | "endColumn"> {
+function extent(ranges: string, line: number, column: number, lines: readonly string[], diagnosticIndex: number): Pick<CompileDiagnostic, "endLine" | "endColumn"> {
   for (const range of ranges.matchAll(RANGE)) {
     const [, startLine, startColumn, endLine, endColumn] = range.map(Number) as [number, number, number, number, number];
     if (startLine !== line || startColumn !== column) continue;

@@ -47,8 +47,7 @@ describe("splitSections", () => {
 });
 
 describe("parseProblem errors", () => {
-  const head = (extra = "") =>
-    `---\nid: x-test\ntrack: hld\ntitle: Test\ndifficulty: easy\ntags: []\ntracker: null\nnotesFile: notes/x-test.md\n${extra}---\n`;
+  const head = (extra = "") => `---\nid: x-test\ntrack: hld\ntitle: Test\ndifficulty: easy\ntags: []\ntracker: null\nnotesFile: notes/x-test.md\n${extra}---\n`;
 
   it("needs frontmatter", () => {
     expect(() => parseProblem("## Opening prompt\nhi", "f", false)).toThrow(/frontmatter/i);
