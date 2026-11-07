@@ -27,7 +27,7 @@ export type CodeDecision =
   | { kind: "keep"; notice: string };
 
 export const OUTSIDE_CHANGE_NOTICE =
-  "The code file changed outside the editor while you had unsaved edits. Your editor text was kept and saved over it.";
+  "The code file changed outside the editor at the same time as your edits. Your editor text was kept and saved over it.";
 
 const SENT_LIMIT = 20;
 

@@ -39,7 +39,7 @@ describe("after a reconnect", () => {
   });
 
   it("keeps unsent edits over an outside change, above the server's version, and says so", () => {
-    // Before the fix the edit went out as version 5 and the server, now at 6, dropped it without a word.
+    // Sent as version 5 against a server at 6, the edit would be dropped without a word.
     const ledger = typed(loaded(), "mine");
     const decision = decideAfterReconnect(ledger, { version: 6, content: "edited in vim" });
     expect(decision).toEqual({ kind: "send", version: 7, notice: OUTSIDE_CHANGE_NOTICE });
