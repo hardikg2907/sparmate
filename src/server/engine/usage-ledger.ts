@@ -2,7 +2,7 @@ import { appendFile, readFile } from "node:fs/promises";
 import type { Mode, Track } from "../../shared/phases";
 import type { Logger } from "./log";
 import type { ProblemCatalog } from "./problems";
-import { estimateCostUsd } from "./usage-capture";
+import { DEAREST_MODEL, estimateCostUsd } from "./usage-capture";
 
 export interface UsageRecord {
   time: string;
@@ -158,9 +158,9 @@ export function parseUsageRecord(line: string): UsageRecord | null {
 
   let cost = typeof raw.costUsd === "number" ? raw.costUsd : typeof raw.cost === "number" ? raw.cost : null;
   let costEstimated = raw.costEstimated === true;
-  // Rows written before estimates existed stored an unknown cost as 0 next to real tokens.
+  // Old rows stored an unknown cost as 0 and carry a wrong helper-model label, so price them at the dearest model.
   if (cost === 0 && raw.costEstimated === undefined && inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens > 0) {
-    const estimate = estimateCostUsd(model, { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens });
+    const estimate = estimateCostUsd(DEAREST_MODEL, { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens });
     if (estimate !== null) {
       cost = estimate;
       costEstimated = true;

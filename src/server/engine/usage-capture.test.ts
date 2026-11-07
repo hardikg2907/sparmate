@@ -43,6 +43,26 @@ describe("usage extraction from SDK result messages", () => {
     expect(extractModel(withoutModel, "fallback-model")).toBe("fallback-model");
   });
 
+  it("labels the call with the requested model even when a helper model comes first in modelUsage", () => {
+    const msg = mockResult({
+      modelUsage: {
+        "claude-haiku-5-5": { inputTokens: 50, outputTokens: 5, costUSD: 0.0001 },
+        "claude-opus-5-5": { inputTokens: 1500, outputTokens: 300, costUSD: 0.04 },
+      } as any,
+    });
+    expect(extractModel(msg, "claude-opus-5-5")).toBe("claude-opus-5-5");
+  });
+
+  it("picks the costliest model in modelUsage when the requested model is absent", () => {
+    const msg = mockResult({
+      modelUsage: {
+        "claude-haiku-5-5": { inputTokens: 50, outputTokens: 5, costUSD: 0.0001 },
+        "claude-opus-5-5": { inputTokens: 1500, outputTokens: 300, costUSD: 0.04 },
+      } as any,
+    });
+    expect(extractModel(msg, "alias-not-listed")).toBe("claude-opus-5-5");
+  });
+
   describe("per-turn usage extraction", () => {
     it("extracts exact per-turn token counts when usage is per-turn", () => {
       const usage = {

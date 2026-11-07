@@ -8,12 +8,15 @@ export interface CumulativeTokens {
   cacheCreationTokens: number;
 }
 
-export function extractModel(msg: SDKResultMessage, fallbackModel: string): string {
-  if ("modelUsage" in msg && msg.modelUsage) {
-    const keys = Object.keys(msg.modelUsage);
-    if (keys.length > 0 && keys[0]) return keys[0];
-  }
-  return fallbackModel;
+// modelUsage also lists small helper models the SDK calls inside one request, so its first key is not the main model.
+export function extractModel(msg: SDKResultMessage, requestedModel: string): string {
+  const usage = "modelUsage" in msg && msg.modelUsage ? (msg.modelUsage as Record<string, { costUSD?: number; outputTokens?: number }>) : {};
+  const keys = Object.keys(usage);
+  if (keys.length === 0) return requestedModel;
+  const requested = keys.find((k) => k === requestedModel || k.startsWith(`${requestedModel}[`));
+  if (requested) return requested;
+  const weight = (k: string) => usage[k]?.costUSD ?? usage[k]?.outputTokens ?? 0;
+  return keys.reduce((best, k) => (weight(k) > weight(best) ? k : best));
 }
 
 /**
@@ -139,12 +142,15 @@ const PRICES_PER_MTOK: Record<string, ModelPrice> = {
   "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.2 },
 };
 
+/** The dearest known model: an upper bound for a row whose model label cannot be trusted. */
+export const DEAREST_MODEL = "claude-opus-5-5";
+
 /** Cost of a call from its token counts, or null for a model with no known price. */
 export function estimateCostUsd(
   model: string,
   t: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number },
 ): number | null {
-  const p = PRICES_PER_MTOK[model];
+  const p = PRICES_PER_MTOK[model.replace(/\[.*$/, "")];
   if (!p) return null;
   return (t.inputTokens * p.input + t.outputTokens * p.output + t.cacheReadTokens * p.cacheRead + t.cacheCreationTokens * p.cacheWrite) / 1_000_000;
 }

@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { estimateCostUsd } from "./usage-capture";
 import { calcCacheHitRate, parseUsageRecord, UsageLedger, type UsageRecord } from "./usage-ledger";
 
 describe("calcCacheHitRate", () => {
@@ -352,6 +353,14 @@ describe("UsageLedger cost honesty and local days", () => {
     expect(s.totals.costUsd).toBeGreaterThan(0);
     expect(s.totals.estimatedCalls).toBe(1);
     expect(s.totals.failedCalls).toBe(0);
+  });
+
+  it("prices a legacy row at the dearest known model because its label cannot be trusted", async () => {
+    await writeFile(filePath, JSON.stringify({ ...base, time: "2026-11-06T10:00:00.000Z" }) + "\n", "utf8");
+    const [row] = await new UsageLedger({ filePath }).readAll();
+    const opus = estimateCostUsd("claude-opus-5-5", row!);
+    expect(row!.costUsd).toBeCloseTo(opus!);
+    expect(row!.costUsd).toBeGreaterThan(estimateCostUsd("claude-haiku-5-5", row!)!);
   });
 
   it("counts failed calls in every total and keeps the breakdowns equal", async () => {

@@ -18,7 +18,7 @@ function toRecord(setup: UsageSetup, stats: TurnStats, ok: boolean): UsageRecord
     cacheCreationTokens: stats.cacheCreationTokens ?? 0,
   };
   // A null cost means the SDK could not say what this call cost, so price it from its tokens.
-  const estimate = stats.costUsd === null ? estimateCostUsd(model, tokens) : null;
+  const estimate = stats.costUsd === null ? estimateCostUsd(setup.model, tokens) ?? estimateCostUsd(model, tokens) : null;
   const cost = stats.costUsd ?? estimate ?? 0;
   return {
     time: new Date().toISOString(),
