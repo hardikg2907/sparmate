@@ -336,7 +336,7 @@ const HLD_REFERENCE: NonNullable<PublicSession["reference"]> = {
     },
     {
       heading: "Level bar",
-      markdown: "At the SDE-2 bar, the candidate leads the first four steps, traces one request, and goes deep on one or two points when asked. A senior candidate raises the cache failure and the hot key without being asked.",
+      markdown: "At the target level, the candidate leads the first four steps, traces one request, and goes deep on one or two points when asked. A candidate at the stretch level raises the cache failure and the hot key without being asked.",
     },
   ],
 };

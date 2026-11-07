@@ -258,7 +258,7 @@ function fakeScorecard(facts: FakeFacts): Scorecard {
     timeline: [{ at: "00:00", note: "Round started." }],
     practiceTask: "Redo the capacity step in five minutes and end each number with the decision it forces.",
     trackerMark: "[~]",
-    trackerMarkReason: "A practice round with gaps at the SDE-2 bar.",
+    trackerMarkReason: "A practice round with gaps at the target level.",
     lldScenarios: facts.track === "lld" ? (facts.tester?.scenarios ?? []) : [],
   };
 }

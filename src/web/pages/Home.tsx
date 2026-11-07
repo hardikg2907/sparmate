@@ -816,7 +816,7 @@ function FullWidthProblemList({
                             </Link>
                           </Tooltip>
                           {problem.lastAttempt.verdict ? (
-                            <Badge tone={VERDICT_TONE[problem.lastAttempt.verdict]} title="Result at the SDE-2 bar">
+                            <Badge tone={VERDICT_TONE[problem.lastAttempt.verdict]} title="Result at your target level">
                               {VERDICT_LABEL[problem.lastAttempt.verdict]}
                             </Badge>
                           ) : null}

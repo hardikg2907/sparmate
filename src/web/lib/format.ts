@@ -44,7 +44,7 @@ export const VERDICT_TONE: Record<Verdict, Tone> = {
   no_hire: "bad",
 };
 
-export const SCORE_WORD: Record<number, string> = { 1: "Missing", 2: "Below bar", 3: "At bar", 4: "Senior signal" };
+export const SCORE_WORD: Record<number, string> = { 1: "Missing", 2: "Below bar", 3: "At bar", 4: "Stretch signal" };
 
 export const SCORE_TONE: Record<number, Tone> = { 1: "bad", 2: "warn", 3: "accent", 4: "good" };
 
