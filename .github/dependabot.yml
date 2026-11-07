@@ -11,6 +11,9 @@ updates:
       # Node types must match the Node line in .nvmrc, or code could use APIs that runtime lacks.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # typescript-eslint does not support TypeScript 7 yet (typescript-eslint/typescript-eslint#10940).
+      - dependency-name: "typescript"
+        versions: [">=7.0.0"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
