@@ -1,7 +1,8 @@
 import type { Problem } from "../../shared/problem";
 import type { Scorecard, Session } from "../../shared/types";
 import { formatStamp, roundTimeMs } from "./clock";
-import { numberedCode, stepNotesText, transcriptLines } from "./envelope";
+import { numberedCode, stepEntries, stepNotesText, transcriptLines } from "./envelope";
+import { codeScopeFor, stepCodeText, unnumberedCode } from "../../shared/stepCode";
 import { phasesFor } from "../../shared/phases";
 import type { TesterOutput } from "./schemas";
 
@@ -62,6 +63,38 @@ export function candidateText(session: Pick<Session, "transcript" | "stepNotes">
     .map((e) => e.text)
     .concat(Object.values(session.stepNotes ?? {}))
     .join("\n");
+}
+
+/**
+ * What each step's own quotes may come from: the candidate chat of that step's visits and its written answer, the
+ * step's frame text when `stepBoard` has one (else the whole board), and the code that step reads.
+ */
+export function stepSources(
+  session: Session,
+  finalCode: string | null,
+  opts: { endMs?: number; stepBoard?: Readonly<Record<string, string>> } = {},
+): Record<string, { candidate: string; board: string; code: string }> {
+  const measured = roundTimeMs(session, session.endedAt ? Date.parse(session.endedAt) : Date.now());
+  const endMs = opts.endMs ?? (Number.isFinite(measured) ? measured : session.durationMs);
+  const out: Record<string, { candidate: string; board: string; code: string }> = {};
+  for (const p of phasesFor(session.track)) {
+    const chat = stepEntries(session.transcript, session.phaseHistory ?? [], p.id, endMs)
+      .filter((e) => e.role === "candidate")
+      .map((e) => e.text);
+    const scope = codeScopeFor(session.track, p.id);
+    const code =
+      finalCode === null || scope === null
+        ? ""
+        : scope === "file"
+          ? finalCode
+          : unnumberedCode(stepCodeText(finalCode, session.stepCode?.[p.id] ?? []));
+    out[p.id] = {
+      candidate: chat.concat(session.stepNotes?.[p.id] ?? []).join("\n"),
+      board: opts.stepBoard?.[p.id] ?? session.board.graphText,
+      code,
+    };
+  }
+  return out;
 }
 
 export function candidateLines(session: Pick<Session, "transcript">): string[] {
@@ -163,18 +196,89 @@ export function failedQuoteNote(
   ].join("\n");
 }
 
-/** Rules the engine owns regardless of what the judge wrote. */
+const HLD_DIMENSIONS = ["navigation", "design", "depth", "scale_reliability", "communication", "drive_time"];
+const LLD_DIMENSIONS = ["requirements", "working_code", "design", "extensibility", "edge_cases", "concurrency", "code_quality", "communication_time"];
+type Verdict = JudgedCard["verdict"]["sde2"];
+
+/** The rubric's verdict table, or null when a dimension it needs was not scored. Concurrency may be left out of an LLD card. */
+function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions"]): { sde2: Verdict; senior: Verdict } | null {
+  const known = track === "lld" ? LLD_DIMENSIONS : HLD_DIMENSIONS;
+  const score = new Map<string, number>();
+  for (const d of dimensions) if (known.includes(d.id) && !score.has(d.id)) score.set(d.id, d.score);
+  if (known.some((id) => id !== "concurrency" && !score.has(id))) return null;
+  const all = [...score.values()];
+  const count = (min: number) => all.filter((v) => v >= min).length;
+  const fours = (...ids: string[]) => ids.every((id) => score.get(id) === 4);
+  const ones = all.filter((v) => v === 1).length;
+  const allThree = all.every((v) => v >= 3);
+  const at = (id: string) => score.get(id) ?? 0;
+  const four = all.filter((v) => v === 4).length;
+  if (track === "lld") {
+    const core = at("working_code") >= 3 && at("design") >= 3 && at("extensibility") >= 3;
+    const sde2: Verdict =
+      allThree && four >= 2
+        ? "strong_hire"
+        : ones === 0 && core && count(3) >= 5
+          ? "hire"
+          : at("working_code") === 1 || at("design") === 1 || at("extensibility") === 1 || ones >= 2
+            ? "no_hire"
+            : "lean_no_hire";
+    const senior: Verdict =
+      allThree && four >= 5 && fours("working_code", "design", "extensibility")
+        ? "strong_hire"
+        : allThree && four >= 3 && fours("design", "extensibility")
+          ? "hire"
+          : !allThree
+            ? "no_hire"
+            : "lean_no_hire";
+    return { sde2, senior };
+  }
+  const sde2: Verdict =
+    allThree && four >= 2
+      ? "strong_hire"
+      : ones === 0 && at("navigation") >= 3 && at("design") >= 3 && count(3) >= 4
+        ? "hire"
+        : at("navigation") === 1 || at("design") === 1 || ones >= 2 || count(3) < 3
+          ? "no_hire"
+          : "lean_no_hire";
+  const senior: Verdict =
+    allThree && four >= 5
+      ? "strong_hire"
+      : allThree && four >= 3 && fours("depth", "scale_reliability")
+        ? "hire"
+        : !allThree
+          ? "no_hire"
+          : "lean_no_hire";
+  return { sde2, senior };
+}
+
+/**
+ * Rules the engine owns regardless of what the judge wrote. Hint caps are not applied: a hint carries free text and
+ * no dimension, so which score it caps is a judgement the judge makes.
+ */
 export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; track: Session["track"]; tester: TesterOutput | null }): JudgedCard {
   const out: JudgedCard = { ...card };
   if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : out.lldScenarios;
   else out.lldScenarios = [];
+
+  const verdicts = verdictsFor(ctx.track, card.dimensions);
+  const confidence = ctx.mode === "guided" && card.verdict.confidence === "high" ? "medium" : card.verdict.confidence;
+  out.verdict = { ...card.verdict, ...(verdicts ?? {}), confidence };
+
   if (out.trackerMark === "[x]") {
-    if (ctx.mode === "guided") {
+    const reasons: string[] = [];
+    if (ctx.mode === "guided") reasons.push("Guided rounds earn at most [~].");
+    if (ctx.track === "lld") {
+      if (!ctx.tester) reasons.push("The scenario tester did not run, so the mark stays [~].");
+      else if (!ctx.tester.compiled) reasons.push("The code did not compile, so the mark stays [~].");
+      else if (ctx.tester.scenarios.length === 0) reasons.push("No scenario ran, so the mark stays [~].");
+      else if (ctx.tester.scenarios.some((s) => !s.pass)) reasons.push("A scenario failed, so the mark stays [~].");
+    }
+    if (card.dimensions.some((d) => d.score < 3)) reasons.push("A dimension scored below 3, so the mark stays [~].");
+    if (card.gaps.some((g) => g.severity !== "low")) reasons.push("A high or medium gap remains, so the mark stays [~].");
+    if (reasons.length > 0) {
       out.trackerMark = "[~]";
-      out.trackerMarkReason = `${out.trackerMarkReason} Guided rounds earn at most [~].`.trim();
-    } else if (ctx.track === "lld" && ctx.tester && !ctx.tester.compiled) {
-      out.trackerMark = "[~]";
-      out.trackerMarkReason = `${out.trackerMarkReason} The code did not compile, so the mark stays [~].`.trim();
+      out.trackerMarkReason = [out.trackerMarkReason, ...reasons].join(" ").trim();
     }
   }
   const validPhases = phasesFor(ctx.track);

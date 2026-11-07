@@ -3,7 +3,7 @@ import { phasePlan } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import type { Session } from "../../shared/types";
 import { checkStepQuotes } from "../../shared/quotes";
-import { enforceRules, failedQuoteNote, failedRatio, judgeMessage, lintCard, phaseTiming, type JudgedCard } from "./debrief";
+import { enforceRules, failedQuoteNote, failedRatio, judgeMessage, lintCard, phaseTiming, stepSources, type JudgedCard } from "./debrief";
 
 const MIN = 60_000;
 
@@ -66,7 +66,7 @@ describe("rules and checks", () => {
 
   it("caps an LLD round whose code did not compile, and clears HLD scenarios", () => {
     expect(enforceRules(card(), { mode: "interview", track: "lld", tester: { compiled: false, scenarios: [], notes: "" } }).trackerMark).toBe("[~]");
-    const hld = enforceRules(card(), { mode: "interview", track: "hld", tester: null });
+    const hld = enforceRules(card({ gaps: [] }), { mode: "interview", track: "hld", tester: null });
     expect(hld.trackerMark).toBe("[x]");
     expect(hld.lldScenarios).toEqual([]);
   });
@@ -218,5 +218,137 @@ describe("judgeMessage", () => {
       hasImage: false,
     });
     expect(text).toContain("<step_windows>\n- requirements: 00:00–05:00, 10:00–45:00\n- capacity: 05:00–10:00\n</step_windows>");
+  });
+});
+
+const HLD_IDS = ["navigation", "design", "depth", "scale_reliability", "communication", "drive_time"];
+const LLD_IDS = ["requirements", "working_code", "design", "extensibility", "edge_cases", "concurrency", "code_quality", "communication_time"];
+
+function scored(ids: string[], scores: Record<string, number>, fallback = 3): JudgedCard["dimensions"] {
+  return ids.map((id) => ({ id, name: id, score: scores[id] ?? fallback, evidence: [], whatA4LooksLike: "x" }));
+}
+
+const goodTester = { compiled: true, scenarios: [{ name: "a", pass: true, detail: "" }], notes: "" };
+
+describe("tracker mark rules", () => {
+  const run = (over: Partial<JudgedCard>, ctx: Partial<Parameters<typeof enforceRules>[1]> = {}) =>
+    enforceRules(card({ gaps: [], dimensions: scored(HLD_IDS, {}), trackerMark: "[x]", ...over }), { mode: "interview", track: "hld", tester: null, ...ctx });
+
+  it("keeps [x] when every rule holds", () => {
+    expect(run({}).trackerMark).toBe("[x]");
+  });
+
+  it("drops [x] when any dimension is below 3", () => {
+    const out = run({ dimensions: scored(HLD_IDS, { depth: 2 }) });
+    expect(out.trackerMark).toBe("[~]");
+    expect(out.trackerMarkReason).toContain("below 3");
+  });
+
+  it("drops [x] when a high or medium gap stands, and keeps it for a low gap", () => {
+    const gap = (severity: "high" | "medium" | "low") => [{ title: "g", severity, whyItMatters: "w", whatGoodLooksLike: "x", teachMinutes: 5 }];
+    expect(run({ gaps: gap("high") }).trackerMark).toBe("[~]");
+    expect(run({ gaps: gap("medium") }).trackerMark).toBe("[~]");
+    expect(run({ gaps: gap("low") }).trackerMark).toBe("[x]");
+  });
+
+  it("drops an LLD [x] when the tester did not run, or a scenario failed, or none ran", () => {
+    const lld = (tester: Parameters<typeof enforceRules>[1]["tester"]) =>
+      enforceRules(card({ gaps: [], dimensions: scored(LLD_IDS, {}), trackerMark: "[x]" }), { mode: "interview", track: "lld", tester }).trackerMark;
+    expect(lld(goodTester)).toBe("[x]");
+    expect(lld(null)).toBe("[~]");
+    expect(lld({ ...goodTester, scenarios: [{ name: "a", pass: false, detail: "" }] })).toBe("[~]");
+    expect(lld({ ...goodTester, scenarios: [] })).toBe("[~]");
+  });
+
+  it("never raises a [~] to [x]", () => {
+    expect(run({ trackerMark: "[~]" }).trackerMark).toBe("[~]");
+  });
+});
+
+describe("verdict and confidence rules", () => {
+  const verdictOf = (ids: string[], scores: Record<string, number>, track: "hld" | "lld" = "hld") =>
+    enforceRules(card({ dimensions: scored(ids, scores), verdict: { sde2: "strong_hire", senior: "strong_hire", confidence: "low", summary: "s" } }), {
+      mode: "interview",
+      track,
+      tester: track === "lld" ? goodTester : null,
+    }).verdict;
+
+  it("sets the HLD verdicts from the scores", () => {
+    expect(verdictOf(HLD_IDS, { depth: 4, design: 4 })).toMatchObject({ sde2: "strong_hire", senior: "lean_no_hire" });
+    expect(verdictOf(HLD_IDS, { depth: 4, design: 4, navigation: 4, scale_reliability: 4, communication: 4, drive_time: 4 })).toMatchObject({ sde2: "strong_hire", senior: "strong_hire" });
+    expect(verdictOf(HLD_IDS, { depth: 4, scale_reliability: 4, design: 4 })).toMatchObject({ sde2: "strong_hire", senior: "hire" });
+    expect(verdictOf(HLD_IDS, { navigation: 1 })).toMatchObject({ sde2: "no_hire", senior: "no_hire" });
+    expect(verdictOf(HLD_IDS, { depth: 2, communication: 2, drive_time: 2, scale_reliability: 2 })).toMatchObject({ sde2: "no_hire" });
+    expect(verdictOf(HLD_IDS, { depth: 2, communication: 2, drive_time: 2 })).toMatchObject({ sde2: "lean_no_hire" });
+    expect(verdictOf(HLD_IDS, { depth: 2, communication: 2 })).toMatchObject({ sde2: "hire", senior: "no_hire" });
+    expect(verdictOf(HLD_IDS, { depth: 1 })).toMatchObject({ sde2: "lean_no_hire" });
+  });
+
+  it("sets the LLD verdicts from the scores, with concurrency left out", () => {
+    const ids = LLD_IDS.filter((id) => id !== "concurrency");
+    expect(verdictOf(ids, { design: 4, extensibility: 4 }, "lld")).toMatchObject({ sde2: "strong_hire", senior: "lean_no_hire" });
+    expect(verdictOf(ids, { working_code: 2 }, "lld")).toMatchObject({ sde2: "lean_no_hire", senior: "no_hire" });
+    expect(verdictOf(ids, { working_code: 1 }, "lld")).toMatchObject({ sde2: "no_hire" });
+    expect(verdictOf(ids, { edge_cases: 1, code_quality: 1 }, "lld")).toMatchObject({ sde2: "no_hire" });
+    expect(verdictOf(ids, { edge_cases: 2, code_quality: 2 }, "lld")).toMatchObject({ sde2: "hire" });
+    expect(verdictOf(ids, { edge_cases: 1 }, "lld")).toMatchObject({ sde2: "lean_no_hire" });
+  });
+
+  it("leaves the verdict alone when a required dimension is missing", () => {
+    const out = enforceRules(card({ verdict: { sde2: "hire", senior: "hire", confidence: "high", summary: "s" } }), { mode: "interview", track: "hld", tester: null });
+    expect(out.verdict).toMatchObject({ sde2: "hire", senior: "hire" });
+  });
+
+  it("keeps the summary and caps a guided round at medium confidence", () => {
+    const base = { dimensions: scored(HLD_IDS, {}), verdict: { sde2: "hire" as const, senior: "hire" as const, confidence: "high" as const, summary: "kept" } };
+    const guided = enforceRules(card(base), { mode: "guided", track: "hld", tester: null }).verdict;
+    expect(guided.confidence).toBe("medium");
+    expect(guided.summary).toBe("kept");
+    expect(enforceRules(card({ ...base, verdict: { ...base.verdict, confidence: "low" } }), { mode: "guided", track: "hld", tester: null }).verdict.confidence).toBe("low");
+    expect(enforceRules(card(base), { mode: "interview", track: "hld", tester: null }).verdict.confidence).toBe("high");
+  });
+});
+
+describe("stepSources", () => {
+  const entry = (id: string, at: number, text: string, role: "candidate" | "interviewer" = "candidate") => ({ id, at, wall: "", channel: "interview" as const, role, text });
+  const session = {
+    track: "hld",
+    durationMs: 45 * MIN,
+    startedAt: new Date(0).toISOString(),
+    endedAt: null,
+    pausedMs: 0,
+    pauseStartedAt: null,
+    phaseHistory: [
+      { phase: "requirements", at: 0, by: "candidate" },
+      { phase: "api", at: 5 * MIN, by: "candidate" },
+      { phase: "requirements", at: 8 * MIN, by: "candidate" },
+      { phase: "design", at: 10 * MIN, by: "candidate" },
+    ],
+    transcript: [entry("1", MIN, "latency under 50 ms"), entry("2", 6 * MIN, "POST /links"), entry("3", 9 * MIN, "also 99.9 percent uptime"), entry("4", 11 * MIN, "I add a cache")],
+    stepNotes: { api: "returns 201" },
+    stepCode: {},
+    board: { version: 1, graphText: "", updatedAt: null },
+  } as unknown as Session;
+
+  it("gives each step only its own chat across its visits, plus its written answer", () => {
+    const by = stepSources(session, null, { endMs: 20 * MIN });
+    expect(by.requirements?.candidate).toContain("latency under 50 ms");
+    expect(by.requirements?.candidate).toContain("99.9 percent uptime");
+    expect(by.requirements?.candidate).not.toContain("POST /links");
+    expect(by.api?.candidate).toContain("POST /links");
+    expect(by.api?.candidate).toContain("returns 201");
+    expect(by.api?.candidate).not.toContain("cache");
+  });
+
+  it("uses a step's own board text when given, and the whole board otherwise", () => {
+    const withBoard = { ...session, board: { version: 1, graphText: "whole board", updatedAt: null } } as Session;
+    expect(stepSources(withBoard, null, { endMs: 20 * MIN, stepBoard: { api: "api frame" } }).api?.board).toBe("api frame");
+    expect(stepSources(withBoard, null, { endMs: 20 * MIN }).api?.board).toBe("whole board");
+  });
+
+  it("checks a step quote against its own step only", () => {
+    const by = stepSources(session, null, { endMs: 20 * MIN });
+    const stepCard = { steps: [{ phase: "api", took: [{ evidence: { quote: "latency under 50 ms", source: "candidate" as const } }] }] };
+    expect(checkStepQuotes(stepCard, (phase) => by[phase] ?? { candidate: "", board: "", code: "" })).toEqual([{ phase: "api", index: 0, verified: false }]);
   });
 });
