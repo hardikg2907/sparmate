@@ -103,9 +103,13 @@ function applyServer(state: SessionState, msg: ServerMsg, now: number, fresh: bo
       }
       const streams = fresh ? {} : withoutStreams(state.streams, session.transcript);
       const useBoard = state.graph.version === null || session.board.version >= state.graph.version;
-      const code: CodeState | null = state.code
-        ? { ...state.code, path: session.code?.path ?? state.code.path, lastRun: newerRun(state.code.lastRun, session.code?.lastRun) }
-        : null;
+      let code: CodeState | null = null;
+      if (state.code) {
+        const lastRun = newerRun(state.code.lastRun, session.code?.lastRun);
+        // A newer run than the page knows means the one it waits for has finished, even if its result was lost.
+        const running = state.code.running && lastRun === state.code.lastRun;
+        code = { ...state.code, path: session.code?.path ?? state.code.path, lastRun, running };
+      }
       const debrief = session.status === "debriefed" ? { stage: "done" as const, detail: null } : state.debrief;
       return {
         ...state,
@@ -116,6 +120,8 @@ function applyServer(state: SessionState, msg: ServerMsg, now: number, fresh: bo
         notice,
         // An error shown before a drop (a rejected token, say) is stale once the connection is back.
         error: fresh ? null : state.error,
+        // The server repeats only a busy or failed channel after this state, so whatever is not repeated is idle.
+        agent: fresh ? initialState.agent : state.agent,
         code,
         debrief,
         graph: useBoard ? graphFromBoard(session.board) : state.graph,

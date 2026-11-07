@@ -150,6 +150,30 @@ describe("optimistic messages", () => {
   });
 });
 
+describe("agent state after a reconnect", () => {
+  it("shows the guide idle when it finished while the socket was down", () => {
+    let state = server(loaded(), { type: "agent.status", channel: "interview", state: "thinking" });
+    // The server sends no status for an idle channel, so the opening state alone must clear it.
+    state = server(state, { type: "session.state", session: session() }, { fresh: true });
+    expect(state.agent.interview).toEqual({ state: "idle", error: null });
+  });
+
+  it("drops an error cover that was resolved while away, and keeps one the server repeats", () => {
+    let state = server(loaded(), { type: "agent.status", channel: "interview", state: "error", error: "Rate limited." });
+    state = server(state, { type: "agent.status", channel: "coach", state: "thinking" });
+    state = server(state, { type: "session.state", session: session() }, { fresh: true });
+    expect(state.agent).toEqual(initialState.agent);
+    state = server(state, { type: "agent.status", channel: "coach", state: "thinking" });
+    expect(state.agent.coach.state).toBe("thinking");
+  });
+
+  it("keeps the agent state on a state that is not a reconnect", () => {
+    let state = server(loaded(), { type: "agent.status", channel: "interview", state: "thinking" });
+    state = server(state, { type: "session.state", session: session() });
+    expect(state.agent.interview.state).toBe("thinking");
+  });
+});
+
 describe("session.state", () => {
   it("drops partial streams after a reconnect but keeps them otherwise", () => {
     let state = loaded();
@@ -257,6 +281,19 @@ describe("code", () => {
     const older = { ...newer, at: 10 };
     state = server(state, { type: "session.state", session: session({ track: "lld", code: { path: "lld/p/attempt.cpp", version: 4, lastRun: older } }) });
     expect(state.code?.lastRun?.at).toBe(90);
+  });
+
+  it("unlocks Run when a state shows a newer run than the one it waited on", () => {
+    const run = (at: number) => ({ at, compile: { ok: true, diagnostics: [], stderr: "", durationMs: 10 }, run: null });
+    let state = server(withCode(), { type: "code.run.result", result: run(10) });
+    state = reducer(state, { type: "run-start" });
+    const lld = (at: number) => session({ track: "lld", code: { path: "lld/p/attempt.cpp", version: 4, lastRun: run(at) } });
+    // The same run as before: still waiting.
+    state = server(state, { type: "session.state", session: lld(10) }, { fresh: true });
+    expect(state.code?.running).toBe(true);
+    // The result was broadcast while the socket was down.
+    state = server(state, { type: "session.state", session: lld(40) }, { fresh: true });
+    expect(state.code).toMatchObject({ running: false, lastRun: { at: 40 } });
   });
 
   it("stops the spinner when the server reports an error", () => {
