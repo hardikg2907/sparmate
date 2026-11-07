@@ -116,7 +116,7 @@ function verify(claim: CheckerOutput["items"][number], e: CheckerEvidence): { so
   }
 }
 
-/** The checklist with what he covered and where, in step order, for the scribe. Empty when no step was checked. */
+/** The checklist with what he covered and where, in step order, for the scribe. A step with no finished check reads "not checked", never "missing". */
 export function stepChecklistText(
   phases: readonly { id: string; label: string }[],
   checklist: Readonly<Record<string, readonly ChecklistItem[]>>,
@@ -127,6 +127,7 @@ export function stepChecklistText(
       const check = checks[p.id];
       const items = checklist[p.id] ?? [];
       if (!check || items.length === 0) return [];
+      if (check.status !== "done" || check.checkedAt === null) return [`[${p.label}]\n- not checked`];
       const rows = items.map((i) => {
         const got = check.items[i.id];
         if (!got) return `- missing: ${i.label}`;

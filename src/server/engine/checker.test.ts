@@ -139,6 +139,24 @@ describe("mergeCheck", () => {
   });
 });
 
+describe("checklist for a step that was not read", () => {
+  const phases = [{ id: "requirements", label: "Requirements" }];
+  const items = evidence().items;
+  const text = (status: "checking" | "done" | "failed", checkedAt: number | null) =>
+    stepChecklistText(phases, { requirements: items }, { requirements: { status, checkedAt, usedImage: false, items: {} } });
+
+  it("says a failed, running or unfinished check was not checked and lists nothing as missing", () => {
+    for (const out of [text("failed", null), text("checking", null), text("failed", 5), text("done", null)]) {
+      expect(out).toBe("[Requirements]\n- not checked");
+      expect(out).not.toContain("missing");
+    }
+  });
+
+  it("still lists missing items after a finished check", () => {
+    expect(text("done", 5)).toContain("- missing: Create a short link");
+  });
+});
+
 describe("what the browser sees of the checklist and the pins", () => {
   const base = (mode: Session["mode"], status: Session["status"]): Pick<Session, "mode" | "status" | "checklist" | "stepChecks" | "pins"> => ({
     mode,
