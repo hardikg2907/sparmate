@@ -6,6 +6,7 @@ import { CaptureUpdateAction, Excalidraw, MainMenu, exportToBlob, hashElementsVe
 import type { ExcalidrawImperativeAPI, ExcalidrawInitialDataState, UIOptions } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement, OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { BoardPin } from "../../shared/types";
+import { freeInsertPoint, type PlacedElement } from "./placement";
 import { BoardPalette } from "./BoardPalette";
 import { PinLayer } from "./PinLayer";
 import { findStepFrame, hasStepFrames, newStepFrames, stepFrameAt } from "./stepFrames";
@@ -125,38 +126,9 @@ function nextInsertPoint(api: ExcalidrawImperativeAPI, counter: { current: numbe
   return { x: width / 2 / zoom.value - scrollX + shift, y: height / 2 / zoom.value - scrollY + shift };
 }
 
-const FREE_SPOT_GAP = 48;
-const FREE_SPOT_RINGS = 6;
-
-/**
- * The spot nearest the middle of the visible canvas where a shape of this size overlaps nothing already drawn.
- * Clicking several palette items in a row then lays them out side by side instead of piling them up.
- */
-function freeInsertPoint(api: ExcalidrawImperativeAPI, size: { width: number; height: number }, counter: { current: number }): Point {
-  const centre = nextInsertPoint(api, { current: 0 });
-  const boxes = api.getSceneElements().map((el) => ({ x: el.x, y: el.y, w: el.width, h: el.height }));
-  const stepX = size.width + FREE_SPOT_GAP;
-  const stepY = size.height + FREE_SPOT_GAP;
-  const fits = (p: Point) => {
-    const left = p.x - size.width / 2 - FREE_SPOT_GAP / 2;
-    const top = p.y - size.height / 2 - FREE_SPOT_GAP / 2;
-    const right = left + size.width + FREE_SPOT_GAP;
-    const bottom = top + size.height + FREE_SPOT_GAP;
-    return boxes.every((b) => right <= b.x || left >= b.x + b.w || bottom <= b.y || top >= b.y + b.h);
-  };
-  for (let ring = 0; ring <= FREE_SPOT_RINGS; ring++) {
-    const candidates: Point[] = [];
-    for (let dy = -ring; dy <= ring; dy++) {
-      for (let dx = -ring; dx <= ring; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) === ring) candidates.push({ x: centre.x + dx * stepX, y: centre.y + dy * stepY });
-      }
-    }
-    // Reading order inside a ring: rows top to bottom, each left to right.
-    candidates.sort((a, b) => a.y - b.y || a.x - b.x);
-    const spot = candidates.find(fits);
-    if (spot) return spot;
-  }
-  return nextInsertPoint(api, counter);
+function paletteInsertPoint(api: ExcalidrawImperativeAPI, size: { width: number; height: number }): Point {
+  const { width, height, scrollX, scrollY, zoom } = api.getAppState();
+  return freeInsertPoint({ width, height, scrollX, scrollY, zoom: zoom.value }, api.getSceneElements() as unknown as PlacedElement[], size);
 }
 
 function applyArrowPlan(api: ExcalidrawImperativeAPI, plan: ArrowPlan): void {
@@ -271,7 +243,7 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
     if (!current || !readyRef.current) throw new Error("The board is not ready yet.");
     const spec = shapeSpecFor(kind);
     if (!spec) throw new Error(`Unknown shape kind: ${kind}`);
-    const at = freeInsertPoint(current, spec, insertCount);
+    const at = paletteInsertPoint(current, spec);
     // Excalidraw puts an element in a frame only for pointer gestures, so a palette insert joins the frame it lands in.
     const frame = stepFrameAt(current.getSceneElements() as unknown as Record<string, unknown>[], at.x, at.y);
     const created = planShape(spec, label ?? spec.defaultLabel, at).map((el) => (frame ? { ...el, frameId: String(frame.id) } : el));
