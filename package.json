@@ -29,7 +29,7 @@
     "@anthropic-ai/claude-agent-sdk": "0.3.318",
     "@anthropic-ai/sdk": "1.4.0",
     "@excalidraw/excalidraw": "0.18.1",
-    "@fastify/static": "10.1.9",
+    "@fastify/static": "10.1.10",
     "@fastify/websocket": "11.3.7",
     "@fontsource-variable/atkinson-hyperlegible-mono": "5.3.0",
     "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
