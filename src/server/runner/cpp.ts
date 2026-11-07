@@ -13,6 +13,7 @@ import {
   realHome,
   sandboxAvailable,
   toolchainReadRoots,
+  withProcessLimits,
 } from "./sandbox";
 
 export interface CheckResult {
@@ -51,6 +52,9 @@ export interface RunnerLimits {
   outputCapBytes: number;
   harnessMaxBytes: number;
   candidateMaxBytes: number;
+  /** Resident memory caps on macOS, which enforces no memory rlimit; Linux uses prlimit's address-space limit. */
+  runMemoryBytes: number;
+  compileMemoryBytes: number;
 }
 
 export const RUNNER_LIMITS: Readonly<RunnerLimits> = {
@@ -62,6 +66,8 @@ export const RUNNER_LIMITS: Readonly<RunnerLimits> = {
   outputCapBytes: 64 * 1024,
   harnessMaxBytes: 100 * 1024,
   candidateMaxBytes: 1_000_000,
+  runMemoryBytes: 1024 * 1024 * 1024,
+  compileMemoryBytes: 2 * 1024 * 1024 * 1024,
 };
 
 /** Appended to cut output so the reader can see it is incomplete. */
@@ -94,9 +100,12 @@ const HARNESS_HEADER = [
   "",
 ].join("\n");
 
-/** Linux compile limits: far above what a single-file build needs, low enough to stop a runaway one. */
+/** Compile limits: far above what a single-file build needs, low enough to stop a runaway one. */
 const COMPILE_ADDRESS_SPACE_BYTES = 4 * 1024 * 1024 * 1024;
 const COMPILE_FILE_BYTES = 256 * 1024 * 1024;
+/** The same file-size and CPU limits Linux runs get from prlimit. */
+const RUN_FILE_BYTES = 16 * 1024 * 1024;
+const RUN_CPU_SECONDS = 10;
 
 /** The compiler's own stderr is read in full to find diagnostics; callers only get the first output cap of it. */
 const COMPILER_STDERR_CAP = 256 * 1024;
@@ -161,7 +170,7 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
     try {
       await access(compiler, constants.X_OK);
     } catch (error) {
-      return interpretCompile(notStarted(error), args.reports, args.timeoutMs, limits.outputCapBytes);
+      return interpretCompile(notStarted(error), args.reports, args.timeoutMs, limits.outputCapBytes, limits.compileMemoryBytes);
     }
 
     const argv = [...BASE_FLAGS, ...args.flags, ...(args.output === null ? [] : ["-o", args.output]), "--", ...args.inputs];
@@ -172,8 +181,13 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
       if (process.platform === "darwin") {
         // An input may be reached through a symlink, so both spellings are allowed.
         const readable = [...new Set([...outside, ...(await Promise.all(outside.map(realInput)))])];
-        command = SANDBOX_EXEC;
-        commandArgs = ["-p", buildCompileSandboxProfile(args.cwd, readable, toolchainReadRoots(compiler)), compiler, ...argv];
+        const profile = buildCompileSandboxProfile(args.cwd, readable, toolchainReadRoots(compiler));
+        const limited = withProcessLimits(SANDBOX_EXEC, ["-p", profile, compiler, ...argv], {
+          fileBytes: COMPILE_FILE_BYTES,
+          cpuSeconds: Math.ceil(args.timeoutMs / 1000) + 5,
+        });
+        command = limited.command;
+        commandArgs = limited.args;
       } else if (process.platform === "linux") {
         const prefix = compilerPrefix(compiler);
         const box = buildLinuxSandboxInvocation(compiler, args.cwd, privateRoots(), {
@@ -196,8 +210,9 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
       timeoutMs: args.timeoutMs,
       maxStdoutBytes: COMPILER_STDERR_CAP,
       maxStderrBytes: COMPILER_STDERR_CAP,
+      maxRssBytes: limits.compileMemoryBytes,
     });
-    return interpretCompile(run, args.reports, args.timeoutMs, limits.outputCapBytes);
+    return interpretCompile(run, args.reports, args.timeoutMs, limits.outputCapBytes, limits.compileMemoryBytes);
   };
 
   const execute = async (dir: string, program: string, timeoutMs: number, extraEnv: Record<string, string>): Promise<NonNullable<RunResult["run"]>> => {
@@ -217,8 +232,12 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
 
     if (sandboxed) {
       if (process.platform === "darwin") {
-        command = SANDBOX_EXEC;
-        args = ["-p", buildSandboxProfile(dir), program];
+        const limited = withProcessLimits(SANDBOX_EXEC, ["-p", buildSandboxProfile(dir), program], {
+          fileBytes: RUN_FILE_BYTES,
+          cpuSeconds: RUN_CPU_SECONDS,
+        });
+        command = limited.command;
+        args = limited.args;
       } else if (process.platform === "linux") {
         const box = buildLinuxSandboxInvocation(program, dir, privateRoots());
         command = box.command;
@@ -234,12 +253,14 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
       timeoutMs,
       maxStdoutBytes: limits.outputCapBytes,
       maxStderrBytes: limits.outputCapBytes,
+      maxRssBytes: limits.runMemoryBytes,
     });
+    const stderr = withCutNote(run.spawnError === null ? withoutProcNoise(run.stderr) : `${run.spawnError}\n`, run.stderrCut, limits.outputCapBytes);
     return {
       exitCode: run.exitCode,
       signal: run.signal,
       stdout: withCutNote(run.stdout, run.stdoutCut, limits.outputCapBytes),
-      stderr: withCutNote(run.spawnError === null ? withoutProcNoise(run.stderr) : `${run.spawnError}\n`, run.stderrCut, limits.outputCapBytes),
+      stderr: run.memoryExceeded ? `${stderr}\n${memoryNote("program", limits.runMemoryBytes)}\n` : stderr,
       timedOut: run.timedOut,
       durationMs: run.durationMs,
     };
@@ -413,6 +434,7 @@ function notStarted(error: unknown): ProcessResult {
     stdoutCut: false,
     stderrCut: false,
     timedOut: false,
+    memoryExceeded: false,
     durationMs: 0,
     spawnError: code === undefined ? "could not start the process" : `could not start the process (${code})`,
   };
@@ -427,12 +449,13 @@ async function readSource(path: string): Promise<string | null> {
   }
 }
 
-function interpretCompile(run: ProcessResult, reports: readonly Report[], timeoutMs: number, capBytes: number): CheckResult {
-  const ok = run.exitCode === 0 && !run.timedOut && run.spawnError === null;
+function interpretCompile(run: ProcessResult, reports: readonly Report[], timeoutMs: number, capBytes: number, memoryBytes: number): CheckResult {
+  const ok = run.exitCode === 0 && !run.timedOut && !run.memoryExceeded && run.spawnError === null;
 
   let stderr = run.stderr;
   if (run.spawnError !== null) stderr = `The C++ compiler could not be started: ${run.spawnError}\n`;
   if (run.timedOut) stderr += `\nThe compiler did not finish within ${Math.round(timeoutMs / 1000)} seconds and was stopped.\n`;
+  if (run.memoryExceeded) stderr += `\n${memoryNote("compiler", memoryBytes)}\n`;
 
   const diagnostics: CompileDiagnostic[] = [];
   for (const report of reports) {
@@ -444,7 +467,7 @@ function interpretCompile(run: ProcessResult, reports: readonly Report[], timeou
   }
   if (!ok && !diagnostics.some((d) => d.severity === "error")) {
     // Link errors and driver failures have no source position; the editor still needs something to show.
-    diagnostics.push({ line: 1, column: 1, endLine: 1, endColumn: 2, severity: "error", message: describeFailure(run, stderr, timeoutMs) });
+    diagnostics.push({ line: 1, column: 1, endLine: 1, endColumn: 2, severity: "error", message: describeFailure(run, stderr, timeoutMs, memoryBytes) });
   }
 
   const capped = truncateUtf8(stderr, capBytes);
@@ -456,9 +479,10 @@ function interpretCompile(run: ProcessResult, reports: readonly Report[], timeou
   };
 }
 
-function describeFailure(run: ProcessResult, stderr: string, timeoutMs: number): string {
+function describeFailure(run: ProcessResult, stderr: string, timeoutMs: number, memoryBytes: number): string {
   if (run.spawnError !== null) return "The C++ compiler could not be started.";
   if (run.timedOut) return `The compiler did not finish within ${Math.round(timeoutMs / 1000)} seconds.`;
+  if (run.memoryExceeded) return memoryNote("compiler", memoryBytes);
   if (/Undefined symbols/.test(stderr)) {
     const symbols = [...stderr.matchAll(/^\s+"(.+)", referenced from:/gm)].map((m) => m[1] ?? "");
     if (symbols.includes("_main")) return "Link error: the program has no main() function.";
@@ -469,6 +493,10 @@ function describeFailure(run: ProcessResult, stderr: string, timeoutMs: number):
   const errorLine = lines.find((l) => /\b(?:fatal )?error: /.test(l)) ?? lines.find((l) => l !== "");
   const message = errorLine?.replace(/^.*?\b(?:fatal )?error: /, "") ?? "";
   return message === "" ? "The build failed." : `Build failed: ${message.slice(0, 300)}`;
+}
+
+function memoryNote(who: "program" | "compiler", bytes: number): string {
+  return `The ${who} used more than ${Math.round(bytes / (1024 * 1024))} MB of memory and was stopped.`;
 }
 
 function cutNote(capBytes: number): string {

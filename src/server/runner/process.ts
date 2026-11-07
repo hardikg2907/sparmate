@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 
 export interface ProcessOptions {
   command: string;
@@ -8,6 +8,11 @@ export interface ProcessOptions {
   timeoutMs: number;
   maxStdoutBytes: number;
   maxStderrBytes: number;
+  /**
+   * Kill the process group once its resident memory passes this size. macOS only: it enforces no memory
+   * rlimit, while Linux runs get an address-space limit from prlimit instead.
+   */
+  maxRssBytes?: number;
 }
 
 export interface ProcessResult {
@@ -19,6 +24,8 @@ export interface ProcessResult {
   stdoutCut: boolean;
   stderrCut: boolean;
   timedOut: boolean;
+  /** True when the group was killed for passing `maxRssBytes`. */
+  memoryExceeded: boolean;
   durationMs: number;
   /** Set when the process could not be started at all, for example because the compiler is missing. */
   spawnError: string | null;
@@ -26,6 +33,9 @@ export interface ProcessResult {
 
 /** After the process ends, wait this long for its pipes to drain before giving up on stragglers that kept them open. */
 const DRAIN_GRACE_MS = 1000;
+
+/** At full allocation speed a program gets roughly half a gigabyte past the cap before the kill lands. */
+const MEMORY_POLL_MS = 100;
 
 const liveGroups = new Set<number>();
 
@@ -50,11 +60,13 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
     const stdout = new Capture(options.maxStdoutBytes);
     const stderr = new Capture(options.maxStderrBytes);
     let timedOut = false;
+    let memoryExceeded = false;
     let exitCode: number | null = null;
     let signal: string | null = null;
     let finished = false;
     let timeout: NodeJS.Timeout | undefined;
     let grace: NodeJS.Timeout | undefined;
+    let memoryWatch: NodeJS.Timeout | undefined;
 
     let child: ReturnType<typeof spawn>;
     try {
@@ -86,6 +98,7 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
       finished = true;
       clearTimeout(timeout);
       clearTimeout(grace);
+      clearInterval(memoryWatch);
       child.stdout?.destroy();
       child.stderr?.destroy();
       resolve({
@@ -96,6 +109,7 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
         stdoutCut: stdout.cut,
         stderrCut: stderr.cut,
         timedOut,
+        memoryExceeded,
         durationMs: Math.round(performance.now() - started),
         spawnError,
       });
@@ -117,6 +131,38 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
       killGroup();
       grace ??= setTimeout(() => finish(null), DRAIN_GRACE_MS);
     }, options.timeoutMs);
+
+    const cap = options.maxRssBytes;
+    if (cap !== undefined && process.platform === "darwin" && child.pid !== undefined) {
+      const pid = child.pid;
+      let polling = false;
+      memoryWatch = setInterval(() => {
+        if (polling || finished) return;
+        polling = true;
+        groupRssBytes(pid).then((bytes) => {
+          polling = false;
+          if (bytes > cap && !finished && !timedOut) {
+            memoryExceeded = true;
+            killGroup();
+            clearInterval(memoryWatch);
+          }
+        });
+      }, MEMORY_POLL_MS);
+    }
+  });
+}
+
+/** Resident memory of every process in the group, from BSD ps where -g selects by process group. Zero when ps fails. */
+function groupRssBytes(pgid: number): Promise<number> {
+  return new Promise((resolve) => {
+    execFile("/bin/ps", ["-o", "rss=", "-g", String(pgid)], { timeout: 2000 }, (error, stdout) => {
+      if (error !== null && stdout === "") {
+        resolve(0);
+        return;
+      }
+      const kilobytes = stdout.split("\n").reduce((sum, line) => sum + (Number(line.trim()) || 0), 0);
+      resolve(kilobytes * 1024);
+    });
   });
 }
 
@@ -179,6 +225,7 @@ function failedToStart(started: number, error: unknown): ProcessResult {
     stdoutCut: false,
     stderrCut: false,
     timedOut: false,
+    memoryExceeded: false,
     durationMs: Math.round(performance.now() - started),
     spawnError: describeSpawnError(error),
   };

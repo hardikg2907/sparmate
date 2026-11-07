@@ -30,6 +30,9 @@ export function sandboxAvailable(platform: NodeJS.Platform = process.platform): 
  * loader, libc++ and the sanitizer runtimes live in system folders. The program's output goes back to a
  * model, so it must not be able to print the user's files.
  *
+ * Forking is denied too: macOS has no per-sandbox process limit, and a child that calls setsid() would leave the
+ * process group and outlive the timeout. Threads are unaffected.
+ *
  * Both paths must be real paths: the sandbox compares resolved paths, so a symlinked
  * temp folder such as /var/... would never match and every write would be denied.
  */
@@ -38,6 +41,7 @@ export function buildSandboxProfile(writableDir: string, privateRoot: string = r
     "(version 1)",
     "(allow default)",
     "(deny network*)",
+    "(deny process-fork)",
     "(deny file-write*)",
     `(allow file-write* (subpath ${quote(writableDir)}))`,
     DEVICE_WRITES,
@@ -108,6 +112,19 @@ export function compilerPrefix(compiler: string | undefined, home: string = real
   const prefix = dirname(dirname(real));
   if (prefix === "/" || prefix === home || home.startsWith(prefix + sep)) return null;
   return prefix;
+}
+
+/**
+ * Runs `command` through /bin/sh with a file-size and CPU-time limit. macOS rejects memory rlimits and counts
+ * processes per user, so those come from the memory watch and the sandbox instead. `exec` keeps the pid, so the
+ * caller's process group and memory watch still apply.
+ * The limits are numbers built here; the command and its arguments travel as positional parameters, never
+ * as shell text.
+ */
+export function withProcessLimits(command: string, args: readonly string[], limits: { fileBytes: number; cpuSeconds: number }): { command: string; args: string[] } {
+  const blocks = Math.max(1, Math.ceil(limits.fileBytes / 1024));
+  const cpu = Math.max(1, Math.ceil(limits.cpuSeconds));
+  return { command: "/bin/sh", args: ["-c", `ulimit -f ${blocks} && ulimit -t ${cpu} && exec "$0" "$@"`, command, ...args] };
 }
 
 export interface LinuxSandboxOptions {

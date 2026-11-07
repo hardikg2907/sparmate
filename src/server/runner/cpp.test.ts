@@ -13,7 +13,7 @@ import {
   createCppRunnerWithLimits,
   detectSanitizers,
 } from "./cpp";
-import { buildCompileSandboxProfile, buildLinuxSandboxInvocation, buildSandboxProfile, sandboxAvailable } from "./sandbox";
+import { buildCompileSandboxProfile, buildLinuxSandboxInvocation, buildSandboxProfile, sandboxAvailable, withProcessLimits } from "./sandbox";
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -251,7 +251,8 @@ describe("timeouts", () => {
   }, 30_000);
 
   it("kills the whole process group, so a child the program left behind does not survive", async () => {
-    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 800 });
+    // Unsandboxed, because the sandbox refuses the fork this test needs.
+    const quick = createCppRunnerWithLimits({ tmpRoot, sandbox: false }, { runTimeoutMs: 800 });
     const started = Date.now();
     const { run: ran } = await quick.compileAndRun(fixture("fork_loop.cpp"));
     expect(ran!.timedOut).toBe(true);
@@ -557,6 +558,98 @@ describe("the sandbox", () => {
     const { run: ran } = await odd.compileAndRun(await program("weird_root.cpp", source));
     expect(ran!.stdout).toBe("inside ok\n");
     await rm(join(base, 'we"ird\\ root'), { recursive: true, force: true });
+  });
+});
+
+describe("process and resource limits", () => {
+  const sleepUntilGone = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const alive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it("leaves no child that called setsid() alive after the run returns", async () => {
+    const source =
+      "#include <cerrno>\n#include <cstdio>\n#include <cstring>\n#include <unistd.h>\n" +
+      "int main() {\n  pid_t child = fork();\n  if (child == 0) { setsid(); sleep(30); _exit(0); }\n" +
+      '  if (child < 0) std::printf("fork refused: %s\\n", std::strerror(errno));\n  else std::printf("child %d\\n", static_cast<int>(child));\n  return 0;\n}\n';
+    const { run: ran } = await runner.compileAndRun(await program("setsid_child.cpp", source));
+    const pid = Number(/child (\d+)/.exec(ran!.stdout)?.[1] ?? 0);
+    if (process.platform === "darwin") expect(ran!.stdout).toBe("fork refused: Operation not permitted\n");
+    if (pid > 0) {
+      await sleepUntilGone(300);
+      expect(alive(pid)).toBe(false);
+    }
+  });
+
+  it("stops a fork bomb within the time limit", async () => {
+    // Bounded at 64 processes, so even a broken sandbox cannot hurt the machine.
+    const source =
+      "#include <cstdio>\n#include <unistd.h>\n" +
+      "int main() {\n  pid_t first = getpid();\n  int made = 0;\n  for (int i = 0; i < 6; i++) if (fork() > 0) made++;\n" +
+      '  if (getpid() == first) { std::printf("forks %d\\n", made); std::fflush(stdout); }\n  volatile unsigned long spin = 0;\n  while (true) spin = spin + 1;\n}\n';
+    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 800 });
+    const started = Date.now();
+    const { run: ran } = await quick.compileAndRun(await program("fork_bomb.cpp", source));
+    expect(ran!.timedOut).toBe(true);
+    expect(ran!.durationMs).toBeLessThan(800 + 1500);
+    expect(Date.now() - started).toBeLessThan(15_000);
+    if (process.platform === "darwin") expect(ran!.stdout).toBe("forks 0\n");
+  });
+
+  it.skipIf(process.platform !== "darwin")("stops a program that keeps allocating memory, well before the time limit", async () => {
+    // Bounded at 1 GB, so a broken watch cannot exhaust the machine either.
+    const source =
+      "#include <cstdio>\n#include <cstdlib>\n#include <cstring>\n" +
+      "int main() {\n  const std::size_t step = 16u << 20;\n  for (int i = 0; i < 64; i++) {\n" +
+      "    char* block = static_cast<char*>(std::malloc(step));\n    if (!block) return 2;\n    std::memset(block, 1, step);\n  }\n" +
+      '  std::puts("allocated 1 GB");\n  std::fflush(stdout);\n  volatile unsigned long spin = 0;\n  while (true) spin = spin + 1;\n}\n';
+    const capped = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 4000, runMemoryBytes: 128 * 1024 * 1024 });
+    const { run: ran } = await capped.compileAndRun(await program("memory_bomb.cpp", source));
+    expect(ran).toMatchObject({ timedOut: false, signal: "SIGKILL" });
+    expect(ran!.stderr).toContain("The program used more than 128 MB of memory and was stopped.");
+    expect(ran!.durationMs).toBeLessThan(4000);
+  });
+
+  it.skipIf(process.platform !== "darwin")("stops a compiler that passes its memory cap", async () => {
+    const tiny = createCppRunnerWithLimits({ tmpRoot }, { compileMemoryBytes: 1024 * 1024 });
+    const check = await tiny.syntaxCheck(fixture("hello.cpp"));
+    expect(check.ok).toBe(false);
+    expect(check.stderr).toContain("The compiler used more than 1 MB of memory and was stopped.");
+  });
+
+  it("stops a program that writes a file larger than 16 MB", async () => {
+    const source =
+      "#include <cstdio>\n#include <vector>\n" +
+      'int main() {\n  std::vector<char> chunk(1 << 20, \'x\');\n  std::FILE* f = std::fopen("big.bin", "w");\n' +
+      "  for (int i = 0; i < 32; i++) { std::fwrite(chunk.data(), 1, chunk.size(), f); std::fflush(f); }\n" +
+      '  std::puts("wrote 32 MB");\n}\n';
+    const { run: ran } = await runner.compileAndRun(await program("big_file.cpp", source));
+    expect(ran!.stdout).not.toContain("wrote 32 MB");
+    expect(ran!.signal).toBe("SIGXFSZ");
+  });
+
+  it("still lets a program use threads", async () => {
+    const source =
+      "#include <iostream>\n#include <mutex>\n#include <thread>\n#include <vector>\n" +
+      "int main() {\n  std::mutex m;\n  int total = 0;\n  std::vector<std::thread> pool;\n" +
+      "  for (int i = 1; i <= 4; i++) pool.emplace_back([&, i] { std::lock_guard<std::mutex> lock(m); total += i; });\n" +
+      '  for (auto& t : pool) t.join();\n  std::cout << "total " << total << "\\n";\n}\n';
+    const { run: ran } = await runner.compileAndRun(await program("threads.cpp", source));
+    expect(ran).toMatchObject({ exitCode: 0, stdout: "total 10\n" });
+  });
+
+  it("builds a run profile that refuses forks and a limits wrapper that passes the command as arguments", () => {
+    expect(buildSandboxProfile("/tmp/build")).toContain("(deny process-fork)");
+    const wrapped = withProcessLimits("/usr/bin/sandbox-exec", ["-p", "(version 1)", "/tmp/a b/program"], { fileBytes: 16 * 1024 * 1024, cpuSeconds: 10 });
+    expect(wrapped).toEqual({
+      command: "/bin/sh",
+      args: ["-c", 'ulimit -f 16384 && ulimit -t 10 && exec "$0" "$@"', "/usr/bin/sandbox-exec", "-p", "(version 1)", "/tmp/a b/program"],
+    });
   });
 });
 
