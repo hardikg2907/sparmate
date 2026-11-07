@@ -5,10 +5,18 @@ type Skeleton = Parameters<typeof convertToExcalidrawElements>[0];
 
 function build(skeleton: unknown[]): Record<string, unknown>[] {
   // Pins and step frames name elements by id, so the ids written here must survive the conversion.
-  return convertToExcalidrawElements(skeleton as Skeleton, { regenerateIds: false }) as unknown as Record<string, unknown>[];
+  const elements = convertToExcalidrawElements(skeleton as Skeleton, { regenerateIds: false }) as unknown as Record<string, unknown>[];
+  // The hand-drawn font loads after the scene is built, so the measured label widths come out a little short and the last
+  // letter gets clipped. Widening each label around its centre leaves the layout unchanged.
+  return elements.map((el) => {
+    if (el.type !== "text" || typeof el.width !== "number" || typeof el.x !== "number") return el;
+    const width = Math.ceil(el.width * 1.14);
+    return { ...el, width, x: el.x - (width - el.width) / 2 };
+  });
 }
 
-function box(id: string, x: number, y: number, text: string, kind: string, extra: Record<string, unknown> = {}) {
+function box(id: string, x: number, y: number, text: string, kind: string, options: Record<string, unknown> = {}) {
+  const { labelSize, ...extra } = options;
   return {
     type: "rectangle",
     id,
@@ -20,13 +28,18 @@ function box(id: string, x: number, y: number, text: string, kind: string, extra
     fillStyle: "solid",
     strokeColor: "#1971c2",
     roundness: { type: 3 },
-    label: { text, fontSize: 18 },
+    label: { text, fontSize: labelSize ?? 18 },
     customData: { kind },
     ...extra,
   };
 }
 
-function link(from: string, to: string, x: number, y: number, width: number, height: number, text: string, dashed = false) {
+/** Larger boxes and type for the design frame, so the diagram stays readable when the frame fills the canvas. */
+function big(width: number, extra: Record<string, unknown> = {}) {
+  return { width, height: 90, labelSize: 28, ...extra };
+}
+
+function link(from: string, to: string, x: number, y: number, width: number, height: number, text: string, dashed = false, fontSize = 16) {
   return {
     type: "arrow",
     x,
@@ -36,7 +49,7 @@ function link(from: string, to: string, x: number, y: number, width: number, hei
     start: { id: from },
     end: { id: to },
     strokeStyle: dashed ? "dashed" : "solid",
-    label: { text, fontSize: 16 },
+    label: { text, fontSize },
   };
 }
 
@@ -89,16 +102,17 @@ export function hldBoard(): Record<string, unknown>[] {
       free("cap-rate", 1120, 200, "about 40 writes/s, 4,000 reads/s"),
       free("api-create", 2160, 130, "POST /v1/links -> { code }"),
       free("api-redirect", 2160, 200, "GET /{code} -> 302"),
-      box("client", 100, 1060, "Client", "client"),
-      box("cdn", 330, 1060, "CDN", "cdn", { backgroundColor: "#fff4e6", strokeColor: "#e8590c" }),
-      box("redirect", 560, 1060, "Redirect service", "service", { backgroundColor: "#ebfbee", strokeColor: "#2f9e44", width: 190 }),
-      box("redis", 900, 900, "Redis", "cache", { backgroundColor: "#fff5f5", strokeColor: "#e03131" }),
-      { ...box("pg", 900, 1230, "Postgres", "database", { backgroundColor: "#f3f0ff", strokeColor: "#6741d9" }), type: "ellipse" },
-      box("keygen", 560, 1340, "Key generator", "service", { backgroundColor: "#ebfbee", strokeColor: "#2f9e44", width: 190 }),
-      link("client", "cdn", 240, 1088, 90, 0, "GET"),
-      link("cdn", "redirect", 470, 1088, 90, 0, "miss"),
-      link("redirect", "redis", 750, 1075, 150, -147, "lookup"),
-      link("redirect", "pg", 750, 1100, 150, 158, "on miss", true),
+      box("client", 120, 1230, "Client", "client", big(230)),
+      box("cdn", 480, 1230, "CDN", "cdn", big(230, { backgroundColor: "#fff4e6", strokeColor: "#e8590c" })),
+      box("redirect", 860, 1230, "Redirect service", "service", big(330, { backgroundColor: "#ebfbee", strokeColor: "#2f9e44" })),
+      box("redis", 1480, 960, "Redis cache", "cache", big(260, { backgroundColor: "#fff5f5", strokeColor: "#e03131" })),
+      { ...box("pg", 1480, 1340, "Postgres", "database", big(260, { backgroundColor: "#f3f0ff", strokeColor: "#6741d9" })), type: "ellipse" },
+      box("keygen", 860, 1560, "Key generator", "service", big(330, { backgroundColor: "#ebfbee", strokeColor: "#2f9e44" })),
+      link("client", "cdn", 350, 1275, 130, 0, "GET", false, 24),
+      link("cdn", "redirect", 710, 1275, 150, 0, "miss", false, 24),
+      link("redirect", "redis", 1190, 1260, 290, -255, "lookup", false, 24),
+      link("redirect", "pg", 1190, 1290, 290, 95, "on miss", true, 24),
+      link("keygen", "pg", 1190, 1605, 290, -180, "new code", true, 24),
     ],
     {
       requirements: ["req-scope", "req-latency", "req-avail"],
