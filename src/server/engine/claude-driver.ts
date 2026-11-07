@@ -22,7 +22,7 @@ import {
   type UserTurn,
 } from "./driver";
 import { truncate, type Logger } from "./log";
-import { extractConversationStats, extractOneShotStats } from "./usage-capture";
+import { addStats, attachFailureStats, extractConversationStats, extractOneShotStats, failureStats } from "./usage-capture";
 
 export interface ClaudeDriverOptions {
   /** Empty folder every model subprocess runs in. */
@@ -377,7 +377,7 @@ class ClaudeConversation implements Conversation {
           if (text) handlers.onTextDelta(text);
           return { text, stats };
         }
-        throw resultFailure(msg, errorKind, this.stderr);
+        throw attachFailureStats(resultFailure(msg, errorKind, this.stderr), stats);
       }
     }
   }
@@ -454,13 +454,13 @@ async function runOnceAttempt<T>(
         }
       } else if (msg.type === "result") {
         const stats = extractOneShotStats(msg, started, setup.model);
-        if (msg.subtype !== "success" || msg.is_error) throw resultFailure(msg, errorKind, stderr);
+        if (msg.subtype !== "success" || msg.is_error) throw attachFailureStats(resultFailure(msg, errorKind, stderr), stats);
         const text = texts.join("\n\n") || msg.result;
         if (!setup.output) return { text, output: null, stats };
         const parsed = setup.output.schema.safeParse(msg.structured_output);
         if (!parsed.success) {
           const issues = parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-          throw new DriverError("The model returned data in the wrong shape. Retry.", `structured output failed validation: ${issues}`);
+          throw attachFailureStats(new DriverError("The model returned data in the wrong shape. Retry.", `structured output failed validation: ${issues}`), stats);
         }
         return { text, output: parsed.data, stats };
       }
@@ -494,7 +494,17 @@ export function createClaudeDriver(opts: ClaudeDriverOptions): Driver & { closeA
         const fallback = setup.output?.fallbackJsonSchema;
         if (fallback && err instanceof DriverError && /json.?schema/i.test(err.detail)) {
           opts.log.warn(`Structured output schema refused for ${setup.role}; retrying with the conservative schema`);
-          return runOnceAttempt(setup, opts, fallback, registry);
+          // The refused attempt may have spent tokens, so its stats join the retry's single ledger row.
+          const first = failureStats(err);
+          try {
+            const res = await runOnceAttempt(setup, opts, fallback, registry);
+            return first ? { ...res, stats: addStats(first, res.stats) } : res;
+          } catch (retryErr) {
+            const second = failureStats(retryErr);
+            const spent = first && second ? addStats(first, second) : (second ?? first);
+            if (spent && typeof retryErr === "object" && retryErr) attachFailureStats(retryErr, spent);
+            throw retryErr;
+          }
         }
         throw err;
       }

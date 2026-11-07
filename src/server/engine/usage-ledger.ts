@@ -2,6 +2,7 @@ import { appendFile, readFile } from "node:fs/promises";
 import type { Mode, Track } from "../../shared/phases";
 import type { Logger } from "./log";
 import type { ProblemCatalog } from "./problems";
+import { estimateCostUsd } from "./usage-capture";
 
 export interface UsageRecord {
   time: string;
@@ -20,6 +21,10 @@ export interface UsageRecord {
   costUsd: number | null;
   duration: number;
   durationMs: number;
+  /** Absent on rows written before failed calls were recorded; read as true. */
+  ok?: boolean;
+  /** True when the cost was priced from tokens because the SDK gave none. */
+  costEstimated?: boolean;
 }
 
 export interface UsageTotals {
@@ -31,6 +36,10 @@ export interface UsageTotals {
   cacheCreationTokens: number;
   cacheHitRate: number;
   calls: number;
+  /** Calls that ended in an error but still spent tokens. */
+  failedCalls: number;
+  /** Calls whose cost is priced from tokens, not reported by the SDK. */
+  estimatedCalls: number;
   rounds: number;
 }
 
@@ -147,7 +156,16 @@ export function parseUsageRecord(line: string): UsageRecord | null {
   const cacheReadTokens = typeof raw.cacheReadTokens === "number" && raw.cacheReadTokens >= 0 ? raw.cacheReadTokens : 0;
   const cacheCreationTokens = typeof raw.cacheCreationTokens === "number" && raw.cacheCreationTokens >= 0 ? raw.cacheCreationTokens : 0;
 
-  const cost = typeof raw.costUsd === "number" ? raw.costUsd : typeof raw.cost === "number" ? raw.cost : null;
+  let cost = typeof raw.costUsd === "number" ? raw.costUsd : typeof raw.cost === "number" ? raw.cost : null;
+  let costEstimated = raw.costEstimated === true;
+  // Rows written before estimates existed stored an unknown cost as 0 next to real tokens.
+  if (cost === 0 && raw.costEstimated === undefined && inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens > 0) {
+    const estimate = estimateCostUsd(model, { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens });
+    if (estimate !== null) {
+      cost = estimate;
+      costEstimated = true;
+    }
+  }
   const duration = typeof raw.durationMs === "number" ? raw.durationMs : typeof raw.duration === "number" ? raw.duration : 0;
 
   const sessionId = typeof raw.sessionId === "string" && raw.sessionId ? raw.sessionId : null;
@@ -172,7 +190,26 @@ export function parseUsageRecord(line: string): UsageRecord | null {
     costUsd: cost,
     duration,
     durationMs: duration,
+    ok: raw.ok !== false,
+    costEstimated,
   };
+}
+
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** The calendar day (YYYY-MM-DD) an instant falls on in the given IANA zone. */
+export function dayInZone(instant: Date, timeZone: string): string {
+  let f = dayFormatters.get(timeZone);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+    dayFormatters.set(timeZone, f);
+  }
+  return f.format(instant);
+}
+
+export interface UsageSummaryOptions {
+  /** IANA zone that decides where one day ends and the next begins. Defaults to this machine's zone. */
+  timeZone?: string;
 }
 
 export interface UsageLedgerOptions {
@@ -237,7 +274,8 @@ export class UsageLedger {
     return problemId;
   }
 
-  async summary(): Promise<UsageSummaryResponse> {
+  async summary(options: UsageSummaryOptions = {}): Promise<UsageSummaryResponse> {
+    const timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const records = await this.readAll();
     let trackingSince: string | null = null;
     for (const r of records) {
@@ -249,6 +287,8 @@ export class UsageLedger {
     let totalOutputTokens = 0;
     let totalCacheReadTokens = 0;
     let totalCacheCreationTokens = 0;
+    let failedCalls = 0;
+    let estimatedCalls = 0;
     const sessionIds = new Set<string>();
 
     const sessionMap = new Map<string, {
@@ -310,6 +350,8 @@ export class UsageLedger {
       totalOutputTokens += r.outputTokens;
       totalCacheReadTokens += r.cacheReadTokens;
       totalCacheCreationTokens += r.cacheCreationTokens;
+      if (r.ok === false) failedCalls += 1;
+      if (r.costEstimated) estimatedCalls += 1;
 
       if (r.sessionId) {
         sessionIds.add(r.sessionId);
@@ -393,7 +435,7 @@ export class UsageLedger {
       modelEntry.calls += 1;
       modelMap.set(r.model, modelEntry);
 
-      const dayKey = r.time.slice(0, 10);
+      const dayKey = dayInZone(new Date(r.time), timeZone);
       const dayEntry = dayMap.get(dayKey) ?? {
         cost: 0,
         inputTokens: 0,
@@ -476,12 +518,11 @@ export class UsageLedger {
       }))
       .sort((a, b) => b.cost - a.cost);
 
-    // Build the last 30 calendar days sequence up to today.
+    // Walk back through calendar dates, not 24-hour steps, so a DST change cannot repeat or skip a day.
     const byDay: DayUsageSummary[] = [];
-    const now = new Date();
+    const [ty, tm, td] = dayInZone(new Date(), timeZone).split("-").map(Number) as [number, number, number];
     for (let i = 29; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 86_400_000);
-      const dayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const dayStr = new Date(Date.UTC(ty, tm - 1, td - i)).toISOString().slice(0, 10);
       const entry = dayMap.get(dayStr);
       if (entry) {
         byDay.push({
@@ -520,6 +561,8 @@ export class UsageLedger {
         cacheCreationTokens: totalCacheCreationTokens,
         cacheHitRate: calcCacheHitRate(totalInputTokens, totalCacheReadTokens, totalCacheCreationTokens),
         calls: records.length,
+        failedCalls,
+        estimatedCalls,
         rounds: sessionIds.size,
       },
       bySession,
@@ -548,6 +591,8 @@ export class UsageLedger {
     let totalOutputTokens = 0;
     let totalCacheReadTokens = 0;
     let totalCacheCreationTokens = 0;
+    let failedCalls = 0;
+    let estimatedCalls = 0;
 
     const roleMap = new Map<string, {
       cost: number;
@@ -565,6 +610,8 @@ export class UsageLedger {
       totalOutputTokens += r.outputTokens;
       totalCacheReadTokens += r.cacheReadTokens;
       totalCacheCreationTokens += r.cacheCreationTokens;
+      if (r.ok === false) failedCalls += 1;
+      if (r.costEstimated) estimatedCalls += 1;
 
       const roleEntry = roleMap.get(r.role) ?? {
         cost: 0,
@@ -609,6 +656,8 @@ export class UsageLedger {
         cacheCreationTokens: totalCacheCreationTokens,
         cacheHitRate: calcCacheHitRate(totalInputTokens, totalCacheReadTokens, totalCacheCreationTokens),
         calls: roundRecords.length,
+        failedCalls,
+        estimatedCalls,
         rounds: 1,
       },
       byRole,

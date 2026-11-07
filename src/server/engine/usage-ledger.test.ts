@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { calcCacheHitRate, parseUsageRecord, UsageLedger, type UsageRecord } from "./usage-ledger";
 
 describe("calcCacheHitRate", () => {
@@ -101,6 +101,8 @@ describe("UsageLedger file operations and aggregations", () => {
       cacheCreationTokens: 0,
       cacheHitRate: 0,
       calls: 0,
+      failedCalls: 0,
+      estimatedCalls: 0,
       rounds: 0,
     });
     expect(summary.bySession).toEqual([]);
@@ -309,5 +311,73 @@ describe("UsageLedger file operations and aggregations", () => {
     expect(s1Res.totals?.calls).toBe(2);
     expect(s1Res.totals?.costUsd).toBeCloseTo(0.04);
     expect(s1Res.byRole.length).toBe(2);
+  });
+});
+
+describe("UsageLedger cost honesty and local days", () => {
+  let tmpDir: string;
+  let filePath: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "ir-ledger-honest-"));
+    filePath = join(tmpDir, "usage.jsonl");
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const base = {
+    sessionId: "s1",
+    problemId: "p1",
+    track: "hld" as const,
+    mode: "guided" as const,
+    role: "guide",
+    model: "claude-haiku-5-5",
+    effort: "low",
+    inputTokens: 2,
+    outputTokens: 1000,
+    cacheReadTokens: 10_000,
+    cacheCreationTokens: 1000,
+    cost: 0,
+    costUsd: 0,
+    duration: 1,
+    durationMs: 1,
+  };
+
+  it("prices a legacy row that has tokens but cost 0 and marks it estimated", async () => {
+    await writeFile(filePath, JSON.stringify({ ...base, time: "2026-11-06T10:00:00.000Z" }) + "\n", "utf8");
+    const s = await new UsageLedger({ filePath }).summary();
+    expect(s.totals.costUsd).toBeGreaterThan(0);
+    expect(s.totals.estimatedCalls).toBe(1);
+    expect(s.totals.failedCalls).toBe(0);
+  });
+
+  it("counts failed calls in every total and keeps the breakdowns equal", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T10:00:00Z"));
+    const ledger = new UsageLedger({ filePath });
+    ledger.record({ ...base, time: "2026-11-07T01:00:00.000Z", cost: 0.5, costUsd: 0.5 });
+    ledger.record({ ...base, role: "judge", model: "claude-sonnet-5-5", time: "2026-11-07T02:00:00.000Z", cost: 0.25, costUsd: 0.25, ok: false });
+    const s = await ledger.summary({ timeZone: "UTC" });
+    expect(s.totals.calls).toBe(2);
+    expect(s.totals.failedCalls).toBe(1);
+    const sum = (xs: { costUsd: number }[]) => xs.reduce((t, x) => t + x.costUsd, 0);
+    expect(sum(s.byRole)).toBeCloseTo(s.totals.costUsd);
+    expect(sum(s.byModel)).toBeCloseTo(s.totals.costUsd);
+    expect(sum(s.byDay)).toBeCloseTo(s.totals.costUsd);
+  });
+
+  it("puts a call at 2026-11-06T20:00Z on 2026-11-07 in Asia/Kolkata", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T10:00:00Z"));
+    const ledger = new UsageLedger({ filePath });
+    ledger.record({ ...base, time: "2026-11-06T20:00:00.000Z", cost: 1, costUsd: 1 });
+    const s = await ledger.summary({ timeZone: "Asia/Kolkata" });
+    expect(s.byDay.at(-1)?.date).toBe("2026-11-07");
+    expect(s.byDay.at(-1)?.calls).toBe(1);
+    expect(s.byDay.at(-2)?.calls).toBe(0);
+    expect(s.byDay.reduce((t, d) => t + d.calls, 0)).toBe(1);
   });
 });

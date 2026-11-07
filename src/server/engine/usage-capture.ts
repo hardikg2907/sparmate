@@ -123,3 +123,53 @@ export function extractOneShotStats(msg: SDKResultMessage, startedMs: number, fa
     model,
   };
 }
+
+interface ModelPrice {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+// USD per million tokens, Anthropic first-party list prices (claude-api skill model table, cached 2026-10-06).
+// Cache writes use the 1-hour rate (2x input), which Claude Code's own cost figures also lean on.
+const PRICES_PER_MTOK: Record<string, ModelPrice> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 8 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 4 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.2 },
+};
+
+/** Cost of a call from its token counts, or null for a model with no known price. */
+export function estimateCostUsd(
+  model: string,
+  t: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number },
+): number | null {
+  const p = PRICES_PER_MTOK[model];
+  if (!p) return null;
+  return (t.inputTokens * p.input + t.outputTokens * p.output + t.cacheReadTokens * p.cacheRead + t.cacheCreationTokens * p.cacheWrite) / 1_000_000;
+}
+
+// A thrown error cannot carry the stats of a call that spent tokens, so they travel beside it.
+const failedCallStats = new WeakMap<object, TurnStats>();
+
+export function attachFailureStats<E extends object>(err: E, stats: TurnStats): E {
+  failedCallStats.set(err, stats);
+  return err;
+}
+
+export function failureStats(err: unknown): TurnStats | null {
+  return typeof err === "object" && err !== null ? (failedCallStats.get(err) ?? null) : null;
+}
+
+/** Sum of two attempts at one call; an unknown cost on either side stays unknown. */
+export function addStats(a: TurnStats, b: TurnStats): TurnStats {
+  return {
+    durationMs: a.durationMs + b.durationMs,
+    costUsd: a.costUsd === null || b.costUsd === null ? null : a.costUsd + b.costUsd,
+    inputTokens: (a.inputTokens ?? 0) + (b.inputTokens ?? 0),
+    outputTokens: (a.outputTokens ?? 0) + (b.outputTokens ?? 0),
+    cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
+    cacheCreationTokens: (a.cacheCreationTokens ?? 0) + (b.cacheCreationTokens ?? 0),
+    model: b.model ?? a.model,
+  };
+}

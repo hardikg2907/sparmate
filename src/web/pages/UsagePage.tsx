@@ -105,8 +105,14 @@ function EmptyUsage({ trackingSince }: { trackingSince: string | null }) {
   );
 }
 
+// The counts are newer than the shared response type, so an older server may omit them.
+type CountedTotals = UsageSummaryResponse["totals"] & { failedCalls?: number; estimatedCalls?: number };
+
 function UsageContent({ data }: { data: UsageSummaryResponse }) {
-  const { totals, bySession, byProblem, byRole, byModel, byDay, trackingSince } = data;
+  const { bySession, byProblem, byRole, byModel, byDay, trackingSince } = data;
+  const totals: CountedTotals = data.totals;
+  const failedCalls = totals.failedCalls ?? 0;
+  const estimatedCalls = totals.estimatedCalls ?? 0;
   const cost = useCountUp(totals.costUsd, { duration: 1100, delay: 200 });
 
   return (
@@ -119,13 +125,20 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
           <div className="flex flex-col justify-between gap-4">
             <div>
               <p className="text-ui font-semibold text-hero-muted">API-equivalent cost</p>
-              <p className="text-mega font-bold tabular-nums tracking-[-0.02em]">{money(cost, 2, totals.costUsd)}</p>
-              <p className="mt-1 text-meta text-hero-muted">Calculated from API rates</p>
+              <p className="text-mega font-bold tabular-nums tracking-[-0.02em]">{estimatedCalls > 0 ? "≈" : ""}{money(cost, 2, totals.costUsd)}</p>
+              <p className="mt-1 text-meta text-hero-muted">
+                {estimatedCalls > 0
+                  ? `Calculated from API rates; ${estimatedCalls.toLocaleString()} ${estimatedCalls === 1 ? "call is" : "calls are"} estimated from tokens`
+                  : "Calculated from API rates"}
+              </p>
             </div>
             <dl className="grid grid-cols-2 gap-x-6 text-ui lg:grid-cols-1 lg:gap-y-2">
               <div>
                 <dt className="text-hero-muted">Model calls</dt>
-                <dd className="font-bold tabular-nums">{totals.calls.toLocaleString()}</dd>
+                <dd className="font-bold tabular-nums">
+                  {totals.calls.toLocaleString()}
+                  {failedCalls > 0 && <span className="ml-2 text-meta font-normal text-hero-muted">{failedCalls.toLocaleString()} failed</span>}
+                </dd>
               </div>
               <div>
                 <dt className="text-hero-muted">Rounds</dt>
@@ -391,6 +404,7 @@ function UsageNotes({ trackingSince }: { trackingSince: string | null }) {
   return (
     <div className="surface-flat space-y-1.5 rounded-xl bg-card p-5 text-ui text-muted-foreground">
       <p>Cost is what the same calls would cost on the API. On a Claude plan you pay by plan limits, not by this amount.</p>
+      <p>A failed call still spent tokens, so it counts in every total. A cost marked ≈ is priced from token counts because the model gave no figure.</p>
       <p>
         {dateFormatted
           ? `Tracking started on ${dateFormatted}; rounds before that show no data.`
