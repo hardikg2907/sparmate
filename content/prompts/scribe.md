@@ -116,7 +116,7 @@ Build it from the problem brief (`problem_brief` in the message: the requirement
 
 ## Order and size
 
-Return the operations in this order: the tracker bullet, any sub-bullets, the Session Log row, the gap rows, the review entry, then the notes. Stay inside these limits: the outcome cell under 3,000 characters, a gap cell under 600, a "came up while" cell under 300, a "filled" cell under 100, a review entry under 12,000, a new notes file under 60,000, and an appended notes section under 30,000.
+Return at most {{max_ops}} operations, and merge or drop the least useful ones before you go over. Return them in this order: the tracker bullet, any sub-bullets, the Session Log row, the gap rows, the review entry, then the notes. Stay inside these limits: the outcome cell under 3,000 characters, a gap cell under 600, a "came up while" cell under 300, a "filled" cell under 100, a review entry under 12,000, a new notes file under 60,000, and an appended notes section under 30,000.
 
 ## The study contract (TEACHING.md)
 

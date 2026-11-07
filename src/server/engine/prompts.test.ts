@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { LIMITS } from "../../shared/protocol";
 import { APP_ROOT } from "./config";
 import {
   COMMON_VARS,
@@ -140,5 +141,14 @@ describe("target level in prompts", () => {
       const out = await loader.render(name, { ...vars, ...extra });
       expect(out).not.toMatch(/\{\{\s*(target_level|stretch_level|target_company)\s*\}\}/);
     }
+  });
+});
+
+describe("scribe prompt", () => {
+  it("states the operation cap the proposal accepts", async () => {
+    const loader = new PromptLoader(join(APP_ROOT, "content"), APP_ROOT);
+    const vars: Record<string, string> = {};
+    for (const k of [...COMMON_VARS, ...PROMPT_VARS.scribe]) vars[k] = k === "max_ops" ? String(LIMITS.proposalOps) : `<${k}>`;
+    expect(await loader.render("scribe", vars as never)).toContain(`at most ${LIMITS.proposalOps} operations`);
   });
 });

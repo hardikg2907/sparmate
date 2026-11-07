@@ -48,7 +48,7 @@ export const PROMPT_VARS = {
   "judge-hld": ["problem_brief", "rubric"],
   "judge-lld": ["problem_brief", "rubric"],
   coach: ["problem_brief", "teaching_md", "scorecard_json"],
-  scribe: ["teaching_md"],
+  scribe: ["teaching_md", "max_ops"],
   "brief-writer": ["section_list", "example_problem"],
   "brief-checker": ["example_problem"],
   checker: [],

@@ -2015,7 +2015,7 @@ export class SessionRuntime {
       const res = await this.deps.driver.runOnce({
         role: "scribe",
         ...this.roleModel("scribe"),
-        systemPrompt: async () => this.deps.prompts.render("scribe", { ...(await this.baseVars()), teaching_md: await this.deps.prompts.teachingMd() }),
+        systemPrompt: async () => this.deps.prompts.render("scribe", { ...(await this.baseVars()), teaching_md: await this.deps.prompts.teachingMd(), max_ops: String(LIMITS.proposalOps) }),
         tools: [],
         fake: { problem: this.problem, scorecard: s.scorecard, notesFileExists, date, mode: s.mode, track: s.track },
         usage: { sessionId: s.id, problemId: s.problemId, track: s.track, mode: s.mode },
