@@ -1,5 +1,7 @@
 <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <style>.m{fill:#3443c0;stroke:#3443c0}@media (prefers-color-scheme:dark){.m{fill:#8e9cff;stroke:#8e9cff}}</style>
-  <path class="m" stroke="none" d="M5 27V7H27V27H20V14H12V27Z"/>
-  <path class="m" fill="none" d="M13 22L16 18L19 22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <style>.m{stroke:#3443c0}@media (prefers-color-scheme:dark){.m{stroke:#8e9cff}}</style>
+  <g class="m" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 24.5h13a4.25 4.25 0 0 0 0-8.5h-5" opacity=".55"/>
+    <path d="M25 7.5H12a4.25 4.25 0 0 0 0 8.5h3"/>
+  </g>
 </svg>
