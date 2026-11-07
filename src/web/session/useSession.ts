@@ -4,6 +4,7 @@ import type { BoardHandle } from "../board/Board";
 import type { ClientMsg, ServerMsg } from "../../shared/protocol";
 import type { Channel, PublicSession } from "../../shared/types";
 import { CHAT_MAX_CHARS, PNG_MAX_BASE64 } from "../lib/contract";
+import { roundMsAt } from "../lib/timing";
 import { confirmVersion, decideAfterReconnect, decideOnExternal, editLedger, recordSent, settleLedger, startLedger, type CodeDecision, type CodeLedger, type CodeText } from "./codeSync";
 import { chatItems, initialState, reducer, type Action } from "./reducer";
 import type { SessionActions, SessionController, SessionSource } from "./types";
@@ -30,6 +31,8 @@ const SERVER_TYPES = [
 const CODE_DEBOUNCE_MS = 500;
 const RUN_GUARD_MS = 60_000;
 const NOTES_GUARD_MS = 240_000;
+// The server ends the round on its own clock, so the last work goes out a moment before the page's reaches zero.
+const TIME_UP_LEAD_MS = 1000;
 const NOT_CONNECTED = "Not connected yet. Try again in a moment.";
 const CODE_CHECKING = "Saving your code first. Try again in a moment.";
 
@@ -115,6 +118,12 @@ function checkCode(io: Io, source: SessionSource, socketRef: MutableRefObject<So
       if (check === io.codeCheck) io.codeChecking = false;
     },
   );
+}
+
+/** Sends the board and code changes still held back by the throttle and the debounce. */
+function flushWork(io: Io, socketRef: MutableRefObject<SocketLike | null>, boardRef: MutableRefObject<BoardHandle | null>): void {
+  boardRef.current?.flush();
+  flushCode(io, socketRef, true);
 }
 
 export function useSessionController(source: SessionSource): SessionController {
@@ -238,6 +247,8 @@ export function useSessionController(source: SessionSource): SessionController {
           break;
         case "session.state":
           if (fresh) afterReconnect(msg.session);
+          // A round that ended on time still takes the work of its last moments for a short while.
+          if (msg.session.status === "ended") flushWork(io, socketRef, boardRef);
           if (io.latestBoard && !["live", "paused", "ended"].includes(msg.session.status)) {
             dispatch({ type: "board-synced", board: { version: io.latestBoard.version, elements: [...io.latestBoard.elements] } });
             io.latestBoard = null;
@@ -277,6 +288,16 @@ export function useSessionController(source: SessionSource): SessionController {
       io.fresh = false;
     };
   }, [source, loaded, io]);
+
+  const timedSession = state.session?.status === "live" && state.session.mode === "interview" ? state.session : null;
+  const timedClock = timedSession?.clock;
+  const clockOffsetMs = state.clockOffsetMs;
+  useEffect(() => {
+    if (!timedClock) return;
+    const remaining = timedClock.durationMs - roundMsAt(timedClock, Date.now() + clockOffsetMs);
+    const timer = setTimeout(() => flushWork(io, socketRef, boardRef), Math.max(0, remaining - TIME_UP_LEAD_MS));
+    return () => clearTimeout(timer);
+  }, [timedClock, clockOffsetMs, io]);
 
   useEffect(() => {
     if (!state.notice) return;

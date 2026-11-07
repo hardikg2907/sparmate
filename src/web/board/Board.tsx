@@ -33,6 +33,8 @@ export interface BoardHandle {
   /** PNG of the whole scene, or of one frame cropped to its edges, as base64 without the data-URL prefix. */
   exportPng(frameId?: string): Promise<string>;
   getElements(): readonly Record<string, unknown>[];
+  /** Reports a change still held back by the throttle at once, so the end of the round does not lose it. */
+  flush(): void;
   /** Pans and zooms to a step's frame; null, or a step with no frame, shows the whole board. False when not ready. */
   showStep(step: string | null, animate?: boolean): boolean;
 }
@@ -344,8 +346,9 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
         const elements = current ? current.getSceneElements() : startElements.current.filter((el) => !el.isDeleted);
         return elements as unknown as readonly Record<string, unknown>[];
       },
+      flush,
     }),
-    [],
+    [flush],
   );
 
   // Opens on the step he is working on rather than the whole board; it waits a moment so Excalidraw's own
