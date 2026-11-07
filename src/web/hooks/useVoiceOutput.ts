@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../backend";
+import { markRepliesHeard, replyToSpeak } from "../lib/replySpeech";
 import { cleanMarkdownForSpeech } from "../lib/speechCleaning";
 import { splitSentences } from "../lib/speechSentences";
 import { pickDefaultSystemVoice } from "../lib/systemVoiceRanking";
@@ -59,6 +60,8 @@ export function useVoiceOutput({
     }
     const current = activeStreamRef.current;
     if (current) {
+      // Later deltas of an interrupted reply must not start it again from the first sentence.
+      seenMessageIdsRef.current.add(current.id);
       current.stopped = true;
       current.abortController?.abort();
       current.prefetchPromises.clear();
@@ -287,14 +290,13 @@ export function useVoiceOutput({
       return;
     }
 
-    if (disabled || !voiceSettings.speakReplies) return;
-
-    const latest = items.findLast((item) => item.role !== "candidate" && item.role !== "system");
-    if (!latest) return;
-
-    if (seenMessageIdsRef.current.has(latest.id) && activeStreamRef.current?.id !== latest.id) {
+    if (disabled || !voiceSettings.speakReplies) {
+      markRepliesHeard(items, seenMessageIdsRef.current);
       return;
     }
+
+    const latest = replyToSpeak(items, seenMessageIdsRef.current, activeStreamRef.current?.id ?? null);
+    if (!latest) return;
 
     if (!activeStreamRef.current || activeStreamRef.current.id !== latest.id) {
       if (activeStreamRef.current) {
