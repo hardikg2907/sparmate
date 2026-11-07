@@ -105,12 +105,9 @@ function EmptyUsage({ trackingSince }: { trackingSince: string | null }) {
   );
 }
 
-// The counts are newer than the shared response type, so an older server may omit them.
-type CountedTotals = UsageSummaryResponse["totals"] & { failedCalls?: number; estimatedCalls?: number };
-
 function UsageContent({ data }: { data: UsageSummaryResponse }) {
   const { bySession, byProblem, byRole, byModel, byDay, trackingSince } = data;
-  const totals: CountedTotals = data.totals;
+  const { totals } = data;
   const failedCalls = totals.failedCalls ?? 0;
   const estimatedCalls = totals.estimatedCalls ?? 0;
   const cost = useCountUp(totals.costUsd, { duration: 1100, delay: 200 });

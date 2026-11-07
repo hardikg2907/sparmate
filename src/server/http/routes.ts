@@ -158,7 +158,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get("/api/usage", async () => {
     if (!deps.usageLedger) {
       return {
-        totals: { cost: 0, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, cacheHitRate: 0, calls: 0, rounds: 0 },
+        totals: { cost: 0, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, cacheHitRate: 0, calls: 0, rounds: 0, failedCalls: 0, estimatedCalls: 0 },
         bySession: [],
         byProblem: [],
         byRole: [],

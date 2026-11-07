@@ -172,6 +172,9 @@ export interface UsageTotals {
   cacheHitRate: number;
   calls: number;
   rounds: number;
+  /** Absent from a server that predates the counts. */
+  failedCalls?: number;
+  estimatedCalls?: number;
 }
 
 export interface SessionUsageSummary {
