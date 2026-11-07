@@ -75,6 +75,7 @@ function withDefaults(s: Session): Session {
   s.checklist ??= {};
   s.stepChecks ??= {};
   s.pins ??= [];
+  s.pendingEvents ??= [];
   // A check still running when the server stopped will never finish; what it found before stays.
   for (const v of Object.values(s.stepChecks)) if (v.status === "checking") v.status = v.checkedAt === null ? "failed" : "done";
   s.focus ??= null;

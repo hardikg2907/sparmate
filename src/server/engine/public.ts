@@ -9,7 +9,7 @@ const AFTER_ROUND = new Set<Session["status"]>(["debriefing", "debriefed", "fail
  * reference answer appears only once the debrief is ready.
  */
 export function toPublicSession(session: Session, problem: Problem | undefined, now: Date = new Date()): PublicSession {
-  const { sdk: _sdk, checklist: _checklist, stepChecks: _stepChecks, stepCode: _stepCode, ...rest } = session;
+  const { sdk: _sdk, checklist: _checklist, stepChecks: _stepChecks, stepCode: _stepCode, pendingEvents: _pendingEvents, ...rest } = session;
   const after = AFTER_ROUND.has(session.status);
   return {
     ...rest,

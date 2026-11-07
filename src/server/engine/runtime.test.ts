@@ -323,6 +323,41 @@ describe("pausing by hand", () => {
   });
 });
 
+describe("pause notes across a restart", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("delivers the pause note after the round is saved, loaded by a new runtime and resumed", async () => {
+    const first = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await first.start(session);
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    await rt.handle({ type: "session.pause" }, first.peer);
+    const saved = structuredClone(first.store.saved!);
+    expect(saved.status).toBe("paused");
+    rt.dispose();
+
+    const sent: string[] = [];
+    const fake = createFakeDriver({ chunkDelayMs: 0 });
+    const driver: Driver = {
+      ...fake,
+      startConversation(s) {
+        const conv = fake.startConversation(s);
+        return { sdkSessionId: () => conv.sdkSessionId(), close: () => conv.close(), send: (turn, handlers) => (sent.push(turn.text), conv.send(turn, handlers)) };
+      },
+    };
+    const second = setup(driver);
+    const reloaded = await second.start(saved);
+    expect(reloaded.isDormant()).toBe(false);
+    await reloaded.handle({ type: "session.resume" }, second.peer);
+    await reloaded.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "back again" }, second.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sent.some((text) => text.includes("the candidate paused the clock"))).toBe(true);
+    expect(second.store.saved?.pendingEvents ?? []).toEqual([]);
+    reloaded.dispose();
+  });
+});
+
 /** Answers like the fake driver, but one chosen send takes `delayMs` longer, as a long reply would. */
 function slowDriver(slowCall: number, delayMs: number): Driver {
   const inner = createFakeDriver({ chunkDelayMs: 0 });

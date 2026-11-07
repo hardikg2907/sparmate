@@ -218,7 +218,6 @@ export class SessionRuntime {
   /** The latest scene, kept so the checker and the pin tools read the board as it is now. */
   private boardElements: Record<string, unknown>[] = [];
   private readonly pngWaits = new Map<string, { remaining: number; finish: (png: Buffer | null) => void }>();
-  private pendingEvents: string[] = [];
   private pendingRun: RunView | null = null;
   private lastCandidateAt: number | null = null;
   private endRequested = false;
@@ -422,11 +421,16 @@ export class SessionRuntime {
     return this.peers.size;
   }
 
+  /** Hidden notes for the interviewer's next turn. They live on the session so a restart keeps them. */
+  private pending(): string[] {
+    return (this.session.pendingEvents ??= []);
+  }
+
   /** True when nothing is running and nobody is watching, so the runtime can be dropped from memory. */
   isDormant(): boolean {
     const s = this.session.status;
     // A paused round's hidden notes and queued requests for the interviewer live only here, so dropping it loses them.
-    const owesInterviewer = s === "paused" && (this.interview.queue.length > 0 || this.pendingEvents.length > 0);
+    const owesInterviewer = s === "paused" && (this.interview.queue.length > 0 || this.pending().length > 0);
     return (
       this.peers.size === 0 &&
       s !== "live" &&
@@ -647,7 +651,7 @@ export class SessionRuntime {
   private async pauseRound(reason: "user" | "away"): Promise<void> {
     this.pauseClock(reason);
     const at = formatClock(this.roundNow());
-    this.pendingEvents.push(reason === "user" ? `the candidate paused the clock at ${at}` : `the candidate left the room, so the clock was paused at ${at}`);
+    this.pending().push(reason === "user" ? `the candidate paused the clock at ${at}` : `the candidate left the room, so the clock was paused at ${at}`);
     if (!this.interview.busy) {
       this.interview.conv?.close();
       this.interview.conv = null;
@@ -715,7 +719,10 @@ export class SessionRuntime {
     s.phaseHistory.push({ phase, at, by });
     const label = this.phases.find((p) => p.id === phase)?.label ?? phase;
     this.addEntry({ channel: "interview", role: "system", kind: "phase", text: by === "candidate" ? `Moved to ${label}.` : `The interviewer moved the round to ${label}.` });
-    if (by === "candidate") this.pendingEvents.push(`candidate moved to phase "${phase}" at ${formatClock(at)}`);
+    if (by === "candidate") {
+      this.pending().push(`candidate moved to phase "${phase}" at ${formatClock(at)}`);
+      this.saveSoon();
+    }
     this.broadcast({ type: "phase.changed", phase, by });
     this.sendState();
     void this.checkStep(left, { leaving: true });
@@ -1146,7 +1153,7 @@ export class SessionRuntime {
     const boardVersion = s.board.version;
     const codeVersion = s.code?.version ?? -1;
     const lastRun = this.pendingRun;
-    const events = [...this.pendingEvents];
+    const events = [...this.pending()];
     const view: ContextView = {
       time: this.timeView(),
       board: { version: boardVersion, graphText: s.board.graphText, changed: boardVersion !== ch.boardSeen },
@@ -1162,7 +1169,10 @@ export class SessionRuntime {
         if (withNotes) ch.notesSeen = Math.max(ch.notesSeen, notesVersion);
         ch.codeSeen = Math.max(ch.codeSeen, codeVersion);
         if (this.pendingRun === lastRun) this.pendingRun = null;
-        this.pendingEvents.splice(0, events.length);
+        if (events.length > 0) {
+          this.pending().splice(0, events.length);
+          this.saveSoon();
+        }
       },
     };
   }

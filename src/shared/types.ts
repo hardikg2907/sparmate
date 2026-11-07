@@ -201,6 +201,8 @@ export interface Session {
    * last. Sessions saved before this existed load without it, and the runtime fills it when it loads the round.
    */
   stepCode: Record<string, string[]>;
+  /** Hidden notes (a pause, a step move) held for the interviewer's next turn. Server only. */
+  pendingEvents?: string[];
   pins: BoardPin[];
   /** A gap from an earlier debrief this guided round practises. Null for a normal round. */
   focus: { title: string; goodLooksLike: string } | null;
@@ -240,7 +242,7 @@ export interface PublicStepCheck {
 }
 
 /** What the browser gets: the session minus anything that would reveal the hidden brief early. */
-export type PublicSession = Omit<Session, "sdk" | "checklist" | "stepChecks" | "stepCode"> & {
+export type PublicSession = Omit<Session, "sdk" | "checklist" | "stepChecks" | "stepCode" | "pendingEvents"> & {
   /** Per phase id, the checklist filtered for the mode and the status of the round. */
   steps: Record<string, PublicStepCheck>;
   clock: { startedAt: string; pausedMs: number; pauseStartedAt: string | null; durationMs: number; serverNow: string };

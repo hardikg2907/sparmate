@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
-import { publicSteps } from "./public";
+import { publicSteps, toPublicSession } from "./public";
 
 type Input = Pick<Session, "mode" | "status" | "checklist" | "stepChecks">;
 
@@ -82,5 +82,12 @@ describe("publicSteps outside a guided round", () => {
     const step = publicSteps(input("interview", "debriefed")).requirements;
     expect(step?.items.map((i) => i.label)).toEqual(["Create a short link", "Redirect adds under 50 ms at p99", "Links expire", "Delete a link"]);
     expect(step?.items.every((i) => !i.question)).toBe(true);
+  });
+});
+
+describe("the browser's copy of a session", () => {
+  it("leaves out the hidden notes held for the interviewer", () => {
+    const session = { ...input("interview", "paused"), pendingEvents: ["the candidate paused the clock at 02:00"], transcript: [], hints: [], board: { version: 0, graphText: "", updatedAt: null }, track: "hld", durationMs: 45 * 60_000, startedAt: "", pausedMs: 0, pauseStartedAt: null, sdk: {}, pins: [] } as unknown as Session;
+    expect("pendingEvents" in toPublicSession(session, undefined)).toBe(false);
   });
 });
