@@ -12,6 +12,12 @@ declare global {
     __fixtureLog?: { type: string; detail?: unknown }[];
     /** Moves the rail the way the interviewer does, so the page's reaction can be tried by hand. */
     __fixtureMovePhase?: (phase: string) => void;
+    /** Drops every socket for `ms`; whatever the server sends meanwhile is lost, as on a real drop. */
+    __fixtureDrop?: (ms: number) => void;
+    /** Changes the attempt file the way an outside editor does. */
+    __fixtureEditFile?: (content: string) => void;
+    /** The code file as the scripted server holds it. */
+    __fixtureCode?: () => { version: number; content: string } | null;
   }
 }
 
@@ -45,9 +51,26 @@ export class FakeServer {
   session: PublicSession;
   private readonly sockets = new Set<FakeSocket>();
   private counter = 0;
+  private code: { version: number; content: string } | null;
+  private readonly busy = { interview: false, coach: false };
 
   constructor(private readonly options: FakeServerOptions) {
     this.session = options.session;
+    this.code = options.code ? { version: options.code.version, content: options.code.content } : null;
+  }
+
+  /** The hooks a scripted check uses to drop the connection and edit the file from outside. */
+  installHooks(): void {
+    window.__fixtureDrop = (ms) => {
+      for (const socket of [...this.sockets]) socket.drop(ms);
+    };
+    window.__fixtureEditFile = (content) => {
+      if (!this.code) return;
+      this.code = { version: this.code.version + 1, content };
+      log("code.external", { version: this.code.version });
+      this.emit({ type: "code.external", version: this.code.version, content });
+    };
+    window.__fixtureCode = () => (this.code ? { ...this.code } : null);
   }
 
   source(): SessionSource {
@@ -61,7 +84,7 @@ export class FakeServer {
       id: this.session.id,
       load,
       fetchSession: async () => this.session,
-      fetchCode: async () => (code ? { version: code.version, content: code.content, path: code.path } : Promise.reject(new Error("no code"))),
+      fetchCode: async () => (code && this.code ? { ...this.code, path: code.path } : Promise.reject(new Error("no code"))),
       createSocket: () => new FakeSocket(this),
       boardImageUrl: () => boardImageUrl,
     };
@@ -101,6 +124,7 @@ export class FakeServer {
   }
 
   private stream(channel: "interview" | "coach", text: string): void {
+    this.busy[channel] = true;
     this.emit({ type: "agent.status", channel, state: "thinking" });
     const id = `fx-m${++this.counter}`;
     const chunks = text.match(/.{1,28}(\s|$)/gs) ?? [text];
@@ -111,6 +135,7 @@ export class FakeServer {
       this.later(chunks.length * 70 + 60, () => {
         const entry = this.addEntry(channel, channel === "coach" ? "coach" : "interviewer", text, id);
         this.emit({ type: "chat.message", entry });
+        this.busy[channel] = false;
         this.emit({ type: "agent.status", channel, state: "idle" });
       });
     });
@@ -143,6 +168,12 @@ export class FakeServer {
         log("board.update", { version: msg.version, elements: msg.elements.length });
         break;
       case "code.update": {
+        // Like the real server, an update that is not newer than the file is dropped without a reply.
+        if (this.code && msg.version <= this.code.version) {
+          log("code.update.dropped", { version: msg.version, held: this.code.version });
+          break;
+        }
+        if (this.code) this.code = { version: msg.version, content: msg.content };
         log("code.update", { version: msg.version, length: msg.content.length });
         this.later(500, () => this.emit({ type: "code.diagnostics", version: msg.version, diagnostics: this.diagnosticsFor(msg.content) }));
         this.lastCode = msg.content;
@@ -240,7 +271,11 @@ export class FakeServer {
   private timeUpScheduled = false;
 
   greet(socket: FakeSocket): void {
-    socket.deliver({ type: "session.state", session: this.state() });
+    const state = this.state();
+    socket.deliver({ type: "session.state", session: this.code && state.code ? { ...state, code: { ...state.code, version: this.code.version } } : state });
+    for (const channel of ["interview", "coach"] as const) {
+      if (this.busy[channel]) socket.deliver({ type: "agent.status", channel, state: "thinking" });
+    }
     if (this.options.agentError) socket.deliver({ type: "agent.status", channel: "interview", state: "error", error: this.options.agentError });
     if (this.options.timeUp && !this.timeUpScheduled) {
       this.timeUpScheduled = true;
@@ -312,6 +347,17 @@ export class FakeSocket implements SocketLike {
     if (this.timer) clearTimeout(this.timer);
     this.server.detach(this);
     this.setStatus("closed");
+  }
+
+  drop(ms: number): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.server.detach(this);
+    this.setStatus("reconnecting");
+    this.timer = setTimeout(() => {
+      this.server.attach(this);
+      this.setStatus("open");
+      this.server.greet(this);
+    }, ms);
   }
 
   on<T extends ServerMsg["type"]>(type: T, handler: ServerHandler<T>): () => void {

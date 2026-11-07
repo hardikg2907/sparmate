@@ -127,6 +127,7 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
   }
 
   window.__fixtureMovePhase = (phase) => server.movePhase(phase);
+  server.installHooks();
 
   root.render(
     <StrictMode>
