@@ -233,7 +233,7 @@ fail loudly in development. Files and variables:
 gap and quoting the judge's "what good looks like", so the guide steers every step toward it.
 
 Common variables: `date` (YYYY-MM-DD), `problem_title`, `track` ("hld"/"lld"), `mode`, `duration_min`,
-`candidate_profile` (read from `<studyRoot>/ABOUT_ME.md` when present, else `content/candidate.md`). The bar comes from one line of that profile, `Target: SDE-2; stretch: senior; company: Series A to C startup`, read by `src/shared/target.ts`. Each part is optional and defaults to the value shown; the line is matched only as `Target:` at the start of a line, so other wording never changes the bar. It fills `target_level`, `stretch_level` and `target_company`, and the same variables fill the rubric text before it enters a prompt. The judge copies the two level names into `verdict.targetLevel` and `verdict.stretchLevel`, and the debrief shows them; the stored verdict keys stay `sde2` (the target level call) and `senior` (the stretch level call). `problem_brief` is the problem file body.
+`candidate_profile` (read from `<studyRoot>/ABOUT_ME.md` when present, else `content/candidate.md`). The bar comes from one line of that profile, `Target: SDE-2; stretch: senior; company: Series A to C startup`, read by `src/shared/target.ts`. Each part is optional and defaults to the value shown; the line is matched only as `Target:` at the start of a line, so other wording never changes the bar. It fills `target_level`, `stretch_level` and `target_company`, and the same variables fill the rubric text before it enters a prompt. The page never names a fixed level: it says "target level" and "stretch level" (the Home result badge reads "Result at your target level", and the top score word is "Stretch signal"). The judge copies the two level names into `verdict.targetLevel` and `verdict.stretchLevel`, and the debrief shows them; the stored verdict keys stay `sde2` (the target level call) and `senior` (the stretch level call). `problem_brief` is the problem file body.
 `teaching_md` is the study root's `TEACHING.md`, read fresh at role start. `rubric` is
 `content/rubrics/<track>.md`. `phase_plan` is one line per phase: `- <label>: about <n> min — <goal>`.
 
@@ -311,7 +311,9 @@ A round pauses in four ways, and `Session.pauseReason` records which:
 Pausing sets status `paused`, `pauseStartedAt` and `pauseReason`, stops the clock and holds every checkpoint below;
 `session.resume` adds the pause to `pausedMs`, clears `pauseReason`, sets status `live` and re-arms the checkpoints. A
 paused round refuses chat, hints and step checks until it is resumed. Both the user and the away pause leave a hidden
-note for the interviewer's next message. `pauseReason` is `null` whenever the status is not `paused`. Pausing closes the
+note for the interviewer's next message, and so does a step move by the candidate. The notes are kept in
+`Session.pendingEvents`, saved with the session, left out of the browser's copy, and cleared once the interviewer
+has them, so a restart keeps them. A paused round that holds notes is not dropped from memory. `pauseReason` is `null` whenever the status is not `paused`. Pausing closes the
 idle interviewer conversation process rather than keeping the subprocess alive; on resume, a new conversation instance
 resumes from `session.sdk.interviewerSessionId`.
 
@@ -323,7 +325,9 @@ if it is mid-reply, fire right after):
   Extensions section. Store it as `session.extension`.
 - Five minutes left: a `<clock>` event; the interviewer may warn the candidate in one line.
 - Time up: status becomes `ended`; the interviewer gets a `<clock>` event to close in one or two sentences
-  with no feedback; then the debrief starts.
+  with no feedback; then the debrief starts. The page sends its last board and code edits as the clock reaches
+  zero, so for 2 seconds after a time-up end the server still takes `board.update` and `code.update`, and the
+  debrief waits for the window to close. After it, and after any other end, both are refused with `not_live`.
 
 Guided mode has no extension checkpoint and no time-up end: the clock counts up and the candidate ends it.
 
@@ -570,7 +574,8 @@ scribe read them.
 
 - `code.update`: if newer, credit its new lines to the design step on the rail (step code, above), write the attempt
   file (atomic), remember its hash (to ignore our own watcher event), debounce a syntax check (1.5 s) and send
-  `code.diagnostics`.
+  `code.diagnostics`. An update that is not newer than the server's version is dropped and its sender alone gets
+  `code.rejected { version, held }`, where `held` is the version the server holds.
 - File watcher: on an external change to the attempt file (your editor), read it, credit its new lines as above, bump the
   version, broadcast `code.external`, run the syntax check.
 - `code.run`: compile and run (section 8), store `code.lastRun`, send `code.run.result`, add a hidden `run`
@@ -732,18 +737,34 @@ normal file the user can open in an editor at the same time (`lld/compile_flags.
   `main()`, so it is off there); run with a 10 s timeout.
 - Diagnostics: `parseClangDiagnostics(stderr, filePath)` in `src/shared/clang.ts`, keeping only lines for the
   compiled file (skip notes inside system headers). Regex on lines of at most 2,000 characters.
-- Sandbox: run every produced binary in an isolated sandbox that denies network access,
-  denies file writes outside its temp build folder, and denies reading file contents outside the build folder
-  (program output goes back to a model, so it must not be able to print the user's files). On macOS, uses
-  `/usr/bin/sandbox-exec -p <profile>` (Seatbelt) allowing only the temp folder and standard devices (`/dev/null`,
-  `/dev/tty`, `/dev/stdout`, `/dev/stderr`, `/dev/dtracehelper`). On Linux (containers or host), uses Bubblewrap
-  (`bwrap`) with private namespaces (`--unshare-all`), a minimal read-only system root (`/usr`, `/etc`), only
-  `/dev/null`, `/dev/zero`, `/dev/random` and `/dev/urandom` as devices, a private `/tmp`, **no `/proc`** (the
-  container's `/proc` would expose the server's environment and its token, and a rootless container cannot mount a
-  fresh one; the sanitizer's resulting "cannot read executable name" warning is removed from the run's stderr),
-  an isolated writable build directory (`--bind <dir> <dir>`), and `prlimit` resource limits (1GB address space,
-  10s CPU, 64 process limit, 16MB file size). If no safe sandbox is available at runtime, code execution is
-  explicitly refused rather than run unsandboxed.
+- Sandbox: the compiler and every produced binary run in an isolated sandbox with no network access and no file
+  writes outside their temp build folder. Program output and diagnostics go back to a model, so neither the compiler
+  nor the program may read the user's files. If no safe sandbox is available at runtime, compiling and running are
+  explicitly refused rather than done unsandboxed.
+  - macOS, programs: `/usr/bin/sandbox-exec -p <profile>` (Seatbelt) allows writes only in the build folder and the
+    standard devices (`/dev/null`, `/dev/tty`, `/dev/stdout`, `/dev/stderr`, `/dev/dtracehelper`), denies reading
+    file contents under the home folder except the build folder, and denies `process-fork`, because macOS has no
+    per-sandbox process limit and a child that calls `setsid()` would leave the process group and outlive the
+    timeout. Threads are unaffected.
+  - macOS, compiler: reads are an allow-list. File contents are readable only from the system (`/usr`, `/System`),
+    the active toolchain (Command Line Tools or the selected Xcode bundle, and the install prefix of a compiler
+    outside them unless that prefix would open the home folder), the build folder, the named input files, and the
+    few fixed-size devices and link files the toolchain reads itself (`/dev/null`, not `/dev/zero` or
+    `/dev/urandom`, so an `#include` cannot read forever). This stops `#include` and `.incbin` from pulling in any
+    other file. Forking stays allowed because the compiler driver starts the linker.
+  - macOS limits: both wrap the command in `/bin/sh` with `ulimit -f` (16 MB for a program, 256 MB for the compiler)
+    and `ulimit -t` (10 s CPU for a program; the compile timeout plus 5 s for the compiler). macOS enforces no
+    memory rlimit, so the runner polls the resident memory of the whole process group every 100 ms with `ps` and
+    kills the group above 1 GB for a program and 2 GB for the compiler, and the result says the memory limit was
+    passed.
+  - Linux (containers or host): Bubblewrap (`bwrap`) with private namespaces (`--unshare-all`), a minimal read-only
+    system root (`/usr`, `/etc`), only `/dev/null`, `/dev/zero`, `/dev/random` and `/dev/urandom` as devices, a
+    private `/tmp`, **no `/proc`** (the container's `/proc` would expose the server's environment and its token, and
+    a rootless container cannot mount a fresh one; the sanitizer's resulting "cannot read executable name" warning is
+    removed from the run's stderr), and an isolated writable build directory (`--bind <dir> <dir>`). The compiler
+    also gets its named input files and its install prefix mounted read-only. `prlimit` sets the limits: a program
+    gets 1 GB address space, 10 s CPU, 64 processes and 16 MB file size; the compiler gets 4 GB address space, the
+    compile timeout plus 5 s CPU, 64 processes and 256 MB file size.
 - Kill the whole process group on timeout. Delete the temp folder afterwards.
 
 ### 8.3 Browser side (WORKSPACE agent)
@@ -922,7 +943,12 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 
 **Usage `/usage`**
 - Linked from the app header next to Settings.
-- Totals: API-equivalent cost, input tokens, output tokens, cache hit rate, number of model calls, rounds.
+- Totals: API-equivalent cost, input tokens, output tokens, cache hit rate, number of model calls, rounds. The
+  ledger records a failed call as a row with `ok: false` (a row without `ok` reads as ok), and the totals count
+  these as `failedCalls`, shown beside the call count. When the SDK gives no cost, the row is priced from its tokens
+  with `costEstimated: true`, and an older row with tokens and a stored cost of 0 is priced at the dearest model
+  the same way. The totals count these as `estimatedCalls`, and the cost shows "≈" when any call is estimated.
+  Days are bucketed in local time.
 - Cost per day bar chart (last 30 days, plain SVG/CSS bars).
 - Tables by problem, by round (each row links to that round's debrief), by role and by model.
 - Informational notes explaining API-equivalent cost vs Claude plan limits and tracking start date.
@@ -947,8 +973,14 @@ input send mode: review before sending vs auto-send after a pause). Shows the st
   the board's `exportPng(frameId)` and answer `board.png.result` (or the error).
 - The session page loads the saved board for every status, so the debrief can draw each step's frame. When a round
   ends in the same page, the last scene the board reported replaces the loaded one.
-- LLD: editor changes are sent as `code.update` debounced 500 ms. `code.external` replaces the editor value.
-  `code.diagnostics` and `code.run.result` feed the editor markers and the console.
+- LLD: editor changes are sent as `code.update` debounced 500 ms. `code.diagnostics` and `code.run.result` feed the
+  editor markers and the console. The editor and the file can both change (an outside edit bumps the server's
+  version, and a dropped socket can lose updates), so the page keeps a ledger of the last text the server is known
+  to hold and the texts it sent since, and settles by one rule: when the editor holds nothing the server lacks,
+  the file's text replaces the editor value (`code.external` live, the fetched file after a reconnect or a
+  `code.rejected`); when both changed, the editor text wins, is sent again above the server's version, and the
+  page shows a notice that the file changed outside the editor and the editor text was kept. On `code.rejected`
+  the page fetches the file and settles the same way, unless a newer text of its own is already sent or waiting.
 - Test hooks with `?testhooks=1`: `window.__irShell = { sendChat(text), state() }`.
 
 ---
@@ -1053,7 +1085,9 @@ markers).
   captured from this machine), quote checks, prose lint, tracker parsing and every bookkeeping op against a
   temp copy of the real `TRACKER.md`, `REVIEW.md` and notes (copied into a temp folder by the test, never
   written in place), stale-hash refusal, the privacy guard, and the C++ runner (compile error, run, timeout,
-  output cap, harness include trick, sandbox denies a write outside the folder and a network connect).
+  output cap, harness include trick, sandbox denies a write outside the folder and a network connect, a fork
+  bomb and a `setsid()` child are stopped, a file over 16 MB and memory over the cap are stopped, and the compile
+  sandbox refuses an `#include` or `.incbin` of a file outside the build folder and builds a normal program).
 - ENGINE: with `SPARMATE_FAKE_AGENT=1`, `scripts/e2e/ws-fake-round.mjs` drives an HLD and an LLD round over the
   WebSocket (hello, chat, board update, code update and run for LLD, phase change, end), waits for the
   debrief, drafts bookkeeping against a temp `STUDY_ROOT`, applies it, and checks the files changed exactly as
