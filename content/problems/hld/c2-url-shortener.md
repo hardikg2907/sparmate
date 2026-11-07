@@ -133,14 +133,14 @@ Use one, at the extension point, unless the candidate already handled it.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Requirements that include the read to write ratio, the latency target and freshness for new links.
 - The 40 per second against 4,000 per second math, ending in "which means the read path needs a cache".
 - A clean API and a working design: stateless redirect service, cache, database, unique codes.
 - One deep dive done properly when the interviewer picks it.
 - Names the viral-link hot key when probed, and gives at least one fix.
 
-Senior signal:
+Stretch signal:
 - Raises guessable codes and counter hot spots without a prompt, and reaches range allocation.
 - Brings up cache stampede and single-flight on the hot link.
 - Spots replica lag for brand-new links.

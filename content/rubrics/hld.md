@@ -1,13 +1,13 @@
 # System design rubric
 
-The bar is an SDE-2 or senior backend engineer at a Series A to C startup, in a 45 to 60 minute system design round. Score every dimension from 1 to 4. There are six dimensions, in this order: `navigation`, `design`, `depth`, `scale_reliability`, `communication` and `drive_time`. Each one has its own section below, headed by its id, with its display name on the line under the heading.
+The bar is a {{target_level}} or {{stretch_level}} backend engineer at a {{target_company}}, in a 45 to 60 minute system design round. Score every dimension from 1 to 4. There are six dimensions, in this order: `navigation`, `design`, `depth`, `scale_reliability`, `communication` and `drive_time`. Each one has its own section below, headed by its id, with its display name on the line under the heading.
 
 | Score | Label | When to give it |
 |---|---|---|
 | 1 | Missing | The work this dimension measures never happened, or a red flag dominates it. |
 | 2 | Below bar | Some of the work happened, but at least one 3-level signal is missing. Every dimension starts here. |
-| 3 | At bar | Every 3-level signal shows in the evidence, or all but one shows and the rest is clear and strong. This is an SDE-2 hire on this dimension. |
-| 4 | Senior signal | Every 3-level signal shows, plus at least two 4-level signals, and they got no hint on this dimension. |
+| 3 | At bar | Every 3-level signal shows in the evidence, or all but one shows and the rest is clear and strong. This is a hire at the {{target_level}} level on this dimension. |
+| 4 | Stretch signal | Every 3-level signal shows, plus at least two 4-level signals, and they got no hint on this dimension. |
 
 A real hiring panel weighs the evidence as a whole, not item by item. So one missing 3-level signal does not hold a dimension at 2 when every other 3-level signal shows clearly. Two missing signals do. When you give a 3 with one signal missing, name that signal as a low gap so they still see it. Red flags and hint caps apply on top of this rule.
 
@@ -161,7 +161,7 @@ Score every dimension first, then apply these rules. Never move a score to reach
 
 For each column, take the first row from the top that matches.
 
-| Verdict | SDE-2 | Senior |
+| Verdict | {{target_level}} | {{stretch_level}} |
 |---|---|---|
 | strong_hire | Every dimension is at 3 or more, and at least two are at 4. | Every dimension is at 3 or more, and at least five are at 4. |
 | hire | There are no 1s, navigation and design are both at 3 or more, and at least four of the six dimensions are at 3 or more. | Every dimension is at 3 or more, and at least three are at 4, including depth and scale_reliability. |
@@ -177,9 +177,9 @@ A guided round is at most medium, because the help changes what the round shows.
 
 ## Gap severity
 
-- **high:** below the SDE-2 bar on navigation or design, or any red flag.
-- **medium:** below the SDE-2 bar on any other dimension, or an SDE-2 item from the brief's Level bar that they missed.
-- **low:** the SDE-2 bar held here, and this is the step toward senior.
+- **high:** below the {{target_level}} bar on navigation or design, or any red flag.
+- **medium:** below the {{target_level}} bar on any other dimension, or a {{target_level}} item from the brief's Level bar that they missed.
+- **low:** the {{target_level}} bar held here, and this is the step toward {{stretch_level}}.
 
 ## Tracker mark
 

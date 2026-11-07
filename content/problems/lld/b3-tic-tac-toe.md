@@ -229,11 +229,11 @@ Give one with 15 minutes left. Undo is the default. Use 2 or 3 for a candidate w
 
 ## Concurrency follow-up
 
-"Two clients submit a move for the same player at the same moment. Walk me through what happens in your code." Expect: the turn check, the cell check, the mark, the state update and the turn change form one check-then-act sequence. Without a lock, both calls pass the turn check and both place a mark, so one player moves twice, or both pick the same empty cell and the second overwrites the first. One `std::mutex` with `std::lock_guard` in `move`, and in every reader (state, winner, current player, cell, print), makes the whole sequence one step. A reader can otherwise see a placed mark with an old state. Senior signal: says the game is sequential by turns, so the lock exists only because the API can be called from several threads. Notes that an `atomic<int>` for the turn is not enough, because the operation spans several fields. Gives one lock per game, so many games run in parallel, and a registry of games needs its own lock only for its map. Does not hold a lock while calling a computer player's strategy unless that code is small and pure.
+"Two clients submit a move for the same player at the same moment. Walk me through what happens in your code." Expect: the turn check, the cell check, the mark, the state update and the turn change form one check-then-act sequence. Without a lock, both calls pass the turn check and both place a mark, so one player moves twice, or both pick the same empty cell and the second overwrites the first. One `std::mutex` with `std::lock_guard` in `move`, and in every reader (state, winner, current player, cell, print), makes the whole sequence one step. A reader can otherwise see a placed mark with an old state. Stretch signal: says the game is sequential by turns, so the lock exists only because the API can be called from several threads. Notes that an `atomic<int>` for the turn is not enough, because the operation spans several fields. Gives one lock per game, so many games run in parallel, and a registry of games needs its own lock only for its map. Does not hold a lock while calling a computer player's strategy unless that code is small and pure.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Step 1 questions that cover N and K, the number of players and their symbols, who moves first, what happens on a bad move, the draw rule, and threads.
 - `Board`, `Player`, a typed result for the 5 reject reasons, and `Game` as real types. A player's identity is separate from how it is displayed: cells hold the player index (best), or a symbol with an empty marker that no player can use.
 - A bounded win check: it looks only around the last move and costs O(K) or better. Per-line counters are fine as a start, but the final program must handle K below N (scenarios 8 to 11). A full-board scan or a scan of whole lines is allowed only if the candidate names the cost and fixes it after one question.
@@ -242,7 +242,7 @@ SDE-2 (hire) must show:
 - Correct locking when asked.
 - One extension landed in the last 15 minutes as a small, local change, with the candidate saying which existing behaviour stays the same.
 
-Senior signal:
+Stretch signal:
 - Sees without help that counters fail when K is below N, and says why: they count marks, not unbroken runs, and they cover only 2 diagonals.
 - Bounds the walk by K, or explains why it is already bounded: no run of K or more can exist before a move, because the game would have ended. So a move costs the same on a 1,000 by 1,000 board. Mentions sparse storage for a huge board.
 - States the invariants out loud: a cell is empty or holds a valid player index; the move count equals the number of marks; the state follows from the count and the winner.

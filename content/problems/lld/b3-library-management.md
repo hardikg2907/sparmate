@@ -169,11 +169,11 @@ Pick one for the last 15 minutes. Offer a second only if the candidate finishes 
 
 ## Concurrency follow-up
 
-"Two desks call `borrow` for the last copy of a book at the same moment. Walk me through what happens in your code." Expect: names the check-then-act race (find a shelf copy, then mark it on loan) and the compound state (copy, loan and queue change together); one `std::mutex` with `std::lock_guard` in every public method, `search` and other reads included, because a scan over a map that another thread is changing is undefined behaviour; explains why a `return` racing a `renew` on the same loan also needs it. A `std::shared_mutex` with a shared lock for `search` is fine only if `search` does not lapse holds. In the reference it does, so it needs the exclusive lock. Senior signal: says per-object locks do not help here, because one borrow touches the copy, the member's loans and the queue; keeps lock scope tight and delivers notifications after releasing the lock; names per-book locks as the next step and the cost: the limit and overdue checks read the member's other loans, which sit under other books' locks, so a second lock or a fixed lock order is needed.
+"Two desks call `borrow` for the last copy of a book at the same moment. Walk me through what happens in your code." Expect: names the check-then-act race (find a shelf copy, then mark it on loan) and the compound state (copy, loan and queue change together); one `std::mutex` with `std::lock_guard` in every public method, `search` and other reads included, because a scan over a map that another thread is changing is undefined behaviour; explains why a `return` racing a `renew` on the same loan also needs it. A `std::shared_mutex` with a shared lock for `search` is fine only if `search` does not lapse holds. In the reference it does, so it needs the exclusive lock. Stretch signal: says per-object locks do not help here, because one borrow touches the copy, the member's loans and the queue; keeps lock scope tight and delivers notifications after releasing the lock; names per-book locks as the next step and the cost: the limit and overdue checks read the member's other loans, which sit under other books' locks, so a second lock or a fixed lock order is needed.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Step 1 questions that cover what is lent (book or copy), the borrow limit, loan length and renewal, the fine rule and time, what a reservation does when a copy returns, and concurrency. Assumptions written down.
 - `BookCopy` and `Loan` as real types, with the due day on the loan. A `Reservation` record, or a per-book queue plus hold fields, so a held copy is visible.
 - A program that compiles and runs scenarios 1 to 10 inside the time. Scenario 11 (hold lapse) is a stretch. A candidate who leaves it out and says so plainly still meets the bar.
@@ -182,7 +182,7 @@ SDE-2 (hire) must show:
 - Rejected calls change nothing. One error style. No phantom members from `operator[]`.
 - Correct locking when asked.
 
-Senior signal:
+Stretch signal:
 - Names `Book`, `BookCopy` and `Loan` within 15 minutes, with a skeleton compiling by minute 30.
 - One `release` path for every freed copy, and states the invariant out loud.
 - Asks "what if the member at the head never comes?" before being told.

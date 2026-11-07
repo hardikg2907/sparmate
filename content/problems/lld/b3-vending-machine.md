@@ -146,7 +146,7 @@ The completion check, in this order:
 ## Patterns that fit
 
 - **Enum plus a transition table** is the reference for two states and five methods. Each cell of the table is one branch.
-- **State pattern** is accepted if they name the cost: a class per state, one pass-through per method, and the circular dependency between machine and states. It pays when a third state arrives, so it is a senior signal only when they argue it from that axis: new states favour the pattern, new methods favour the enum. Building five state classes for two states in the first 40 minutes is over-engineering.
+- **State pattern** is accepted if they name the cost: a class per state, one pass-through per method, and the circular dependency between machine and states. It pays when a third state arrives, so it is a stretch signal only when they argue it from that axis: new states favour the pattern, new methods favour the enum. Building five state classes for two states in the first 40 minutes is over-engineering.
 - **Interface segregation** for the two panels: the customer code cannot call `restock`, and no `if (user == OPERATOR)` appears anywhere.
 - **Strategy** for the change rule or for a dispenser, when an extension arrives. An interface plus a fake in `main()` is also a testing seam.
 - Also accepted, if they can defend it: the slot id and a `Cash` kept as two fields instead of an `Order` type (a bare `balance` number is not accepted); making change on a copy of the stock and committing only on success, instead of moving the pieces in and rolling back; an `int` piece checked against the seven values instead of an enum; a count array indexed by piece instead of a map; a search for change instead of greedy.
@@ -212,14 +212,14 @@ Pick one the candidate has not seen. Prefer 1 or 2. Number 3 has the same shape 
 - Private helpers do not lock. `std::mutex` is not recursive, so a public method that calls another public method locks twice. That is undefined behaviour, and in practice a deadlock.
 - If they used the State pattern: copying the `shared_ptr` to the current state while another thread assigns it is itself a data race. The lock must cover the copy and the call.
 
-Senior signal:
+Stretch signal:
 - Lock scope with a reason. Outside code that can call back into the machine must not run under the lock, because the mutex is not recursive. They see that a slow dispenser held under the lock stalls every other call, and that letting go of the lock mid-sale needs a visible DISPENSING state: a slow outside call is what earns a new state. Holding the lock across a fast fake dispenser is fine.
 - Uses the numbers. One customer presses a key every few hundred milliseconds, and each critical section takes microseconds, so one lock is busy far below 1% of the time. Per-slot locks add deadlock risk and buy nothing, because a sale touches a slot, the stock and the order together.
 - Names the other shape: one thread owns the machine and both panels post commands to a queue, which is the actor model (an actor with a mailbox, such as an Elixir process or an Akka actor, is also accepted). States the cost, which is latency and a reply channel.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Step 1 questions that cover the order of steps, cancel and refund, the failure list (sold out, bad slot, no exact change), where change comes from, what the operator can do and when, and threads. A rule they do not ask about must appear as a stated assumption.
 - The exact pieces held per denomination and kept together with the slot id (an `Order` type is the reference; two fields are fine), and `Slot` and `Product` as plain data. Customer and operator as two interfaces or two clear groups of methods.
 - A state enum with only the states a caller can see, and a transition table written or spoken. Wrong-order calls are refused, not crashes.
@@ -228,7 +228,7 @@ SDE-2 (hire) must show:
 - The extension handled in the last 15 minutes: they restate it, name which existing behaviour changes, and write the change or the exact fields and methods that change.
 - Correct locking when asked: one mutex shared by both panels.
 
-Senior signal:
+Stretch signal:
 - Finds `Order` and the cash shape fast (inside 15 minutes), with the skeleton compiling by minute 30.
 - Explains why dispensing is not a state, and what would earn a new state (a jam, maintenance, a slow outside call).
 - Picks the enum or the State pattern with the axis argument, unprompted, and states the cost.

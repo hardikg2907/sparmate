@@ -64,7 +64,7 @@ Then read it yourself and cut what you do not need. A syllabus you did not agree
 ## Priority legend
 🔴 High — comes up often, invest real time · 🟡 Medium — good to know · ⚪ Lower — if time allows
 
-This example is calibrated for **SDE-2 / senior backend at Series A–C startups** — not junior, not staff, not FAANG-only prep. See `TEACHING.md` §10 for what that bar actually demands.
+This example is calibrated for the default bar, **SDE-2 / senior backend at Series A–C startups** — not junior, not staff, not FAANG-only prep. See `TEACHING.md` §10 for what that bar actually demands.
 
 **Two tracks, equal weight, run in parallel.** Don't finish A before starting B — they're different skills and both get tested.
 

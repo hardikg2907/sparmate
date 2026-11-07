@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { Mode, Track } from "../../shared/phases";
+import { DEFAULT_TARGET } from "../../shared/target";
 import type { Proposal, Session, SessionStatus, Verdict } from "../../shared/types";
 import { resolveInside } from "../study/files";
 import { writeFileAtomic } from "./fsutil";
@@ -80,6 +81,11 @@ function withDefaults(s: Session): Session {
   s.gapProgress ??= {};
   s.studyNotes ??= null;
   if (s.scorecard && !s.scorecard.steps) s.scorecard.steps = [];
+  // Rounds judged before the level was a setting were judged at the default bar.
+  if (s.scorecard) {
+    s.scorecard.verdict.targetLevel ??= DEFAULT_TARGET.level;
+    s.scorecard.verdict.stretchLevel ??= DEFAULT_TARGET.stretch;
+  }
   return s;
 }
 

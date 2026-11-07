@@ -161,7 +161,7 @@ Use one, at the extension point, unless it was already handled. Prefer 2 or 3.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Requirements that cover identity, limits per plan and endpoint, how exact (burst, about 10% over, never 2x), what a blocked client sees, the 5 ms budget and what happens when the limiter fails.
 - The math of 100,000 checks a second against what one node does, with the script cost and some headroom stated, ending in "which means a cluster of a few shards" (about 4; 3 to 6 is fine).
 - An algorithm chosen with a reason, including why a fixed window fails the 2x rule.
@@ -170,7 +170,7 @@ SDE-2 (hire) must show:
 - A timeout and a fail mode per rule when probed on Redis (capacity limits let traffic through, login never unlimited), and a breaker for slow.
 - A hot-client fix that is not "more shards", once the traffic skew comes up or the interviewer asks where it breaks first.
 
-Senior signal:
+Stretch signal:
 - Says slow is worse than down unprompted, with in-flight numbers, and sizes the blast radius of a lost shard first.
 - Picks the algorithm per rule by what it protects, and shows that C sets the overshoot.
 - Fixes a hot key only for flagged clients, with the error as a number.

@@ -121,7 +121,7 @@ Metadata and search (a mention): Postgres keyed by `videoId`, behind Redis. Chan
 - **Ladder.** A fixed ladder or per-title encoding. Eager encoding of every rendition, or lazy: top rungs only once a video gets views. Lazy saves compute on videos that get few or no views, but lowers quality for the first viewers.
 - **Job queue.** A task queue with ack and lease (RabbitMQ or a cloud queue), a pipeline orchestrator, or Kafka with an answer for one slow or poison task blocking its partition. A managed transcoding service is fine if the candidate still explains split, encode and package.
 - **Metadata and counts.** Postgres with replicas (sharded by `videoId` later) or a key-value store. Counters by stream aggregation into delta writes (the reference), sharded Redis counters, or a wide-column store, if the raw events stay the source of truth.
-- **CDN.** One commercial CDN, several, or own caches inside internet providers' networks (a valid cost answer at 2 Tbps, not expected at SDE-2). Pre-warming before a known release is a bonus.
+- **CDN.** One commercial CDN, several, or own caches inside internet providers' networks (a valid cost answer at 2 Tbps, not expected at the hire bar). Pre-warming before a known release is a bonus.
 
 ## Deep dives
 
@@ -154,7 +154,7 @@ Use one, at the extension point, unless the candidate already handled it.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Requirements that cover views and uploads a day, video size and length, the startup and processing targets, view-count freshness, and what is out of scope.
 - The math, ending in "which means": about 2 Tbps against about 6,000 requests a second means the CDN carries the bytes, and 14 Gbps of uploads means devices upload straight to object storage.
 - A clean API and a working design: resumable chunked upload, a queue with workers, renditions cut into segments with a manifest, a CDN in front of object storage, a metadata service.
@@ -162,7 +162,7 @@ SDE-2 (hire) must show:
 - Retries and idempotent tasks after a nudge about a dead worker, and a fix for the hot view-count row when probed.
 - One deep dive done properly when the interviewer picks it.
 
-Senior signal:
+Stretch signal:
 - Raises cost unprompted: egress is the biggest bill, with levers (hit ratio, a better codec on the hot head, own caches) and cold storage for originals.
 - Chunk-parallel encoding with aligned keyframes, deterministic output keys, a dead-letter queue and progressive publish.
 - Cache design with numbers: immutable segments, a path-only cache key, a shield tier, request collapsing, takedown by purge.

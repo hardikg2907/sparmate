@@ -1,13 +1,13 @@
 # Machine coding rubric
 
-The bar is an SDE-2 or senior backend engineer at a Series A to C startup, in a 90 to 120 minute machine coding round: a running, in-memory C++ program, then one new requirement near the end. Score each dimension from 1 to 4. There are eight dimensions, in this order: `requirements`, `working_code`, `design`, `extensibility`, `edge_cases`, `concurrency`, `code_quality` and `communication_time`. Each one has its own section below, headed by its id, with its display name on the line under the heading. Concurrency is scored only in the cases its section names.
+The bar is a {{target_level}} or {{stretch_level}} backend engineer at a {{target_company}}, in a 90 to 120 minute machine coding round: a running, in-memory C++ program, then one new requirement near the end. Score each dimension from 1 to 4. There are eight dimensions, in this order: `requirements`, `working_code`, `design`, `extensibility`, `edge_cases`, `concurrency`, `code_quality` and `communication_time`. Each one has its own section below, headed by its id, with its display name on the line under the heading. Concurrency is scored only in the cases its section names.
 
 | Score | Label | When to give it |
 |---|---|---|
 | 1 | Missing | The work this dimension measures never happened, or a red flag dominates it. |
 | 2 | Below bar | Some of the work happened, but at least one 3-level signal is missing. Every dimension starts here. |
-| 3 | At bar | Every 3-level signal shows in the evidence, or all but one shows and the rest is clear and strong. This is an SDE-2 hire on this dimension. |
-| 4 | Senior signal | Every 3-level signal shows, plus at least two 4-level signals, and they got no hint on this dimension. |
+| 3 | At bar | Every 3-level signal shows in the evidence, or all but one shows and the rest is clear and strong. This is a hire at the {{target_level}} level on this dimension. |
+| 4 | Stretch signal | Every 3-level signal shows, plus at least two 4-level signals, and they got no hint on this dimension. |
 
 A real hiring panel weighs the evidence as a whole, not item by item. So one missing 3-level signal does not hold a dimension at 2 when every other 3-level signal shows clearly. Two missing signals do. When you give a 3 with one signal missing, name that signal as a low gap so they still see it. Red flags and hint caps apply on top of this rule.
 
@@ -194,7 +194,7 @@ Score every dimension first, then apply these rules. Never move a score to reach
 
 For each column, take the first row from the top that matches.
 
-| Verdict | SDE-2 | Senior |
+| Verdict | {{target_level}} | {{stretch_level}} |
 |---|---|---|
 | strong_hire | Every scored dimension is at 3 or more, and at least two are at 4. | Every scored dimension is at 3 or more, and at least five are at 4, including working_code, design and extensibility. |
 | hire | There are no 1s, working_code, design and extensibility are all at 3 or more, and at least five scored dimensions are at 3 or more. | Every scored dimension is at 3 or more, and at least three are at 4, including design and extensibility. |
@@ -210,9 +210,9 @@ A guided round is at most medium, because the help changes what the round shows.
 
 ## Gap severity
 
-- **high:** below the SDE-2 bar on working_code, design or extensibility, or any red flag.
-- **medium:** below the SDE-2 bar on any other scored dimension, or an SDE-2 item from the brief's Level bar that they missed.
-- **low:** the SDE-2 bar held here, and this is the step toward senior.
+- **high:** below the {{target_level}} bar on working_code, design or extensibility, or any red flag.
+- **medium:** below the {{target_level}} bar on any other scored dimension, or a {{target_level}} item from the brief's Level bar that they missed.
+- **low:** the {{target_level}} bar held here, and this is the step toward {{stretch_level}}.
 
 ## Tracker mark
 

@@ -206,7 +206,7 @@ Pick the one that probes their biggest gap. A candidate who used a `switch` on t
    - Same: scenarios 1 to 11 give the same results. A rejected expense still changes nothing.
 2. **Simplify debts:** "Show the fewest payments that settle everyone."
    - Facts: it is a read-only suggestion. It does not change the stored pair balances or any net position, and it may pair people who never owed each other directly. Real use has at most about 12 people with a non-zero net position.
-   - Expect: a function over the per-user net positions, and nothing else changes. Drop zeros. Then repeatedly match the largest debtor with the largest creditor and move the smaller of the two amounts. That gives at most k − 1 transfers for k non-zero users. It is **not always the minimum**. The true minimum is k minus the largest number of groups the people can be split into, where each group's nets add up to 0. That is a partition problem and NP-hard in general. For about 12 users, a bitmask search over zero-sum subsets finds it. An SDE-2 candidate who says "greedy, and it is not always minimal" holds the bar. Claiming greedy is optimal does not.
+   - Expect: a function over the per-user net positions, and nothing else changes. Drop zeros. Then repeatedly match the largest debtor with the largest creditor and move the smaller of the two amounts. That gives at most k − 1 transfers for k non-zero users. It is **not always the minimum**. The true minimum is k minus the largest number of groups the people can be split into, where each group's nets add up to 0. That is a partition problem and NP-hard in general. For about 12 users, a bitmask search over zero-sum subsets finds it. A candidate at the hire bar who says "greedy, and it is not always minimal" holds the bar. Claiming greedy is optimal does not.
    - Check, scenario 11's ledger: 3 transfers, for example Dave pays Alice 1466, Carol pays Alice 434, Carol pays Bob 333. This is the minimum, because no proper subset of the four nets adds up to 0. Applying the transfers brings every net to 0. With another leftover rule, recompute the nets from the candidate's shares. It is still 3 transfers.
    - Check, where greedy loses: on Big, Alice pays 1100 exact [Carol 500, Dave 300, Erin 300], and Bob pays 500 exact [Alice 500]. Net positions: Alice +600, Bob +500, Carol −500, Dave −300, Erin −300. Greedy with ties to the lower id gives 4 transfers: Carol pays Alice 500, Dave pays Bob 300, Erin pays Bob 200, Erin pays Alice 100. The minimum is 3: Carol pays Bob 500, Dave pays Alice 300, Erin pays Alice 300. For any answer, check that every amount is above 0, that every net ends at 0, and the count.
    - Same: `balances()`, `balancesOf` and `settle` give the same results as before.
@@ -225,11 +225,11 @@ Pick the one that probes their biggest gap. A candidate who used a `switch` on t
 - `std::map::operator[]` inserts, so even a read can write. Reads need the lock too.
 - The fix is one `std::mutex` with a `std::lock_guard` in every public method. The strategy's `split` is a pure function, so it may run before the lock. The group and membership reads belong inside the lock, because `addGroup` can insert into the same map. An edit is one critical section.
 
-Senior signal: states the cost with the brief's numbers. At about 100 calls per second and a few microseconds each, one lock is busy well under 1% of the time. One lock per pair needs the locks taken in sorted key order for a multi-pair expense, or two expenses can deadlock, and it buys nothing at this load. Sharding by group does not work here, because balances are global: two groups share the same Alice and Bob pair. They also say not to call anything unknown while holding the lock.
+Stretch signal: states the cost with the brief's numbers. At about 100 calls per second and a few microseconds each, one lock is busy well under 1% of the time. One lock per pair needs the locks taken in sorted key order for a multi-pair expense, or two expenses can deadlock, and it buys nothing at this load. Sharding by group does not work here, because balances are global: two groups share the same Alice and Bob pair. They also say not to call anything unknown while holding the lock.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Step 1 questions that cover the money unit and rounding, the leftover rule, the split types and their validation, whether balances are per pair or per group, the settle-up rules, and threads.
 - Money as an integer type, 64-bit, with no floating point in amounts. Shares that add up to the total exactly, with a stated and implemented leftover rule.
 - The split types behind a Strategy, with validation inside it, so a new type lands in one new class.
@@ -238,7 +238,7 @@ SDE-2 (hire) must show:
 - A program that compiles and runs scenarios 1 to 9 inside the time.
 - Correct locking when asked, with the settle-up race named.
 
-Senior signal:
+Stretch signal:
 - Finds `Expense` with stored shares and the pair ledger fast (inside 15 minutes), with the skeleton compiling by minute 30.
 - Treats time as a parameter without being told. Asks about rounding and overflow before coding.
 - Sees equal and percent as one proportional split. States the invariant "shares add up to the total" and asserts it in `main()`.

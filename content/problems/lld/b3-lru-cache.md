@@ -121,11 +121,11 @@ Pick one the candidate has not seen. If they built room for one already, pick an
 
 1. **Expiry:** each entry may carry a time to live in whole seconds, given at `put`. An expired entry must never be returned. What changes?
    - Facts: the caller passes the current time into every `get` and `put`, and the cache never reads the clock. A TTL is at least 1 second, and an entry without one never expires. An entry put at `t` with TTL `d` expires at `t + d`: a `get` at exactly `t + d` already misses. A `get` does not extend it, and a `put` of an existing key restarts it and replaces the TTL, so a `put` without a TTL makes the entry permanent. The caller's time never goes backward. `size()` takes no time and may still count a dead entry; no scenario checks it. Lazy removal is fine: a dead entry may linger until a `get` finds it or it is evicted. Purging dead entries before evicting a live one is better.
-   - Expect: an `expiresAt` in `Entry`, `now` as a parameter of `get` and `put`, and an expired `get` that removes the entry and misses. A good answer names the lazy gap: a full cache can evict a live entry while a dead one sits untouched. Senior fix: an index ordered by expiry time.
+   - Expect: an `expiresAt` in `Entry`, `now` as a parameter of `get` and `put`, and an expired `get` that removes the entry and misses. A good answer names the lazy gap: a full cache can evict a live entry while a dead one sits untouched. Stretch fix: an index ordered by expiry time.
    - Same: without a TTL, scenarios 1 to 8 give the same results. A hit still refreshes, an update still evicts nothing, and nothing reads the system clock.
 2. **A second eviction policy:** product also wants least-frequently-used eviction. The caller picks the policy when it builds the cache, and the entry with the fewest uses goes first. What changes?
    - Facts: a new entry starts at 1 use, and each later hit or update adds 1. A tie goes to the least recently used. An evicted key forgets its count. The speed target stays O(1), and a slower first version must say so.
-   - Expect: the order logic leaves the cache. The cache keeps `values` and an `EvictionPolicy`, and `get` and `put` only call its hooks. An `enum` plus `switch` works for two policies if they name the cost: each new policy edits the cache. Senior: O(1) LFU with count buckets, and why `std::priority_queue` fails: it cannot change a priority in place.
+   - Expect: the order logic leaves the cache. The cache keeps `values` and an `EvictionPolicy`, and `get` and `put` only call its hooks. An `enum` plus `switch` works for two policies if they name the cost: each new policy edits the cache. Stretch: O(1) LFU with count buckets, and why `std::priority_queue` fails: it cannot change a priority in place.
    - Same: with `LruPolicy`, scenarios 1 to 8 give the same results. A new key in a full cache evicts exactly one entry, and an update none. The lock stays in the cache and covers the policy calls.
 
 ## Concurrency follow-up
@@ -136,11 +136,11 @@ Pick one the candidate has not seen. If they built room for one already, pick an
 - The fix is one `std::mutex` with a `std::lock_guard` in every public method, `get` and `size` included, and the value copied out under the lock.
 - A second race: a `get` holds a node while another thread's `put` evicts it, or two `put`s of new keys both pass the capacity check.
 
-Senior signal: states the cost with the brief's numbers. At 50,000 calls per second and about 1 microsecond per call, one mutex is busy about 5% of the time, so one lock is enough. For much higher rates they shard: N caches with one mutex each, picked by the key's hash. The cost is that eviction is per shard, so the cache is only approximately LRU.
+Stretch signal: states the cost with the brief's numbers. At 50,000 calls per second and about 1 microsecond per call, one mutex is busy about 5% of the time, so one lock is enough. For much higher rates they shard: N caches with one mutex each, picked by the key's hash. The cost is that eviction is per shard, so the cache is only approximately LRU.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Step 1 questions that cover the capacity rule, what counts as a use, what `put` does to an existing key, how a miss is reported, and threads.
 - A list node that carries the key (an `Entry` with key and value, or a list of keys with the value in the map), in a list plus a map that give O(1) `get` and `put`. They can say why the iterators stay valid after `splice`. If they erase and re-insert instead, they must store the new iterator.
 - Scenarios 1 to 8 pass inside the time, with the core running by about minute 40.
@@ -148,7 +148,7 @@ SDE-2 (hire) must show:
 - The extension in code inside the last 15 minutes, naming the behaviour that stays the same. If time ran out, the exact fields and methods that change.
 - Correct locking when asked: one mutex, `get` included, value copied out.
 
-Senior signal:
+Stretch signal:
 - Asks about expiry, other policies and threads in step 1, then builds the core without them. The core runs by about minute 25.
 - Says unprompted that `get` is a write, so a shared lock fails.
 - Takes time as a parameter without being told, and weighs lazy against eager expiry.

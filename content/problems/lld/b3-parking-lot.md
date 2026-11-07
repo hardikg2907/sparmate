@@ -122,18 +122,18 @@ Pick one the candidate has not seen. The display-board extension was already use
 
 ## Concurrency follow-up
 
-"Two entrances call `enter` at the same moment with one spot left. Walk me through what happens in your code." Expect: names the check-then-act race; one `std::mutex` with `std::lock_guard` in every method that touches spots or tickets, reads included; explains why the exit path needs the lock too. Senior signal: discusses lock scope (do not call out to boards or loggers while holding it) and per-floor locks as the next step, with the cost.
+"Two entrances call `enter` at the same moment with one spot left. Walk me through what happens in your code." Expect: names the check-then-act race; one `std::mutex` with `std::lock_guard` in every method that touches spots or tickets, reads included; explains why the exit path needs the lock too. Stretch signal: discusses lock scope (do not call out to boards or loggers while holding it) and per-floor locks as the next step, with the cost.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Step 1 questions that cover gates, fit rule, lot full, fee rule and concurrency.
 - `Spot` and `Ticket` as real types; a flat data shape that makes the assignment rule a simple walk.
 - A program that compiles and runs scenarios 1 to 9 inside the time.
 - Pricing kept out of `ParkingLot` (Strategy or at least one function object), so the extension lands in one place.
 - Correct locking when asked.
 
-Senior signal:
+Stretch signal:
 - Finds `Ticket` and the data shape fast (inside 15 minutes), skeleton compiling by minute 30.
 - Treats time as a parameter without being told.
 - Handles the extension with a small, local change and says which existing behaviour stays the same.

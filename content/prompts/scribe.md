@@ -108,7 +108,7 @@ Build it from the problem brief (`problem_brief` in the message: the requirement
 - Alternatives the brief accepts, and when each one wins.
 - The extension or curveballs, and how the design takes each one.
 - Numbers worth remembering.
-- The tradeoff (a quoted sentence with a real cost in the cost slot), Where it breaks, The 60-second interview answer, The follow-up they'll ask, The traps (the smart-sounding wrong answers, including the one they fell into if they did, phrased generally), and What the SDE-2 bar expects.
+- The tradeoff (a quoted sentence with a real cost in the cost slot), Where it breaks, The 60-second interview answer, The follow-up they'll ask, The traps (the smart-sounding wrong answers, including the one they fell into if they did, phrased generally), and What the {{target_level}} bar expects.
 - In my systems: only when the coach linked the problem to a technology they run, by technology name only.
 - Rabbit holes: only sources named in the brief or during the coach conversation. If none were, write "No vetted reference picked yet."
 

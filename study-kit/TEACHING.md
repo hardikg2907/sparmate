@@ -9,8 +9,7 @@
 | **Name** | |
 | **Experience** | e.g. two years backend |
 | **Day-to-day stack** | languages, database, queue, cloud, anything they run in production |
-| **Target role** | e.g. SDE-2 or senior backend |
-| **Target companies** | e.g. Series A–C startups |
+| **Target role** | the `Target:` line in `ABOUT_ME.md` sets the level, the stretch level and the company type |
 | **LLD language** | the language they will write code in for Track B |
 | **Known strong areas** | where they already have real depth |
 | **Known weak areas** | if they already know |
@@ -290,9 +289,9 @@ Either way, write each accepted item into `TRACKER.md` as a sub-bullet under the
 
 ---
 
-## 10. Interview mode, and the SDE-2 bar
+## 10. Interview mode, and the target bar
 
-They are targeting the role in the profile block. This section assumes **SDE-2 or senior backend**, so they are not being measured against a junior and not against a staff engineer. That bar is specific, and it changes what you emphasise.
+They are targeting the level on the `Target:` line of the profile. This section describes the default bar, **SDE-2 with senior as the stretch**, so they are not being measured against a junior and not against a staff engineer. For another target, move the expectations below up or down one level and keep the same habits. That bar is specific, and it changes what you emphasise.
 
 **What is expected at this level. Push them on all of it.**
 

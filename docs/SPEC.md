@@ -26,7 +26,7 @@ Read these before building: `src/shared/*.ts` (the typed contract), the two fixt
 3. **The candidate's own methods drive the phase rail:** six HLD steps and seven LLD steps
    (`src/shared/phases.ts`). The rail is a guide, never a gate: the candidate may move freely.
 4. **Marks follow the tracker rules.** Guided rounds earn at most `[~]`. `[x]` needs: finished inside the
-   time, the code ran (LLD), and no gap at the SDE-2 bar.
+   time, the code ran (LLD), and no gap at the target level bar.
 5. **Never edit the candidate's code or `main()`.** Tests compile his file plus a separate harness `main()`.
 6. **Nothing is written to `TRACKER.md`, `REVIEW.md` or `notes/` without the user approving the exact diff.**
 7. **Offline UI.** The page loads nothing from the internet (fonts and editor are served locally). Only the
@@ -233,7 +233,7 @@ fail loudly in development. Files and variables:
 gap and quoting the judge's "what good looks like", so the guide steers every step toward it.
 
 Common variables: `date` (YYYY-MM-DD), `problem_title`, `track` ("hld"/"lld"), `mode`, `duration_min`,
-`candidate_profile` (read from `<studyRoot>/ABOUT_ME.md` when present, else `content/candidate.md`). `problem_brief` is the problem file body.
+`candidate_profile` (read from `<studyRoot>/ABOUT_ME.md` when present, else `content/candidate.md`). The bar comes from one line of that profile, `Target: SDE-2; stretch: senior; company: Series A to C startup`, read by `src/shared/target.ts`. Each part is optional and defaults to the value shown; the line is matched only as `Target:` at the start of a line, so other wording never changes the bar. It fills `target_level`, `stretch_level` and `target_company`, and the same variables fill the rubric text before it enters a prompt. The judge copies the two level names into `verdict.targetLevel` and `verdict.stretchLevel`, and the debrief shows them; the stored verdict keys stay `sde2` (the target level call) and `senior` (the stretch level call). `problem_brief` is the problem file body.
 `teaching_md` is the study root's `TEACHING.md`, read fresh at role start. `rubric` is
 `content/rubrics/<track>.md`. `phase_plan` is one line per phase: `- <label>: about <n> min — <goal>`.
 
@@ -355,7 +355,7 @@ On end: status `debriefing`, `debrief.progress` updates, then:
    `mm:ss–mm:ss` spans from `phaseHistory`, so the judge can tell which lines belong to which step), the final graph text, the PNG as an image block, LLD final code with line numbers and the
    tester results. Validate with `ScorecardSchema`. Besides the dimensions, the judge returns `steps`: per step
    he reached, `took` (one to five points, each a plain sentence, the rubric dimension it moved and an exact
-   evidence quote from that step) and `missing` (what the SDE-2 answer had in that step that his did not). The
+   evidence quote from that step) and `missing` (what the target level answer had in that step that his did not). The
    step readings agree with the dimension scores and add no new scoring. The judge also pins up to eight board
    elements with `pin_element` (held or gap). Each judge attempt collects its own pins, and the pins of the scorecard
    that is kept replace any earlier judge pins in `Session.pins`.
@@ -891,7 +891,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 
 **Debrief `/session/:id`** (status `debriefing`, `debriefed`, `failed`)
 - While `debriefing`: a progress list from `debrief.progress`.
-- The SDE-2 call and the senior call, shown as plain labels ("Strong pass", "Pass", "Close, not yet", "Not yet") with a one-line plain meaning under the SDE-2 call, then confidence and summary.
+- The call at the target level and the call at the stretch level, each named with the round's own level names, shown as plain labels ("Strong pass", "Pass", "Close, not yet", "Not yet") with a one-line plain meaning under the target level call, then confidence and summary.
 - Dimension table: name, score 1–4 as a short bar with the word (1 Missing, 2 Below bar, 3 At bar,
   4 Senior signal), evidence quotes with time and a check mark or a "not found in transcript" warning from
   `quoteChecks`, and "what a 4 looks like" behind a disclosure.
@@ -1007,7 +1007,7 @@ strong, in which case the missing signal becomes a low gap; real panels weigh th
 Extra requirement is never a gap. Politeness, length and confidence
 never raise a score. Accept valid alternative designs. Hints given cap the related dimension (H2 caps at 3, H3
 caps at 2). Guided rounds always get `trackerMark: "[~]"`. Interview rounds get `[x]` only when the round
-finished in time, (LLD) the code compiled and passed the core scenarios, and no gap sits at the SDE-2 bar.
+finished in time, (LLD) the code compiled and passed the core scenarios, and no gap sits at the target level bar.
 Writes `verdict.summary`, strengths and gaps in plain sentences that follow TEACHING.md section 2 (no
 symbols in prose, at most one em-dash per paragraph).
 
@@ -1021,7 +1021,7 @@ material for the problem, never a record of the round: built from the problem br
 the scorecard's model answers, in a neutral voice, holding the prompt and questions to ask, requirements, the
 capacity math or entities, the API, the reference design with a diagram, deep dives, accepted alternatives,
 the extension, numbers, the tradeoff, where it breaks, the 60-second answer, the follow-up, the traps and the
-SDE-2 bar. His run goes only into the tracker mark and suffix, a Session Log row in the existing style, a
+target level bar. His run goes only into the tracker mark and suffix, a Session Log row in the existing style, a
 REVIEW.md entry with three or four recall questions in the existing format, Gaps Found & Filled rows for
 prerequisites that were taught, and `(added)` sub-bullets for real new gaps. When the notes file exists, the
 scribe appends only reference material the file lacks, under a topic heading, or sends no notes op. Never rewrites or reorders tracker topics.
@@ -1030,7 +1030,7 @@ Brief-writer: turns a pasted prompt into a problem file with every required sect
 using `{{example_problem}}` as the model for depth and tone.
 
 Rubrics (`content/rubrics/hld.md`, `lld.md`): one section per dimension id (section 5.3), each with what a 1,
-2, 3 and 4 look like at the SDE-2 bar and the red flags, plus the decision rules (SDE-2 `hire`, shown as "Pass": no
+2, 3 and 4 look like at the target level bar and the red flags, plus the decision rules (`hire` at the target level, shown as "Pass": no
 1s, the two core dimensions at 3 or more, at least four dimensions at 3 or more; LLD: working code below 3 caps the
 verdict at `lean_no_hire`, shown as "Close, not yet"; concurrency scored only when relevant or asked). The rubric files
 keep the judge's own terms; the screen shows the plain labels from `src/web/lib/verdict.ts`: `strong_hire` is "Strong

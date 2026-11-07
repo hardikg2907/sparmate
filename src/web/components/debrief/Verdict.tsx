@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Tone } from "../../lib/format";
 import { useCountUp } from "../../hooks/useCountUp";
+import { DEFAULT_TARGET } from "../../../shared/target";
 import type { Scorecard } from "../../../shared/types";
 import { MARK_LABEL, MARK_TONE, SCORE_TONE, SCORE_WORD, VERDICT_TONE } from "../../lib/format";
 import { VERDICT_EXPLANATION, VERDICT_LABEL } from "../../lib/verdict";
@@ -42,7 +43,7 @@ export function ScoreMeter({ score, wide, stretch }: { score: number; wide?: boo
 }
 
 /**
- * The whole result on one screen. The call at the SDE-2 bar sits on a band tinted by that call, so the outcome reads
+ * The whole result on one screen. The call at the target level bar sits on a band tinted by that call, so the outcome reads
  * before any word does; the scores run under it as one strip, and the way on to the gaps is the next button.
  */
 /** One dimension in the score strip: a jump link to its evidence, whose score counts up when the debrief opens. */
@@ -65,9 +66,17 @@ function ScoreCell({ dimension }: { dimension: Scorecard["dimensions"][number] }
   );
 }
 
+/** The level names the round was judged at; a card saved without them was judged at the defaults. */
+export function levelNames(verdict: Scorecard["verdict"]): { target: string; stretch: string } {
+  return { target: verdict.targetLevel ?? DEFAULT_TARGET.level, stretch: verdict.stretchLevel ?? DEFAULT_TARGET.stretch };
+}
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
   const { verdict, trackerMark, trackerMarkReason } = scorecard;
   const tone = VERDICT_TONE[verdict.sde2];
+  const levels = levelNames(verdict);
   const gapCount = scorecard.gaps.length;
   return (
     <section id="verdict" aria-labelledby="verdict-heading" className="scroll-mt-16">
@@ -78,12 +87,12 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
         <div className="relative grid gap-x-12 gap-y-5 px-6 pb-4 pt-8 sm:px-9 md:grid-cols-[auto_1fr] md:items-center">
           <span aria-hidden="true" className={cn("absolute inset-y-6 left-0 w-1.5 rounded-r-full", TONE_FILL[tone], BAND_GLOW[tone])} />
           <div>
-            <p className="text-ui font-semibold text-muted-foreground">At the SDE-2 bar</p>
+            <p className="text-ui font-semibold text-muted-foreground">At the {levels.target} bar</p>
             <p className="font-display text-display font-extrabold tracking-[-0.02em] text-foreground sm:text-mega">{VERDICT_LABEL[verdict.sde2]}</p>
           </div>
           <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-ui sm:grid-cols-3 md:justify-self-end">
             <div>
-              <dt className="text-muted-foreground">Senior bar</dt>
+              <dt className="text-muted-foreground">{capitalize(levels.stretch)} bar</dt>
               <dd className={cn("text-lead font-bold", TONE_TEXT[VERDICT_TONE[verdict.senior]])}>{VERDICT_LABEL[verdict.senior]}</dd>
             </div>
             <div>
@@ -119,7 +128,7 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
           ) : null}
         </div>
 
-        <p className="px-6 pb-3 pt-4 text-meta text-faint sm:px-9">Scores run from 1 to 4. A 3 meets the SDE-2 bar. Select a score to read its evidence.</p>
+        <p className="px-6 pb-3 pt-4 text-meta text-faint sm:px-9">Scores run from 1 to 4. A 3 meets the {levels.target} bar. Select a score to read its evidence.</p>
         <nav aria-label="Scores by dimension" className="px-4 pb-4 sm:px-5 sm:pb-5">
           <ul className={cn("grid grid-cols-2 gap-3", scorecard.dimensions.length % 4 === 0 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
             {scorecard.dimensions.map((dimension, index) => (

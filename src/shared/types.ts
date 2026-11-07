@@ -266,10 +266,13 @@ export const EvidenceSchema = z.strictObject({
 
 export const ScorecardSchema = z.strictObject({
   verdict: z.strictObject({
+    // The keys are stored in saved sessions: `sde2` is the call at the target level, `senior` the call at the stretch level.
     sde2: z.enum(VERDICTS),
     senior: z.enum(VERDICTS),
+    targetLevel: z.string().optional().describe("The target level name, copied exactly from the prompt."),
+    stretchLevel: z.string().optional().describe("The stretch level name, copied exactly from the prompt."),
     confidence: z.enum(["low", "medium", "high"]),
-    summary: z.string().describe("Three to five plain sentences on how the round went at the SDE-2 bar."),
+    summary: z.string().describe("Three to five plain sentences on how the round went at the target level bar."),
   }),
   dimensions: z.array(
     z.strictObject({
@@ -292,7 +295,7 @@ export const ScorecardSchema = z.strictObject({
           }),
         )
         .max(8),
-      missing: z.array(z.string().describe("What the SDE-2 answer had in this step that his did not.")).max(6),
+      missing: z.array(z.string().describe("What the target level answer had in this step that his did not.")).max(6),
     }),
   ),
   strengths: z.array(z.string()),

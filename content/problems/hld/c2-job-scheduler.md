@@ -174,7 +174,7 @@ Use one, at the extension point, unless the candidate already handled it.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Requirements that cover one-off versus cron, the start-time target and at least once with no loss after accept. Asks about peak load, and sizes for the hourly burst once told.
 - The math: about 2,300 runs per second on average and about 12,000 at the top of the hour, several writes per run, ending in "which means the store needs sharding" or a stated per-node budget that fits.
 - A clean API with an idempotency key on submit, a run state machine, and a working design: a durable store with an index on due time, dispatchers that claim due runs without a scan, a hand-off to workers, and leases that expire.
@@ -183,7 +183,7 @@ SDE-2 (hire) must show:
 - No single scheduler instance: shard ownership, leader election with failover, or competing dispatchers.
 - One deep dive done at the Good level when the interviewer picks it.
 
-Senior signal:
+Stretch signal:
 - The attempt number as a fencing token, and the limit of fencing for external side effects.
 - Counts the attempt at claim so a poison run still ends `DEAD`.
 - Raises the hourly burst without a prompt, and pre-scales from the known due count or spreads cron fires.

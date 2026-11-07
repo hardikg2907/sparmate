@@ -111,6 +111,24 @@ describe("pause reason on load", () => {
     const loaded = await loadSaved({ status: "debriefed", scorecard: rawCard });
     expect(loaded?.scorecard?.steps).toEqual([]);
   });
+
+  it("loads a scorecard saved before levels were named with the default level names", async () => {
+    const rawCard = {
+      verdict: { sde2: "hire", senior: "lean_no_hire", confidence: "high", summary: "Good." },
+      dimensions: [],
+      steps: [],
+      strengths: [],
+      gaps: [],
+      timeline: [],
+      practiceTask: "t",
+      trackerMark: "[x]",
+      trackerMarkReason: "r",
+      lldScenarios: [],
+    };
+    const loaded = await loadSaved({ status: "debriefed", scorecard: rawCard });
+    expect(loaded?.scorecard?.verdict).toMatchObject({ sde2: "hire", senior: "lean_no_hire", targetLevel: "SDE-2", stretchLevel: "senior" });
+    expect(store.history()[0]?.verdict).toBe("hire");
+  });
 });
 
 describe("remove", () => {

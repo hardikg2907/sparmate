@@ -173,11 +173,11 @@ Pick one for the last 15 minutes. Prefer 1 or 2. Use 3 as a design talk if littl
 
 ## Concurrency follow-up
 
-"Two users hold the same seat of the same show at the same moment. Walk me through what happens in your code." Expect: names the check-then-act race, where both read free and both write held. One `std::mutex` with `std::lock_guard` covers the check of every seat and the marking of every seat, so a multi-seat hold is atomic. `confirm`, `release`, `cancel` and the free-seat query take the same lock. Confirm checks expiry and flips to booked under that lock, so a confirm and a new hold after expiry cannot interleave. The payment itself never runs under the lock: that is why holds exist. Senior signal: a mutex per show, with the reason (a hold touches one show, so there is no lock-ordering problem and unrelated shows do not wait). A per-show mutex alone is not enough, because the shared `bookings` map and the booking id counter are touched by every show. They need a small second lock (or an atomic counter), held only for the lookup or insert and never while waiting for a show lock. If they lock per seat, they must lock in ascending seat id, or two holds of A1,A2 and A2,A1 deadlock. They state the cost of one global mutex and why it is fine at 16 threads. In a real deployment, the same rule is one conditional `UPDATE` in Postgres that sets a seat held only if it is free or expired, in one transaction for all seats. A Redis `SET NX` with a TTL per seat also works, with a rollback when part of the group fails.
+"Two users hold the same seat of the same show at the same moment. Walk me through what happens in your code." Expect: names the check-then-act race, where both read free and both write held. One `std::mutex` with `std::lock_guard` covers the check of every seat and the marking of every seat, so a multi-seat hold is atomic. `confirm`, `release`, `cancel` and the free-seat query take the same lock. Confirm checks expiry and flips to booked under that lock, so a confirm and a new hold after expiry cannot interleave. The payment itself never runs under the lock: that is why holds exist. Stretch signal: a mutex per show, with the reason (a hold touches one show, so there is no lock-ordering problem and unrelated shows do not wait). A per-show mutex alone is not enough, because the shared `bookings` map and the booking id counter are touched by every show. They need a small second lock (or an atomic counter), held only for the lookup or insert and never while waiting for a show lock. If they lock per seat, they must lock in ascending seat id, or two holds of A1,A2 and A2,A1 deadlock. They state the cost of one global mutex and why it is fine at 16 threads. In a real deployment, the same rule is one conditional `UPDATE` in Postgres that sets a seat held only if it is free or expired, in one transaction for all seats. A Redis `SET NX` with a TTL per seat also works, with a rollback when part of the group fails.
 
 ## Level bar
 
-SDE-2 (hire) must show:
+Hire bar must show:
 - Step 1 questions that cover who picks seats, hold time and expiry, what payment tells the system, the cancel rule, seats per hold, and concurrency.
 - `ShowSeat` (state per show) as a real type, found within about 20 minutes and with at most one hint. A flat per-show seat array that makes hold a check loop plus a write loop.
 - A program that compiles and runs scenarios 1 to 10 inside the time.
@@ -185,7 +185,7 @@ SDE-2 (hire) must show:
 - Time passed in on every call, never the clock.
 - Correct locking when asked.
 
-Senior signal:
+Stretch signal:
 - Names the per-show seat state in the first 10 to 15 minutes, before any hint, and says why a flag on `Seat` fails.
 - Chooses lazy expiry unprompted and says why: no timer thread, testable, one writer.
 - States the invariant "one owner per seat" and uses it in the late confirm and late release cases.

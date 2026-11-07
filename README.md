@@ -1,7 +1,7 @@
 # Sparmate
 
 A local practice room for system design (HLD) and C++ machine-coding (LLD) interviews. An AI interviewer runs
-a timed round with you on a whiteboard or in a code editor, then a judge scores the round against the SDE-2 bar,
+a timed round with you on a whiteboard or in a code editor, then a judge scores the round against your target level (SDE-2 unless the `Target:` line in your `ABOUT_ME.md` says otherwise),
 a coach teaches the gaps, and a scribe drafts the study-note edits for you to approve.
 
 It runs only on this Mac, at `http://127.0.0.1:4747`, and uses your Claude Code login (no API key).
@@ -44,7 +44,7 @@ Stop it with Ctrl+C in that terminal, or `pkill -f "tsx src/server/index.ts"` if
    `lld/<problem>/attempt-<date>.cpp`, so you can switch to Zed at any time; edits in Zed show up in the browser.
 5. **Pause** when you must step away; the round also pauses about a minute after you close its tab. **Discard
    round** deletes a round with no debrief. **End interview** ends the round and starts the debrief.
-6. **Debrief:** the verdict at the SDE-2 and senior bars, a score per dimension with your own words quoted
+6. **Debrief:** the verdict at your target and stretch levels, a score per dimension with your own words quoted
    (each quote is checked against the transcript), the gaps in order, the time per phase, each step's frame with
    what held, what is missing and the judge's pins, and for LLD the tester's scenario results against your code. "Reference answer" opens the problem's model design.
 7. **Coach:** the chat on the right teaches the gaps, following `TEACHING.md` (with voice input and spoken replies).
