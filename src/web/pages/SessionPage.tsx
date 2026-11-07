@@ -40,7 +40,7 @@ export function SessionRoot({ source, theme, studyRoot }: { source: SessionSourc
   }, [discarded]);
 
   useEffect(() => {
-    if (title) document.title = `${roundOpen ? "" : "Debrief: "}${title} - Interview Room`;
+    if (title) document.title = `${roundOpen ? "" : "Debrief: "}${title} - Sparmate`;
   }, [title, roundOpen]);
 
   if (discarded) {

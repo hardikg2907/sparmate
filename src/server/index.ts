@@ -84,7 +84,7 @@ async function main(): Promise<void> {
     guard = await loadPrivacyGuard({ claudeJsonPath: config.claudeJsonPath, denylistPath: config.denylistPath });
   } catch (err) {
     // Without the guard nothing can be checked before it is logged or written, so the server does not start.
-    process.stderr.write(`Interview Room cannot start: the privacy guard did not load (${(err as Error).message}).\n`);
+    process.stderr.write(`Sparmate cannot start: the privacy guard did not load (${(err as Error).message}).\n`);
     process.exit(1);
   }
 
@@ -105,20 +105,20 @@ async function main(): Promise<void> {
     log,
   );
   const prompts = new PromptLoader(config.contentDir, config.studyRoot);
-  const rawDriver = config.fakeAgent ? createFakeDriver() : createClaudeDriver({ cwd: paths.agentCwd, log, clientApp: `interview-room/${config.version}` });
+  const rawDriver = config.fakeAgent ? createFakeDriver() : createClaudeDriver({ cwd: paths.agentCwd, log, clientApp: `sparmate/${config.version}` });
   const usageLedger = new UsageLedger({ filePath: paths.usage, problems, log });
   const driver = wrapDriverWithLedger(rawDriver, usageLedger);
-  const cppTmpRoot = process.env.IR_IN_CONTAINER === "1" ? "/tmp/runtime/cpp" : paths.cppTmp;
+  const cppTmpRoot = process.env.SPARMATE_IN_CONTAINER === "1" ? "/tmp/runtime/cpp" : paths.cppTmp;
   const manager = new SessionManager({ config, store, settings, driver, guard, runner: lazyRunner(cppTmpRoot, config.studyRoot), prompts, log, problems });
   await manager.init();
 
   const kokoro = new KokoroManager({ kokoroHome: config.kokoroHome, appRoot: config.appRoot });
 
   const app = await buildApp({ config, csrfToken, manager, settings, store, kokoro, log, usageLedger });
-  const listenHost = process.env.IR_IN_CONTAINER === "1" ? "0.0.0.0" : "127.0.0.1";
+  const listenHost = process.env.SPARMATE_IN_CONTAINER === "1" ? "0.0.0.0" : "127.0.0.1";
   await app.listen({ port: config.port, host: listenHost });
   log.info(`Started on port ${config.port}${config.fakeAgent ? " with the fake agent" : ""}; ${guard.size()} privacy terms loaded`);
-  process.stdout.write(`Interview Room is running at http://127.0.0.1:${config.port}${config.fakeAgent ? " (fake agent)" : ""}\n`);
+  process.stdout.write(`Sparmate is running at http://127.0.0.1:${config.port}${config.fakeAgent ? " (fake agent)" : ""}\n`);
 
   const stop = createShutdownHandler({
     kokoro,
@@ -134,6 +134,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`Interview Room failed to start: ${describeError(err)}\n`);
+  process.stderr.write(`Sparmate failed to start: ${describeError(err)}\n`);
   process.exit(1);
 });

@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "=== Interview Room Container Setup ==="
+echo "=== Sparmate Container Setup ==="
 
 # 1. Check for Podman or Docker
 if command -v podman >/dev/null 2>&1; then
@@ -19,15 +19,15 @@ fi
 echo "Using container engine: $ENGINE"
 
 # 2. Build container image
-IMAGE_NAME="${IMAGE_NAME:-interview-room:latest}"
+IMAGE_NAME="${IMAGE_NAME:-sparmate:latest}"
 echo "Building container image $IMAGE_NAME..."
 $ENGINE build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Containerfile" "$APP_DIR"
 
 # 3. Create named volumes
 echo "Creating named volumes..."
-$ENGINE volume create interview-room-data >/dev/null
-$ENGINE volume create interview-room-kokoro >/dev/null
-$ENGINE volume create interview-room-claude >/dev/null
+$ENGINE volume create sparmate-data >/dev/null
+$ENGINE volume create sparmate-kokoro >/dev/null
+$ENGINE volume create sparmate-claude >/dev/null
 
 # 4. Study folder path
 DEFAULT_STUDY="$HOME/interview-prep"
@@ -59,7 +59,7 @@ KOKORO_VOICES_SHA256="bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f
 
 echo "Checking Kokoro neural TTS model files in volume..."
 $ENGINE run --rm \
-  -v interview-room-kokoro:/kokoro \
+  -v sparmate-kokoro:/kokoro \
   "$IMAGE_NAME" sh -c "
     set -e
     check_model() {
@@ -86,7 +86,7 @@ if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
   echo "Saving CLAUDE_CODE_OAUTH_TOKEN to credentials volume..."
   # Passed by name, so the token never appears in a command line or the process list.
   $ENGINE run --rm -e CLAUDE_CODE_OAUTH_TOKEN \
-    -v interview-room-claude:/home/node/.claude \
+    -v sparmate-claude:/home/node/.claude \
     "$IMAGE_NAME" sh -c 'umask 077; printenv CLAUDE_CODE_OAUTH_TOKEN > /home/node/.claude/oauth_token'
 elif [ -t 0 ] && [ "$NONINTERACTIVE" != "1" ]; then
   echo ""
@@ -98,13 +98,13 @@ elif [ -t 0 ] && [ "$NONINTERACTIVE" != "1" ]; then
   echo ""
   if [ -n "$token_input" ]; then
     CLAUDE_CODE_OAUTH_TOKEN="$token_input" $ENGINE run --rm -e CLAUDE_CODE_OAUTH_TOKEN \
-      -v interview-room-claude:/home/node/.claude \
+      -v sparmate-claude:/home/node/.claude \
       "$IMAGE_NAME" sh -c 'umask 077; printenv CLAUDE_CODE_OAUTH_TOKEN > /home/node/.claude/oauth_token'
     echo "Saved OAuth token."
   else
     echo "Starting interactive Claude login inside container..."
     $ENGINE run -it --rm \
-      -v interview-room-claude:/home/node/.claude \
+      -v sparmate-claude:/home/node/.claude \
       "$IMAGE_NAME" claude login || true
   fi
 fi

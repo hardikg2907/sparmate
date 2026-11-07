@@ -18,7 +18,7 @@ if [ -z "$ENGINE" ]; then
   fi
 fi
 
-CONTAINER_NAME="${CONTAINER_NAME:-interview-room}"
+CONTAINER_NAME="${CONTAINER_NAME:-sparmate}"
 
 echo "Stopping $CONTAINER_NAME..."
 $ENGINE stop "$CONTAINER_NAME" >/dev/null 2>&1 || true

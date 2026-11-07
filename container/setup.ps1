@@ -1,10 +1,10 @@
-# Interview Room Windows PowerShell Setup Script
+# Sparmate Windows PowerShell Setup Script
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $AppDir = Split-Path -Parent $ScriptDir
 
-Write-Host "=== Interview Room Windows Setup ===" -ForegroundColor Cyan
+Write-Host "=== Sparmate Windows Setup ===" -ForegroundColor Cyan
 
 # 1. Check for Podman or Docker
 $Engine = $null
@@ -19,16 +19,16 @@ if (Get-Command podman -ErrorAction SilentlyContinue) {
 Write-Host "Using container engine: $Engine" -ForegroundColor Green
 
 # 2. Build container image
-$ImageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "interview-room:latest" }
+$ImageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "sparmate:latest" }
 Write-Host "Building image $ImageName..." -ForegroundColor Green
 & $Engine build -t $ImageName -f "$ScriptDir/Containerfile" "$AppDir"
 if ($LASTEXITCODE -ne 0) { throw "Image build failed" }
 
 # 3. Create named volumes
 Write-Host "Creating named volumes..." -ForegroundColor Green
-& $Engine volume create interview-room-data | Out-Null
-& $Engine volume create interview-room-kokoro | Out-Null
-& $Engine volume create interview-room-claude | Out-Null
+& $Engine volume create sparmate-data | Out-Null
+& $Engine volume create sparmate-kokoro | Out-Null
+& $Engine volume create sparmate-claude | Out-Null
 
 # 4. Study folder path
 $DefaultStudy = Join-Path $HOME "interview-prep"
@@ -53,7 +53,7 @@ $VoicesUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/mode
 $VoicesSha = "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
 
 Write-Host "Checking Kokoro neural TTS model files..." -ForegroundColor Green
-& $Engine run --rm -v interview-room-kokoro:/kokoro $ImageName sh -c @"
+& $Engine run --rm -v sparmate-kokoro:/kokoro $ImageName sh -c @"
 set -e
 check_model() { echo '$ModelSha  /kokoro/kokoro-v1.0.onnx' | sha256sum -c - >/dev/null 2>&1; }
 check_voices() { echo '$VoicesSha  /kokoro/voices-v1.0.bin' | sha256sum -c - >/dev/null 2>&1; }
@@ -74,7 +74,7 @@ echo 'Kokoro models verified.'
 if ($env:CLAUDE_CODE_OAUTH_TOKEN) {
     Write-Host "Saving CLAUDE_CODE_OAUTH_TOKEN to volume..." -ForegroundColor Green
     # Passed by name, so the token never appears in a command line or the process list.
-    & $Engine run --rm -e CLAUDE_CODE_OAUTH_TOKEN -v interview-room-claude:/home/node/.claude $ImageName sh -c 'umask 077; printenv CLAUDE_CODE_OAUTH_TOKEN > /home/node/.claude/oauth_token'
+    & $Engine run --rm -e CLAUDE_CODE_OAUTH_TOKEN -v sparmate-claude:/home/node/.claude $ImageName sh -c 'umask 077; printenv CLAUDE_CODE_OAUTH_TOKEN > /home/node/.claude/oauth_token'
 } else {
     Write-Host ""
     Write-Host "Claude authentication options:" -ForegroundColor Yellow
@@ -83,12 +83,12 @@ if ($env:CLAUDE_CODE_OAUTH_TOKEN) {
     $Token = Read-Host "Paste OAuth token (or press Enter)"
     if (-not [string]::IsNullOrWhiteSpace($Token)) {
         $env:CLAUDE_CODE_OAUTH_TOKEN = $Token
-        & $Engine run --rm -e CLAUDE_CODE_OAUTH_TOKEN -v interview-room-claude:/home/node/.claude $ImageName sh -c 'umask 077; printenv CLAUDE_CODE_OAUTH_TOKEN > /home/node/.claude/oauth_token'
+        & $Engine run --rm -e CLAUDE_CODE_OAUTH_TOKEN -v sparmate-claude:/home/node/.claude $ImageName sh -c 'umask 077; printenv CLAUDE_CODE_OAUTH_TOKEN > /home/node/.claude/oauth_token'
         Remove-Item Env:CLAUDE_CODE_OAUTH_TOKEN
         Write-Host "OAuth token saved." -ForegroundColor Green
     } else {
         Write-Host "Starting Claude browser login in container..." -ForegroundColor Cyan
-        & $Engine run -it --rm -v interview-room-claude:/home/node/.claude $ImageName claude login
+        & $Engine run -it --rm -v sparmate-claude:/home/node/.claude $ImageName claude login
     }
 }
 

@@ -49,9 +49,9 @@ interface Span {
 }
 
 export async function loadPrivacyGuard(options?: PrivacyGuardOptions): Promise<PrivacyGuard> {
-  const claudeJsonPath = options?.claudeJsonPath ?? process.env.IR_CLAUDE_JSON ?? join(homedir(), ".claude.json");
+  const claudeJsonPath = options?.claudeJsonPath ?? process.env.SPARMATE_CLAUDE_JSON ?? join(homedir(), ".claude.json");
   const denylistPath =
-    options?.denylistPath ?? process.env.IR_DENYLIST ?? join(homedir(), ".config", "interview-room", "denylist.txt");
+    options?.denylistPath ?? process.env.SPARMATE_DENYLIST ?? join(homedir(), ".config", "sparmate", "denylist.txt");
 
   const texts = new Set<string>();
   for (const term of await termsFromClaudeJson(claudeJsonPath)) texts.add(term);

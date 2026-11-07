@@ -52,7 +52,7 @@ function Shell() {
       const [bootstrap, settings] = await Promise.all([getBootstrap(true), api.settings()]);
       setBoot({ phase: "ready", bootstrap, settings });
     } catch (error) {
-      setBoot({ phase: "error", message: error instanceof ApiError && error.message ? error.message : "Cannot reach the Interview Room server." });
+      setBoot({ phase: "error", message: error instanceof ApiError && error.message ? error.message : "Cannot reach the Sparmate server." });
     }
   }, []);
 
@@ -84,7 +84,7 @@ function Shell() {
   if (boot.phase === "error") {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center" role="alert">
-        <h1 className="text-lead font-semibold">The Interview Room server is not answering</h1>
+        <h1 className="text-lead font-semibold">The Sparmate server is not answering</h1>
         <p className="max-w-md text-body text-muted-foreground">{boot.message} Check that it is running, then try again.</p>
         <Button variant="default" onClick={() => void load()}>
           Try again

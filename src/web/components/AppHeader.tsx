@@ -20,7 +20,7 @@ export function AppHeader({ title, titleAs = "h1", children, actions }: { title?
             <span className="brand-tile flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-hidden="true">
               <Logo size={18} />
             </span>
-            <span>Interview Room</span>
+            <span>Sparmate</span>
           </Link>
           {title ? (
             <>

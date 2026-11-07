@@ -1,4 +1,4 @@
-// End-to-end check of the engine with the fake model driver (IR_FAKE_AGENT=1).
+// End-to-end check of the engine with the fake model driver (SPARMATE_FAKE_AGENT=1).
 //
 //   node scripts/e2e/ws-fake-round.mjs            uses port 4751 unless PORT is set (4750-4799, not 4780)
 //   node scripts/e2e/ws-fake-round.mjs --keep     keeps the temp folder for inspection
@@ -343,12 +343,12 @@ function startServer(dirs) {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
-      IR_FAKE_AGENT: "1",
+      SPARMATE_FAKE_AGENT: "1",
       PORT: String(PORT),
       STUDY_ROOT: dirs.study,
       DATA_DIR: dirs.data,
-      IR_CLAUDE_JSON: join(dirs.root, "claude.json"),
-      IR_DENYLIST: join(dirs.root, "denylist.txt"),
+      SPARMATE_CLAUDE_JSON: join(dirs.root, "claude.json"),
+      SPARMATE_DENYLIST: join(dirs.root, "denylist.txt"),
     },
   });
   let output = "";

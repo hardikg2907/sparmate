@@ -5,23 +5,23 @@ import type { FastifyInstance } from "fastify";
 /** Vite's dev server proxies to us from this port. */
 export const DEV_PORT = 5173;
 
-export function allowedHosts(port: number, inContainer: boolean = process.env.IR_IN_CONTAINER === "1"): Set<string> {
+export function allowedHosts(port: number, inContainer: boolean = process.env.SPARMATE_IN_CONTAINER === "1"): Set<string> {
   if (inContainer) {
     return new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   }
   return new Set([`127.0.0.1:${port}`, `localhost:${port}`, `127.0.0.1:${DEV_PORT}`, `localhost:${DEV_PORT}`]);
 }
 
-export function allowedOrigins(port: number, inContainer: boolean = process.env.IR_IN_CONTAINER === "1"): Set<string> {
+export function allowedOrigins(port: number, inContainer: boolean = process.env.SPARMATE_IN_CONTAINER === "1"): Set<string> {
   return new Set([...allowedHosts(port, inContainer)].map((h) => `http://${h}`));
 }
 
 /** Exact Host match defeats DNS rebinding: a rebound name still arrives with the attacker's host name. */
-export function hostAllowed(host: string | undefined, port: number, inContainer: boolean = process.env.IR_IN_CONTAINER === "1"): boolean {
+export function hostAllowed(host: string | undefined, port: number, inContainer: boolean = process.env.SPARMATE_IN_CONTAINER === "1"): boolean {
   return host !== undefined && allowedHosts(port, inContainer).has(host.toLowerCase());
 }
 
-export function originAllowed(origin: string | undefined, port: number, inContainer: boolean = process.env.IR_IN_CONTAINER === "1"): boolean {
+export function originAllowed(origin: string | undefined, port: number, inContainer: boolean = process.env.SPARMATE_IN_CONTAINER === "1"): boolean {
   return origin !== undefined && allowedOrigins(port, inContainer).has(origin.toLowerCase());
 }
 
@@ -77,7 +77,7 @@ export function checkRequest(
   req: { method: string; url: string; headers: IncomingHttpHeaders },
   port: number,
   csrfToken: string,
-  inContainer: boolean = process.env.IR_IN_CONTAINER === "1",
+  inContainer: boolean = process.env.SPARMATE_IN_CONTAINER === "1",
 ): RequestVerdict {
   if (!hostAllowed(req.headers.host, port, inContainer)) return { ok: false, status: 421, reason: "host" };
   const upgrade = isUpgrade(req.headers);

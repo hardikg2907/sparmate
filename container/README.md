@@ -1,6 +1,6 @@
-# Interview Room Container
+# Sparmate Container
 
-Run Interview Room in a local container on Linux, Windows, or macOS.
+Run Sparmate in a local container on Linux, Windows, or macOS.
 The server runs inside the container while your browser stays on your host machine.
 
 ## Requirements
@@ -53,11 +53,11 @@ Stop the container:
 - **Study Folder:** Mounted from your host machine (default: `~/interview-prep`).
   Contains `TRACKER.md`, `REVIEW.md`, `TEACHING.md`, `notes/`, and `lld/`.
   You can edit these files directly with any editor.
-- **App Data:** Stored in the `interview-room-data` volume.
+- **App Data:** Stored in the `sparmate-data` volume.
   Contains session logs, settings, and generated custom problems.
-- **Claude Config:** Stored in the `interview-room-claude` volume.
+- **Claude Config:** Stored in the `sparmate-claude` volume.
   Contains your Claude authentication session.
-- **TTS Models:** Stored in the `interview-room-kokoro` volume.
+- **TTS Models:** Stored in the `sparmate-kokoro` volume.
   Contains the offline Kokoro ONNX model weights.
 
 ## Updating
@@ -74,14 +74,14 @@ Remove the container, image, and persistent volumes:
 
 ```bash
 # Stop and remove the container
-podman rm -f interview-room 2>/dev/null || docker rm -f interview-room 2>/dev/null
+podman rm -f sparmate 2>/dev/null || docker rm -f sparmate 2>/dev/null
 
 # Remove the container image
-podman rmi interview-room:latest 2>/dev/null || docker rmi interview-room:latest 2>/dev/null
+podman rmi sparmate:latest 2>/dev/null || docker rmi sparmate:latest 2>/dev/null
 
 # Remove named volumes (leaves host study files intact)
-podman volume rm interview-room-data interview-room-claude interview-room-kokoro 2>/dev/null || \
-docker volume rm interview-room-data interview-room-claude interview-room-kokoro 2>/dev/null
+podman volume rm sparmate-data sparmate-claude sparmate-kokoro 2>/dev/null || \
+docker volume rm sparmate-data sparmate-claude sparmate-kokoro 2>/dev/null
 ```
 
 Your host study files in `~/interview-prep` are preserved.

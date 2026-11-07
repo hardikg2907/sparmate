@@ -21,7 +21,7 @@ await mkdir(join(study, "lld"), { recursive: true });
 await mkdir(OUT, { recursive: true });
 await copyStudyKit(study);
 
-const server = spawn(join(APP, "node_modules", ".bin", "tsx"), ["src/server/index.ts"], { cwd: APP, env: { ...process.env, PORT: String(PORT), STUDY_ROOT: study, DATA_DIR: join(work, "data"), IR_FAKE_AGENT: "1" }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(join(APP, "node_modules", ".bin", "tsx"), ["src/server/index.ts"], { cwd: APP, env: { ...process.env, PORT: String(PORT), STUDY_ROOT: study, DATA_DIR: join(work, "data"), SPARMATE_FAKE_AGENT: "1" }, stdio: ["ignore", "pipe", "pipe"] });
 let log = "";
 server.stdout.on("data", (d) => (log += d));
 server.stderr.on("data", (d) => (log += d));

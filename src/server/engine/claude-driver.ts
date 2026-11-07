@@ -270,7 +270,7 @@ export function baseOptions(
     systemPrompt,
     // Candidate text must reach the model as written: no @path file expansion, no slash commands.
     verbatimPrompts: true,
-    env: childEnv(opts?.clientApp ?? "interview-room/0.1"),
+    env: childEnv(opts?.clientApp ?? "sparmate/0.1"),
     stderr: stderr.push,
     abortController,
     ...(hooks ? { hooks } : {}),

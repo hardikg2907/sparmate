@@ -10,8 +10,8 @@ import { copyStudyKit } from "../lib/tempStudy.mjs";
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PORT = 4763;
-const KOKORO_HOME = process.env.IR_KOKORO_HOME;
-if (!KOKORO_HOME) throw new Error("Set IR_KOKORO_HOME to a folder that holds kokoro-v1.0.onnx and voices-v1.0.bin");
+const KOKORO_HOME = process.env.SPARMATE_KOKORO_HOME;
+if (!KOKORO_HOME) throw new Error("Set SPARMATE_KOKORO_HOME to a folder that holds kokoro-v1.0.onnx and voices-v1.0.bin");
 const HOST = `127.0.0.1:${PORT}`;
 const BASE = `http://${HOST}`;
 
@@ -78,13 +78,13 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        IR_FAKE_AGENT: "1",
+        SPARMATE_FAKE_AGENT: "1",
         PORT: String(PORT),
         STUDY_ROOT: dirs.study,
         DATA_DIR: dirs.data,
-        IR_CLAUDE_JSON: join(dirs.root, "claude.json"),
-        IR_DENYLIST: join(dirs.root, "denylist.txt"),
-        IR_KOKORO_HOME: KOKORO_HOME,
+        SPARMATE_CLAUDE_JSON: join(dirs.root, "claude.json"),
+        SPARMATE_DENYLIST: join(dirs.root, "denylist.txt"),
+        SPARMATE_KOKORO_HOME: KOKORO_HOME,
       },
     },
   );

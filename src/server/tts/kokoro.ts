@@ -19,8 +19,8 @@ export interface KokoroManagerOptions {
 }
 
 export function findPython(kokoroHome: string): string {
-  if (process.env.IR_PYTHON_PATH && existsSync(process.env.IR_PYTHON_PATH)) {
-    return process.env.IR_PYTHON_PATH;
+  if (process.env.SPARMATE_PYTHON_PATH && existsSync(process.env.SPARMATE_PYTHON_PATH)) {
+    return process.env.SPARMATE_PYTHON_PATH;
   }
   const venvPython = join(kokoroHome, ".venv", "bin", "python");
   // No fallback to a system python: it would report Kokoro available where kokoro-onnx is not installed.

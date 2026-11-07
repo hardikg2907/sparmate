@@ -26,7 +26,7 @@ const GROUPS: { title: string; items: { keys: string[]; label: string }[] }[] = 
   },
 ];
 
-const OPEN_EVENT = "ir-open-shortcuts";
+const OPEN_EVENT = "sparmate-open-shortcuts";
 
 /** Opens the shortcuts list from a button, the same as pressing ? does. */
 export function openShortcuts(): void {

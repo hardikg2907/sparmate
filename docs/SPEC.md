@@ -1,4 +1,4 @@
-# Interview Room — build spec
+# Sparmate — build spec
 
 A local web app for practising system design (HLD) and machine-coding (LLD, C++) interviews against an AI
 interviewer, then getting a scored debrief, a coach who fills the gaps, and drafted study notes to approve.
@@ -48,15 +48,15 @@ Environment variables (all optional). The server also reads them from a gitignor
 
 | Variable | Default | Use |
 |---|---|---|
-| `PORT` | `4747` | Server port. The server binds `127.0.0.1` only natively, or `0.0.0.0` when `IR_IN_CONTAINER=1`. |
+| `PORT` | `4747` | Server port. The server binds `127.0.0.1` only natively, or `0.0.0.0` when `SPARMATE_IN_CONTAINER=1`. |
 | `STUDY_ROOT` | `~/sparmate-study` | Where `TRACKER.md`, `REVIEW.md`, `notes/`, `lld/` live. Tests point it at a temp copy. |
 | `DATA_DIR` | `<STUDY_ROOT>/rounds` | Sessions, settings, custom problems, logs. |
-| `IR_IN_CONTAINER` | unset | `1` enables container mode: server listens on `0.0.0.0`, strict host/origin allow-lists applied. |
-| `IR_FAKE_AGENT` | unset | `1` replaces every model call with the deterministic fake driver (section 5.9). |
-| `IR_CLAUDE_JSON` | `~/.claude.json` | Where the privacy guard reads the account email (section 11). |
-| `IR_DENYLIST` | `~/.config/interview-room/denylist.txt` | Extra deny-listed terms, one per line, kept outside the repo. |
-| `IR_KOKORO_HOME` | `<DATA_DIR>/kokoro` | Local Kokoro neural TTS folder holding `.venv/bin/python`, `kokoro-v1.0.onnx` and `voices-v1.0.bin`. |
-| `IR_AWAY_MS` | unset (60000) | Tests only. Milliseconds a live round may have no open socket before it pauses as "away" (section 5.5). An integer from 50 to 600000. |
+| `SPARMATE_IN_CONTAINER` | unset | `1` enables container mode: server listens on `0.0.0.0`, strict host/origin allow-lists applied. |
+| `SPARMATE_FAKE_AGENT` | unset | `1` replaces every model call with the deterministic fake driver (section 5.9). |
+| `SPARMATE_CLAUDE_JSON` | `~/.claude.json` | Where the privacy guard reads the account email (section 11). |
+| `SPARMATE_DENYLIST` | `~/.config/sparmate/denylist.txt` | Extra deny-listed terms, one per line, kept outside the repo. |
+| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro` | Local Kokoro neural TTS folder holding `.venv/bin/python`, `kokoro-v1.0.onnx` and `voices-v1.0.bin`. |
+| `SPARMATE_AWAY_MS` | unset (60000) | Tests only. Milliseconds a live round may have no open socket before it pauses as "away" (section 5.5). An integer from 50 to 600000. |
 
 Data layout under `DATA_DIR` (shown for the default, `<STUDY_ROOT>/rounds`):
 
@@ -147,7 +147,7 @@ const base = {
   model, effort,                 // from settings per role
   systemPrompt: <rendered prompt file>,       // a plain string: replaces Claude Code's own system prompt
   verbatimPrompts: true,         // candidate text reaches the model as written: no @path expansion, no slash commands
-  env: { ...process.env minus the parent Claude Code session variables, CLAUDE_AGENT_SDK_CLIENT_APP: "interview-room/0.1" },
+  env: { ...process.env minus the parent Claude Code session variables, CLAUDE_AGENT_SDK_CLIENT_APP: "sparmate/0.1" },
   stderr: (line) => log (redacted, truncated),
 };
 ```
@@ -404,7 +404,7 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 - "Draft study notes" runs the scribe (section 10) and sends `bookkeeping.proposal`. The user ticks ops and
   clicks Save: `bookkeeping.apply`.
 
-### 5.9 FakeDriver (`IR_FAKE_AGENT=1`)
+### 5.9 FakeDriver (`SPARMATE_FAKE_AGENT=1`)
 
 Same interface as the Claude driver, no network, deterministic, fast (stream a reply in a few chunks over
 about 300 ms):
@@ -838,7 +838,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 ### 12.1 Screens
 
 **Home `/`**
-- Header: "Interview Room", a quiet progress summary, a link to the Usage page, and a settings button.
+- Header: "Sparmate", a quiet progress summary, a link to the Usage page, and a settings button.
 - Progress overview: compact card per track with a stacked progress bar (done, partly done, not started), count legend, redo due count, and date of last round.
 - "Up next" card for the problem with `badge: "next"` and any `redo` problems, each with "Start interview" and an outlined secondary "Guided" button of matching height.
 - Single full-width problem list with a track switch at the top: segmented tabs ("System design · HLD" and "Machine coding · LLD", each with count, persisted in `localStorage`).
@@ -1054,10 +1054,10 @@ markers).
   temp copy of the real `TRACKER.md`, `REVIEW.md` and notes (copied into a temp folder by the test, never
   written in place), stale-hash refusal, the privacy guard, and the C++ runner (compile error, run, timeout,
   output cap, harness include trick, sandbox denies a write outside the folder and a network connect).
-- ENGINE: with `IR_FAKE_AGENT=1`, `scripts/e2e/ws-fake-round.mjs` drives an HLD and an LLD round over the
+- ENGINE: with `SPARMATE_FAKE_AGENT=1`, `scripts/e2e/ws-fake-round.mjs` drives an HLD and an LLD round over the
   WebSocket (hello, chat, board update, code update and run for LLD, phase change, end), waits for the
   debrief, drafts bookkeeping against a temp `STUDY_ROOT`, applies it, and checks the files changed exactly as
-  planned. `scripts/e2e/ws-fake-pause.mjs` runs the server with `IR_AWAY_MS` shortened and checks the user pause and
+  planned. `scripts/e2e/ws-fake-pause.mjs` runs the server with `SPARMATE_AWAY_MS` shortened and checks the user pause and
   resume in both modes, the away pause (and that a quick reconnect cancels it), discard over the WebSocket and over
   REST with the session folder gone afterwards, and the attempt-file rule for LLD rounds. Plus one real-model smoke script, `scripts/e2e/ws-real-smoke.mjs`, that runs three interviewer turns
   and a judge call on the URL shortener and prints timings.

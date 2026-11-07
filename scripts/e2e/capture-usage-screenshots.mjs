@@ -21,7 +21,7 @@ await copyStudyKit(study);
 
 const server = spawn(join(APP, "node_modules", ".bin", "tsx"), ["src/server/index.ts"], {
   cwd: APP,
-  env: { ...process.env, PORT: String(PORT), STUDY_ROOT: study, DATA_DIR: join(work, "data"), IR_FAKE_AGENT: "1" },
+  env: { ...process.env, PORT: String(PORT), STUDY_ROOT: study, DATA_DIR: join(work, "data"), SPARMATE_FAKE_AGENT: "1" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 
@@ -84,7 +84,7 @@ try {
   const setTheme = async (theme) => {
     await page.evaluate((th) => {
       document.documentElement.classList.toggle("dark", th === "dark");
-      localStorage.setItem("ir-theme", th);
+      localStorage.setItem("sparmate-theme", th);
     }, theme);
     await sleep(300);
   };

@@ -1,9 +1,9 @@
-// End-to-end check of pausing and discarding with the fake model driver (IR_FAKE_AGENT=1).
+// End-to-end check of pausing and discarding with the fake model driver (SPARMATE_FAKE_AGENT=1).
 //
 //   PORT=4758 node scripts/e2e/ws-fake-pause.mjs     port from 4750 to 4759; 4758 when PORT is unset
 //   node scripts/e2e/ws-fake-pause.mjs --keep        keeps the temp folder for inspection
 //
-// It starts the server against a temp copy of the study folder with IR_AWAY_MS shortened to a few seconds, then
+// It starts the server against a temp copy of the study folder with SPARMATE_AWAY_MS shortened to a few seconds, then
 // checks: a user pause and resume in both modes, the automatic "away" pause (and that a quick reconnect cancels
 // it), discard over the WebSocket and over REST with the session folder gone afterwards, and what a discard does
 // to an LLD attempt file. The real study folder is only read.
@@ -221,13 +221,13 @@ function startServer(dirs) {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
-      IR_FAKE_AGENT: "1",
-      IR_AWAY_MS: String(AWAY_MS),
+      SPARMATE_FAKE_AGENT: "1",
+      SPARMATE_AWAY_MS: String(AWAY_MS),
       PORT: String(PORT),
       STUDY_ROOT: dirs.study,
       DATA_DIR: dirs.data,
-      IR_CLAUDE_JSON: join(dirs.root, "claude.json"),
-      IR_DENYLIST: join(dirs.root, "denylist.txt"),
+      SPARMATE_CLAUDE_JSON: join(dirs.root, "claude.json"),
+      SPARMATE_DENYLIST: join(dirs.root, "denylist.txt"),
     },
   });
   let output = "";

@@ -47,7 +47,7 @@ export function createLogger(options: LoggerOptions): Logger {
   const write = (level: "info" | "warn" | "error", message: string, err?: unknown) => {
     const line = clean(err === undefined ? message : `${message}: ${describeError(err)}`);
     stream.write(`${new Date().toISOString()} ${level.toUpperCase()} ${line}\n`);
-    if (options.echo !== false && level !== "info") process.stderr.write(`[interview-room] ${level}: ${line}\n`);
+    if (options.echo !== false && level !== "info") process.stderr.write(`[sparmate] ${level}: ${line}\n`);
   };
 
   return {

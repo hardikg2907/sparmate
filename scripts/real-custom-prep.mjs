@@ -56,7 +56,7 @@ async function main() {
   await copyStudyKit(study);
 
   const env = { ...process.env, PORT: String(PORT), STUDY_ROOT: study, DATA_DIR: data };
-  delete env.IR_FAKE_AGENT;
+  delete env.SPARMATE_FAKE_AGENT;
 
   console.log(`Starting real server on port ${PORT}...`);
   const server = spawn(process.execPath, [join(APP, "node_modules", "tsx", "dist", "cli.mjs"), join(APP, "src", "server", "index.ts")], {

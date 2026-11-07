@@ -105,7 +105,7 @@ export interface BootstrapResponse {
   csrfToken: string;
   version: string;
   studyRoot: string; // shown in settings so the user knows which folder bookkeeping writes to
-  fakeAgent: boolean; // true when IR_FAKE_AGENT=1 (UI testing without model calls)
+  fakeAgent: boolean; // true when SPARMATE_FAKE_AGENT=1 (UI testing without model calls)
 }
 
 export const CreateSessionSchema = z.strictObject({

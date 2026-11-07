@@ -66,9 +66,9 @@ import { Link, navigate } from "../router";
 const CUSTOM_MIN = 10;
 const CUSTOM_MAX = 4000;
 const HISTORY_SHOWN = 8;
-const STORAGE_TRACK = "ir-home-track";
-const STORAGE_STATUS = "ir-home-status-filter";
-const STORAGE_SORT = "ir-home-sort";
+const STORAGE_TRACK = "sparmate-home-track";
+const STORAGE_STATUS = "sparmate-home-status-filter";
+const STORAGE_SORT = "sparmate-home-sort";
 const GUIDED_HINT = "Step by step, with feedback and hints, no timer pressure";
 
 type Durations = Settings["durations"];
@@ -973,7 +973,7 @@ function StartDialog({
   );
 }
 
-const CUSTOM_JOB_KEY = "ir-custom-job";
+const CUSTOM_JOB_KEY = "sparmate-custom-job";
 
 function CustomPrompt({
   starting,
@@ -1433,7 +1433,7 @@ export function HomePage({ fakeAgent, onOpenSettings, durations }: { fakeAgent: 
   }, []);
 
   useEffect(() => {
-    document.title = "Interview Room";
+    document.title = "Sparmate";
     void load();
   }, [load]);
 

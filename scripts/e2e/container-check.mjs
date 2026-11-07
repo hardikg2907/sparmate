@@ -12,10 +12,10 @@ import { copyStudyKit } from "../lib/tempStudy.mjs";
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PORT = Number(process.env.PORT ?? 4780);
 const BASE = `http://127.0.0.1:${PORT}`;
-const CONTAINER_NAME = process.env.IR_CONTAINER_NAME ?? `ir-test-check-${Date.now()}`;
-const IMAGE_NAME = process.env.IR_IMAGE_NAME ?? "localhost/ir-test-image:latest";
-const KOKORO_VOLUME = process.env.IR_KOKORO_VOLUME ?? "ir-test-kokoro";
-const DATA_VOLUME = process.env.IR_DATA_VOLUME ?? "ir-test-data";
+const CONTAINER_NAME = process.env.SPARMATE_CONTAINER_NAME ?? `ir-test-check-${Date.now()}`;
+const IMAGE_NAME = process.env.SPARMATE_IMAGE_NAME ?? "localhost/ir-test-image:latest";
+const KOKORO_VOLUME = process.env.SPARMATE_KOKORO_VOLUME ?? "ir-test-kokoro";
+const DATA_VOLUME = process.env.SPARMATE_DATA_VOLUME ?? "ir-test-data";
 const PODMAN = process.env.PODMAN_BIN ?? "/opt/podman/bin/podman";
 
 const results = [];
@@ -195,9 +195,9 @@ async function main() {
       "-p",
       `127.0.0.1:${PORT}:4780`,
       "-e",
-      "IR_IN_CONTAINER=1",
+      "SPARMATE_IN_CONTAINER=1",
       "-e",
-      "IR_FAKE_AGENT=1",
+      "SPARMATE_FAKE_AGENT=1",
       "-e",
       "PORT=4780",
       "-e",
@@ -205,9 +205,9 @@ async function main() {
       "-e",
       "DATA_DIR=/data",
       "-e",
-      "IR_CLAUDE_JSON=/home/node/.claude.json",
+      "SPARMATE_CLAUDE_JSON=/home/node/.claude.json",
       "-e",
-      "IR_DENYLIST=/home/node/denylist.txt",
+      "SPARMATE_DENYLIST=/home/node/denylist.txt",
       "-v",
       `${study}:/study`,
       "-v",
@@ -315,7 +315,7 @@ async function main() {
     // Sandbox Escape 3: write outside build directory (must fail)
     const writeRes = await runCodeSnippet(
       "escape write",
-      `#include <iostream>\n#include <fstream>\nint main() {\n  for (const auto* p : {"/home/node/escape.txt", "/data/escape.txt", "/study/escape.txt", "/app/interview-room/escape.txt"}) {\n    std::ofstream f(p);\n    if (f.is_open()) { f << "pwned\\n"; f.close(); std::cout << "ESCAPE_WRITE_OUTSIDE" << std::endl; return 0; }\n  }\n  return 1;\n}\n`,
+      `#include <iostream>\n#include <fstream>\nint main() {\n  for (const auto* p : {"/home/node/escape.txt", "/data/escape.txt", "/study/escape.txt", "/app/sparmate/escape.txt"}) {\n    std::ofstream f(p);\n    if (f.is_open()) { f << "pwned\\n"; f.close(); std::cout << "ESCAPE_WRITE_OUTSIDE" << std::endl; return 0; }\n  }\n  return 1;\n}\n`,
     );
     const writeEscaped = writeRes.result?.run?.stdout?.includes("ESCAPE_WRITE_OUTSIDE") && writeRes.result?.run?.exitCode === 0;
     check("sandbox escape: write outside build dir is blocked", !writeEscaped, `exitCode: ${writeRes.result?.run?.exitCode}`);
@@ -323,7 +323,7 @@ async function main() {
     // Sandbox Escape 5: the server's environment, token included, must not be visible through /proc.
     const procRes = await runCodeSnippet(
       "escape proc",
-      `#include <dirent.h>\n#include <fstream>\n#include <iostream>\n#include <iterator>\n#include <string>\nint main() {\n  DIR* d = opendir("/proc");\n  if (!d) return 1;\n  while (dirent* e = readdir(d)) {\n    std::string p = std::string("/proc/") + e->d_name + "/environ";\n    std::ifstream f(p, std::ios::binary);\n    std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());\n    if (s.find("IR_IN_CONTAINER") != std::string::npos) { std::cout << "ESCAPE_SERVER_ENV" << std::endl; return 0; }\n  }\n  return 2;\n}\n`,
+      `#include <dirent.h>\n#include <fstream>\n#include <iostream>\n#include <iterator>\n#include <string>\nint main() {\n  DIR* d = opendir("/proc");\n  if (!d) return 1;\n  while (dirent* e = readdir(d)) {\n    std::string p = std::string("/proc/") + e->d_name + "/environ";\n    std::ifstream f(p, std::ios::binary);\n    std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());\n    if (s.find("SPARMATE_IN_CONTAINER") != std::string::npos) { std::cout << "ESCAPE_SERVER_ENV" << std::endl; return 0; }\n  }\n  return 2;\n}\n`,
     );
     const procEscaped = procRes.result?.run?.stdout?.includes("ESCAPE_SERVER_ENV");
     check("sandbox escape: the server's environment is not readable through /proc", procRes.type === "code.run.result" && !procEscaped, `exitCode: ${procRes.result?.run?.exitCode}`);
@@ -346,7 +346,7 @@ async function main() {
         "content-type": "application/json",
       },
       body: {
-        text: "Interview Room running Kokoro synthesis inside container.",
+        text: "Sparmate running Kokoro synthesis inside container.",
         voice: "bm_george",
         speed: 1.0,
       },

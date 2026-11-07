@@ -19,7 +19,7 @@ if [ -z "$ENGINE" ]; then
   fi
 fi
 
-IMAGE_NAME="${IMAGE_NAME:-interview-room:latest}"
+IMAGE_NAME="${IMAGE_NAME:-sparmate:latest}"
 PORT="${PORT:-4747}"
 STUDY_DIR="${STUDY_ROOT:-$HOME/interview-prep}"
 
@@ -27,7 +27,7 @@ case "$STUDY_DIR" in
   "~"*) STUDY_DIR="$HOME${STUDY_DIR#\~}" ;;
 esac
 
-CONTAINER_NAME="${CONTAINER_NAME:-interview-room}"
+CONTAINER_NAME="${CONTAINER_NAME:-sparmate}"
 
 # Stop any existing container with the same name
 $ENGINE rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -38,12 +38,12 @@ $ENGINE run -d \
   --name "$CONTAINER_NAME" \
   -p "127.0.0.1:$PORT:$PORT" \
   -e PORT="$PORT" \
-  -e IR_IN_CONTAINER=1 \
-  -e IR_FAKE_AGENT="${IR_FAKE_AGENT:-}" \
+  -e SPARMATE_IN_CONTAINER=1 \
+  -e SPARMATE_FAKE_AGENT="${SPARMATE_FAKE_AGENT:-}" \
   -v "$STUDY_DIR:/study:Z" \
-  -v interview-room-data:/data:Z \
-  -v interview-room-kokoro:/kokoro:Z \
-  -v interview-room-claude:/home/node/.claude:Z \
+  -v sparmate-data:/data:Z \
+  -v sparmate-kokoro:/kokoro:Z \
+  -v sparmate-claude:/home/node/.claude:Z \
   "$IMAGE_NAME" >/dev/null
 
-echo "Interview Room is running at http://127.0.0.1:$PORT"
+echo "Sparmate is running at http://127.0.0.1:$PORT"

@@ -1,4 +1,4 @@
-# Interview Room
+# Sparmate
 
 A local practice room for system design (HLD) and C++ machine-coding (LLD) interviews. An AI interviewer runs
 a timed round with you on a whiteboard or in a code editor, then a judge scores the round against the SDE-2 bar,
@@ -76,7 +76,7 @@ with token counts and cost for that specific round.
 
 The app never names your employer. Every model prompt says not to mention your email or workplace, the study
 notes are checked against a deny-list before they can be saved (your account email's domain, plus any terms
-in `~/.config/interview-room/denylist.txt`, one per line), and the model subprocess loads none of your Claude
+in `~/.config/sparmate/denylist.txt`, one per line), and the model subprocess loads none of your Claude
 Code settings or memory.
 
 ## Problems
@@ -92,7 +92,7 @@ curveballs or extensions, the level bar and traps. Check a new or edited brief w
 npm run dev          # vite on :5173 with reload, server on :4747
 npm test             # unit tests
 npm run typecheck
-IR_FAKE_AGENT=1 npm start                      # no model calls: a scripted fake interviewer and judge
+SPARMATE_FAKE_AGENT=1 npm start                      # no model calls: a scripted fake interviewer and judge
 node scripts/e2e/ws-fake-round.mjs             # full rounds over the WebSocket with the fake driver
 node scripts/e2e/real-round.mjs --profile strong|weak|lld   # real model, temp copy of the study folder
 node scripts/e2e/ui-tour.mjs                   # screenshots of the main pages

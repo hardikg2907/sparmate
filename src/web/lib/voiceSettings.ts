@@ -27,7 +27,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   rate: 1.0,
 };
 
-const KEY = "ir-voice";
+const KEY = "sparmate-voice";
 
 const listeners = new Set<(settings: VoiceSettings) => void>();
 

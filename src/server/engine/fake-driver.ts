@@ -335,7 +335,7 @@ function fakeScribeOps(facts: FakeFacts): BookkeepingOp[] {
   ops.push({
     kind: "tracker_append_session_log_row",
     date,
-    topics: `**${code} ${p.meta.title}**, a ${facts.mode ?? "interview"} round in Interview Room`,
+    topics: `**${code} ${p.meta.title}**, a ${facts.mode ?? "interview"} round in Sparmate`,
     outcome: `\`${mark}\`. ${facts.scorecard?.verdict.summary ?? "Scored."}`,
     notesFile: p.meta.notesFile,
   });

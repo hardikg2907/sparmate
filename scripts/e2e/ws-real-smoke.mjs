@@ -45,7 +45,7 @@ const ctx = (roundMs, boardChanged) => ({
 
 const log = memoryLogger();
 const cwd = await mkdtemp(join(tmpdir(), "ir-agent-cwd-"));
-const driver = createClaudeDriver({ cwd, log, clientApp: "interview-room/smoke" });
+const driver = createClaudeDriver({ cwd, log, clientApp: "sparmate/smoke" });
 const report = { model: MODEL, turns: [], judge: null, scribe: null, resume: null };
 let toolCalls = 0;
 let sdkId = null;

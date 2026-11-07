@@ -1,6 +1,6 @@
 export type Theme = "light" | "dark";
 
-const KEY = "ir-theme";
+const KEY = "sparmate-theme";
 
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;

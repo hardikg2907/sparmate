@@ -4,7 +4,7 @@
 import puppeteer from "puppeteer-core";
 
 const url = process.argv[2] ?? "http://127.0.0.1:4747/";
-const shot = process.argv[3] ?? "/tmp/interview-room-smoke.png";
+const shot = process.argv[3] ?? "/tmp/sparmate-smoke.png";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 // Excalidraw lists a CDN copy of every font as a fallback; the CSP blocks it on purpose.
@@ -31,7 +31,7 @@ page.on("console", (msg) => {
 page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
 
 await page.goto(url, { waitUntil: "networkidle0", timeout: 60000 });
-await page.waitForFunction(() => document.body.innerText.includes("Interview Room"), { timeout: 30000 });
+await page.waitForFunction(() => document.body.innerText.includes("Sparmate"), { timeout: 30000 });
 const text = await page.evaluate(() => document.body.innerText);
 await page.screenshot({ path: shot });
 await browser.close();

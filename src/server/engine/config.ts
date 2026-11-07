@@ -59,13 +59,13 @@ function parsePort(raw: string | undefined): number {
 function parseAwayMs(raw: string | undefined): number | undefined {
   if (raw === undefined || raw === "") return undefined;
   const ms = Number(raw);
-  if (!Number.isInteger(ms) || ms < 50 || ms > 600_000) throw new Error("IR_AWAY_MS must be an integer from 50 to 600000");
+  if (!Number.isInteger(ms) || ms < 50 || ms > 600_000) throw new Error("SPARMATE_AWAY_MS must be an integer from 50 to 600000");
   return ms;
 }
 
 export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<ServerConfig> {
   const port = parsePort(env.PORT);
-  const awayPauseMs = parseAwayMs(env.IR_AWAY_MS);
+  const awayPauseMs = parseAwayMs(env.SPARMATE_AWAY_MS);
   const studyRootRaw = studyRootPath(env);
   const studyRoot = await realpath(studyRootRaw).catch(() => {
     throw new Error(`STUDY_ROOT does not exist: ${studyRootRaw}`);
@@ -86,11 +86,11 @@ export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<
     contentDir: join(APP_ROOT, "content"),
     webDist: join(APP_ROOT, "dist", "web"),
     excalidrawAssets: join(APP_ROOT, "node_modules", "@excalidraw", "excalidraw", "dist", "prod"),
-    fakeAgent: env.IR_FAKE_AGENT === "1",
+    fakeAgent: env.SPARMATE_FAKE_AGENT === "1",
     ...(awayPauseMs === undefined ? {} : { awayPauseMs }),
-    claudeJsonPath: env.IR_CLAUDE_JSON ? resolve(env.IR_CLAUDE_JSON) : join(homedir(), ".claude.json"),
-    denylistPath: env.IR_DENYLIST ? resolve(env.IR_DENYLIST) : join(homedir(), ".config", "interview-room", "denylist.txt"),
-    kokoroHome: env.IR_KOKORO_HOME ? resolve(env.IR_KOKORO_HOME) : join(dataDir, "kokoro"),
+    claudeJsonPath: env.SPARMATE_CLAUDE_JSON ? resolve(env.SPARMATE_CLAUDE_JSON) : join(homedir(), ".claude.json"),
+    denylistPath: env.SPARMATE_DENYLIST ? resolve(env.SPARMATE_DENYLIST) : join(homedir(), ".config", "sparmate", "denylist.txt"),
+    kokoroHome: env.SPARMATE_KOKORO_HOME ? resolve(env.SPARMATE_KOKORO_HOME) : join(dataDir, "kokoro"),
     version: typeof pkg.version === "string" ? pkg.version : "0.0.0",
   };
 }

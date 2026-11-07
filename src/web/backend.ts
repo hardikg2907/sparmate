@@ -60,7 +60,7 @@ async function requestJson<T>(method: string, path: string, body: unknown, token
       cache: "no-store",
     });
   } catch {
-    throw new ApiError(0, "Cannot reach the Interview Room server.");
+    throw new ApiError(0, "Cannot reach the Sparmate server.");
   }
   if (!res.ok) throw new ApiError(res.status, await readError(res));
   return (await res.json()) as T;

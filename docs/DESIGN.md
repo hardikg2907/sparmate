@@ -1,4 +1,4 @@
-# Interview Room — UI and UX revamp
+# Sparmate — UI and UX revamp
 
 This brief explains what the revamp changes and why. It covers the user, a review of the current UI, the visual
 direction, the flows, and the changes per screen. The last sections list the labels that stay frozen, the new
@@ -419,7 +419,7 @@ moment to read the plan before the clock runs. A real round has the same moment.
 
 ### Home
 
-- **Header.** "Interview Room" on a filled brand tile, a one-line progress summary, and Settings. Usage and
+- **Header.** "Sparmate" on a filled brand tile, a one-line progress summary, and Settings. Usage and
   Settings show only their icons on a phone. Test mode stays as a warn pill.
 - **Resume strip** for each live or paused round, above everything else, on a warm fill with a solid icon.
 - **Progress.** One raised panel with a column per track. Each column shows a large count ("1 of 6"), one pip
@@ -535,7 +535,7 @@ moment to read the plan before the clock runs. A real round has the same moment.
 
 Scripts and tests depend on these, so the revamp keeps them exactly.
 
-- Text "Interview Room" on the home page (`scripts/smoke-ui.mjs`).
+- Text "Sparmate" on the home page (`scripts/smoke-ui.mjs`).
 - A button whose text contains "End interview" in the room, and a confirm button whose text is "End interview"
   (`scripts/e2e/ui-tour.mjs`).
 - Text "What the judge saw", "Strengths" or "Teach me" on the debrief (`ui-tour.mjs`).

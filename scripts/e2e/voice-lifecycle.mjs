@@ -29,7 +29,7 @@ const server = spawn(
       PORT: String(PORT),
       STUDY_ROOT: study,
       DATA_DIR: join(work, "data"),
-      IR_FAKE_AGENT: "1",
+      SPARMATE_FAKE_AGENT: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   },

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
-const KEY = "ir-chat-width";
+const KEY = "sparmate-chat-width";
 const MIN = 300;
 const MAX = 640;
 const DEFAULT = 380;

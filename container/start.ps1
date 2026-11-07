@@ -1,4 +1,4 @@
-# Interview Room Windows PowerShell Start Script
+# Sparmate Windows PowerShell Start Script
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -11,8 +11,8 @@ if (-not (Get-Command podman -ErrorAction SilentlyContinue)) {
 
 $Port = "4747"
 $StudyDir = Join-Path $HOME "interview-prep"
-$ImageName = "interview-room:latest"
-$ContainerName = if ($env:CONTAINER_NAME) { $env:CONTAINER_NAME } else { "interview-room" }
+$ImageName = "sparmate:latest"
+$ContainerName = if ($env:CONTAINER_NAME) { $env:CONTAINER_NAME } else { "sparmate" }
 
 if (Test-Path $EnvFile) {
     Get-Content $EnvFile | ForEach-Object {
@@ -39,12 +39,12 @@ Write-Host "Starting $ContainerName on http://127.0.0.1:$Port..." -ForegroundCol
   --name $ContainerName `
   -p "127.0.0.1:${Port}:${Port}" `
   -e PORT="$Port" `
-  -e IR_IN_CONTAINER=1 `
-  -e IR_FAKE_AGENT="$env:IR_FAKE_AGENT" `
+  -e SPARMATE_IN_CONTAINER=1 `
+  -e SPARMATE_FAKE_AGENT="$env:SPARMATE_FAKE_AGENT" `
   -v "${StudyDir}:/study" `
-  -v "interview-room-data:/data" `
-  -v "interview-room-kokoro:/kokoro" `
-  -v "interview-room-claude:/home/node/.claude" `
+  -v "sparmate-data:/data" `
+  -v "sparmate-kokoro:/kokoro" `
+  -v "sparmate-claude:/home/node/.claude" `
   $ImageName | Out-Null
 
-Write-Host "Interview Room is running at http://127.0.0.1:$Port" -ForegroundColor Cyan
+Write-Host "Sparmate is running at http://127.0.0.1:$Port" -ForegroundColor Cyan

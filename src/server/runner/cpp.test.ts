@@ -187,12 +187,12 @@ describe("compileAndRun", () => {
   });
 
   it("does not hand the server's environment to compiled programs", async () => {
-    process.env.IR_RUNNER_TEST_SECRET = "should-not-leak";
+    process.env.SPARMATE_RUNNER_TEST_SECRET = "should-not-leak";
     try {
-      const path = await program("env.cpp", '#include <cstdio>\n#include <cstdlib>\nint main() {\n  const char* v = std::getenv("IR_RUNNER_TEST_SECRET");\n  std::printf("secret=%s\\n", v ? v : "(unset)");\n}\n');
+      const path = await program("env.cpp", '#include <cstdio>\n#include <cstdlib>\nint main() {\n  const char* v = std::getenv("SPARMATE_RUNNER_TEST_SECRET");\n  std::printf("secret=%s\\n", v ? v : "(unset)");\n}\n');
       expect((await runner.compileAndRun(path)).run!.stdout).toBe("secret=(unset)\n");
     } finally {
-      delete process.env.IR_RUNNER_TEST_SECRET;
+      delete process.env.SPARMATE_RUNNER_TEST_SECRET;
     }
   });
 
