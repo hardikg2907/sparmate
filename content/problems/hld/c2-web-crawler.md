@@ -82,6 +82,7 @@ Per-node and per-row figures below are assumptions. Accept other reasonable valu
 
 ## API and entities
 
+External API:
 Operator API (internal HTTPS, a few calls):
 - `POST /seeds` with `{ urls }` returns `202 { accepted }`. `400` for a malformed URL.
 - `PUT /hosts/{host}/policy` with `{ delayMs?, monthlyBudget?, blocked? }` returns `204`. A blocked host stops at once, even for URLs already queued (a takedown).
