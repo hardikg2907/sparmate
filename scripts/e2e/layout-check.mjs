@@ -82,8 +82,15 @@ try {
   );
 
   const TARGET_PAGES = [
-    { name: "home (with unfinished)", url: (theme) => `/?fixture=home&theme=${theme}` },
-    { name: "home (without unfinished)", url: (theme) => `/?fixture=home&unfinished=0&theme=${theme}` },
+    { name: "today (with unfinished)", url: (theme) => `/?fixture=home&theme=${theme}` },
+    { name: "today (without unfinished)", url: (theme) => `/?fixture=home&unfinished=0&theme=${theme}` },
+    { name: "library", url: (theme) => `/?fixture=library&theme=${theme}` },
+    { name: "library (new question)", url: (theme) => `/?fixture=library-new&theme=${theme}` },
+    { name: "progress", url: (theme) => `/?fixture=progress&theme=${theme}` },
+    { name: "history", url: (theme) => `/?fixture=history&theme=${theme}` },
+    { name: "settings", url: (theme) => `/?fixture=settings&theme=${theme}` },
+    { name: "gym", url: (theme) => `/?fixture=gym&theme=${theme}` },
+    { name: "dsa", url: (theme) => `/?fixture=dsa&theme=${theme}` },
     { name: "room-hld", url: (theme) => `/?fixture=room-hld&theme=${theme}` },
     { name: "room-lld", url: (theme) => `/?fixture=room-lld&theme=${theme}` },
     { name: "debrief-hld", url: (theme) => `/?fixture=debrief-hld&theme=${theme}` },

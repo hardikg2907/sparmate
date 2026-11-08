@@ -11,6 +11,13 @@ function iso(daysAgo: number, hour = 10): string {
   return d.toISOString();
 }
 
+/** A calendar day, "2026-11-10", as the server writes a last-attempt date. */
+function day(daysAgo: number): string {
+  const d = new Date(Date.now() - daysAgo * DAY);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 export const fixtureBootstrap: BootstrapResponse = {
   csrfToken: "fixture-token-not-used-anywhere",
   version: "0.1.0",
@@ -39,7 +46,7 @@ export const fixtureProblems: ProblemSummary[] = [
     difficulty: "easy",
     tags: ["read-heavy", "caching"],
     trackerMark: "[~]",
-    lastAttempt: { sessionId: "20261017-0915-c2-url-shortener-k3x9", date: iso(12), mode: "interview", verdict: "lean_no_hire" },
+    lastAttempt: { sessionId: "20261017-0915-c2-url-shortener-k3x9", date: day(12), mode: "guided", verdict: "lean_no_hire", readiness: "not_yet" },
     badge: "redo",
     custom: false,
   },
@@ -87,7 +94,7 @@ export const fixtureProblems: ProblemSummary[] = [
     difficulty: "medium",
     tags: ["queues", "retries"],
     trackerMark: "[x]",
-    lastAttempt: { sessionId: "20261008-1930-c2-notification-service-q2m7", date: iso(21), mode: "interview", verdict: "hire" },
+    lastAttempt: { sessionId: "20261008-1930-c2-notification-service-q2m7", date: day(21), mode: "interview", verdict: "hire" },
     badge: null,
     custom: false,
   },
@@ -111,7 +118,7 @@ export const fixtureProblems: ProblemSummary[] = [
     difficulty: "medium",
     tags: ["strategy", "concurrency"],
     trackerMark: "[~]",
-    lastAttempt: { sessionId: "20261028-1100-b3-parking-lot-a8f2", date: iso(1), mode: "interview", verdict: "lean_no_hire" },
+    lastAttempt: { sessionId: "20261028-1100-b3-parking-lot-a8f2", date: day(1), mode: "interview", verdict: "lean_no_hire" },
     badge: null,
     custom: false,
   },
@@ -135,7 +142,7 @@ export const fixtureProblems: ProblemSummary[] = [
     difficulty: "easy",
     tags: ["state", "inventory"],
     trackerMark: "[x]",
-    lastAttempt: { sessionId: "20261003-1400-b3-vending-machine-z9c1", date: iso(26), mode: "guided", verdict: "strong_hire" },
+    lastAttempt: { sessionId: "20261003-1400-b3-vending-machine-z9c1", date: day(26), mode: "guided", verdict: "strong_hire" },
     badge: null,
     custom: false,
   },
@@ -177,6 +184,34 @@ export const fixtureProblems: ProblemSummary[] = [
   },
 ];
 
+const TIMING = [
+  { phase: "requirements", label: "Requirements", plannedMinutes: 5, actualMinutes: 7.2 },
+  { phase: "capacity", label: "Capacity math", plannedMinutes: 3, actualMinutes: 21.8 },
+  { phase: "api", label: "API", plannedMinutes: 4, actualMinutes: 5.4 },
+  { phase: "design", label: "High-level design", plannedMinutes: 10, actualMinutes: 9.1 },
+];
+
+const SCORES = (driving: number, depth: number) => [
+  { id: "problem_navigation", name: "Problem navigation", score: 2 },
+  { id: "solution_design", name: "Solution design", score: 2 },
+  { id: "technical_depth", name: "Technical depth", score: depth },
+  { id: "scale_reliability", name: "Scale and reliability", score: 2 },
+  { id: "communication", name: "Communication", score: 3 },
+  { id: "driving_time", name: "Driving and time", score: driving },
+];
+
+function clock(startedAt: string, usedMin: number, durationMin: number, paused: boolean) {
+  const started = new Date(startedAt).getTime();
+  return {
+    startedAt,
+    pausedMs: 0,
+    pauseStartedAt: paused ? new Date(started + usedMin * 60_000).toISOString() : null,
+    durationMs: durationMin * 60_000,
+  };
+}
+
+const pausedAfter = (startedAt: string, usedMin: number) => new Date(new Date(startedAt).getTime() + usedMin * 60_000).toISOString();
+
 export const fixtureHistory: SessionHistoryItem[] = [
   {
     id: "20261028-1100-b3-parking-lot-a8f2",
@@ -189,6 +224,8 @@ export const fixtureHistory: SessionHistoryItem[] = [
     verdict: "lean_no_hire",
     pause: null,
     notesSaved: false,
+    scores: SCORES(2, 3),
+    gaps: [{ title: "Name the state transitions before coding", goodLooksLike: "A transition table is written before any method body.", severity: "medium", done: false }],
   },
   {
     id: "20261024-1900-c2-news-feed-t7d4",
@@ -207,12 +244,19 @@ export const fixtureHistory: SessionHistoryItem[] = [
     problemId: "c2-url-shortener",
     title: "URL Shortener",
     track: "hld",
-    mode: "interview",
+    mode: "guided",
     createdAt: iso(12, 9),
     status: "debriefed",
     verdict: "lean_no_hire",
+    readiness: "not_yet",
     pause: null,
     notesSaved: false,
+    scores: SCORES(1, 2),
+    phaseTiming: TIMING,
+    gaps: [
+      { title: "Capacity math drifts", goodLooksLike: "Each number ends in a line that says which means.", severity: "high", done: false },
+      { title: "Driving the clock", goodLooksLike: "Moves on at the planned time for each step.", severity: "high", done: false },
+    ],
   },
   {
     id: "20261008-1930-c2-notification-service-q2m7",
@@ -225,6 +269,9 @@ export const fixtureHistory: SessionHistoryItem[] = [
     verdict: "hire",
     pause: null,
     notesSaved: true,
+    scores: SCORES(3, 3),
+    phaseTiming: TIMING,
+    gaps: [],
   },
   {
     id: "20261003-1400-b3-vending-machine-z9c1",
@@ -235,19 +282,45 @@ export const fixtureHistory: SessionHistoryItem[] = [
     createdAt: iso(26, 14),
     status: "debriefed",
     verdict: "strong_hire",
+    readiness: "ready",
     pause: null,
     notesSaved: true,
+    scores: SCORES(2, 3),
+    gaps: [],
+  },
+];
+
+const RECENT = iso(2, 18);
+const OLD = iso(30, 20);
+
+/** Two unfinished rounds: one paused two days ago with 43 minutes used, and an old one. */
+export const fixtureOpenRounds: SessionHistoryItem[] = [
+  {
+    id: "20261106-1800-b3-elevator-p4k2",
+    problemId: "b3-elevator",
+    title: "Elevator Controller",
+    track: "lld",
+    mode: "interview",
+    createdAt: RECENT,
+    status: "paused",
+    verdict: null,
+    pause: { reason: "user", pausedAt: pausedAfter(RECENT, 43), timeLeftMs: 77 * 60_000 },
+    notesSaved: false,
+    clock: clock(RECENT, 43, 120, true),
   },
   {
-    id: "20260929-2015-c2-chat-system-m5p8",
+    id: "20261009-2015-c2-chat-system-m5p8",
     problemId: "c2-chat-system",
     title: "Chat System",
     track: "hld",
     mode: "interview",
-    createdAt: iso(30, 20),
+    createdAt: OLD,
     status: "paused",
     verdict: null,
-    pause: { reason: "away", timeLeftMs: 18 * 60_000 },
+    pause: { reason: "away", pausedAt: pausedAfter(OLD, 27), timeLeftMs: 18 * 60_000 },
     notesSaved: false,
+    clock: clock(OLD, 27, 45, true),
   },
 ];
+
+export const fixtureAllHistory: SessionHistoryItem[] = [...fixtureOpenRounds, ...fixtureHistory].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
