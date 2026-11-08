@@ -45,6 +45,11 @@ export function localDay(date: Date): string {
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
 
+/** The day a redo falls due: a week after the attempt, as a local date. */
+export function redoDueOn(attemptDay: string): string {
+  return addDays(attemptDay, REDO_AFTER_DAYS);
+}
+
 function addDays(day: string, days: number): string {
   const [y, m, d] = day.split("-").map(Number);
   return localDay(new Date(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + days));
@@ -64,7 +69,7 @@ export function redoQueue(problems: readonly ProblemSummary[], history: readonly
     .filter((p) => p.trackerMark === "[~]" && !open.has(p.id))
     .map((problem): RedoEntry => {
       const date = problem.lastAttempt?.date ?? null;
-      return { problem, dueOn: date ? addDays(date, REDO_AFTER_DAYS) : null, due: problem.badge === "redo" };
+      return { problem, dueOn: date ? redoDueOn(date) : null, due: problem.badge === "redo" };
     });
   const key = (e: RedoEntry) => e.dueOn ?? "9999-12-31";
   return entries.sort((a, b) => Number(b.due) - Number(a.due) || key(a).localeCompare(key(b)) || a.problem.title.localeCompare(b.problem.title));

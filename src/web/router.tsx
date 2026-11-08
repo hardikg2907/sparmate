@@ -1,13 +1,29 @@
 import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from "react";
 import { flushSync } from "react-dom";
 
-export type Route = { name: "home" } | { name: "session"; id: string } | { name: "usage" } | { name: "not-found" };
+export type PageName = "home" | "library" | "library-new" | "gym" | "dsa" | "progress" | "history" | "settings" | "usage";
+
+export type Route = { name: PageName } | { name: "session"; id: string } | { name: "not-found" };
 
 const SESSION_PATH = /^\/session\/([A-Za-z0-9_-]{1,160})\/?$/;
 
+const PAGE_PATHS: Record<string, PageName> = {
+  "/": "home",
+  "/library": "library",
+  "/library/new": "library-new",
+  "/gym": "gym",
+  "/dsa": "dsa",
+  "/progress": "progress",
+  "/history": "history",
+  "/settings": "settings",
+  "/usage": "usage",
+};
+
 export function parseRoute(pathname: string): Route {
-  if (pathname === "/" || pathname === "") return { name: "home" };
-  if (pathname === "/usage" || pathname === "/usage/") return { name: "usage" };
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
+  const page = Object.hasOwn(PAGE_PATHS, path) ? PAGE_PATHS[path] : undefined;
+  if (page) return { name: page };
+  if (pathname === "") return { name: "home" };
   const match = SESSION_PATH.exec(pathname);
   if (match?.[1]) return { name: "session", id: match[1] };
   return { name: "not-found" };

@@ -132,37 +132,6 @@ export function PlanTrack({
   );
 }
 
-/** The plan alone, before a round starts: each phase to scale with its minutes, then the goals in order. */
-export function PlanPreview({ plan, track }: { plan: readonly PlanPhase[]; track: Track }) {
-  const goals = goalsOf(track);
-  return (
-    <div>
-      <div className="flex h-9 overflow-hidden rounded-md border border-border" aria-hidden="true">
-        {plan.map((phase, index) => (
-          <div
-            key={phase.id}
-            style={{ flexGrow: phase.minutes, flexBasis: 0 }}
-            className={cn("@container flex min-w-0 items-center gap-1 bg-muted px-1.5", index > 0 && "border-l border-border")}
-          >
-            <span className="truncate text-meta font-semibold text-foreground">{phase.label}</span>
-            <span className="ml-auto hidden shrink-0 font-mono text-meta tabular-nums text-faint @[6rem]:inline">{formatMinutes(phase.minutes)}m</span>
-          </div>
-        ))}
-      </div>
-      <ol className="mt-3 space-y-1.5">
-        {plan.map((phase, index) => (
-          <li key={phase.id} className="grid grid-cols-[1.5rem_8.5rem_3.5rem_1fr] items-baseline gap-2 text-ui">
-            <span className="font-mono text-meta text-faint">{index + 1}</span>
-            <span className="font-semibold text-foreground">{phase.label}</span>
-            <span className="font-mono text-meta tabular-nums text-muted-foreground">{formatMinutes(phase.minutes)} min</span>
-            <span className="text-muted-foreground">{goals.get(phase.id)}</span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
 interface TimingRow {
   phase: string;
   label: string;
