@@ -4,12 +4,6 @@ Ideas we have discussed but not built. Each entry says what the idea is and why 
 
 ## Next
 
-- **Gym.** Short drills of 10 to 15 minutes, each on one skill. The Gym page exists as a placeholder, and its link in the main bar shows no count until drills exist.
-  - The drill types are fixed: capacity math, walk a request, requirements sprint, pick a deep dive, LLD skeleton.
-  - The judge's gaps choose which drill is due. A gap queues its drill for the next day, then 3 days later, then 7 days later. Three passes in a row close the gap.
-  - A drill takes its prompt and its answer key from one section of a problem brief. A grader compares the answer with that section and returns Pass or Not yet, plus the single most important fix.
-  - Drills use only problems the candidate has already played, plus custom problems, so a drill never spoils a full round.
-  - The candidate can also open any drill without a gap. Due drills come first.
 
 ## Parked
 

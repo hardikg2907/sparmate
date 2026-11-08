@@ -27,17 +27,6 @@ function bullets(text: string): string[] {
   });
 }
 
-/** The bold lead of a bullet: "**Writes:** ..." gives "writes". */
-function lead(bullet: string): string | null {
-  const m = /^\*\*([^*]+?):?\*\*/.exec(bullet);
-  return m?.[1] ? m[1].replace(/:$/, "").trim().toLowerCase() : null;
-}
-
-function listSentence(words: readonly string[]): string {
-  if (words.length <= 1) return words.join("");
-  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
-}
-
 export interface DeepDiveEntry {
   title: string;
   text: string;
@@ -133,15 +122,10 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
 
   switch (drill) {
     case "capacity": {
-      const leads = bullets(section(problem, "Capacity math"))
-        .map(lead)
-        .filter((l): l is string => l !== null)
-        .slice(0, 5);
-      const what = leads.length >= 2 ? listSentence(leads) : "load, storage and what each needs";
       return {
         prompt: {
           ...base,
-          task: `Write one line each for ${what}. End each line with "which means".`,
+          task: 'Pick only the numbers that decide something and write one line for each. End each line with "which means", then the decision it forces.',
           material: [
             problemBlock,
             {
@@ -172,7 +156,7 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
       return {
         prompt: {
           ...base,
-          task: "Write the questions you would ask and the requirements you would settle, split into what it does and how well it must do it.",
+          task: "Write the questions you would ask and the requirements you would settle, split into what it does and how well it must do it, with the scale stated as numbers.",
           material: [problemBlock],
           answerHint: "Write each question with the answer you would assume. Numbers help.",
         },

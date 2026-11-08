@@ -469,9 +469,14 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 - A left nav on desktop and a scrolling row of buttons on a phone. Raised sections hold label and control pairs, with a
   hairline between pairs. One filled "Save changes" button sits at the top right.
 
-### Gym and DSA
+### Gym
 
-- Gym is a placeholder. DSA uses the Progress layout: a mesh hero (amber "Weekly goal" chip, "Mediums this week", a 112 px
+- A mesh hero holds the next drill: an amber "Next drill" pill, the drill name at display size, the problem, a tile of three facts (length, due, passes in a row with three pips and an info tip) and one line for the task, then the one primary button. A raised "Also due" card lists three more with a drill glyph, the problem and the due day in amber. "All drills" opens the side panel. The due count is a small amber chip on the Gym link.
+- The drill screen is full screen with a slim bar: Back to the Gym, the drill name and a soft countdown that turns amber and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (Pass or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like".
+
+### DSA
+
+- DSA uses the Progress layout: a mesh hero (amber "Weekly goal" chip, "Mediums this week", a 112 px
   count with "of N", the one primary "Open LeetCode" button and a dark tile with the Monday-first day strip) beside a 400 px
   raised card "This pass". The strip's cells are 28 px: a solve fills the cell and shows its count, a DSA day in the plan has an
   outline, today has a white ring. The card holds "Not touched yet" as quiet chips, or three bars when every common topic has

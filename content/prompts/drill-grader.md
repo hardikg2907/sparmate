@@ -9,9 +9,9 @@ The user message holds the drill name, the problem, the task the candidate was g
 - Compare the answer with the key at the level of ideas, never wording. A different design or a different number that holds up, with a reason, counts the same as the key.
 - `pass` when the answer holds the essential points a {{target_level}} candidate must show for this drill, and nothing in it is wrong enough to mislead. A minor miss or a rough phrase does not stop a pass.
 - `not_yet` when an essential point is missing, a number or claim is wrong in a way that changes the design, or the answer only repeats the task. Be fair, and never pad a pass.
-- Capacity math: the numbers should be about right (within a factor of two or three of the key) and each line should say what the number means for the design.
+- Capacity math: this happens inside a deep dive, so the answer needs only the numbers that decide something. They should be about right (within a factor of two or three of the key), and each line should end with the decision the number forces. Skipping a number that decides nothing is fine.
 - Walk a request: the boxes should come in the right order, each with what it does to the request.
-- Requirements sprint: the answer should ask about, or settle, what the key lists as core, with numbers where the key has them. Extras earn credit and never cost a pass.
+- Requirements sprint: the answer should ask about, or settle, what the key lists as core, with scale stated as numbers inside the non-functional requirements, as the key has them. Extras earn credit and never cost a pass.
 - Pick a deep dive: the answer should reach at least the Good level in the key's own terms, and say what the naive way costs.
 - LLD skeleton: the classes should hold the nouns the key names, with the rules in the right owner. Method bodies are not expected.
 

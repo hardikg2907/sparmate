@@ -45,7 +45,7 @@ describe("drill content from the shipped briefs", () => {
     expect(built?.prompt.material[0]?.markdown).not.toMatch(/Where would you like to start/);
     expect(built?.key).toBe(hld.sections["Capacity math"]);
     expect(built?.prompt.task).toContain("which means");
-    expect(built?.prompt.task).toMatch(/writes/);
+    expect(built?.prompt.task).toContain("only the numbers that decide something");
     expect(scaleFacts(hld).every((f) => /\d/.test(f))).toBe(true);
   });
 
