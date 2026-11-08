@@ -591,6 +591,7 @@ covered items tells him whether a step is done. A guided round shows him the gui
 `assistCount` (how many times he asked for a model answer; the steps stay on the server until the debrief). `pins`
 follows the checklist rule: none in an interview round, the guide's in a guided round, all of them once the round is
 over.
+Sessions saved before `stepVerdicts` and `assists` existed load without them, and a guided session without them renders as before.
 
 Sessions that hold `stepSummaries` (a notepad per step: `proposed` and `agreed` lines) keep them; the debrief and the
 scribe read them.
