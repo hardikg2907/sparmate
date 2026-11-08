@@ -1292,7 +1292,7 @@ export class SessionRuntime {
     const items = this.session.checklist[phase] ?? [];
     if (items.length === 0) return "This step has no checklist.";
     const check = this.session.stepChecks[phase];
-    if (check?.checkedAt == null) return "The checker has no finished reading of this step yet, so his checklist shows only how many items the step has.";
+    if (check?.checkedAt == null) return "The checker has no finished reading of this step yet, so judge the step from what he has said and drawn.";
     return [
       `This is the checker's reading of the step checklist as of ${formatClock(check.checkedAt)}. It may lag his latest work, and he does not see this list.`,
       "<checklist>",
@@ -1544,7 +1544,7 @@ export class SessionRuntime {
         ),
         defineTool(
           "recheck_step",
-          `Have the checker read one step's checklist again from scratch, when he says the list looks wrong or stale. Any step, not only the current one: ${phaseIds}. Waits for the result and returns each item with its state and where it was found.`,
+          `Have the checker read one step's checklist again from scratch, when the reading looks out of date against what he has said or drawn. Any step, not only the current one: ${phaseIds}. Waits for the result and returns each item with its state and where it was found.`,
           { phase: z.string().min(1).max(40) },
           async ({ phase }) => {
             if (!isPhaseOf(this.session.track, phase)) return textOutput(`Unknown step. Use one of: ${phaseIds}.`, true);
@@ -1586,7 +1586,7 @@ export class SessionRuntime {
     if (!settled || run.freshDone === before || check?.checkedAt == null) {
       return textOutput(`The check of ${label} did not finish. The list keeps its last reading.`, true);
     }
-    return textOutput(`The checker read ${label} again at ${formatClock(check.checkedAt)}. He sees this list now.\n${stepReadingText(items, check)}`);
+    return textOutput(`The checker read ${label} again at ${formatClock(check.checkedAt)}. It is evidence for you; he does not see it.\n${stepReadingText(items, check)}`);
   }
 
   private readCodeOutput(content: string): ToolOutput {
