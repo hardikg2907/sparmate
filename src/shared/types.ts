@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Mode, Track } from "./phases";
 import { LIMITS } from "./protocol";
+import { DAY_KINDS, DEFAULT_DSA_GOAL, DEFAULT_WEEKLY_PLAN, DSA_GOAL_MAX, DSA_GOAL_MIN, LEETCODE_USERNAME_PATTERN } from "./week";
 
 export const MODEL_IDS = ["claude-opus-5-5", "claude-sonnet-5-5"] as const;
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -28,6 +29,13 @@ export const SettingsSchema = z.strictObject({
     lld: z.union([z.literal(90), z.literal(120)]),
   }),
   theme: z.enum(["light", "dark"]),
+  // The three below arrived after the first settings files, so a file without them loads with these defaults.
+  weeklyPlan: z
+    .array(z.enum(DAY_KINDS))
+    .length(7)
+    .default(() => [...DEFAULT_WEEKLY_PLAN]),
+  leetcodeUsername: z.string().regex(LEETCODE_USERNAME_PATTERN).optional(),
+  dsaWeeklyGoal: z.number().int().min(DSA_GOAL_MIN).max(DSA_GOAL_MAX).default(DEFAULT_DSA_GOAL),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -36,6 +44,8 @@ export const DEFAULT_SETTINGS: Settings = {
   effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium" },
   durations: { hld: 45, lld: 120 },
   theme: "dark",
+  weeklyPlan: [...DEFAULT_WEEKLY_PLAN],
+  dsaWeeklyGoal: DEFAULT_DSA_GOAL,
 };
 
 // ---------------------------------------------------------------------------

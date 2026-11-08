@@ -1,5 +1,6 @@
 import type { LIMITS } from "../../shared/protocol";
 import type { Settings } from "../../shared/types";
+import { DEFAULT_DSA_GOAL, DEFAULT_WEEKLY_PLAN } from "../../shared/week";
 
 // The browser does not import the shared schema modules for values. They build zod schemas at load, and zod
 // probes eval while doing so, which the page's content security policy reports as an error on every load.
@@ -33,4 +34,6 @@ export const DEFAULT_SETTINGS: Settings = {
   effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium" },
   durations: { hld: 45, lld: 120 },
   theme: "dark",
+  weeklyPlan: [...DEFAULT_WEEKLY_PLAN],
+  dsaWeeklyGoal: DEFAULT_DSA_GOAL,
 };
