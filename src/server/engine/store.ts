@@ -42,6 +42,7 @@ function scoredParts(s: Session): Pick<SessionSummary, "scores" | "phaseTiming" 
     gaps: (card.gaps ?? []).map((g) => ({
       title: g.title,
       goodLooksLike: g.whatGoodLooksLike,
+      whyItMatters: g.whyItMatters,
       severity: g.severity,
       done: s.gapProgress?.[g.title]?.state === "taught",
       ...(g.drill ? { drill: g.drill } : {}),

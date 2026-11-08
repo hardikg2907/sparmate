@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DRILL_INFO,
+  dueStatus,
   DRILL_TYPES,
   DrillSubmitSchema,
   DrillTargetSchema,
@@ -115,17 +116,27 @@ describe("gap to drill", () => {
     ["Never walked one request end to end", "walk"],
     ["Cache stampede on a viral link", "deep_dive"],
     ["Replica lag and consistency for new writes", "deep_dive"],
+    ["Capacity math done without prompting, each number ending in a design consequence", "capacity"],
+    ["Walking one request through every box, including the miss path", "walk"],
+    ["Caching a viral link: TTLs, hot keys and stampede", "deep_dive"],
+    ["Batching click counts off the redirect path", "deep_dive"],
   ] as const)("maps the HLD gap %j to %s", (title, drill) => {
     expect(drillForGap({ title }, "hld")).toBe(drill);
   });
 
-  it("reads the good-looks-like text only when the title says nothing", () => {
-    expect(drillForGap({ title: "Weak opening", goodLooksLike: "Ask about scale, then estimate the QPS and storage." }, "hld")).toBe("capacity");
-    expect(drillForGap({ title: "Capacity math", goodLooksLike: "Walk a request through every box." }, "hld")).toBe("capacity");
+  it("queues nothing for a gap about pacing or leading the round, whatever its reason says", () => {
+    expect(drillForGap({ title: "Phase pacing and leading the round", whyItMatters: "Capacity took 22 minutes and requirements 17." }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Time management in the demo" }, "lld")).toBeNull();
+  });
+
+  it("reads the reason only when the title says nothing", () => {
+    expect(drillForGap({ title: "Weak opening", whyItMatters: "You never estimated the QPS or the storage." }, "hld")).toBe("capacity");
+    expect(drillForGap({ title: "Capacity math", whyItMatters: "Walk a request through every box." }, "hld")).toBe("capacity");
   });
 
   it("returns null when nothing fits", () => {
-    expect(drillForGap({ title: "Communication was hard to follow", goodLooksLike: "Speak in short, clear steps." }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Communication was hard to follow", whyItMatters: "Speak in short, clear steps." }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Something vague" }, "hld")).toBeNull();
   });
 
   it.each([
@@ -203,5 +214,16 @@ describe("scorecard gap drill field", () => {
     for (const drill of DRILL_TYPES) expect(gapSchema.safeParse({ ...gap, drill }).success).toBe(true);
     expect(gapSchema.safeParse({ ...gap, drill: "juggling" }).success).toBe(false);
     expect(gapSchema.safeParse({ ...gap, drill: null }).success).toBe(false);
+  });
+});
+
+describe("due wording", () => {
+  const today = "2026-11-08";
+  it("reads as a status, not a past date", () => {
+    expect(dueStatus("2026-11-08", today)).toEqual({ label: "Due today", tone: "due" });
+    expect(dueStatus("2026-11-02", today)).toEqual({ label: "Overdue", since: "2026-11-02", tone: "overdue" });
+    expect(dueStatus("2026-11-09", today)).toEqual({ label: "Tomorrow", tone: "later" });
+    expect(dueStatus("2026-11-12", today)).toEqual({ label: "2026-11-12", tone: "later" });
+    expect(dueStatus("2027-01-01", "2026-12-31").label).toBe("Tomorrow");
   });
 });

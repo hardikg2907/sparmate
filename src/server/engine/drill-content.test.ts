@@ -95,6 +95,30 @@ describe("drill content from the shipped briefs", () => {
   });
 });
 
+describe("deep dive for the real URL Shortener gaps", () => {
+  it("matches caching and hot keys to the redirects entry and click counting to the clicks entry", () => {
+    const entries = deepDiveEntries(hld);
+    expect(pickDeepDive(entries, "Caching a viral link: TTLs, hot keys and stampede")?.title).toBe("Fast, highly available redirects");
+    expect(pickDeepDive(entries, "Batching click counts off the redirect path")?.title).toBe("Counting clicks without slowing redirects");
+  });
+
+  it("reads the whole entry, not only its title", () => {
+    const entries = [
+      { title: "Alpha", text: "uses a bloom filter to skip lookups" },
+      { title: "Beta", text: "plain" },
+    ];
+    expect(pickDeepDive(entries, "bloom filters")?.title).toBe("Alpha");
+  });
+
+  it("builds the same topic for the hero as the drill page when no word matches", () => {
+    const a = buildDrill(hld, "deep_dive", { hint: "Zzzz qqqq", rotation: 2 });
+    const b = buildDrill(hld, "deep_dive", { hint: "Zzzz qqqq", rotation: 2 });
+    expect(a?.prompt.topic).toBeDefined();
+    expect(a?.prompt.topic).toBe(b?.prompt.topic);
+    expect(buildDrill(hld, "deep_dive", { rotation: 0 })?.prompt.topic).not.toBe(buildDrill(hld, "deep_dive", { rotation: 1 })?.prompt.topic);
+  });
+});
+
 describe("pickDeepDive", () => {
   const entries = [
     { title: "Generating unique short codes", text: "a" },

@@ -67,64 +67,87 @@ afterEach(() => stack.cleanup());
 describe("queueGapDrills", () => {
   const problems = () => new Map(stack.deps.problems.list().map((p) => [p.meta.id, p] as const));
 
-  it("queues a drill per gap that has one, due the day after the debrief", async () => {
+  it("queues a drill per gap that has one, and none for a gap about pacing", async () => {
     await stack.deps.problems.reload();
     const draft = emptyState();
-    expect(queueGapDrills(draft, history, problems())).toBe(true);
+    expect(queueGapDrills(draft, history, problems(), "2026-10-30")).toBe(true);
     expect(draft.items.map((i) => [i.drill, i.dueOn, i.passes, i.status])).toEqual([
       ["capacity", "2026-10-31", 0, "open"],
       ["deep_dive", "2026-10-31", 0, "open"],
     ]);
   });
 
-  it("takes the day from the end time in local time, so a late debrief falls due the next local day", async () => {
+  it("falls due the local day after the debrief, even for a late-evening or just-after-midnight debrief", async () => {
     await stack.deps.problems.reload();
     const late = round({ endedAt: new Date(2026, 9, 30, 23, 50).toISOString() });
     const draft = emptyState();
-    queueGapDrills(draft, [late], problems());
+    queueGapDrills(draft, [late], problems(), "2026-10-30");
     expect(draft.items[0]?.dueOn).toBe("2026-10-31");
     const after = round({ id: "20261031-0001-c2-url-shortener-abcd", endedAt: new Date(2026, 9, 31, 0, 10).toISOString() });
     const next = emptyState();
-    queueGapDrills(next, [after], problems());
+    queueGapDrills(next, [after], problems(), "2026-10-31");
     expect(next.items[0]?.dueOn).toBe("2026-11-01");
+  });
+
+  it("never back-fills a drill with a due day before the day it is queued", async () => {
+    await stack.deps.problems.reload();
+    const draft = emptyState();
+    queueGapDrills(draft, history, problems(), "2026-11-05");
+    expect(draft.items.map((i) => i.dueOn)).toEqual(["2026-11-05", "2026-11-05"]);
+    expect(draft.items.every((i) => i.createdOn === "2026-10-31")).toBe(true);
+  });
+
+  it("queues nothing from a debrief more than 14 days old, and does from one exactly 14 days old", async () => {
+    await stack.deps.problems.reload();
+    const old = emptyState();
+    expect(queueGapDrills(old, history, problems(), "2026-11-14")).toBe(false);
+    expect(old.items).toEqual([]);
+    const edge = emptyState();
+    expect(queueGapDrills(edge, history, problems(), "2026-11-13")).toBe(true);
+    expect(edge.items.every((i) => i.dueOn === "2026-11-13")).toBe(true);
   });
 
   it("queues each gap once, and never from a round that is not debriefed", async () => {
     await stack.deps.problems.reload();
     const draft = emptyState();
-    queueGapDrills(draft, history, problems());
-    expect(queueGapDrills(draft, history, problems())).toBe(false);
+    queueGapDrills(draft, history, problems(), "2026-11-03");
+    expect(queueGapDrills(draft, history, problems(), "2026-11-03")).toBe(false);
     expect(draft.items).toHaveLength(2);
     const open = emptyState();
-    expect(queueGapDrills(open, [round({ status: "live" }), round({ id: "x", status: "failed" })], problems())).toBe(false);
+    expect(queueGapDrills(open, [round({ status: "live" }), round({ id: "x", status: "failed" })], problems(), "2026-11-03")).toBe(false);
   });
 
   it("does not queue a second open drill for the same gap on the same problem", async () => {
     await stack.deps.problems.reload();
     const draft = emptyState();
-    queueGapDrills(draft, [round(), round({ id: "20261101-0900-c2-url-shortener-zzzz" })], problems());
+    queueGapDrills(draft, [round(), round({ id: "20261101-0900-c2-url-shortener-zzzz" })], problems(), "2026-11-03");
     expect(draft.items).toHaveLength(2);
   });
 
   it("queues drills from a gap-practice round too", async () => {
     await stack.deps.problems.reload();
     const draft = emptyState();
-    queueGapDrills(draft, [round({ focus: true, mode: "guided" })], problems());
+    queueGapDrills(draft, [round({ focus: true, mode: "guided" })], problems(), "2026-11-03");
     expect(draft.items.length).toBeGreaterThan(0);
   });
 
   it("skips a gap whose problem no longer loads", () => {
     const draft = emptyState();
-    expect(queueGapDrills(draft, history, new Map())).toBe(false);
+    expect(queueGapDrills(draft, history, new Map(), "2026-11-03")).toBe(false);
   });
 
   it("uses the judge's drill, then the keywords, and queues nothing when none fits", async () => {
     await stack.deps.problems.reload();
     const draft = emptyState();
-    queueGapDrills(draft, [round({ gaps: [{ title: "Totally unrelated words", goodLooksLike: "Be calm.", severity: "low", done: false, drill: "walk" }] })], problems());
+    queueGapDrills(
+      draft,
+      [round({ gaps: [{ title: "Totally unrelated words", goodLooksLike: "Be calm.", severity: "low", done: false, drill: "walk" }] })],
+      problems(),
+      "2026-11-03",
+    );
     expect(draft.items.map((i) => i.drill)).toEqual(["walk"]);
     const none = emptyState();
-    queueGapDrills(none, [round({ gaps: [{ title: "Totally unrelated words", goodLooksLike: "Be calm.", severity: "low", done: false }] })], problems());
+    queueGapDrills(none, [round({ gaps: [{ title: "Totally unrelated words", goodLooksLike: "Be calm.", severity: "low", done: false }] })], problems(), "2026-11-03");
     expect(none.items).toEqual([]);
   });
 
@@ -141,8 +164,26 @@ describe("which problems a drill may use", () => {
 
   it("allows played problems and custom problems only", () => {
     const all = stubs(["a", "b", "c"], ["mine"]);
-    expect(playableProblems(all, [{ problemId: "b" }]).map((p) => p.meta.id)).toEqual(["b", "mine"]);
+    expect(playableProblems(all, [{ problemId: "b", status: "debriefed" }]).map((p) => p.meta.id)).toEqual(["b", "mine"]);
     expect(playableProblems(all, [])).toHaveLength(1);
+  });
+
+  it("counts a finished round and never a live or paused one, so its hidden facts stay hidden", () => {
+    const all = stubs(["a", "b", "c", "d", "e"]);
+    const ids = (statuses: SessionHistoryItem["status"][]) =>
+      playableProblems(
+        all,
+        statuses.map((status, i) => ({ problemId: "abcde"[i] ?? "a", status })),
+      ).map((p) => p.meta.id);
+    expect(ids(["live", "paused"])).toEqual([]);
+    expect(ids(["ended", "debriefing", "debriefed", "failed", "live"])).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("offers nothing for a problem whose only round is paused", async () => {
+    history = [round({ status: "paused", gaps: [] })];
+    const summary = await service.summary();
+    expect(summary.problems).toEqual([]);
+    await expect(service.prompt(target)).rejects.toMatchObject({ status: 404 });
   });
 
   it("offers nothing from the library before a round exists", async () => {
@@ -264,6 +305,68 @@ describe("running a drill", () => {
     expect(store.snapshot().items).toEqual(queuedBefore);
     expect(before.items).toEqual([]);
     expect(store.snapshot().attempts).toHaveLength(1);
+  });
+
+  it("an attempt before the drill's day is logged and changes nothing, so a gap cannot close in one day", async () => {
+    const queued = (await service.summary()).queue.find((r) => r.drill === "capacity");
+    const t = { ...target, drillId: queued?.id };
+    await service.submit(t, ANSWER_PASS);
+    const after = (await service.summary()).queue.find((r) => r.id === queued?.id);
+    expect(after).toMatchObject({ passes: 1, dueOn: "2026-11-06", due: false });
+    for (const again of [t, target]) {
+      const early = await service.submit(again, ANSWER_PASS);
+      expect(early).toMatchObject({ verdict: "pass", passesInRow: null, closed: false, nextDueOn: null });
+    }
+    expect((await service.summary()).queue.find((r) => r.id === queued?.id)).toMatchObject({ passes: 1, dueOn: "2026-11-06" });
+    expect(store.snapshot().attempts).toHaveLength(3);
+    expect(store.snapshot().attempts.filter((a) => a.drillId !== null)).toHaveLength(1);
+  });
+
+  it("a free drill counts for a queued one only when that one is due", async () => {
+    clock = new Date(2026, 9, 30, 20, 0);
+    const early = await service.submit(target, ANSWER_PASS);
+    expect(early.passesInRow).toBeNull();
+    expect((await service.summary()).queue.find((r) => r.drill === "capacity")).toMatchObject({ passes: 0, dueOn: "2026-10-31" });
+    clock = new Date(2026, 9, 31, 8, 0);
+    expect((await service.submit(target, ANSWER_PASS)).passesInRow).toBe(1);
+  });
+
+  it("rejects a second submit for a drill that is still being graded", async () => {
+    const queued = (await service.summary()).queue.find((r) => r.drill === "capacity");
+    const t = { ...target, drillId: queued?.id };
+    const [a, b] = await Promise.allSettled([service.submit(t, ANSWER_PASS), service.submit(t, ANSWER_PASS)]);
+    const statuses = [a, b].map((r) => (r.status === "rejected" ? (r.reason as HttpError).status : 200));
+    expect(statuses.sort()).toEqual([200, 409]);
+    expect((await service.summary()).queue.find((r) => r.id === queued?.id)?.passes).toBe(1);
+    // The guard lifts once the grading ends.
+    clock = new Date(2026, 10, 6, 9, 0);
+    await expect(service.submit(t, ANSWER_PASS)).resolves.toMatchObject({ passesInRow: 2 });
+  });
+
+  it("refuses a blank answer with a clear message", async () => {
+    await expect(service.submit(target, "  \n ")).rejects.toMatchObject({ status: 400, message: "Write an answer first." });
+    expect(store.snapshot().attempts).toEqual([]);
+  });
+
+  it("shows the gap and the topic on a queued deep dive, with the topic the drill page uses", async () => {
+    history = [
+      round({
+        gaps: [
+          {
+            title: "Batching click counts off the redirect path",
+            goodLooksLike: "Consume events in batches.",
+            whyItMatters: "One UPDATE per click locks a hot row.",
+            severity: "high",
+            done: false,
+          },
+        ],
+      }),
+    ];
+    const row = (await service.summary()).queue[0];
+    expect(row).toMatchObject({ drill: "deep_dive", gapTitle: "Batching click counts off the redirect path", topic: "Counting clicks without slowing redirects" });
+    const prompt = await service.prompt({ drill: "deep_dive", problemId: "c2-url-shortener", drillId: row?.id });
+    expect(prompt.topic).toBe(row?.topic);
+    expect(prompt.task).toBe(row?.task);
   });
 
   it("records attempts for the week stats, free ones included", async () => {

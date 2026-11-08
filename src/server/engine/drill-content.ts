@@ -53,26 +53,55 @@ export function deepDiveEntries(problem: Problem): DeepDiveEntry[] {
   return entries.filter((e) => e.text !== "");
 }
 
+const COMMON = new Set([
+  "that",
+  "with",
+  "from",
+  "your",
+  "into",
+  "them",
+  "what",
+  "when",
+  "this",
+  "they",
+  "each",
+  "then",
+  "than",
+  "have",
+  "will",
+  "make",
+  "more",
+  "only",
+  "also",
+  "does",
+  "over",
+  "just",
+]);
+
+/** Four-letter word stems, so "caching" and "cache" meet. */
 function stems(text: string): Set<string> {
   return new Set(
     text
       .toLowerCase()
       .split(/[^a-z0-9]+/)
-      .filter((w) => w.length >= 4)
-      .map((w) => w.slice(0, 5)),
+      .filter((w) => w.length >= 4 && !COMMON.has(w))
+      .map((w) => w.slice(0, 4)),
   );
 }
 
-/** The deep dive that shares the most words with the gap, else the one the rotation points at. */
+/**
+ * The deep dive that shares the most words with the gap, counting its whole text and its title three times over.
+ * Without a shared word the rotation points at one.
+ */
 export function pickDeepDive(entries: readonly DeepDiveEntry[], hint = "", rotation = 0): DeepDiveEntry | null {
   if (entries.length === 0) return null;
   const wanted = stems(hint);
   let best = -1;
   let score = 0;
   entries.forEach((entry, index) => {
-    const own = stems(entry.title);
+    const title = stems(entry.title);
     let shared = 0;
-    for (const s of own) if (wanted.has(s)) shared += 1;
+    for (const s of stems(`${entry.title} ${entry.text}`)) if (wanted.has(s)) shared += title.has(s) ? 3 : 1;
     if (shared > score) {
       score = shared;
       best = index;
@@ -175,6 +204,7 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
         prompt: {
           ...base,
           task: `Take "${entry.title}": say what goes wrong with the naive way, what you would build instead, and what it costs.`,
+          topic: entry.title,
           material: [problemBlock, { heading: "The topic", markdown: entry.title }],
           answerHint: "Go one level deeper than your first answer, and name the trade-off.",
         },

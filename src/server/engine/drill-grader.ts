@@ -51,6 +51,11 @@ export function finishGrade(output: GraderOutput, answer: string): GradedAnswer 
   };
 }
 
+/** Angle brackets become entities, so text inside a block can never close it or open a new one. */
+export function escapeBlock(text: string): string {
+  return text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** The user message for one grading call. The key and the answer are data, never instructions. */
 export function graderMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">, key: string, answer: string): string {
   return [
@@ -58,13 +63,13 @@ export function graderMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "prob
     `<problem>${prompt.problem.title}</problem>`,
     `<task>${prompt.task}</task>`,
     "<shown_to_candidate>",
-    ...prompt.material.map((m) => `${m.heading}:\n${m.markdown}`),
+    ...prompt.material.map((m) => escapeBlock(`${m.heading}:\n${m.markdown}`)),
     "</shown_to_candidate>",
     "<answer_key>",
-    key,
+    escapeBlock(key),
     "</answer_key>",
     "<answer>",
-    answer,
+    escapeBlock(answer),
     "</answer>",
     "Grade the answer against the key. Return the verdict, the one fix, the candidate's line and what a pass sounds like.",
   ].join("\n");

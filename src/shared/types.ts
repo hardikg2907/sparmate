@@ -267,6 +267,8 @@ export interface HistoryGap {
   title: string;
   goodLooksLike: string;
   severity: "high" | "medium" | "low";
+  /** The judge's reason the gap matters; drills read it to pick a topic. */
+  whyItMatters?: string;
   /** The coach taught it all the way. */
   done: boolean;
   /** The drill the judge chose for this gap, when one fits. */

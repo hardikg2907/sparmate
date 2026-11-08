@@ -339,7 +339,7 @@ function ScheduleFacts({ result }: { result: DrillResult }) {
         </dd>
       </div>
       <div className="min-w-0 px-3 py-3 sm:px-5 sm:py-3.5">
-        <dt className="text-meta text-muted-foreground">{result.closed ? "Status" : "Next drill"}</dt>
+        <dt className="text-meta text-muted-foreground">{result.closed ? "Status" : "Comes back"}</dt>
         <dd className="mt-0.5 text-body font-semibold sm:text-lead">{items.next}</dd>
       </div>
     </dl>

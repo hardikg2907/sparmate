@@ -1,5 +1,6 @@
 import {
   DRILL_INFO,
+  addDays,
   applyVerdict,
   byDueDay,
   drillForGap,
@@ -45,6 +46,12 @@ export interface DrillDeps {
   now?: () => Date;
 }
 
+/** Rounds older than this many days at the moment they are first seen queue no drills. */
+export const BACKFILL_DAYS = 14;
+
+/** A round counts as played once it has ended, because until then its hidden facts are still in use. */
+const OVER: ReadonlySet<SessionHistoryItem["status"]> = new Set(["ended", "debriefing", "debriefed", "failed"]);
+
 /** The id of a queued drill. It comes from the round and the gap, so the same gap is never queued twice. */
 export function drillItemId(sessionId: string, gapTitle: string): string {
   return sha256Hex(`${sessionId}\n${gapTitle}`).slice(0, 16);
@@ -54,16 +61,21 @@ export function drillItemId(sessionId: string, gapTitle: string): string {
  * Queues one drill for every scorecard gap that has one, the day after its debrief. Rounds already seen are skipped,
  * and so is a gap that already has an open drill on the same problem. Returns whether anything was added.
  */
-export function queueGapDrills(draft: DrillState, history: readonly SessionHistoryItem[], problems: ReadonlyMap<string, Problem>): boolean {
+export function queueGapDrills(draft: DrillState, history: readonly SessionHistoryItem[], problems: ReadonlyMap<string, Problem>, today: string): boolean {
   let added = false;
+  const oldest = addDays(today, -BACKFILL_DAYS);
   const known = new Set(draft.items.map((i) => i.id));
   for (const round of history) {
     if (round.status !== "debriefed" || !round.gaps?.length) continue;
     const problem = problems.get(round.problemId);
     if (!problem) continue;
     const debriefDay = localDay(new Date(round.endedAt ?? round.createdAt));
+    if (debriefDay < oldest) continue;
+    // A round queued late, such as one that was debriefed before the Gym existed, falls due today and never days ago.
+    const first = firstDueDay(debriefDay);
+    const dueOn = first < today ? today : first;
     for (const gap of round.gaps) {
-      const drill = drillForGap({ title: gap.title, goodLooksLike: gap.goodLooksLike, drill: gap.drill }, round.track);
+      const drill = drillForGap({ title: gap.title, ...(gap.whyItMatters ? { whyItMatters: gap.whyItMatters } : {}), drill: gap.drill }, round.track);
       if (!drill || !drillFits(problem, drill)) continue;
       const id = drillItemId(round.id, gap.title);
       if (known.has(id)) continue;
@@ -75,10 +87,10 @@ export function queueGapDrills(draft: DrillState, history: readonly SessionHisto
         sessionId: round.id,
         problemId: round.problemId,
         gapTitle: gap.title.slice(0, 600),
-        gapHint: gap.goodLooksLike.slice(0, 1200),
+        gapHint: (gap.whyItMatters ?? gap.goodLooksLike).slice(0, 1200),
         drill,
-        createdOn: firstDueDay(debriefDay),
-        dueOn: firstDueDay(debriefDay),
+        createdOn: first,
+        dueOn,
         passes: 0,
         status: "open",
       });
@@ -88,16 +100,18 @@ export function queueGapDrills(draft: DrillState, history: readonly SessionHisto
   return added;
 }
 
-/** Problems a drill may use: any problem with a round, and every custom problem. Nothing the candidate has not met. */
-export function playableProblems(all: readonly Problem[], history: readonly Pick<SessionHistoryItem, "problemId">[]): Problem[] {
-  const played = new Set(history.map((h) => h.problemId));
+/** Problems a drill may use: any problem with a finished round, and every custom problem. A live or paused round never counts, so a drill cannot show its hidden facts. */
+export function playableProblems(all: readonly Problem[], history: readonly Pick<SessionHistoryItem, "problemId" | "status">[]): Problem[] {
+  const played = new Set(history.filter((h) => OVER.has(h.status)).map((h) => h.problemId));
   return all.filter((p) => p.custom || played.has(p.meta.id));
 }
 
-function asRow(item: DrillItem, problem: Problem, today: string): GymDrillRow {
-  const content = buildDrill(problem, item.drill, { hint: `${item.gapTitle} ${item.gapHint}` });
+function asRow(item: DrillItem, problem: Problem, today: string, rotation: number): GymDrillRow {
+  const content = buildDrill(problem, item.drill, { hint: `${item.gapTitle} ${item.gapHint}`, rotation });
   return {
     id: item.id,
+    gapTitle: item.gapTitle,
+    topic: content?.prompt.topic ?? null,
     drill: item.drill,
     title: DRILL_INFO[item.drill].title,
     problemId: item.problemId,
@@ -125,7 +139,8 @@ export class DrillService {
 
   private async sync(problems: ReadonlyMap<string, Problem>): Promise<DrillState> {
     const history = this.deps.history();
-    await this.deps.store.update((draft) => ({ save: queueGapDrills(draft, history, problems), value: null }));
+    const today = this.today();
+    await this.deps.store.update((draft) => ({ save: queueGapDrills(draft, history, problems, today), value: null }));
     return this.deps.store.snapshot();
   }
 
@@ -136,7 +151,7 @@ export class DrillService {
     const queue = state.items
       .filter((i) => i.status === "open" && problems.has(i.problemId))
       .sort(byDueDay)
-      .map((i) => asRow(i, problems.get(i.problemId) as Problem, today));
+      .map((i) => asRow(i, problems.get(i.problemId) as Problem, today, state.attempts.filter((a) => a.problemId === i.problemId && a.drill === i.drill).length));
     return {
       today,
       queue,
@@ -154,15 +169,15 @@ export class DrillService {
     const problem = problems.get(target.problemId);
     if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
     if (!drillsForTrack(problem.meta.track).includes(target.drill)) throw new HttpError(400, "That drill does not fit this problem.");
-    const item = this.matchItem(state, target);
+    const item = this.matchItem(state, target, this.today());
     const rotation = state.attempts.filter((a) => a.problemId === problem.meta.id && a.drill === target.drill).length;
     const content = buildDrill(problem, target.drill, { hint: item ? `${item.gapTitle} ${item.gapHint}` : "", rotation });
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
     return { problem, item, content };
   }
 
-  /** The queued drill an attempt counts for: the one named, or else the earliest open one of the same kind on the problem. */
-  private matchItem(state: DrillState, target: DrillTarget): DrillItem | null {
+  /** The queued drill an attempt may count for: the one named, or else the earliest due one of the same kind on the problem. */
+  private matchItem(state: DrillState, target: DrillTarget, today: string): DrillItem | null {
     if (target.drillId) {
       const named = state.items.find((i) => i.id === target.drillId);
       if (!named || named.status !== "open" || named.problemId !== target.problemId || named.drill !== target.drill) {
@@ -170,7 +185,8 @@ export class DrillService {
       }
       return named;
     }
-    return state.items.filter((i) => i.status === "open" && i.problemId === target.problemId && i.drill === target.drill).sort(byDueDay)[0] ?? null;
+    // A free drill counts only for a queued one that is due, so practising early cannot rush a gap to closed.
+    return state.items.filter((i) => isDue(i, today) && i.problemId === target.problemId && i.drill === target.drill).sort(byDueDay)[0] ?? null;
   }
 
   async prompt(target: DrillTarget): Promise<DrillPrompt> {
@@ -180,7 +196,22 @@ export class DrillService {
     return content.prompt;
   }
 
+  /** Drills being graded right now, so a second submit for the same drill cannot score it twice. */
+  private readonly grading = new Set<string>();
+
   async submit(target: DrillTarget, answer: string): Promise<DrillResult> {
+    if (answer.trim() === "") throw new HttpError(400, "Write an answer first.");
+    const key = target.drillId ?? `${target.drill}:${target.problemId}`;
+    if (this.grading.has(key)) throw new HttpError(409, "This drill is already being graded. Wait for the result.");
+    this.grading.add(key);
+    try {
+      return await this.submitNow(target, answer);
+    } finally {
+      this.grading.delete(key);
+    }
+  }
+
+  private async submitNow(target: DrillTarget, answer: string): Promise<DrillResult> {
     const problems = await this.playable();
     const state = await this.sync(problems);
     const { problem, content } = await this.resolve(target, state);
@@ -190,11 +221,13 @@ export class DrillService {
 
     return this.deps.store.update((draft) => {
       // The queue may have changed while the grader worked, so the match is made again on the saved state.
-      const item = this.matchLive(draft, target);
+      const item = this.matchLive(draft, target, today);
       let passesInRow: number | null = null;
       let closed = false;
       let nextDueOn: string | null = null;
-      if (item) {
+      // An attempt before the drill's day is practice: it is logged and changes nothing.
+      const counts = item !== null && isDue(item, today);
+      if (item && counts) {
         const next = applyVerdict(item, graded.verdict, today);
         item.passes = next.passes;
         item.dueOn = next.dueOn;
@@ -203,9 +236,16 @@ export class DrillService {
         closed = next.status === "closed";
         nextDueOn = closed ? null : next.dueOn;
       }
-      const attempt: DrillAttempt = { at: now.toISOString(), day: today, drill: target.drill, problemId: target.problemId, drillId: item?.id ?? null, verdict: graded.verdict };
+      const attempt: DrillAttempt = {
+        at: now.toISOString(),
+        day: today,
+        drill: target.drill,
+        problemId: target.problemId,
+        drillId: counts ? (item?.id ?? null) : null,
+        verdict: graded.verdict,
+      };
       draft.attempts.push(attempt);
-      const other = draft.items.filter((i) => i.id !== item?.id && isDue(i, today) && problems.has(i.problemId)).sort(byDueDay)[0];
+      const other = draft.items.filter((i) => i.id !== (counts ? item?.id : undefined) && isDue(i, today) && problems.has(i.problemId)).sort(byDueDay)[0];
       const result: DrillResult = {
         ...graded,
         passesInRow,
@@ -217,9 +257,9 @@ export class DrillService {
     });
   }
 
-  private matchLive(draft: DrillState, target: DrillTarget): DrillItem | null {
+  private matchLive(draft: DrillState, target: DrillTarget, today: string): DrillItem | null {
     try {
-      return this.matchItem(draft, target);
+      return this.matchItem(draft, target, today);
     } catch {
       return null;
     }

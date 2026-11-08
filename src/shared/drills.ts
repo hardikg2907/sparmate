@@ -39,11 +39,11 @@ const HLD_RULES: Rule[] = [
   { drill: "capacity", pattern: /capacity|back[- ]of[- ]the[- ]envelope|estimat|\bqps\b|throughput|sizing|storage (math|numbers)|scale (math|numbers)|numbers?\b.*\bdecision/ },
   { drill: "deep_dive", pattern: /deep[- ]dive/ },
   { drill: "requirements", pattern: /requirement|clarif|scoping|\bscope\b|non-functional|assumption|constraint|ask(ing)? (the )?(right )?questions/ },
-  { drill: "walk", pattern: /walk (a |one |the )?(request|flow)|request (path|flow)|end[- ]to[- ]end|data flow|\b(read|write) path\b|trace (a|the|one) /i },
+  { drill: "walk", pattern: /walk(ed|ing|s)? (a |one |the |every )?(request|flow)|request (path|flow)|end[- ]to[- ]end|data flow|\b(read|write|miss) path\b|trace (a|the|one) / },
   {
     drill: "deep_dive",
     pattern:
-      /trade-?off|cach|consisten|shard|partition|replica|failure|failover|stampede|hot (key|shard|spot)|idempoten|queue|rate limit|bottleneck|durab|availab|latency|ordering|fan-?out|backpressure|retry/,
+      /trade-?off|cach|consisten|shard|partition|replica|failure|failover|stampede|hot (key|shard|spot)|idempoten|queue|rate limit|bottleneck|durab|availab|latency|ordering|fan-?out|backpressure|retry|\bttls?\b|click|\bcount|batch|analytics/,
   },
 ];
 
@@ -52,15 +52,20 @@ const LLD_RULE: Rule = {
   pattern: /entit|class|interface|skeleton|model(l)?ing|object|relationship|data shape|abstraction|pattern|strategy|extensib|responsib|encapsulat|\bapi\b|noun/,
 };
 
+/** Gaps about how the round was run, not about what was designed. No drill trains them. */
+const ABOUT_THE_ROUND = /pacing|leading the round|time[- ]?(management|box)|drive the (round|interview)|communicat|running out of time|phase (timing|pacing)/;
+
 /**
- * Picks a drill for a scorecard gap. The judge's own choice wins when it fits the track. Otherwise the gap's title
- * is matched first, then its title with the "what good looks like" text. Null means no drill fits, so none is queued.
+ * Picks a drill for a scorecard gap. The judge's own choice wins when it fits the track. Otherwise the gap's title is
+ * matched first, then its title with the reason it matters. A gap about pacing or communication gets none, and so does
+ * a gap no rule fits: null queues nothing.
  */
-export function drillForGap(gap: { title: string; goodLooksLike?: string; drill?: DrillType | undefined }, track: Track): DrillType | null {
+export function drillForGap(gap: { title: string; whyItMatters?: string; drill?: DrillType | undefined }, track: Track): DrillType | null {
   if (gap.drill && DRILL_INFO[gap.drill].track === track) return gap.drill;
-  const rules = track === "lld" ? [LLD_RULE] : HLD_RULES;
   const title = gap.title.toLowerCase();
-  const full = `${title} ${(gap.goodLooksLike ?? "").toLowerCase()}`;
+  if (ABOUT_THE_ROUND.test(title)) return null;
+  const rules = track === "lld" ? [LLD_RULE] : HLD_RULES;
+  const full = `${title} ${(gap.whyItMatters ?? "").toLowerCase()}`;
   for (const text of [title, full]) {
     const hit = rules.find((r) => r.pattern.test(text));
     if (hit) return hit.drill;
@@ -133,6 +138,14 @@ export function applyVerdict(item: Pick<DrillItem, "passes">, verdict: DrillVerd
   return { passes, dueOn: addDays(today, PASS_INTERVAL_DAYS[passes - 1] ?? 7), status: "open" };
 }
 
+/** How a due day reads: "Due today", "Overdue" (with the day it fell due), "Tomorrow", or the day itself. */
+export function dueStatus(dueOn: string, today: string): { label: string; since?: string; tone: "due" | "overdue" | "later" } {
+  if (dueOn === today) return { label: "Due today", tone: "due" };
+  if (dueOn < today) return { label: "Overdue", since: dueOn, tone: "overdue" };
+  if (dueOn === addDays(today, 1)) return { label: "Tomorrow", tone: "later" };
+  return { label: dueOn, tone: "later" };
+}
+
 export function isDue(item: Pick<DrillItem, "dueOn" | "status">, today: string): boolean {
   return item.status === "open" && item.dueOn <= today;
 }
@@ -185,6 +198,10 @@ export type DrillSubmit = z.infer<typeof DrillSubmitSchema>;
 
 export interface GymDrillRow {
   id: string;
+  /** The scorecard gap this drill trains. */
+  gapTitle: string;
+  /** The deep-dive topic, for a deep dive. */
+  topic: string | null;
   drill: DrillType;
   title: string;
   problemId: string;
@@ -212,6 +229,8 @@ export interface DrillPrompt {
   title: string;
   minutes: number;
   task: string;
+  /** The deep-dive topic, for a deep dive. */
+  topic?: string;
   problem: { id: string; title: string; track: Track };
   material: { heading: string; markdown: string }[];
   /** Short line under the answer box. */

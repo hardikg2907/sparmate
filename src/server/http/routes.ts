@@ -156,6 +156,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   app.post("/api/gym/submit", async (req, reply) => {
     const parsed = DrillSubmitSchema.safeParse(req.body);
+    const typed = (req.body as { answer?: unknown } | null)?.answer;
+    if (typeof typed === "string" && typed.trim() === "") return badRequest(reply, "Write an answer first.");
     if (!parsed.success || !deps.drills) return badRequest(reply, "Write an answer of up to 8000 characters.");
     const { answer, ...target } = parsed.data;
     try {

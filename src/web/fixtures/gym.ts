@@ -4,6 +4,8 @@ const TODAY = "2026-11-08";
 
 function row(
   id: string,
+  gapTitle: string,
+  topic: string | null,
   drill: GymDrillRow["drill"],
   title: string,
   problemId: string,
@@ -13,7 +15,7 @@ function row(
   passes: number,
   task: string,
 ): GymDrillRow {
-  return { id, drill, title, problemId, problemTitle, minutes, dueOn, due: dueOn <= TODAY, passes, task };
+  return { id, gapTitle, topic, drill, title, problemId, problemTitle, minutes, dueOn, due: dueOn <= TODAY, passes, task };
 }
 
 /** A queue with five drills due, so the page shows the hero, the list and the "more due" line. */
@@ -75,7 +77,7 @@ export const fixtureGym: GymSummary = {
       0,
       "Write the classes: names, fields and method signatures, with no bodies.",
     ),
-    row("a1b2c3d4e5f60006", "capacity", "Capacity math", "c2-news-feed", "News Feed", 10, "2026-11-12", 1, ""),
+    row("a1b2c3d4e5f60006", "Capacity math done without prompting", null, "capacity", "Capacity math", "c2-news-feed", "News Feed", 10, "2026-11-12", 1, ""),
   ],
   dueCount: 5,
   problems: [

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { DRILL_INFO, DRILL_TYPES, PASSES_TO_CLOSE, PASS_INTERVAL_DAYS, type DrillType, type GymDrillRow, type GymSummary } from "../../shared/drills";
+import { DRILL_INFO, dueStatus, DRILL_TYPES, PASSES_TO_CLOSE, PASS_INTERVAL_DAYS, type DrillType, type GymDrillRow, type GymSummary } from "../../shared/drills";
 import { DrillIcon, DumbbellIcon } from "../components/DrillIcon";
 import { ArrowLeftIcon, ChevronRightIcon, ListIcon, PlayFilledIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
@@ -15,8 +15,16 @@ export const HOW_A_GAP_CLOSES = `Three passes in a row close the gap. After a pa
 /** How many drills the "Also due" card lists before it says how many more wait. */
 const ALSO_DUE_SHOWN = 3;
 
+/** Due as a status. A drill that fell due earlier reads "Overdue", never a past date. */
 export function dueText(row: Pick<GymDrillRow, "dueOn">, today: string): string {
-  return row.dueOn === today ? "Today" : shortDay(parseDay(row.dueOn));
+  const status = dueStatus(row.dueOn, today);
+  return status.tone === "later" && status.label === row.dueOn ? shortDay(parseDay(row.dueOn)) : status.label;
+}
+
+/** The day an overdue drill fell due, for small text beside "Overdue". Null when it is not overdue. */
+export function overdueSince(row: Pick<GymDrillRow, "dueOn">, today: string): string | null {
+  const status = dueStatus(row.dueOn, today);
+  return status.since ? `since ${shortDay(parseDay(status.since))}` : null;
 }
 
 /** The drill's address, with its queue id when it came from the queue. */
@@ -99,9 +107,18 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
       <p className="mt-3 text-body text-muted-foreground sm:text-lead">
         On <b className="font-semibold text-foreground">{row.problemTitle}</b>
       </p>
+      <p className="mt-1 max-w-[62ch] truncate text-ui text-hero-muted">Gap: {row.gapTitle}</p>
       <dl className="mesh-tile mt-7 grid w-full auto-cols-fr grid-flow-col divide-x divide-border rounded-xl sm:inline-grid sm:w-auto sm:auto-cols-auto">
         <Fact label="Length" value={`${row.minutes} min`} />
-        <Fact label="Due" value={dueText(row, today)} />
+        <Fact
+          label="Due"
+          value={
+            <>
+              <span>{dueText(row, today)}</span>
+              {overdueSince(row, today) ? <small className="text-meta font-medium text-hero-muted">{overdueSince(row, today)}</small> : null}
+            </>
+          }
+        />
         <Fact
           label={
             <span className="inline-flex items-center gap-1">
@@ -209,9 +226,14 @@ function AlsoDue({ rows, today, onAll, hasHero }: { rows: GymDrillRow[]; today: 
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-body font-semibold">{row.title}</span>
-                  <span className="block truncate text-meta text-muted-foreground">{row.problemTitle}</span>
+                  <span className="block truncate text-meta text-muted-foreground">{row.gapTitle}</span>
+                  <span className="block truncate text-meta text-faint">{row.problemTitle}</span>
+                  {row.topic ? <span className="block truncate text-meta text-faint">Topic: {row.topic}</span> : null}
                 </span>
-                <span className="shrink-0 text-ui text-warning">{dueText(row, today)}</span>
+                <span className="shrink-0 text-right text-ui text-warning">
+                  {dueText(row, today)}
+                  {overdueSince(row, today) ? <small className="block text-meta text-faint">{overdueSince(row, today)}</small> : null}
+                </span>
               </Link>
             </li>
           ))}

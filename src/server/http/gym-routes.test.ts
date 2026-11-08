@@ -173,6 +173,19 @@ describe("POST /api/gym/submit", () => {
     expect((await post("/api/gym/submit", payload)).statusCode).toBe(400);
   });
 
+  it("tells the candidate to write an answer when it is blank", async () => {
+    const res = await post("/api/gym/submit", { drill: "capacity", problemId: "c2-url-shortener", answer: "  \n" });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe("Write an answer first.");
+  });
+
+  it("answers 409 to a second submit while the first is still being graded", async () => {
+    const queued = (await app.inject({ method: "GET", url: "/api/gym", headers: { host: HOST } })).json<GymSummary>().queue[0];
+    const body = { drill: "capacity", problemId: "c2-url-shortener", drillId: queued?.id, answer: ANSWER };
+    const codes = (await Promise.all([post("/api/gym/submit", body), post("/api/gym/submit", body)])).map((r) => r.statusCode).sort();
+    expect(codes).toEqual([200, 409]);
+  });
+
   it("refuses an answer for a problem that was never played", async () => {
     expect((await post("/api/gym/submit", { drill: "capacity", problemId: "c2-rate-limiter", answer: "x" })).statusCode).toBe(404);
   });
