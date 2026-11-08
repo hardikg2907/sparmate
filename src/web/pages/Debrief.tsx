@@ -152,12 +152,24 @@ function WhileYouWait({ session }: { session: PublicSession }) {
   );
 }
 
-/** Brings the coach chat to the divider where the gap began, or to the chat itself when the round has no divider for it. */
+/**
+ * Brings the coach chat to the divider where the gap began, or to the chat itself when the round has no divider.
+ * The gap's newest divider is often already on screen at the foot of the chat, so scrolling alone shows no change.
+ * The divider flashes to show which lesson is meant, and the cursor lands in the coach's box, ready for an answer.
+ */
 function showGapInChat(title: string): void {
   const text = gapDividerText(title);
+  const coach = document.querySelector<HTMLElement>('section[aria-label="Coach"]');
   const dividers = [...document.querySelectorAll<HTMLElement>("[data-gap-divider]")].filter((el) => el.dataset.gapDivider === text);
-  const target = dividers.at(-1) ?? document.querySelector<HTMLElement>('section[aria-label="Coach"]');
-  target?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  const divider = dividers.at(-1);
+  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  (divider ?? coach)?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: divider ? "nearest" : "start" });
+  if (divider) {
+    divider.classList.remove("chat-flash");
+    void divider.offsetWidth;
+    divider.classList.add("chat-flash");
+  }
+  coach?.querySelector<HTMLTextAreaElement>("textarea")?.focus({ preventScroll: true });
 }
 
 function ScorecardBody({

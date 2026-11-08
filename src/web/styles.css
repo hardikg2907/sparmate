@@ -749,6 +749,18 @@ body {
  * All of it stops under prefers-reduced-motion; static gradients stay.
  * ---------------------------------------------------------------------------------------------------- */
 
+@keyframes chat-flash {
+  0%,
+  60% {
+    background: var(--primary-soft);
+    color: var(--foreground);
+  }
+}
+.chat-flash {
+  border-radius: var(--radius-md, 6px);
+  animation: chat-flash 1.6s ease-out;
+}
+
 @keyframes ir-dot {
   0%,
   80%,
