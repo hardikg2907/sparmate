@@ -27,7 +27,7 @@ export function AppHeader({ testMode, actions }: { testMode?: boolean; actions?:
   const overflowCurrent = page !== null && LINKS.slice(INLINE_ON_PHONE).some((link) => link.pages.includes(page));
   return (
     <header className="header-hairline sticky top-0 z-20 shrink-0 border-b border-border/70 bg-card/90 shadow-xs backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-card/80">
-      <div className="mx-auto flex h-14 max-w-[1224px] items-center gap-3 px-4 sm:gap-6 sm:px-8">
+      <div className="mx-auto flex h-14 max-w-[1224px] items-center gap-2 px-4 sm:gap-6 sm:px-8">
         <Link href="/" aria-label="Sparmate, Today" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-md text-lead font-bold tracking-[-0.01em]">
           <span className="brand-tile flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-hidden="true">
             <Logo size={18} />
@@ -43,10 +43,10 @@ export function AppHeader({ testMode, actions }: { testMode?: boolean; actions?:
                 href={link.href}
                 aria-current={current ? "page" : undefined}
                 className={cn(
-                  "relative flex shrink-0 items-center rounded-md px-3 text-ui font-medium transition-colors",
+                  "relative flex shrink-0 items-center rounded-md px-2 text-ui font-medium transition-colors sm:px-3",
                   index >= INLINE_ON_PHONE && "max-sm:hidden",
                   current
-                    ? "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
+                    ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -59,9 +59,9 @@ export function AppHeader({ testMode, actions }: { testMode?: boolean; actions?:
               <button
                 type="button"
                 className={cn(
-                  "relative flex shrink-0 items-center gap-1 rounded-md px-3 text-ui font-medium transition-colors sm:hidden",
+                  "relative flex shrink-0 items-center gap-0.5 rounded-md px-2 text-ui font-medium transition-colors sm:hidden",
                   overflowCurrent
-                    ? "text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
+                    ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
