@@ -23,23 +23,72 @@ export function gapMarks(gaps: readonly Gap[], progress: Readonly<Record<string,
   return marks;
 }
 
-export function gapBadge(mark: GapMark | undefined): { label: string; tone: Tone } | null {
-  if (mark === undefined) return null;
-  if (mark === "sent") return { label: "Sent to the coach", tone: "good" };
-  if (mark.state === "taught") return { label: "Taught", tone: "good" };
-  if (mark.state === "core_only") return { label: "Core idea only, topic session later", tone: "warn" };
-  return mark.by === "coach" ? { label: "Started by the coach", tone: "accent" } : { label: "Sent to the coach", tone: "good" };
+/** Where a gap stands on the page. Only a "taught" record is done; a round that merely opened the gap is still with the coach. */
+export type GapState = "not_started" | "with_coach" | "done" | "later";
+
+export function gapState(mark: GapMark | undefined): GapState {
+  if (mark === undefined) return "not_started";
+  if (mark === "sent") return "with_coach";
+  if (mark.state === "taught") return "done";
+  if (mark.state === "core_only") return "later";
+  return "with_coach";
 }
 
-export function teachLabel(mark: GapMark | undefined): string {
-  return mark === undefined ? "Teach me this" : "Ask again";
+export const GAP_STATE_LABEL: Record<GapState, string> = {
+  not_started: "Not started",
+  with_coach: "With the coach",
+  done: "Done",
+  later: "Core idea done, rest later",
+};
+
+/** The badge for a gap that has started; a gap that has not started shows none. */
+export function gapBadge(state: GapState): { label: string; tone: Tone } | null {
+  if (state === "not_started") return null;
+  return { label: GAP_STATE_LABEL[state], tone: state === "with_coach" ? "accent" : state === "done" ? "good" : "warn" };
 }
 
-/** The first gap, most serious first, that the coach has not touched. */
-export function startHere<T extends Gap>(sorted: readonly T[], marks: ReadonlyMap<string, GapMark>): T | undefined {
-  return sorted.find((gap) => !marks.has(gap.title));
+function recordTime(mark: GapMark | undefined): number {
+  if (mark === undefined || mark === "sent") return Number.NEGATIVE_INFINITY;
+  const time = Date.parse(mark.at);
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
 }
 
-export function workedText(worked: number, total: number): string {
-  return `${worked} of ${total} worked with the coach`;
+/**
+ * The gap to work on now. A gap that is with the coach always wins, the newest record first, so the coach opening
+ * a gap by itself is never skipped. Without one, it is the first gap not started, most serious first.
+ */
+export function currentGap<T extends Gap>(sorted: readonly T[], marks: ReadonlyMap<string, GapMark>): T | undefined {
+  let best: T | undefined;
+  for (const gap of sorted) {
+    const mark = marks.get(gap.title);
+    if (gapState(mark) !== "with_coach") continue;
+    if (best === undefined || recordTime(mark) > recordTime(marks.get(best.title))) best = gap;
+  }
+  return best ?? sorted.find((gap) => gapState(marks.get(gap.title)) === "not_started");
+}
+
+export interface GapCounts {
+  total: number;
+  /** Done, or the core idea taught with the rest for a later session. */
+  done: number;
+  withCoach: number;
+}
+
+export function gapCounts(gaps: readonly Gap[], marks: ReadonlyMap<string, GapMark>): GapCounts {
+  const states = gaps.map((gap) => gapState(marks.get(gap.title)));
+  return {
+    total: gaps.length,
+    done: states.filter((state) => state === "done" || state === "later").length,
+    withCoach: states.filter((state) => state === "with_coach").length,
+  };
+}
+
+/** The gaps step is complete only when no gap is left to start or to finish with the coach. */
+export function gapsComplete(gaps: readonly Gap[], marks: ReadonlyMap<string, GapMark>): boolean {
+  const { total, done } = gapCounts(gaps, marks);
+  return done === total;
+}
+
+export function progressText({ total, done, withCoach }: GapCounts): string {
+  return `Gaps: ${done} of ${total} done${withCoach > 0 ? ` · ${withCoach} with the coach` : ""}`;
 }
