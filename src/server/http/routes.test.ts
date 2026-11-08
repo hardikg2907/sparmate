@@ -5,6 +5,7 @@ import { PORT, makeStack, recordingPeer, type Stack } from "../engine/__fixtures
 import type { Session } from "../../shared/types";
 import { buildApp } from "./app";
 import { newCsrfToken } from "./security";
+import { SetupStatus } from "../setup/checks";
 
 const TOKEN = newCsrfToken();
 const HOST = `127.0.0.1:${PORT}`;
@@ -213,5 +214,30 @@ describe("Usage routes", () => {
     const body = res.json();
     expect(body.sessionId).toBe(id);
     expect(body.hasData).toBe(false);
+  });
+});
+
+describe("GET /api/bootstrap setup field", () => {
+  const checks = [{ id: "compiler" as const, ok: false, optional: false, title: "C++ compiler", detail: "missing", fix: "xcode-select --install" }];
+
+  it("is an empty list when no checks are wired", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/bootstrap", headers: { host: HOST } });
+    expect(res.json().setup).toEqual([]);
+  });
+
+  it("carries the cached check results", async () => {
+    const withSetup = await buildApp({
+      config: stack.config,
+      csrfToken: TOKEN,
+      manager: stack.manager,
+      settings: stack.settings,
+      store: stack.store,
+      log: stack.log,
+      setupStatus: new SetupStatus(async () => checks),
+    });
+    await withSetup.ready();
+    const res = await withSetup.inject({ method: "GET", url: "/api/bootstrap", headers: { host: HOST } });
+    await withSetup.close();
+    expect(res.json().setup).toEqual(checks);
   });
 });

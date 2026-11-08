@@ -29,16 +29,18 @@
 
 ## Requirements
 
-| Need                    | Details                                                                                                                                                     |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Node.js                 | 22.12 or newer.                                                                                                                                             |
-| Operating system        | macOS is the main path. Linux works through the container (see below). Windows works through the container only.                                            |
-| Claude Code login       | Install Claude Code and sign in once by running `claude`. The app talks to the model through the Claude Agent SDK and uses that login. It needs no API key. |
-| A C++ compiler          | `clang++` at `/usr/bin/clang++`. On macOS, install the Xcode Command Line Tools with `xcode-select --install`.                                              |
-| Chrome                  | Needed for voice input. It uses the browser's on-device speech recognition. Other browsers work for everything else.                                        |
-| Kokoro voice (optional) | Gives natural spoken replies. Without it, the app falls back to your system voice. See below.                                                               |
+| Need                    | Details                                                                                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js                 | 22.12 or newer.                                                                                                                                     |
+| Operating system        | macOS is the main path. Linux works through the container (see below). Windows works through the container only.                                    |
+| A Claude account        | `npm run setup` signs you in. You do not need to install Claude Code. The app talks to the model through the Claude Agent SDK and needs no API key. |
+| A C++ compiler          | `clang++` at `/usr/bin/clang++`. On macOS, install the Xcode Command Line Tools with `xcode-select --install`.                                      |
+| Chrome                  | Needed for voice input. It uses the browser's on-device speech recognition. Other browsers work for everything else.                                |
+| Kokoro voice (optional) | Gives natural spoken replies. Without it, the app falls back to your system voice. Needs Python 3.11 or newer. See below.                           |
 
 ### Optional: Kokoro speech
+
+`npm run setup` offers to install the Kokoro voice for you. It is a download of about 340 MB, and it needs Python 3.11 or newer. On macOS, `brew install python@3.12` gives you one.
 
 Spoken replies use [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) through a small Python worker. The app looks for these files in the Kokoro folder:
 
@@ -48,10 +50,10 @@ Spoken replies use [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) through
 <kokoro folder>/voices-v1.0.bin
 ```
 
-The default Kokoro folder is `kokoro/` inside your data folder. Set `SPARMATE_KOKORO_HOME` to use another place. To set it up by hand:
+The default Kokoro folder is `kokoro/` inside your data folder. Set `SPARMATE_KOKORO_HOME` to use another place. To set it up by hand, use Python 3.11 or newer:
 
 ```sh
-python3 -m venv "$SPARMATE_KOKORO_HOME/.venv"
+python3.12 -m venv "$SPARMATE_KOKORO_HOME/.venv"
 "$SPARMATE_KOKORO_HOME/.venv/bin/pip" install kokoro-onnx==0.4.7 soundfile==0.13.1
 ```
 
@@ -71,18 +73,38 @@ On Windows, run `.\setup.ps1` and then `.\start.ps1` from the `container` folder
 ## Quick start
 
 ```sh
-git clone https://github.com/hardikg2907/sparmate.git
-cd sparmate
-npm install
-cp .env.example .env
+git clone https://github.com/hardikg2907/sparmate.git && cd sparmate
+npm run setup
 npm start
 ```
 
-Open `http://127.0.0.1:4747`.
+`npm run setup` installs the packages, checks for a C++ compiler, signs you in to Claude and offers to install the Kokoro voice. You can run it again at any time. It skips what is already done.
 
-In `.env`, set `STUDY_ROOT` to the folder you want for your study files. If you leave it unset, the app uses `~/sparmate-study`. The first start creates that folder from `study-kit/` when it is missing or empty.
+Open `http://127.0.0.1:4747`. If something is still missing, the home page shows what it is and the command that fixes it.
 
-`npm start` builds the web page and then starts the server. Stop it with Ctrl+C.
+The first start creates your study folder from `study-kit/` when it is missing or empty. By default it is `~/sparmate-study`. `npm start` builds the web page and then starts the server. Stop it with Ctrl+C.
+
+### Setup options
+
+Pass these after `--`, for example `npm run setup -- --no-kokoro`.
+
+| Option           | What it does                             |
+| ---------------- | ---------------------------------------- |
+| `--yes`          | Answers yes to every question.           |
+| `--no-kokoro`    | Never offers the Kokoro voice.           |
+| `--skip-install` | Skips `npm ci` and only runs the checks. |
+
+Without a terminal, setup asks nothing. It skips the Claude sign-in and the Kokoro voice unless you pass `--yes`.
+
+### Optional settings
+
+To change a default, copy the example file and edit it:
+
+```sh
+cp .env.example .env
+```
+
+In `.env`, set `STUDY_ROOT` to the folder you want for your study files. If you leave it unset, the app uses `~/sparmate-study`.
 
 All settings in `.env`:
 

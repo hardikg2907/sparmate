@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { BASE_MINUTES, phasePlan, type Mode, type Track } from "../../shared/phases";
 import type { ProblemSummary, Settings } from "../../shared/types";
-import type { CustomProblemJobStatus } from "../../shared/protocol";
+import type { CustomProblemJobStatus, SetupCheck } from "../../shared/protocol";
 import { ApiError, api, type SessionHistoryItem } from "../backend";
 import { AppHeader } from "../components/AppHeader";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { DiscardNote } from "../components/DiscardNote";
 import { BarChartIcon, CheckIcon, ChevronDownIcon, PauseIcon, PlayIcon, SlidersIcon, WarnIcon } from "../components/icons";
 import { Modal } from "../components/Modal";
+import { SetupCard } from "../components/SetupCard";
 import { PlanPreview } from "../components/PlanTrack";
 import { Select } from "../components/Select";
 import {
@@ -75,6 +76,8 @@ export interface HomeViewProps {
   onOpenSettings: () => void;
   /** Round lengths from the settings, so the start dialog can show the real plan. */
   durations: Durations | null;
+  /** What the server found missing on this machine; the page shows a card when something required is. */
+  setup?: SetupCheck[];
 }
 
 function minutesFor(track: Track, durations: Durations | null): number {
@@ -90,7 +93,7 @@ function fillStep(index: number, at?: number): CSSProperties {
 }
 
 export function HomeView(props: HomeViewProps) {
-  const { problems, history, error, onRetry, starting, startError, onStart, discarding, discardError, onDiscard, fakeAgent, onOpenSettings, durations } = props;
+  const { problems, history, error, onRetry, starting, startError, onStart, discarding, discardError, onDiscard, fakeAgent, onOpenSettings, durations, setup } = props;
   const busy = starting !== null;
   const recommended = (problems ?? []).filter((p) => p.badge === "next");
   const redos = (problems ?? []).filter((p) => p.badge === "redo");
@@ -209,6 +212,8 @@ export function HomeView(props: HomeViewProps) {
       <main tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 space-y-12 px-4 pb-16 pt-8 sm:px-8">
         {startError && !chosen ? <ErrorLine text={startError} /> : null}
         {discardError ? <ErrorLine text={discardError} /> : null}
+
+        {setup ? <SetupCard checks={setup} /> : null}
 
         {error ? (
           <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />} title="The problem list could not be loaded" actions={<Button onClick={onRetry}>Try again</Button>}>
@@ -1372,7 +1377,7 @@ function messageOf(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function HomePage({ fakeAgent, onOpenSettings, durations }: { fakeAgent: boolean; onOpenSettings: () => void; durations: Durations | null }) {
+export function HomePage({ fakeAgent, onOpenSettings, durations, setup }: { fakeAgent: boolean; onOpenSettings: () => void; durations: Durations | null; setup: SetupCheck[] }) {
   const [problems, setProblems] = useState<ProblemSummary[] | null>(null);
   const [history, setHistory] = useState<SessionHistoryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1434,6 +1439,7 @@ export function HomePage({ fakeAgent, onOpenSettings, durations }: { fakeAgent: 
       fakeAgent={fakeAgent}
       onOpenSettings={onOpenSettings}
       durations={durations}
+      setup={setup}
       onStart={(problemId, mode) => void begin(`${problemId}:${mode}`, { problemId, mode })}
       onStartCustom={(prompt, track, mode) => void begin(`custom:${mode}`, { customPrompt: prompt, customTrack: track, mode })}
     />

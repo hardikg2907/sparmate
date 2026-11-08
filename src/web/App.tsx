@@ -111,7 +111,9 @@ function Shell() {
   return (
     <>
       <div key={pageKey} className={`${enter}h-full min-h-0`}>
-        {route.name === "home" ? <HomePage fakeAgent={bootstrap.fakeAgent} onOpenSettings={() => setSettingsOpen(true)} durations={settings.durations} /> : null}
+        {route.name === "home" ? (
+          <HomePage fakeAgent={bootstrap.fakeAgent} onOpenSettings={() => setSettingsOpen(true)} durations={settings.durations} setup={bootstrap.setup} />
+        ) : null}
         {route.name === "usage" ? <UsagePage /> : null}
         {route.name === "session" ? (
           <Suspense

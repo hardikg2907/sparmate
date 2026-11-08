@@ -9,6 +9,7 @@ import { SESSION_ID, type SessionStore } from "../engine/store";
 import type { KokoroManager } from "../tts/kokoro";
 import { TtsRequestSchema } from "../tts/schema";
 import type { UsageLedger } from "../engine/usage-ledger";
+import type { SetupStatus } from "../setup/checks";
 
 export interface RouteDeps {
   config: ServerConfig;
@@ -19,6 +20,7 @@ export interface RouteDeps {
   kokoro?: KokoroManager;
   log: Logger;
   usageLedger?: UsageLedger;
+  setupStatus?: SetupStatus;
 }
 
 function notFound(reply: FastifyReply) {
@@ -37,6 +39,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     version: config.version,
     studyRoot: config.studyRoot,
     fakeAgent: config.fakeAgent,
+    setup: (await deps.setupStatus?.get()) ?? [],
   }));
 
   app.get("/api/problems", async () => manager.problemSummaries());
