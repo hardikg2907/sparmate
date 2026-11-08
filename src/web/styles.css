@@ -1427,3 +1427,11 @@ body {
     scale: none;
   }
 }
+
+/* A row that scrolls sideways without a visible bar, for the main links on a narrow screen. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

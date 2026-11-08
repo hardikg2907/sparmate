@@ -76,6 +76,31 @@ describe("recommendation", () => {
     expect(buildProblemSummaries(problems, { bullets: marks, lastLogTrack: null }, recent, "2026-11-02").find((p) => p.id === "b3-lot")?.badge).toBeNull();
   });
 
+  it("sends the due date it used for a redo, from the tracker date when there is no app attempt", () => {
+    const out = buildProblemSummaries(problems, { bullets: marks, lastLogTrack: null }, [], "2026-10-27");
+    const lot = out.find((p) => p.id === "b3-lot");
+    expect(lot).toMatchObject({ lastAttempt: null, badge: null, redoDueOn: "2026-11-01" });
+    expect(out.find((p) => p.id === "c2-url")?.redoDueOn).toBeNull();
+  });
+
+  it("sends the due date from the last attempt when there is one", () => {
+    const out = buildProblemSummaries(problems, { bullets: marks, lastLogTrack: null }, [session("b3-lot", "lld", "2026-10-30T10:00:00.000Z")], "2026-11-02");
+    expect(out.find((p) => p.id === "b3-lot")?.redoDueOn).toBe("2026-11-06");
+  });
+
+  it("does not count a gap round as an attempt: it leaves the last attempt, the redo clock and the next track alone", () => {
+    const gapRound: SessionSummary = { ...session("b3-lot", "lld", "2026-11-05T10:00:00.000Z"), focus: true };
+    const out = buildProblemSummaries(problems, { bullets: marks, lastLogTrack: "lld" }, [gapRound], "2026-11-06");
+    const lot = out.find((p) => p.id === "b3-lot");
+    expect(lot?.lastAttempt).toBeNull();
+    expect(lot).toMatchObject({ badge: "redo", redoDueOn: "2026-11-01" });
+    expect(out.filter((p) => p.badge === "next").map((p) => p.id)).toEqual(["c2-url"]);
+    const real = session("b3-lot", "lld", "2026-10-30T10:00:00.000Z");
+    expect(buildProblemSummaries(problems, { bullets: marks, lastLogTrack: null }, [real, gapRound], "2026-11-06").find((p) => p.id === "b3-lot")?.lastAttempt?.date).toBe(
+      "2026-10-30",
+    );
+  });
+
   it("falls back to the other track when the wanted one has no new problem, and gives exactly one next", () => {
     const allLldDone = bullets([...marks].map(([k, v]) => [k, k.startsWith("b3") ? { ...v, mark: "[x]" as const } : v]));
     const out = buildProblemSummaries(problems, { bullets: allLldDone, lastLogTrack: "hld" }, [], "2026-10-29");

@@ -260,6 +260,15 @@ export class SessionManager {
     return task;
   }
 
+  /** Ends a live or paused round and starts its debrief, for a round nobody has open. */
+  async end(id: string): Promise<void> {
+    const rt = await this.open(id);
+    if (!rt) throw new HttpError(404, "That session does not exist.");
+    const status = rt.statusNow();
+    if (status !== "live" && status !== "paused") throw new HttpError(409, "The round has already ended.");
+    await rt.endByRequest();
+  }
+
   private async discardNow(id: string): Promise<void> {
     const session = await this.session(id);
     if (!session) throw new HttpError(404, "That session does not exist.");

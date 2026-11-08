@@ -1,19 +1,37 @@
 import { StrictMode, useState } from "react";
 import type { Root } from "react-dom/client";
 import { AppProviders } from "../components/AppProviders";
-import { SettingsModal } from "../components/SettingsModal";
-import { HomeView } from "../pages/Home";
+import { HistoryView } from "../pages/History";
+import { LibraryView } from "../pages/Library";
+import { LibraryNewView } from "../pages/LibraryNew";
+import { DsaView, GymView } from "../pages/Placeholders";
+import { ProgressView } from "../pages/Progress";
+import { SettingsView } from "../pages/Settings";
+import { TodayView } from "../pages/Today";
+import type { PageContext } from "../pages/context";
 import { lockNavigation } from "../router";
 import { applyTheme, type Theme } from "../theme";
 import type { Mode } from "../../shared/phases";
 import type { PublicSession } from "../../shared/types";
 import { FakeServer } from "./fakeServer";
-import { fixtureBootstrap, fixtureHistory, fixtureProblems, fixtureSettings } from "./home";
+import { fixtureAllHistory, fixtureBootstrap, fixtureHistory, fixtureOpenRounds, fixtureProblems, fixtureSettings } from "./home";
+import { useFixtureStudyData } from "./studyData";
 import { fixtureProposal } from "./proposal";
 import { fixtureUsage } from "./usage";
 import { LLD_CODE, LLD_FINAL_CODE, withLegacyNotes } from "./sessions";
 import { hldDebrief, hldRoom, lldDebrief, lldRoom } from "./rooms";
 
+export const PAGE_FIXTURES = ["home", "library", "library-new", "progress", "history", "settings", "gym", "dsa"] as const;
+const FIXTURE_PATH: Record<string, string> = {
+  home: "/",
+  library: "/library",
+  "library-new": "/library/new",
+  progress: "/progress",
+  history: "/history",
+  settings: "/settings",
+  gym: "/gym",
+  dsa: "/dsa",
+};
 export const FIXTURES = ["home", "room-hld", "room-lld", "debrief-hld", "debrief-lld", "usage"] as const;
 
 type DebriefStatus = PublicSession["status"];
@@ -39,17 +57,26 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
   applyTheme(theme);
   window.__fixtureLog = [];
 
-  if (name === "home") {
+  if ((PAGE_FIXTURES as readonly string[]).includes(name)) {
+    // The main bar marks the page from the address, and a fixture keeps the address it was opened with.
+    history.replaceState(null, "", `${FIXTURE_PATH[name] ?? "/"}${location.search}`);
+    const day = params.get("now");
+    const now = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? new Date(`${day}T10:00:00`) : new Date();
     root.render(
       <StrictMode>
         <AppProviders>
-          <FixtureHome
-            theme={theme}
-            openSettings={params.get("settings") === "1"}
-            preparing={params.get("preparing") === "1"}
-            noUnfinished={params.get("unfinished") === "0"}
-            fakeAgent={params.get("testmode") !== "0"}
-          />
+          <div className="h-full min-h-0 overflow-hidden">
+            <FixturePage
+              name={name}
+              theme={theme}
+              now={now}
+              preparing={params.get("preparing") === "1"}
+              noUnfinished={params.get("unfinished") === "0"}
+              testMode={params.get("testmode") !== "0"}
+              username={params.get("username")}
+              plan={params.get("plan")}
+            />
+          </div>
         </AppProviders>
       </StrictMode>,
     );
@@ -158,61 +185,56 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
   );
 }
 
-function FixtureHome({
+function FixturePage({
+  name,
   theme,
-  openSettings,
+  now,
   preparing,
   noUnfinished,
-  fakeAgent,
+  testMode,
+  username,
+  plan,
 }: {
+  name: string;
   theme: Theme;
-  openSettings: boolean;
+  now: Date;
   preparing: boolean;
-  noUnfinished?: boolean;
-  fakeAgent: boolean;
+  noUnfinished: boolean;
+  testMode: boolean;
+  username: string | null;
+  plan: string | null;
 }) {
-  const [open, setOpen] = useState(openSettings);
-  const [settings, setSettings] = useState(fixtureSettings(theme));
-  const [starting, setStarting] = useState<string | null>(preparing ? "custom:interview" : null);
-  const [history, setHistory] = useState(() => (noUnfinished ? fixtureHistory.filter((item) => item.status === "debriefed" || item.status === "failed") : fixtureHistory));
+  const [settings, setSettings] = useState(() => {
+    const base = fixtureSettings(theme);
+    const days = plan?.split(",");
+    return {
+      ...base,
+      ...(username ? { leetcodeUsername: username } : {}),
+      ...(days?.length === 7 ? { weeklyPlan: days as typeof base.weeklyPlan } : {}),
+    };
+  });
+  const everything = noUnfinished ? fixtureHistory : name === "home" ? [...fixtureOpenRounds, ...fixtureHistory] : fixtureAllHistory;
+  const data = useFixtureStudyData(fixtureProblems, everything, preparing ? "custom:interview" : null);
+  const ctx: PageContext = { settings, testMode, setup: [] };
 
-  const pretendToStart = (key: string) => {
-    setStarting(key);
-    setTimeout(() => setStarting(null), 1500);
-  };
-
-  return (
-    <>
-      <div className="h-full min-h-0 overflow-hidden">
-        <HomeView
-          problems={fixtureProblems}
-          history={history}
-          error={null}
-          onRetry={() => {}}
-          starting={starting}
-          startError={null}
-          fakeAgent={fakeAgent}
-          onOpenSettings={() => setOpen(true)}
-          onStart={(id, mode) => pretendToStart(`${id}:${mode}`)}
-          onStartCustom={(_prompt, _track, mode) => pretendToStart(`custom:${mode}`)}
-          discarding={null}
-          discardError={null}
-          onDiscard={(id) => setHistory((items) => items.filter((item) => item.id !== id))}
-          durations={settings.durations}
-        />
-      </div>
-      {open ? (
-        <SettingsModal
-          settings={settings}
-          studyRoot={fixtureBootstrap.studyRoot}
-          onClose={() => setOpen(false)}
-          onSave={async (next) => {
-            setSettings(next);
-            applyTheme(next.theme);
-          }}
-          onApplyTheme={applyTheme}
-        />
-      ) : null}
-    </>
-  );
+  if (name === "library") return <LibraryView data={data} ctx={ctx} />;
+  if (name === "library-new") return <LibraryNewView data={data} ctx={ctx} />;
+  if (name === "progress") return <ProgressView data={data} ctx={ctx} now={now} />;
+  if (name === "history") return <HistoryView data={data} ctx={ctx} />;
+  if (name === "gym") return <GymView ctx={ctx} />;
+  if (name === "dsa") return <DsaView ctx={ctx} />;
+  if (name === "settings") {
+    return (
+      <SettingsView
+        settings={settings}
+        studyRoot={fixtureBootstrap.studyRoot}
+        testMode={testMode}
+        onSave={async (next) => {
+          setSettings(next);
+        }}
+        onApplyTheme={applyTheme}
+      />
+    );
+  }
+  return <TodayView data={data} ctx={ctx} now={now} />;
 }

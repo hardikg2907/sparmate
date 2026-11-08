@@ -56,23 +56,9 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
 
-  // 1. Settings dialog with model Select open (light theme)
-  await page.goto(`${BASE}/?fixture=home&theme=light`, { waitUntil: "networkidle0" });
+  // 1. Settings page with model Select open (light theme)
+  await page.goto(`${BASE}/?fixture=settings&theme=light`, { waitUntil: "networkidle0" });
   await sleep(500);
-
-  // Click Settings button
-  const settingsBtn = await page.waitForSelector('button:has-text("Settings")', { timeout: 5000 }).catch(async () => {
-    const btns = await page.$$("button");
-    for (const b of btns) {
-      const text = await page.evaluate((el) => el.textContent, b);
-      if (text && text.includes("Settings")) return b;
-    }
-    return null;
-  });
-  if (settingsBtn) {
-    await settingsBtn.click();
-  }
-  await sleep(400);
 
   // Click model select (Interviewer model)
   const modelTrigger = await page.waitForSelector('button[aria-label="Interviewer model"]', { timeout: 5000 });
@@ -83,22 +69,9 @@ try {
   await page.screenshot({ path: lightPath });
   console.log(`Saved: ${lightPath}`);
 
-  // 2. Settings dialog with model Select open (dark theme)
-  await page.goto(`${BASE}/?fixture=home&theme=dark`, { waitUntil: "networkidle0" });
+  // 2. Settings page with model Select open (dark theme)
+  await page.goto(`${BASE}/?fixture=settings&theme=dark`, { waitUntil: "networkidle0" });
   await sleep(500);
-
-  const settingsBtnDark = await page.waitForSelector('button:has-text("Settings")', { timeout: 5000 }).catch(async () => {
-    const btns = await page.$$("button");
-    for (const b of btns) {
-      const text = await page.evaluate((el) => el.textContent, b);
-      if (text && text.includes("Settings")) return b;
-    }
-    return null;
-  });
-  if (settingsBtnDark) {
-    await settingsBtnDark.click();
-  }
-  await sleep(400);
 
   const modelTriggerDark = await page.waitForSelector('button[aria-label="Interviewer model"]', { timeout: 5000 });
   await modelTriggerDark.click();
@@ -108,20 +81,17 @@ try {
   await page.screenshot({ path: darkPath });
   console.log(`Saved: ${darkPath}`);
 
-  // 3. Home filter row with status Select open
-  await page.goto(`${BASE}/?fixture=home&theme=light`, { waitUntil: "networkidle0" });
+  // 3. Weekly plan day Select open
+  await page.goto(`${BASE}/?fixture=settings&theme=light`, { waitUntil: "networkidle0" });
   await sleep(500);
 
-  const statusTrigger = await page.waitForSelector("#status-filter", { timeout: 5000 });
-  // Scroll it into view if needed
-  await page.evaluate((el) => el.scrollIntoView({ block: "center" }), statusTrigger);
-  await sleep(200);
-  await statusTrigger.click();
+  const dayTrigger = await page.waitForSelector('button[aria-label="Mon plan"]', { timeout: 5000 });
+  await dayTrigger.click();
   await sleep(300);
 
-  const homeStatusPath = join(OUT, "home-status-select-open.png");
-  await page.screenshot({ path: homeStatusPath });
-  console.log(`Saved: ${homeStatusPath}`);
+  const planSelectPath = join(OUT, "settings-plan-select-open.png");
+  await page.screenshot({ path: planSelectPath });
+  console.log(`Saved: ${planSelectPath}`);
 } finally {
   await browser.close();
   server.kill();

@@ -1,6 +1,6 @@
 import type { BootstrapResponse, ClientMsg, CreateSessionRequest, CustomProblemJobStatus, ServerMsg } from "../shared/protocol";
 import type { Mode, Track } from "../shared/phases";
-import type { ProblemSummary, PublicSession, Readiness, SessionStatus, Settings, Verdict } from "../shared/types";
+import type { ProblemSummary, PublicSession, SessionHistoryItem, Settings } from "../shared/types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -81,20 +81,7 @@ async function request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: strin
 // ---------------------------------------------------------------------------
 // REST helpers
 
-export interface SessionHistoryItem {
-  id: string;
-  problemId: string;
-  title: string;
-  track: Track;
-  mode: Mode;
-  createdAt: string;
-  status: SessionStatus;
-  verdict: Verdict | null;
-  readiness?: Readiness["call"] | null;
-  /** Set while paused: why, and the round time left (null in a guided round). */
-  pause: { reason: NonNullable<PublicSession["pauseReason"]>; timeLeftMs: number | null } | null;
-  notesSaved: boolean;
-}
+export type { SessionHistoryItem };
 
 export interface BoardSnapshot {
   version: number;
@@ -117,6 +104,7 @@ export const api = {
   currentCustomProblemJob: () => request<{ job: CustomProblemJobStatus | null }>("GET", "/api/custom-problems"),
   customProblemJob: (jobId: string) => request<CustomProblemJobStatus>("GET", `/api/custom-problems/${enc(jobId)}`),
   cancelCustomProblemJob: (jobId: string) => request<CustomProblemJobStatus>("DELETE", `/api/custom-problems/${enc(jobId)}`),
+  endSession: (id: string) => request<{ ok: true }>("POST", `/api/sessions/${enc(id)}/end`),
   discardSession: (id: string) => request<{ ok: true }>("DELETE", `/api/sessions/${enc(id)}`),
   session: (id: string) => request<PublicSession>("GET", `/api/sessions/${enc(id)}`),
   board: (id: string) => request<BoardSnapshot>("GET", `/api/sessions/${enc(id)}/board`),

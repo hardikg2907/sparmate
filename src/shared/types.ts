@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Mode, Track } from "./phases";
 import { LIMITS } from "./protocol";
+import { DAY_KINDS, DEFAULT_DSA_GOAL, DEFAULT_WEEKLY_PLAN, DSA_GOAL_MAX, DSA_GOAL_MIN, LEETCODE_USERNAME_PATTERN } from "./week";
 
 export const MODEL_IDS = ["claude-opus-5-5", "claude-sonnet-5-5"] as const;
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -28,6 +29,13 @@ export const SettingsSchema = z.strictObject({
     lld: z.union([z.literal(90), z.literal(120)]),
   }),
   theme: z.enum(["light", "dark"]),
+  // The three below arrived after the first settings files, so a file without them loads with these defaults.
+  weeklyPlan: z
+    .array(z.enum(DAY_KINDS))
+    .length(7)
+    .default(() => [...DEFAULT_WEEKLY_PLAN]),
+  leetcodeUsername: z.string().regex(LEETCODE_USERNAME_PATTERN).optional(),
+  dsaWeeklyGoal: z.number().int().min(DSA_GOAL_MIN).max(DSA_GOAL_MAX).default(DEFAULT_DSA_GOAL),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -36,6 +44,8 @@ export const DEFAULT_SETTINGS: Settings = {
   effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium" },
   durations: { hld: 45, lld: 120 },
   theme: "dark",
+  weeklyPlan: [...DEFAULT_WEEKLY_PLAN],
+  dsaWeeklyGoal: DEFAULT_DSA_GOAL,
 };
 
 // ---------------------------------------------------------------------------
@@ -54,6 +64,11 @@ export interface ProblemSummary {
   lastAttempt: { sessionId: string; date: string; mode: Mode; verdict: Verdict | null; readiness?: Readiness["call"] | null } | null;
   /** First sentence of the problem's opening prompt, which the candidate would hear anyway. */
   summary: string;
+  /**
+   * The day a redo falls due: seven days after the date the redo rule used, which is the last attempt, else the newest
+   * date on the tracker bullet. Null when the problem is not partly done or no date is known.
+   */
+  redoDueOn?: string | null;
   /** "next" = recommended new problem; "redo" = a [~] problem whose last attempt is 7 or more days old. */
   badge: "next" | "redo" | null;
   custom: boolean;
@@ -229,6 +244,48 @@ export interface Session {
   sdk: { interviewerSessionId: string | null; coachSessionId: string | null };
   scorecard: Scorecard | null;
   models: { interviewer: ModelId; judge: ModelId };
+}
+
+/** One scored skill from a round's scorecard. */
+export interface HistoryScore {
+  id: string;
+  name: string;
+  score: number;
+}
+
+/** A scorecard gap with what the coach did about it, so a practice round can start without opening the round. */
+export interface HistoryGap {
+  title: string;
+  goodLooksLike: string;
+  severity: "high" | "medium" | "low";
+  /** The coach taught it all the way. */
+  done: boolean;
+}
+
+/** One row of the round history: enough for Today, Progress and History without fetching each round. */
+export interface SessionHistoryItem {
+  id: string;
+  problemId: string;
+  title: string;
+  track: Track;
+  mode: Mode;
+  createdAt: string;
+  status: SessionStatus;
+  verdict: Verdict | null;
+  /** Guided rounds only: the readiness call the history badge shows in place of the hire verdict. */
+  readiness?: Readiness["call"] | null;
+  /** Set while the round is paused: why, when, and how much of the round is left (null in a guided round, which has no limit). */
+  pause: { reason: NonNullable<Session["pauseReason"]>; pausedAt?: string; timeLeftMs: number | null } | null;
+  /** The study-notes draft was saved to the study files. */
+  notesSaved: boolean;
+  /** The raw clock, so the page can work out the time used at any moment. Absent from a server that predates it. */
+  clock?: { startedAt: string; pausedMs: number; pauseStartedAt: string | null; durationMs: number };
+  /** A short round practising one gap. It is not an attempt at the problem, so no clock or score counts it. */
+  focus?: boolean;
+  /** Scored rounds only. */
+  scores?: HistoryScore[];
+  phaseTiming?: { phase: string; label: string; plannedMinutes: number; actualMinutes: number }[];
+  gaps?: HistoryGap[];
 }
 
 /** A checklist item as the browser shows it. */

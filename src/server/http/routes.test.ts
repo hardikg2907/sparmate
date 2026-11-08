@@ -33,6 +33,41 @@ afterEach(async () => {
 const start = () => stack.manager.create({ problemId: "c2-url-shortener", mode: "interview" });
 const del = (id: string, headers: Record<string, string>) => app.inject({ method: "DELETE", url: `/api/sessions/${id}`, headers });
 
+describe("POST /api/sessions/:id/end", () => {
+  const end = (id: string, headers: Record<string, string>) => app.inject({ method: "POST", url: `/api/sessions/${id}/end`, headers });
+
+  // The debrief writes files, so a test waits for it before the folder is cleaned up.
+  const settled = async (id: string) => {
+    for (let i = 0; i < 200; i++) {
+      const status = stack.store.history().find((h) => h.id === id)?.status;
+      if (status === "debriefed" || status === "failed") return status;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return null;
+  };
+
+  it("ends a round nobody has open and runs its debrief", async () => {
+    const id = await start();
+    const res = await end(id, GOOD);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    expect(await settled(id)).toBe("debriefed");
+  });
+
+  it("refuses a second end with 409", async () => {
+    const id = await start();
+    await end(id, GOOD);
+    expect((await end(id, GOOD)).statusCode).toBe(409);
+    await settled(id);
+  });
+
+  it("answers 404 for a round that does not exist and 403 without the token", async () => {
+    expect((await end("20261030-0900-nothing-here-abcd", GOOD)).statusCode).toBe(404);
+    const id = await start();
+    expect((await end(id, { host: HOST, origin: `http://${HOST}` })).statusCode).toBe(403);
+  });
+});
+
 describe("DELETE /api/sessions/:id", () => {
   it("discards the round, drops its history entry and answers ok", async () => {
     const id = await start();

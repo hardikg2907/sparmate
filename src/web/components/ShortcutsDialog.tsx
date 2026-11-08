@@ -11,10 +11,6 @@ const GROUPS: { title: string; items: { keys: string[]; label: string }[] }[] = 
     ],
   },
   {
-    title: "Starting a round",
-    items: [{ keys: ["Enter"], label: "Start the round from the start dialog" }],
-  },
-  {
     title: "In the room",
     items: [
       { keys: ["Enter"], label: "Send your message" },

@@ -3,9 +3,15 @@ import type { BootstrapResponse } from "../shared/protocol";
 import type { Settings } from "../shared/types";
 import { ApiError, api, getBootstrap } from "./backend";
 import { AppProviders } from "./components/AppProviders";
-import { SettingsModal } from "./components/SettingsModal";
 import { Button, Spinner } from "./components/ui";
-import { HomePage } from "./pages/Home";
+import { HistoryPage } from "./pages/History";
+import { LibraryPage } from "./pages/Library";
+import { LibraryNewPage } from "./pages/LibraryNew";
+import { DsaPage, GymPage } from "./pages/Placeholders";
+import { ProgressPage } from "./pages/Progress";
+import { SettingsPage } from "./pages/Settings";
+import { TodayPage } from "./pages/Today";
+import type { PageContext } from "./pages/context";
 import { UsagePage } from "./pages/UsagePage";
 import { Link, useRoute } from "./router";
 import { testHooksEnabled } from "./session/testHooks";
@@ -44,7 +50,6 @@ export function App() {
 function Shell() {
   const route = useRoute();
   const [boot, setBoot] = useState<Boot>({ phase: "loading" });
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
     setBoot({ phase: "loading" });
@@ -94,6 +99,7 @@ function Shell() {
   }
 
   const { bootstrap, settings } = boot;
+  const ctx: PageContext = { settings, testMode: bootstrap.fakeAgent, setup: bootstrap.setup };
 
   const save = async (next: Settings) => {
     try {
@@ -111,9 +117,14 @@ function Shell() {
   return (
     <>
       <div key={pageKey} className={`${enter}h-full min-h-0`}>
-        {route.name === "home" ? (
-          <HomePage fakeAgent={bootstrap.fakeAgent} onOpenSettings={() => setSettingsOpen(true)} durations={settings.durations} setup={bootstrap.setup} />
-        ) : null}
+        {route.name === "home" ? <TodayPage ctx={ctx} /> : null}
+        {route.name === "library" ? <LibraryPage ctx={ctx} /> : null}
+        {route.name === "library-new" ? <LibraryNewPage ctx={ctx} /> : null}
+        {route.name === "gym" ? <GymPage ctx={ctx} /> : null}
+        {route.name === "dsa" ? <DsaPage ctx={ctx} /> : null}
+        {route.name === "progress" ? <ProgressPage ctx={ctx} /> : null}
+        {route.name === "history" ? <HistoryPage ctx={ctx} /> : null}
+        {route.name === "settings" ? <SettingsPage ctx={ctx} studyRoot={bootstrap.studyRoot} onSave={save} onApplyTheme={applyTheme} /> : null}
         {route.name === "usage" ? <UsagePage /> : null}
         {route.name === "session" ? (
           <Suspense
@@ -130,12 +141,11 @@ function Shell() {
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
             <h1 className="text-lead font-semibold">Page not found</h1>
             <Link href="/" className="rounded text-primary-text underline underline-offset-2">
-              Back to home
+              Back to Today
             </Link>
           </div>
         ) : null}
       </div>
-      {settingsOpen ? <SettingsModal settings={settings} studyRoot={bootstrap.studyRoot} onClose={() => setSettingsOpen(false)} onSave={save} onApplyTheme={applyTheme} /> : null}
     </>
   );
 }

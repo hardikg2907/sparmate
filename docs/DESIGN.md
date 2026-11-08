@@ -29,8 +29,12 @@ His own notes show where rounds go wrong. The design should help with these firs
 
 | Screen | His job | What "done" looks like |
 |---|---|---|
-| Home | "Tell me what to do tonight and let me start it without thinking." | One obvious next round, and a paused round he can resume or throw away. |
-| Start (new) | "Get me ready for the round." | He sees the length, the mode and his plan, then starts with one key press. |
+| Today | "Tell me what to do today and let me start it without thinking." | One obvious session from his weekly plan, and a paused round he can finish or throw away. |
+| Library | "Let me choose a problem and see it before I start." | A list to scan, a detail panel, one Start button. |
+| Progress | "Show me my weakest skill and what to do about it." | One focus skill with one chart and one action, skills over time, the next redos. |
+| History | "Let me find an old round, open its debrief or delete it." | A calm table of every round, unfinished ones marked. |
+| Settings | "Let me set the plan and the tools once." | Sections with one Save button. |
+| Start | "Get me ready for the round." | He reads the plan in the plan panel, picks a mode, and starts with one button. |
 | Room | "Let me work, keep me honest about time, and let me talk to the interviewer." | Work area as large as possible, time plan always readable, chat always ready. |
 | Pause | "Stop the clock, and make it obvious how to carry on." | Work hidden, one large Resume button, the reason for the pause stated. |
 | Debrief | "Tell me straight how it went, then fix my gaps." | The call, the scores and one next step in one screen, gaps next, evidence on demand in tabs. |
@@ -317,26 +321,31 @@ text field, the board or the editor lists every keyboard shortcut.
 ## 4. Information architecture and flows
 
 ```
- Home ──(choose a round)──► Start dialog ──(Start)──► Room ──(End interview / time up)──► Debrief
-  │  ▲                                                 │ ▲                                 │
-  │  └──────────────── Back to home ◄──────────────────┘ │                                 ├─ Gaps ──► Coach chat
-  │                                                      │                                 └─ Study notes ──► Save
-  ├─ Resume strip ──(Resume)─────────────────────────────┘
-  ├─ Resume strip ──(Discard)──► confirm ──► Home
+ Today ──(Start)──► Room ──(End interview / time up)──► Debrief
+  │  ▲                    │ ▲                                │
+  │  └── Back to home ◄───┘ │                                ├─ Gaps ──► Coach chat
+  │                         │                                └─ Study notes ──► Save
+  ├─ Unfinished card ──(Finish)──────────┘
+  ├─ Unfinished card ──(End and debrief)──► Debrief
+  ├─ Unfinished card ──(Discard)──► confirm ──► Today
+  ├─ See the plan ──► plan panel ──(Start)──► Room
+  ├─ Library row ──(Start)──► Room
   ├─ History row ──(Open)──► Room or Debrief
-  └─ Settings dialog
+  └─ Settings page
 ```
+
+The main bar (Today, Library, Gym, DSA, Progress, History, and Usage and Settings icons) shows on the reading pages.
+Rooms and debriefs are full screen without it.
 
 ### Start a round
 
-1. Home shows **one recommended round** at the top, with the other due redos beside it.
-2. He presses **Start interview** (or **Guided**) on any problem. A start dialog opens. It shows the problem, the
-   mode, the length from his settings, and the plan track for that length with each phase's goal.
-3. Focus is on the start button. **Enter** starts the round; **Escape** closes the dialog. The dialog shows
-   "Preparing the interviewer…" while the server creates the session.
+1. Today shows **one session**, chosen from the weekly plan, with the other unfinished rounds and redos beside it.
+2. He presses the one filled button ("Start guided round" or "Start interview round"). "See the plan" opens a side
+   panel with the mode switch, the step plan with its minutes and last time's minutes, and the last try. In the Library
+   he selects a row and starts from the detail panel.
+3. The button shows a spinner while the server creates the session, then the room opens.
 
-The dialog adds one key press. It earns it: starting creates a model session and a clock, and the dialog is the
-moment to read the plan before the clock runs. A real round has the same moment.
+The plan panel is the moment to read the plan before the clock runs. The room shows the same plan.
 
 ### During the round
 
@@ -406,35 +415,63 @@ moment to read the plan before the clock runs. A real round has the same moment.
   draft any time." The proposal view keeps every behaviour: grouped by file, a tick box per change, blocked changes
   disabled with the reason, a diff per file, **Save selected**, the result list, and **Draft again** on a stale draft.
 
-### Resume or discard from home
+### Finish or discard from Today
 
-- When a round is live or paused, a strip at the top of home says "Chat System is paused. Started 30 Sept,
-  20:15." with **Resume** and **Discard**. Discard asks first, with the same text as today.
+- A round paused in the last 24 hours is the Today hero, with **Finish** as its primary action. Older unfinished rounds
+  sit in the Unfinished card with **Finish** and **End and debrief**. A round with under 5 minutes of clock offers
+  **Discard** in place of End and debrief. Discard asks first, with the same text as the room.
 
 ---
 
 ## 5. Changes per screen
 
-### Home
+### Main bar and page frame
 
-- **Header.** "Sparmate" on a filled brand tile, a one-line progress summary, and Settings. Usage and
-  Settings show only their icons on a phone. Test mode stays as a warn pill.
-- **Resume strip** for each live or paused round, above everything else, on a warm fill with a solid icon.
-- **Progress.** One raised panel with a column per track. Each column shows a large count ("1 of 6"), one pip
-  per problem (done first, then partly done, then not started) and a legend with the last round date. A redo that
-  is due shows as a warn pill in the column header.
-- **Up next.** The recommended round is the mesh panel: an amber "Recommended" (or "Redo") pill, the title at 48 px in
-  the rounded face, the reason, Start interview as the primary key and Guided as the secondary button. The plan, drawn
-  to scale with its phase minutes, sits on a dark glass tile over the glow. Due redos are one line each in a raised
-  panel below it.
-- **Problem lists.** One raised panel with a toolbar (track tabs, status filter, sort) on a muted fill, and
-  one row per problem. A row reads like a table line: tracker mark, title, difficulty, last attempt with its
-  verdict, and the two start buttons. The summary shows as a tooltip on the title. The recommended and the redo
-  row carry a coloured edge and a tint. On a phone the row wraps into three short lines.
-- **Practise any question.** Same fields and limits, below the lists.
-- **History.** One raised panel with a muted header row and an actions column. The table scrolls sideways on a
-  phone.
-- **Start dialog**, described in section 4.
+- **Bar.** "Sparmate" on a filled brand tile, six links with a 2 px underline on the current page, and icons for Usage,
+  Settings and shortcuts. The links scroll inside the bar on a phone. Test mode stays as a warn pill.
+- **Frame.** A centred column about 1160 px wide. Heroes are mesh panels with one filled button. Side cards are raised
+  panels. Detail goes behind a side panel, a popover or an info tip, never in an accordion. A fact never shares a line
+  with dots: each has its own label and value.
+
+### Today
+
+- **Header.** The date as a kicker, the day's title, and a quiet week strip with today marked.
+- **Hero.** A mesh panel: an amber chip ("Redo due", "New problem" or "Unfinished") and a track pill, the title at 64 px in
+  the rounded face, one sentence why, a facts tile (Mode, Round, Debrief), at most one amber warning line, then the filled
+  primary button, "See the plan" and a quiet link to the Library.
+- **Side.** An Unfinished card with a clock bar, and a link card for the other redos.
+- **Plan panel.** A panel from the right: mode switch, the plan bar drawn to scale, a table of step, plan and last time,
+  and a last-try tile.
+
+### Library
+
+- **Switches.** Track (HLD, LLD, My questions, each with a count) and filter (Fresh first, Redo due, All).
+- **List.** One raised panel with groups. A row has a mark, title, difficulty and a two-line result, and no button.
+- **Detail.** A sticky raised panel: chips, title, the interviewer's opening line, a facts tile, the mode switch with an
+  info tip, one filled Start button and a caption.
+- **Practise any question** opens its own page with the same fields and limits as before.
+
+### Progress
+
+- **Focus card.** A mesh panel with the lowest skill, its score, one supporting number, a planned-against-used chart with
+  one bar per step, and one action.
+- **Skills.** A Guided and Interview switch, a 1 to 4 track per skill with a dashed line at the target bar, a dot per
+  round and the latest number.
+- **Next redos.** The next two, and a side panel with the full queue.
+
+### History
+
+- One raised panel with a header row and an actions column. The table scrolls sideways on a phone. An unfinished round
+  carries a warn chip and a Finish button.
+
+### Settings
+
+- A left nav on desktop and a scrolling row of buttons on a phone. Raised sections hold label and control pairs, with a
+  hairline between pairs. One filled "Save changes" button sits at the top right.
+
+### Gym and DSA
+
+- Placeholders with the final header, a mesh panel with the empty-state text and a ghost of the side card.
 
 ### Room
 
@@ -531,7 +568,7 @@ moment to read the plan before the clock runs. A real round has the same moment.
 
 Scripts and tests depend on these, so the revamp keeps them exactly.
 
-- Text "Sparmate" on the home page (`scripts/smoke-ui.mjs`).
+- Text "Sparmate" on Today (`scripts/smoke-ui.mjs`).
 - A button whose text contains "End interview" in the room, and a confirm button whose text is "End interview"
   (`scripts/e2e/ui-tour.mjs`).
 - Text "What the judge saw", "Strengths" or "Teach me" on the debrief (`ui-tour.mjs`).
@@ -540,8 +577,9 @@ Scripts and tests depend on these, so the revamp keeps them exactly.
 - The room root keeps `flex h-full`, the room never scrolls as a whole, and no scroller sits inside another
   (`scripts/e2e/layout-check.mjs`).
 - `window.__irBoard` and `window.__irShell` with `?testhooks=1`, and the `__fixtureLog` in fixture mode.
-- Fixture URL parameters: `fixture`, `theme`, `mode`, `status`, `settings`, `error`, `reason`, `offline`,
-  `timeup`, `stale`, `preparing`.
+- Fixture names: `home` (Today), `library`, `library-new`, `progress`, `history`, `settings`, `gym`, `dsa`, the room and debrief
+  fixtures, and `usage`. URL parameters: `fixture`, `theme`, `mode`, `status`, `error`, `reason`, `offline`, `timeup`,
+  `stale`, `preparing`, `now` (a date, for Today and Progress), `unfinished=0`, `username`, `plan`, `testmode=0`.
 
 ---
 

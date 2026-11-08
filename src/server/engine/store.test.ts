@@ -219,6 +219,51 @@ describe("fields added later", () => {
     expect(summarize(session({ mode: "guided", status: "debriefed", scorecard: card })).readiness).toBe("not_yet");
   });
 
+  it("leaves the scores out of an unscored round and carries its clock", () => {
+    const item = summarize(session());
+    expect(item.scores).toBeUndefined();
+    expect(item.gaps).toBeUndefined();
+    expect(item.clock).toMatchObject({ pausedMs: 0, pauseStartedAt: null, durationMs: 45 * 60_000 });
+  });
+
+  it("puts the scores, phase timing and gap state of a scored round in its summary", () => {
+    const card = {
+      verdict: { sde2: "lean_no_hire" },
+      dimensions: [
+        { id: "driving", name: "Driving and time", score: 1, evidence: [], whatA4LooksLike: "" },
+        { id: "depth", name: "Technical depth", score: 3, evidence: [], whatA4LooksLike: "" },
+      ],
+      gaps: [
+        { title: "Capacity math", severity: "high", whyItMatters: "", whatGoodLooksLike: "Each number ends in which means", teachMinutes: 5 },
+        { title: "Retries", severity: "low", whyItMatters: "", whatGoodLooksLike: "Backoff", teachMinutes: 3 },
+      ],
+      phaseTiming: [{ phase: "capacity", label: "Capacity math", plannedMinutes: 4, actualMinutes: 22 }],
+    } as unknown as Session["scorecard"];
+    const item = summarize(session({ status: "debriefed", scorecard: card, gapProgress: { "Capacity math": { by: "coach", state: "taught", at: "2026-11-01T10:00:00Z" } } }));
+    expect(item.scores).toEqual([
+      { id: "driving", name: "Driving and time", score: 1 },
+      { id: "depth", name: "Technical depth", score: 3 },
+    ]);
+    expect(item.phaseTiming).toEqual([{ phase: "capacity", label: "Capacity math", plannedMinutes: 4, actualMinutes: 22 }]);
+    expect(item.gaps).toEqual([
+      { title: "Capacity math", goodLooksLike: "Each number ends in which means", severity: "high", done: true },
+      { title: "Retries", goodLooksLike: "Backoff", severity: "low", done: false },
+    ]);
+  });
+
+  it("marks a gap round in its summary, and an ordinary or older round as not one", () => {
+    expect(summarize(session({ focus: { title: "Capacity math", goodLooksLike: "x" } })).focus).toBe(true);
+    expect(summarize(session()).focus).toBe(false);
+    const { focus: _f, ...old } = session();
+    expect(summarize(old as Session).focus).toBe(false);
+  });
+
+  it("says when a paused round stopped", () => {
+    const at = "2026-11-07T09:00:00.000Z";
+    const item = summarize(session({ status: "paused", pauseReason: "user", pauseStartedAt: at, startedAt: "2026-11-07T08:00:00.000Z" }));
+    expect(item.pause).toEqual({ reason: "user", pausedAt: at, timeLeftMs: 0 });
+  });
+
   it("loads a session saved before gap progress existed with no records, and keeps saved ones", async () => {
     const { gapProgress: _g, ...old } = session({ status: "debriefed" });
     await mkdir(join(dir, ID), { recursive: true });
@@ -288,7 +333,7 @@ describe("fields added later", () => {
       }),
     );
     const [item] = store.history();
-    expect(item?.pause).toEqual({ reason: "away", timeLeftMs: 35 * 60_000 });
+    expect(item?.pause).toEqual({ reason: "away", pausedAt: new Date(start.getTime() + 11 * 60_000).toISOString(), timeLeftMs: 35 * 60_000 });
     expect(item?.notesSaved).toBe(true);
   });
 });

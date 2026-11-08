@@ -32,7 +32,7 @@ export function UsagePage({ initial }: { initial?: UsageSummaryResponse } = {}) 
 
   return (
     <div className="page-canvas flex h-full min-h-0 flex-col overflow-y-auto">
-      <AppHeader title="Usage" titleAs="p" />
+      <AppHeader />
 
       <main tabIndex={-1} className="reveal-children mx-auto w-full max-w-6xl flex-1 space-y-8 px-4 pb-16 pt-8 sm:px-8">
         <div className="space-y-1">

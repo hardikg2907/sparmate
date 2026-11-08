@@ -1,4 +1,5 @@
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
+import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 /** A radio group drawn as a segmented control: arrow keys move and select, as in any radio group. */
@@ -14,7 +15,7 @@ export function Segmented<T extends string>({
 }: {
   label: string;
   value: T;
-  options: { value: T; label: string; title?: string }[];
+  options: { value: T; label: string; title?: string; count?: number; icon?: ReactNode }[];
   onChange: (value: T) => void;
   name?: string;
   disabled?: boolean;
@@ -37,11 +38,13 @@ export function Segmented<T extends string>({
           value={option.value}
           title={option.title}
           className={cn(
-            "inline-flex items-center rounded-[5px] px-3 text-ui font-semibold text-muted-foreground transition-[color,background-color,box-shadow] duration-150 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-55 data-[state=checked]:bg-card data-[state=checked]:text-foreground data-[state=checked]:shadow-xs data-[state=checked]:ring-1 data-[state=checked]:ring-input/70",
+            "inline-flex items-center gap-2 rounded-[5px] px-3 text-ui font-semibold text-muted-foreground transition-[color,background-color,box-shadow] duration-150 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-55 data-[state=checked]:bg-card data-[state=checked]:text-foreground data-[state=checked]:shadow-xs data-[state=checked]:ring-1 data-[state=checked]:ring-input/70",
             size === "sm" ? "h-7" : "h-8",
           )}
         >
+          {option.icon}
           {option.label}
+          {option.count === undefined ? null : <span className="text-meta font-semibold text-faint">{option.count}</span>}
         </RadioGroupPrimitive.Item>
       ))}
     </RadioGroupPrimitive.Root>

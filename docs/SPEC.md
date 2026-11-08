@@ -241,7 +241,7 @@ fail loudly in development. Files and variables:
 gap and quoting the judge's "what good looks like", so the guide steers every step toward it.
 
 Common variables: `date` (YYYY-MM-DD), `problem_title`, `track` ("hld"/"lld"), `mode`, `duration_min`,
-`candidate_profile` (read from `<studyRoot>/ABOUT_ME.md` when present, else `content/candidate.md`). The bar comes from one line of that profile, `Target: SDE-2; stretch: senior; company: Series A to C startup`, read by `src/shared/target.ts`. Each part is optional and defaults to the value shown; the line is matched only as `Target:` at the start of a line, so other wording never changes the bar. It fills `target_level`, `stretch_level` and `target_company`, and the same variables fill the rubric text before it enters a prompt. The page never names a fixed level: it says "target level" and "stretch level" (the Home result badge reads "Result at your target level", and the top score word is "Stretch signal"). The judge copies the two level names into `verdict.targetLevel` and `verdict.stretchLevel`, and the debrief shows them; the stored verdict keys stay `sde2` (the target level call) and `senior` (the stretch level call). `problem_brief` is the problem file body.
+`candidate_profile` (read from `<studyRoot>/ABOUT_ME.md` when present, else `content/candidate.md`). The bar comes from one line of that profile, `Target: SDE-2; stretch: senior; company: Series A to C startup`, read by `src/shared/target.ts`. Each part is optional and defaults to the value shown; the line is matched only as `Target:` at the start of a line, so other wording never changes the bar. It fills `target_level`, `stretch_level` and `target_company`, and the same variables fill the rubric text before it enters a prompt. The page never names a fixed level: it says "target level" and "stretch level" (the Library result badge reads "Result at your target level", and the top score word is "Stretch signal"). The judge copies the two level names into `verdict.targetLevel` and `verdict.stretchLevel`, and the debrief shows them; the stored verdict keys stay `sde2` (the target level call) and `senior` (the stretch level call). `problem_brief` is the problem file body.
 `teaching_md` is the study root's `TEACHING.md`, read fresh at role start. `rubric` is
 `content/rubrics/<track>.md`. `phase_plan` is one line per phase: `- <label>: about <n> min — <goal>`.
 
@@ -393,7 +393,7 @@ On end: status `debriefing`, `debrief.progress` updates, then:
    (end minus start minus pauses) above 1.5 times the round's planned duration ("The round took 80 minutes against a
    45-minute plan."). The call is `ready` only when there are no reasons. The judge, the dimension scores, the gaps, the
    coach and the tracker mark (`[~]`) work as before, and `verdict.sde2` stays in the data, but the page shows no hire
-   verdict for a guided round that has a readiness call. `GET /api/sessions` and the home list carry `readiness.call`
+   verdict for a guided round that has a readiness call. `GET /api/sessions` and the Library list carry `readiness.call`
    for the badge. Sessions saved before the field existed have none and show their verdict.
 6. Add `phaseTiming` and `quoteChecks`, save, status `debriefed`, send `debrief.ready` and a fresh
    `session.state` (which now includes `reference`).
@@ -429,7 +429,7 @@ On end: status `debriefing`, `debrief.progress` updates, then:
   will add it to his tracker.
 - The scribe input also carries any written step text, any step notepads a session holds (labelled as a summary to
   check against the transcript), and the step checklist with what was covered and where. The draft and its result are recorded on
-  `Session.studyNotes` (proposal id, status, number of saved changes, save time), so a reload and the home history
+  `Session.studyNotes` (proposal id, status, number of saved changes, save time), so a reload and the History page
   still show whether the notes were saved.
 - "Draft study notes" runs the scribe (section 10) and sends `bookkeeping.proposal`. The user ticks ops and
   clicks Save: `bookkeeping.apply`.
@@ -457,7 +457,7 @@ about 300 ms):
 
 Keep the FakeDriver in its own file so the Claude driver has no test-only branches.
 
-### 5.10 Home list and recommendation
+### 5.10 Library list and recommendation
 
 `GET /api/problems` builds `ProblemSummary[]` from `content/problems/**` plus `DATA_DIR/custom-problems/`,
 tracker marks (section 10.1) and app history:
@@ -468,6 +468,34 @@ tracker marks (section 10.1) and app history:
   means HLD). Tracker order = the order of bullets in the section.
 - `summary`: the first sentence of the problem's "Opening prompt", which the candidate hears anyway. Nothing from
   a hidden section is used.
+
+### 5.10a Today's session
+
+`selectToday` in `src/shared/today.ts` is a pure function of the clock, the weekly plan (`Settings.weeklyPlan`, Monday
+first), the problem list and the history. It answers with the day's kind, one hero, the other unfinished rounds and the
+redo queue. The order of its rules:
+
+1. A round paused within the last 24 hours (or still marked live) is the hero on any day, including a rest day. The
+   primary action is Finish. When several qualify, the newest wins and the rest go to the Unfinished card.
+2. A rest day shows a calm rest hero. A DSA day shows "Solve on LeetCode" with a link to `https://leetcode.com/problemset/`
+   and, when a scored round has a gap the coach has not finished, a 20-minute gap round on the newest such gap.
+3. On an HLD or LLD day the order is: a due redo of that track, then an unfinished (older than 24 hours) round of that
+   track, then the next new problem of that track. The next new problem is the server's recommendation when it is on
+   the track, else the first `[ ]` non-custom problem of the track in list order (the list order follows the tracker).
+   With nothing on that track it falls back to the other track.
+4. On a redo day the oldest due redo of any track leads. With none due, the hero is a new problem on the track with
+   fewer rounds in the last 14 days.
+5. A problem with an open round is never offered as a redo or as a new problem. Its round is the way back to it, and
+   a redo of that problem waits until the round ends.
+6. An unfinished round with less than 5 minutes of clock used offers Discard in place of End and debrief.
+7. The mode is guided when the last attempt at the problem was a guided round with readiness `not_yet`, else interview.
+
+The hero's warning line comes from `largestOverrun`: the one step of the last scorecard's phase timing that ran at
+least 3 minutes and 1.5 times over its plan. With no such step the line is left out.
+
+`src/shared/progress.ts` holds the Progress derivations: the focus skill (lowest average score over the newest three
+scored interview rounds, or guided rounds when there is no interview round), the per-skill rows for each mode, and the
+week's counts (a finished round on a problem tried before counts as a redo).
 
 ### 5.11 HTTP and WebSocket (ENGINE agent)
 
@@ -481,13 +509,14 @@ REST endpoints (JSON):
 | GET | `/api/custom-problems/:jobId` | `CustomProblemJobStatus` (`{ id, stage, searches, pages, problemId?, title?, track?, sourcesCount?, checksCount?, corrections?, confidence?, costUsd?, error? }`). `stage` is `researching`, `writing`, `checking`, `ready`, `failed` or `cancelled`. |
 | DELETE | `/api/custom-problems/:jobId` | Cancels a running custom problem preparation job, aborts its model process, and marks the job `cancelled`. Same Host, Origin and CSRF checks as other writes. Answers the updated status, or 404 if not found. |
 | POST | `/api/sessions` | `CreateSessionRequest` -> `{ sessionId }`. Custom prompt runs the brief-writer first (can take a minute). LLD creates the attempt file. A `focus` (gap title and "what good looks like") is allowed only with `problemId` and mode `guided`; it starts a 20-minute guided round and is kept on the session. |
-| GET | `/api/sessions` | history: `{ id, problemId, title, track, mode, createdAt, status, verdict, readiness, pause, notesSaved }[]`, newest first. `pause` is `{ reason, timeLeftMs }` while paused (`timeLeftMs` is null in a guided round), else null. `notesSaved` is true once study notes were written. |
+| GET | `/api/sessions` | history: `SessionHistoryItem[]` (`{ id, problemId, title, track, mode, createdAt, status, verdict, readiness, pause, notesSaved, clock, scores, phaseTiming, gaps }`), newest first. `pause` is `{ reason, pausedAt, timeLeftMs }` while paused (`timeLeftMs` is null in a guided round), else null. `notesSaved` is true once study notes were written. `clock` is the raw round clock (`startedAt`, `pausedMs`, `pauseStartedAt`, `durationMs`). A scored round also carries `scores` (`{ id, name, score }[]`), `phaseTiming` and `gaps` (`{ title, goodLooksLike, severity, done }[]`), so the pages need no per-round fetch. Every field after `notesSaved` is optional, and a round saved by an older version loads without them. |
 | GET | `/api/sessions/:id` | `PublicSession` |
+| POST | `/api/sessions/:id/end` | Ends a live or paused round that nobody has open and starts its debrief. Answers `{ ok: true }`. `404` for an id that fails the id regex or a round that does not exist; `409` when the round already ended. Same Host, Origin and CSRF checks as every other write. |
 | DELETE | `/api/sessions/:id` | Discard the round (below). Answers `{ ok: true }`. `404` for an id that fails the id regex or a round that does not exist; `409` while the status is `debriefing`. Same Host, Origin and CSRF checks as every other write. |
 | GET | `/api/sessions/:id/board` | `{ version, elements }` |
 | GET | `/api/sessions/:id/board-final.png` | image |
 | GET | `/api/sessions/:id/code` | `{ version, content, path }` (LLD) |
-| GET | `/api/settings`, PUT `/api/settings` | `Settings` (zod-validated) |
+| GET | `/api/settings`, PUT `/api/settings` | `Settings` (strict zod schema: unknown keys are rejected). Besides models, effort, durations and theme it holds `weeklyPlan` (7 entries, Monday first, each `hld`, `lld`, `dsa`, `redo` or `rest`; default `dsa, hld, dsa, hld, dsa, lld, redo`), `leetcodeUsername` (optional, 1 to 40 of letters, digits, `_` and `-`; stored only, the app does not call LeetCode) and `dsaWeeklyGoal` (integer 1 to 30, default 3). A settings file saved before these keys loads with the defaults. |
 | GET | `/api/usage` | `UsageResponse`: overall totals and breakdowns (by session, problem, role, model, day for last 30 days), cache hit rate, and `trackingSince`. |
 | GET | `/api/sessions/:id/usage` | `SessionUsageResponse`: round totals and per-role breakdown. |
 | GET | `/api/tts/status` | `{ available: boolean }` |
@@ -890,15 +919,60 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 
 ### 12.1 Screens
 
-**Home `/`**
-- Header: "Sparmate", a quiet progress summary, a link to the Usage page, and a settings button.
-- Progress overview: compact card per track with a stacked progress bar (done, partly done, not started), count legend, redo due count, and date of last round.
-- "Up next" card for the problem with `badge: "next"` and any `redo` problems, each with "Start interview" and an outlined secondary "Guided" button of matching height.
-- Single full-width problem list with a track switch at the top: segmented tabs ("System design · HLD" and "Machine coding · LLD", each with count, persisted in `localStorage`).
-- Status filter (All, Not started, Partly done, Done, Redo due) and sort (Tracker order, Difficulty, Last attempt) in one compact row above the problem list, persisted in `localStorage`, with an empty state and "Clear filter" button.
-- Problem list rows: mark chip (`[ ]`, `[~]`, `[x]`), title, summary, difficulty, last attempt (date and verdict label chip; a guided attempt with a readiness call shows "Ready" or "Not yet" instead), badge, and matching-height "Start interview" and outlined "Guided" buttons.
-- "Practise any question": a textarea for a pasted prompt, an HLD/LLD toggle, and a Prepare button. Displays multi-stage preparation progress ("Researching · N searches, M pages", "Writing the brief", "Checking facts"). Once ready, shows a setup card with problem title, track, sources count, checks count, corrections applied, confidence note, and "Start interview" / "Guided" buttons without revealing the hidden brief text. The debrief reference answer section renders the verified research sources with secure outbound links (`target="_blank"`, `rel="noreferrer noopener"`).
-- History: recent sessions with date, title, mode, a result chip (the verdict as its plain label, or "Ready" or "Not yet" for a guided round with a readiness call, or the status: In progress, Paused, Round ended, Debriefing, Debriefed, Debrief failed), a link (Resume for a live or paused round, else Open debrief or Open) and a "Discard" button. A debriefed round shows "Notes saved" or "Notes not saved". The open-round strip at the top says why a paused round paused and how many minutes were left. Discard asks first, with the same confirm text as the room, then calls `DELETE /api/sessions/:id` and preserves scroll position using `focus({ preventScroll: true })`. It is disabled while the status is Debriefing.
+**Main bar** (every page except the room, the debrief and the start flow)
+- "Sparmate" and six links: Today, Library, Gym, DSA, Progress, History. The current page is underlined. Usage and
+  Settings are icons on the right, with the Test mode pill beside them. On a phone the links scroll sideways inside
+  the bar, so the page never does. The Gym link shows no count until the Gym exists.
+
+**Today `/`**
+- Kicker date and the day's title ("System design day", "Machine coding day", "DSA day", "Redo day", "Rest day"). A
+  quiet week strip top right marks today and shows each day's kind from the weekly plan.
+- The hero card is the session `selectToday` picks (section 5.10a): chips ("Redo due" or "New problem", the track), the
+  problem title large, one sentence why, a facts row (Mode, Round, Debrief), at most one warning line, the one filled
+  primary button, "See the plan" and a quiet "Pick another problem" link to the Library. "See the plan" opens a side
+  panel with the mode switch, the step plan with its minutes and the minutes of the last try, the last try's result, and
+  a link to the last debrief. A round to finish shows Finish as the primary action. A DSA day shows "Open LeetCode"
+  (new tab, `rel="noopener noreferrer"`).
+- Side column: an Unfinished card for the newest unfinished round (title, paused date, clock used of the total with a
+  bar, Finish, and End and debrief, or Discard under 5 minutes of clock), with "N more unfinished rounds" linking to
+  History; a link card "N more redos" to Progress. End and debrief calls `POST /api/sessions/:id/end` and opens the round.
+
+**Library `/library`**
+- Track switch HLD, LLD and My questions with counts; filter Fresh first (default), Redo due, All. Rows hold a status
+  mark, title, difficulty and the last result on two lines (a coloured result word and a small detail such as "Redo due
+  8 Nov" or "Round open"), grouped Fresh then Tried before. A row has no button: selecting it fills the right panel with
+  the chips, the title, the interviewer's opening line, the Status, Round and Debrief facts, the Interview or Guided
+  switch (default from the mode rule), one primary Start button and a small caption. A problem with an open round shows
+  "Finish the open round" in place of Start.
+- "Practise any question" (top right) opens `/library/new`: a textarea for a pasted prompt, an HLD/LLD toggle and a
+  Prepare button. It shows multi-stage preparation progress ("Researching: N searches, M pages", "Writing the brief",
+  "Checking facts"). Once ready it shows a setup card with the problem title, track, sources count, checks count,
+  corrections applied, a confidence note, and "Start interview" and "Guided" buttons, without revealing the hidden brief.
+  The debrief's reference section renders the verified research sources with secure outbound links (`target="_blank"`,
+  `rel="noreferrer noopener"`).
+
+**Progress `/progress`**
+- Header row with "This week": Rounds finished of planned, Redos of planned, and Drills and DSA mediums as "—" with an
+  info tip ("Coming with the Gym", "Coming with DSA") until those pages exist.
+- Main card "Focus this week": the lowest skill from the newest scored rounds, its score out of 4, one supporting number,
+  and one chart with a bar per step, planned minutes against used minutes, from the newest scorecard's phase timing. The
+  primary button is "Practise this gap" (a 20-minute guided round on the newest open gap whose text names the skill) or,
+  with no such gap, "Start a round" to Today.
+- Side cards: Skills with a Guided and Interview switch (never mixed), a 1 to 4 track per skill with the target bar
+  marked, one dot per round (the newest bold) and the latest number, and an info tip that explains the scale; and Next
+  redos with the next two and their dates, "See all N" opening a side panel with the full queue.
+
+**History `/history`**
+- Every round, newest first: date, problem and track, mode, a result chip (the verdict as its plain label, or "Ready" or
+  "Not yet" for a guided round with a readiness call, or the status), a link (Finish for a live or paused round, else
+  Open debrief or Open) and a "Discard" button. A debriefed round shows "Notes saved" or "Notes not saved". An unfinished
+  round carries an "Unfinished" chip. Discard asks first, with the same confirm text as the room, then calls
+  `DELETE /api/sessions/:id`. It is disabled while the status is Debriefing.
+
+**Gym `/gym` and DSA `/dsa`**
+- Placeholder pages with their final headers and a calm empty state that previews the layout. Gym: "Drills from your gaps
+  are coming. Each takes 10 to 15 minutes on one skill." DSA: with no username, "Add your LeetCode username in Settings"
+  and a button to Settings; with one, "LeetCode progress is coming." They show no numbers.
 
 **Room `/session/:id`** (status `live` or `paused`)
 - Top bar: title, mode chip, the phase rail (click a phase to move there; shows each phase's planned minutes;
@@ -907,7 +981,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   and a small "More round actions" menu that holds "Discard round". The confirm for End interview says it ends the
   round and runs the scored debrief. The confirm for Discard round says the transcript, board and score are deleted,
   there is no debrief, the study files are not touched, and, for an LLD round, the attempt file is kept if it has
-  code in it. When the server sends `session.discarded`, the page goes to Home. Leaving a live interview round asks
+  code in it. When the server sends `session.discarded`, the page goes to Today. Leaving a live interview round asks
   for confirmation and says the round pauses about a minute after the last tab closes.
 - HLD: the board fills the main area; the chat panel is on the right (about 380 px, resizable is optional).
 - LLD: the main area has tabs "Code" and "Class diagram" (the board with the LLD palette); the console sits
@@ -978,11 +1052,15 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 - Informational notes explaining API-equivalent cost vs Claude plan limits and tracking start date.
 - Friendly empty state when no calls have been logged yet.
 
-**Settings** (a modal): models and effort per role, HLD and LLD durations, theme, and voice options
-(speak replies on/off, voice engine: Kokoro with allow-listed voices and speed rate, or System with local-only
-voices ranked with English and quality defaults and macOS download hint, "I use headphones" toggle, and voice
-input send mode: review before sending vs auto-send after a pause). Shows the study root path. Saved with PUT
-(voice options stored in browser local storage).
+**Settings `/settings`**
+- A left section nav (Weekly plan, DSA and LeetCode, Rounds, Models, Voice and theme, Study folder) and one "Save changes"
+  button. Edits stay in a draft until Save; the theme applies on save. Sections: the weekly plan (one choice per day, with
+  a reset to the default plan); the LeetCode username (1 to 40 letters, digits, underscores or hyphens) and the weekly DSA goal; the HLD and
+  LLD round lengths; models and effort per role; theme and voice options (speak replies on or off, speed, "I use
+  headphones", and the voice input send mode: review before sending or auto-send after a pause); the study root path.
+  Server settings are saved with PUT; voice options are stored in browser local storage. Leaving with unsaved edits asks
+  "Leave without saving?" first, whether by an in-app link, the browser's Back or Forward (the router puts the settings
+  address back and asks), or a reload or closed tab (the browser's own prompt).
 
 ### 12.2 Data flow
 
