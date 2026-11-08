@@ -1,6 +1,6 @@
 // End-to-end check of pausing and discarding with the fake model driver (SPARMATE_FAKE_AGENT=1).
 //
-//   PORT=4758 node scripts/e2e/ws-fake-pause.mjs     port from 4750 to 4759; 4758 when PORT is unset
+//   PORT=4758 node scripts/e2e/ws-fake-pause.mjs     port from 4750 to 4759; a free port in that range when PORT is unset
 //   node scripts/e2e/ws-fake-pause.mjs --keep        keeps the temp folder for inspection
 //
 // It starts the server against a temp copy of the study folder with SPARMATE_AWAY_MS shortened to a few seconds, then
@@ -15,10 +15,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { pickFreePort } from "../lib/freePort.mjs";
 import { KIT_DIR, copyStudyKit } from "../lib/tempStudy.mjs";
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PORT = Number(process.env.PORT ?? 4758);
+const PORT = process.env.PORT ? Number(process.env.PORT) : await pickFreePort({ from: 4750, to: 4759, skip: [] });
 if (!(PORT >= 4750 && PORT <= 4759)) throw new Error("Use a port from 4750 to 4759");
 const KEEP = process.argv.includes("--keep");
 const BASE = `http://127.0.0.1:${PORT}`;

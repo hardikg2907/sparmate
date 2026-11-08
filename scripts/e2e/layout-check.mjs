@@ -4,6 +4,7 @@
 // 2. Visible elements overflow the viewport horizontally without an ancestor clip.
 // 3. Nested scroll containers scroll in the same direction as the page / ancestor.
 // 4. The room page scrolls as a whole (instead of individual panes).
+// PORT sets the port; when it is unset the script picks a free port from 4750 to 4799 (not 4780).
 
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -11,10 +12,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { pickFreePort } from "../lib/freePort.mjs";
 import { copyStudyKit } from "../lib/tempStudy.mjs";
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PORT = Number(process.env.PORT ?? 4764);
+const PORT = process.env.PORT ? Number(process.env.PORT) : await pickFreePort();
 const BASE = `http://127.0.0.1:${PORT}`;
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
