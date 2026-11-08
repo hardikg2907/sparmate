@@ -24,6 +24,8 @@ export const fixtureGym: GymSummary = {
   queue: [
     row(
       "a1b2c3d4e5f60001",
+      "Capacity math done without prompting",
+      null,
       "capacity",
       "Capacity math",
       "c2-url-shortener",
@@ -35,6 +37,8 @@ export const fixtureGym: GymSummary = {
     ),
     row(
       "a1b2c3d4e5f60002",
+      "Walking one request through every box",
+      null,
       "walk",
       "Walk a request",
       "c2-url-shortener",
@@ -46,6 +50,8 @@ export const fixtureGym: GymSummary = {
     ),
     row(
       "a1b2c3d4e5f60003",
+      "Asking about scale before drawing",
+      null,
       "requirements",
       "Requirements sprint",
       "c2-rate-limiter",
@@ -57,6 +63,8 @@ export const fixtureGym: GymSummary = {
     ),
     row(
       "a1b2c3d4e5f60004",
+      "Fan-out choices for a celebrity account",
+      "Fan-out on write or read",
       "deep_dive",
       "Pick a deep dive",
       "c2-news-feed",
@@ -68,6 +76,8 @@ export const fixtureGym: GymSummary = {
     ),
     row(
       "a1b2c3d4e5f60005",
+      "Spot and Ticket hidden in nested maps",
+      null,
       "lld_skeleton",
       "LLD skeleton",
       "b3-parking-lot",
