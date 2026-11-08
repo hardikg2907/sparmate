@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { CreateSessionSchema, PrepareCustomProblemSchema, type BootstrapResponse } from "../../shared/protocol";
+import { DrillSubmitSchema, DrillTargetSchema } from "../../shared/drills";
 import { SettingsSchema } from "../../shared/types";
 import type { ServerConfig } from "../engine/config";
+import type { DrillService } from "../engine/drills";
 import type { Logger } from "../engine/log";
 import { HttpError, type SessionManager } from "../engine/sessions";
 import type { SettingsStore } from "../engine/settings";
@@ -25,6 +27,7 @@ export interface RouteDeps {
   usageLedger?: UsageLedger;
   setupStatus?: SetupStatus;
   leetcode?: LeetcodeService;
+  drills?: DrillService;
 }
 
 function notFound(reply: FastifyReply) {
@@ -133,6 +136,34 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const rt = await manager.open(req.params.id);
     const snapshot = rt ? await rt.codeSnapshot() : null;
     return snapshot ?? notFound(reply);
+  });
+
+  app.get("/api/gym", async (_req, reply) => {
+    if (!deps.drills) return notFound(reply);
+    return deps.drills.summary();
+  });
+
+  app.post("/api/gym/prompt", async (req, reply) => {
+    const parsed = DrillTargetSchema.safeParse(req.body);
+    if (!parsed.success || !deps.drills) return badRequest(reply);
+    try {
+      return await deps.drills.prompt(parsed.data);
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
+  });
+
+  app.post("/api/gym/submit", async (req, reply) => {
+    const parsed = DrillSubmitSchema.safeParse(req.body);
+    if (!parsed.success || !deps.drills) return badRequest(reply, "Write an answer of up to 8000 characters.");
+    const { answer, ...target } = parsed.data;
+    try {
+      return await deps.drills.submit(target, answer);
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
   });
 
   app.get("/api/settings", async () => settings.get());

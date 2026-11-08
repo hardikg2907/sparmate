@@ -5,6 +5,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import { LIMITS } from "../../shared/protocol";
 import type { ServerConfig } from "../engine/config";
+import type { DrillService } from "../engine/drills";
 import type { Logger } from "../engine/log";
 import type { SessionManager } from "../engine/sessions";
 import type { SettingsStore } from "../engine/settings";
@@ -28,6 +29,7 @@ export interface AppDeps {
   usageLedger?: UsageLedger;
   setupStatus?: SetupStatus;
   leetcode?: LeetcodeService;
+  drills?: DrillService;
 }
 
 // The largest browser message is a board PNG; the scene and JSON framing ride on top of it.

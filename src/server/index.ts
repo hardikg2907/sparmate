@@ -3,6 +3,8 @@ import { loadPrivacyGuard, type PrivacyGuard } from "./guard/privacy";
 import { createCppRunner, type CppRunner } from "./runner/cpp";
 import { createClaudeDriver } from "./engine/claude-driver";
 import { APP_ROOT, dataPaths, loadAppEnv, loadConfig, studyRootPath } from "./engine/config";
+import { DrillStore } from "./engine/drill-store";
+import { DrillService } from "./engine/drills";
 import { createFakeDriver } from "./engine/fake-driver";
 import { createLogger, describeError, type Logger } from "./engine/log";
 import { ProblemCatalog } from "./engine/problems";
@@ -120,6 +122,9 @@ async function main(): Promise<void> {
   const cppTmpRoot = process.env.SPARMATE_IN_CONTAINER === "1" ? "/tmp/runtime/cpp" : paths.cppTmp;
   const manager = new SessionManager({ config, store, settings, driver, guard, runner: lazyRunner(cppTmpRoot, config.studyRoot), prompts, log, problems });
   await manager.init();
+  const drillStore = new DrillStore(paths.drills, log);
+  await drillStore.load();
+  const drills = new DrillService({ store: drillStore, history: () => manager.history(), problems, driver, settings, prompts, guard, log });
 
   const kokoro = new KokoroManager({ kokoroHome: config.kokoroHome, appRoot: config.appRoot });
 
@@ -136,7 +141,7 @@ async function main(): Promise<void> {
   // Read once at start, so a gap between visits stays small. The service still keeps its minimum wait.
   void leetcode.get().catch((err) => log.warn("The first LeetCode read failed", err));
 
-  const app = await buildApp({ config, csrfToken, manager, settings, store, kokoro, log, usageLedger, setupStatus, leetcode });
+  const app = await buildApp({ config, csrfToken, manager, settings, store, kokoro, log, usageLedger, setupStatus, leetcode, drills });
   const listenHost = process.env.SPARMATE_IN_CONTAINER === "1" ? "0.0.0.0" : "127.0.0.1";
   await app.listen({ port: config.port, host: listenHost });
   log.info(`Started on port ${config.port}${config.fakeAgent ? " with the fake agent" : ""}; ${guard.size()} privacy terms loaded`);

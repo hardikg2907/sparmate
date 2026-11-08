@@ -39,7 +39,13 @@ function scoredParts(s: Session): Pick<SessionSummary, "scores" | "phaseTiming" 
   return {
     scores: (card.dimensions ?? []).map((d) => ({ id: d.id, name: d.name, score: d.score })),
     ...(card.phaseTiming ? { phaseTiming: card.phaseTiming.map((p) => ({ ...p })) } : {}),
-    gaps: (card.gaps ?? []).map((g) => ({ title: g.title, goodLooksLike: g.whatGoodLooksLike, severity: g.severity, done: s.gapProgress?.[g.title]?.state === "taught" })),
+    gaps: (card.gaps ?? []).map((g) => ({
+      title: g.title,
+      goodLooksLike: g.whatGoodLooksLike,
+      severity: g.severity,
+      done: s.gapProgress?.[g.title]?.state === "taught",
+      ...(g.drill ? { drill: g.drill } : {}),
+    })),
   };
 }
 
@@ -51,6 +57,7 @@ export function summarize(s: Session): SessionSummary {
     track: s.track,
     mode: s.mode,
     createdAt: s.createdAt,
+    ...(s.endedAt ? { endedAt: s.endedAt } : {}),
     status: s.status,
     verdict: s.scorecard?.verdict.sde2 ?? null,
     readiness: s.scorecard?.readiness?.call ?? null,

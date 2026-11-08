@@ -47,6 +47,7 @@ export function dataPaths(dataDir: string) {
     settings: join(dataDir, "settings.json"),
     usage: join(dataDir, "usage.jsonl"),
     leetcode: join(dataDir, "leetcode.json"),
+    drills: join(dataDir, "drills.json"),
   };
 }
 

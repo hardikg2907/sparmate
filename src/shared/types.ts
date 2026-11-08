@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Mode, Track } from "./phases";
+import { DrillTypeSchema, type DrillType } from "./drills";
 import { LIMITS } from "./protocol";
 import { DAY_KINDS, DEFAULT_DSA_GOAL, DEFAULT_WEEKLY_PLAN, DSA_GOAL_MAX, DSA_GOAL_MIN, LEETCODE_USERNAME_PATTERN, isPastOrToday } from "./week";
 
@@ -17,12 +18,15 @@ export const SettingsSchema = z.strictObject({
     judge: z.enum(MODEL_IDS),
     coach: z.enum(MODEL_IDS),
     scribe: z.enum(MODEL_IDS),
+    // Drills arrived after the first settings files, so a file without a grader loads with the default.
+    grader: z.enum(MODEL_IDS).default("claude-sonnet-5-5"),
   }),
   effort: z.strictObject({
     interviewer: z.enum(EFFORTS),
     judge: z.enum(EFFORTS),
     coach: z.enum(EFFORTS),
     scribe: z.enum(EFFORTS),
+    grader: z.enum(EFFORTS).default("medium"),
   }),
   durations: z.strictObject({
     hld: z.union([z.literal(45), z.literal(60)]),
@@ -45,8 +49,8 @@ export const SettingsSchema = z.strictObject({
 export type Settings = z.infer<typeof SettingsSchema>;
 
 export const DEFAULT_SETTINGS: Settings = {
-  models: { interviewer: "claude-opus-5-5", judge: "claude-opus-5-5", coach: "claude-opus-5-5", scribe: "claude-opus-5-5" },
-  effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium" },
+  models: { interviewer: "claude-opus-5-5", judge: "claude-opus-5-5", coach: "claude-opus-5-5", scribe: "claude-opus-5-5", grader: "claude-sonnet-5-5" },
+  effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium", grader: "medium" },
   durations: { hld: 45, lld: 120 },
   theme: "dark",
   weeklyPlan: [...DEFAULT_WEEKLY_PLAN],
@@ -265,6 +269,8 @@ export interface HistoryGap {
   severity: "high" | "medium" | "low";
   /** The coach taught it all the way. */
   done: boolean;
+  /** The drill the judge chose for this gap, when one fits. */
+  drill?: DrillType;
 }
 
 /** One row of the round history: enough for Today, Progress and History without fetching each round. */
@@ -275,6 +281,8 @@ export interface SessionHistoryItem {
   track: Track;
   mode: Mode;
   createdAt: string;
+  /** When the round ended. Absent while it is open and for summaries saved before this existed. */
+  endedAt?: string;
   status: SessionStatus;
   verdict: Verdict | null;
   /** Guided rounds only: the readiness call the history badge shows in place of the hire verdict. */
@@ -387,6 +395,7 @@ export const ScorecardSchema = z.strictObject({
       whyItMatters: z.string(),
       whatGoodLooksLike: z.string(),
       teachMinutes: z.number().int().min(1).max(60),
+      drill: DrillTypeSchema.optional().describe("The short drill that trains this gap, or leave it out when none fits."),
     }),
   ),
   timeline: z.array(z.strictObject({ at: z.string(), note: z.string() })),
