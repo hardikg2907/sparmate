@@ -91,9 +91,16 @@ export function findBundledClaude(deps: Pick<SetupDeps, "exists" | "resolveModul
 
 async function checkCompiler(compiler: string, fix: string, deps: SetupDeps): Promise<SetupCheck> {
   const base = { id: "compiler" as const, optional: false, title: "C++ compiler" };
+  const missing = { ...base, ok: false, detail: "Machine-coding rounds need clang++ to compile and run your code.", fix };
+  // Without the Command Line Tools, macOS's /usr/bin/clang++ is a stub that opens the install dialog every time it
+  // runs, and this check runs at each server start. Asking xcode-select first keeps the stub from being touched.
+  if (deps.platform === "darwin" && compiler.startsWith("/usr/bin/")) {
+    const tools = await deps.spawn("/usr/bin/xcode-select", ["-p"], PROBE_TIMEOUT_MS);
+    if (!tools.finished || tools.exitCode !== 0) return missing;
+  }
   const probe = await deps.spawn(compiler, ["--version"], PROBE_TIMEOUT_MS);
   if (probe.finished && probe.exitCode === 0) return { ...base, ok: true, detail: "clang++ is installed." };
-  return { ...base, ok: false, detail: "Machine-coding rounds need clang++ to compile and run your code.", fix };
+  return missing;
 }
 
 async function checkClaudeLogin(opts: SetupCheckOptions, fix: string, deps: SetupDeps): Promise<SetupCheck> {
@@ -143,7 +150,10 @@ export async function runSetupChecks(opts: SetupCheckOptions, deps: SetupDeps = 
   ]);
 }
 
-/** A cached view of the checks. Start it at boot without waiting; reads re-run a failed result once it is stale. */
+/**
+ * A cached view of the checks. Start it at boot without waiting; reads re-run the checks once the result is stale
+ * and a required check failed. An optional miss such as the voice does not count, so it never slows each page load.
+ */
 export class SetupStatus {
   private cached: Promise<SetupCheck[]> | null = null;
   private finishedAt = 0;
@@ -162,7 +172,7 @@ export class SetupStatus {
     if (!this.cached) return this.refresh();
     const current = await this.cached;
     const stale = this.now() - this.finishedAt > this.staleAfterMs;
-    if (stale && current.some((check) => !check.ok)) return this.refresh();
+    if (stale && current.some((check) => !check.ok && !check.optional)) return this.refresh();
     return current;
   }
 

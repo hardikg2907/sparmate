@@ -84,6 +84,34 @@ describe("runSetupChecks", () => {
     expect(byId(checks, "compiler")).toMatchObject({ ok: false, optional: false, fix: "xcode-select --install" });
   });
 
+  it("never runs the macOS compiler stub when the Command Line Tools are missing", async () => {
+    const ran: string[] = [];
+    const deps = makeDeps();
+    const spawn = deps.spawn;
+    deps.spawn = async (command, args, timeoutMs) => {
+      ran.push(command);
+      if (command === "/usr/bin/xcode-select") return { finished: true, exitCode: 2, stdout: "" };
+      return spawn(command, args, timeoutMs);
+    };
+    const checks = await runSetupChecks(options, deps);
+    expect(byId(checks, "compiler")).toMatchObject({ ok: false, fix: "xcode-select --install" });
+    expect(ran).toContain("/usr/bin/xcode-select");
+    expect(ran).not.toContain("/usr/bin/clang++");
+  });
+
+  it("asks only the compiler itself on Linux", async () => {
+    const ran: string[] = [];
+    const deps = makeDeps({ platform: "linux", arch: "x64" });
+    const spawn = deps.spawn;
+    deps.spawn = async (command, args, timeoutMs) => {
+      ran.push(command);
+      return spawn(command, args, timeoutMs);
+    };
+    const checks = await runSetupChecks(options, deps);
+    expect(byId(checks, "compiler").ok).toBe(true);
+    expect(ran).not.toContain("/usr/bin/xcode-select");
+  });
+
   it("reports a signed-out user with the setup command", async () => {
     const checks = await runSetupChecks(options, makeDeps({ auth: { finished: true, exitCode: 1, stdout: JSON.stringify({ loggedIn: false }) } }));
     expect(byId(checks, "claude-login")).toMatchObject({ ok: false, optional: false, fix: "npm run setup" });
@@ -169,6 +197,18 @@ describe("SetupStatus", () => {
     now = 16_000;
     expect(await status.get()).toBe(good);
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-run when only an optional check failed", async () => {
+    let now = 0;
+    const voiceMissing: SetupCheck[] = [...good, { id: "kokoro", ok: false, optional: true, title: "t", detail: "d", fix: "f" }];
+    const run = vi.fn(async () => voiceMissing);
+    const status = new SetupStatus(run, 15_000, () => now);
+    status.start();
+    await status.get();
+    now = 10 * 60_000;
+    expect(await status.get()).toBe(voiceMissing);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it("does not re-run a passing result however old it is", async () => {
