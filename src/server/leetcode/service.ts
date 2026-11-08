@@ -1,9 +1,9 @@
-import { emptyDsa, type DsaResponse } from "../../shared/dsa";
+import { emptyDsa, type DsaFailure, type DsaResponse } from "../../shared/dsa";
 import type { Settings } from "../../shared/types";
 import { localDay } from "../../shared/week";
 import type { Logger } from "../engine/log";
 import { LeetcodeError, type LeetcodeClient } from "./client";
-import { computePass, computeWeek, dayStartSeconds, mergeLedger, recentRows, type ProblemInfo } from "./compute";
+import { computePass, computeWeek, dayStartSeconds, mergeLedger, recentRows } from "./compute";
 import { emptySnapshot, loadSnapshot, saveSnapshot, type AccountSnapshot, type Snapshot } from "./snapshot";
 
 const MINUTE = 60_000;
@@ -31,7 +31,7 @@ export interface ServiceOptions {
 
 export class LeetcodeService {
   private snapshot: Snapshot | null = null;
-  private attempt: { username: string; at: number; outcome: Outcome } | null = null;
+  private attempt: { username: string; at: number; outcome: Outcome; reason: DsaFailure | null } | null = null;
   private readonly inflight = new Map<string, Promise<void>>();
   private readonly now: () => number;
   private readonly minInterval: number;
@@ -62,18 +62,24 @@ export class LeetcodeService {
     return this.snapshot;
   }
 
-  private lastRead(username: string, snapshot: Snapshot): { at: number; outcome: Outcome } | null {
+  /** How the newest read for this name ended. After a restart the saved failure and the saved read say it. */
+  private lastRead(username: string, snapshot: Snapshot): { at: number; outcome: Outcome; reason: DsaFailure | null } | null {
     if (this.attempt?.username === username) return this.attempt;
-    // Nothing was tried since the server started, so the saved read says how fresh the numbers are.
     const account = snapshot.account?.username === username ? snapshot.account : null;
-    return account ? { at: Date.parse(account.fetchedAt), outcome: "ok" } : null;
+    const failure = snapshot.lastFailure?.username === username ? snapshot.lastFailure : null;
+    if (failure && (!account || Date.parse(failure.at) > Date.parse(account.fetchedAt))) {
+      return { at: Date.parse(failure.at), outcome: failure.reason === "not_found" ? "not_found" : "failed", reason: failure.reason };
+    }
+    return account ? { at: Date.parse(account.fetchedAt), outcome: "ok", reason: null } : null;
+  }
+
+  private waitAfter(outcome: Outcome, force: boolean): number {
+    return outcome === "failed" ? (force ? this.failedForced : this.failedAuto) : this.minInterval;
   }
 
   private due(username: string, snapshot: Snapshot, force: boolean): boolean {
     const last = this.lastRead(username, snapshot);
-    if (!last) return true;
-    const wait = last.outcome === "failed" ? (force ? this.failedForced : this.failedAuto) : this.minInterval;
-    return this.now() - last.at >= wait;
+    return !last || this.now() - last.at >= this.waitAfter(last.outcome, force);
   }
 
   private refresh(username: string, countFrom: string): Promise<void> {
@@ -91,46 +97,59 @@ export class LeetcodeService {
     try {
       const profile = await client.profile(username, signal);
       if (!profile.found) {
-        this.attempt = { username, at: this.now(), outcome: "not_found" };
+        await this.fail(username, "not_found", "not_found");
         return;
       }
       const recent = await client.recent(username, signal);
       const before = snapshot.account?.username === username ? snapshot.account.entries : [];
-      const entries = mergeLedger(before, recent, dayStartSeconds(countFrom));
+      const entries = mergeLedger(before, recent);
       const problems = { ...snapshot.problems };
-      const missing = [...new Set(entries.map((e) => e.slug))].filter((slug) => problems[slug] === undefined).slice(0, MAX_LOOKUPS);
+      const fromSec = dayStartSeconds(countFrom);
+      const missing = [...new Set(entries.filter((e) => e.timestamp >= fromSec).map((e) => e.slug))].filter((slug) => problems[slug] === undefined).slice(0, MAX_LOOKUPS);
       await lookUp(missing, LOOKUP_PARALLEL, async (slug) => {
         try {
           const info = await client.problem(slug, signal);
-          if (info) problems[slug] = info;
+          problems[slug] = info ?? { missing: true };
         } catch (err) {
           // One problem that cannot be read is left out of the topic counts until a later read.
           if (!(err instanceof LeetcodeError)) throw err;
         }
       });
       const account: AccountSnapshot = { username, fetchedAt: new Date(this.now()).toISOString(), lifetime: profile.profile.totals, entries };
-      this.snapshot = { version: 1, problems, account };
-      this.attempt = { username, at: this.now(), outcome: "ok" };
+      this.snapshot = { version: 1, problems, account, lastFailure: null };
+      this.attempt = { username, at: this.now(), outcome: "ok", reason: null };
       await saveSnapshot(this.options.filePath, this.snapshot).catch((err) => log.warn("Could not save leetcode.json", err));
     } catch (err) {
       log.warn("Could not read the LeetCode profile", err);
-      this.attempt = { username, at: this.now(), outcome: "failed" };
+      await this.fail(username, "failed", err instanceof LeetcodeError ? err.reason : "unreachable");
     }
+  }
+
+  private async fail(username: string, outcome: Outcome, reason: DsaFailure): Promise<void> {
+    const at = this.now();
+    this.attempt = { username, at, outcome, reason };
+    const snapshot = await this.load();
+    this.snapshot = { ...snapshot, lastFailure: { username, reason, at: new Date(at).toISOString() } };
+    await saveSnapshot(this.options.filePath, this.snapshot).catch((err) => this.options.log.warn("Could not save leetcode.json", err));
   }
 
   private build(username: string, countFrom: string, goal: number): DsaResponse {
     const snapshot = this.snapshot ?? emptySnapshot();
     const account = snapshot.account?.username === username ? snapshot.account : null;
-    const outcome = this.attempt?.username === username ? this.attempt.outcome : "ok";
-    if (outcome === "not_found") return emptyDsa(username, "not_found", goal, countFrom);
-    if (!account) return emptyDsa(username, "error", goal, countFrom);
+    const last = this.lastRead(username, snapshot);
+    const outcome = last?.outcome ?? "ok";
+    const failure = outcome === "ok" || !last ? null : { reason: last.reason ?? ("unreachable" as const), at: new Date(last.at).toISOString() };
+    const nextAt = last ? last.at + this.waitAfter(last.outcome, true) : 0;
+    const nextReadAt = nextAt > this.now() ? new Date(nextAt).toISOString() : null;
+    // A name that stops resolving after a good read keeps its saved numbers, shown as old, rather than a blank page.
+    if (!account) return { ...emptyDsa(username, outcome === "not_found" ? "not_found" : "error", goal, countFrom), failure, nextReadAt };
     const fromSec = dayStartSeconds(countFrom);
     const entries = account.entries.filter((e) => e.timestamp >= fromSec);
-    const problems = snapshot.problems as Readonly<Record<string, ProblemInfo>>;
+    const problems = snapshot.problems;
     const { pass, topics } = computePass(entries, problems, fromSec);
     return {
       username,
-      status: outcome === "failed" ? "stale" : "ok",
+      status: outcome === "ok" ? "ok" : "stale",
       fetchedAt: account.fetchedAt,
       countFrom,
       pass,
@@ -140,6 +159,8 @@ export class LeetcodeService {
       recent: recentRows(entries, problems),
       lifetimeSolved: account.lifetime.all,
       weeklyGoal: goal,
+      failure,
+      nextReadAt,
     };
   }
 }

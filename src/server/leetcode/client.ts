@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { DsaFailure } from "../../shared/dsa";
 import { LEETCODE_USERNAME_PATTERN } from "../../shared/week";
 import type { LedgerEntry, ProblemInfo } from "./compute";
 
@@ -21,7 +22,10 @@ const QUESTION_QUERY = `query question($s: String!) { question(titleSlug: $s) { 
 
 /** Any failure to read LeetCode: network, status, size, shape. The page treats all of them the same way. */
 export class LeetcodeError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly reason: Exclude<DsaFailure, "not_found"> = "unexpected_reply",
+  ) {
     super(message);
     this.name = "LeetcodeError";
   }
@@ -124,12 +128,12 @@ export function createLeetcodeClient(options: ClientOptions): LeetcodeClient {
       });
       if (!res.ok) {
         await res.body?.cancel().catch(() => undefined);
-        throw new LeetcodeError(`LeetCode answered with status ${res.status}`);
+        throw new LeetcodeError(`LeetCode answered with status ${res.status}`, "busy");
       }
       text = await readCapped(res, maxBytes);
     } catch (err) {
       if (err instanceof LeetcodeError) throw err;
-      throw new LeetcodeError(signal.aborted ? "LeetCode did not answer in time" : "LeetCode could not be reached");
+      throw signal.aborted ? new LeetcodeError("LeetCode did not answer in time", "timeout") : new LeetcodeError("LeetCode could not be reached", "unreachable");
     }
     let json: unknown;
     try {

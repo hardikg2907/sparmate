@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DSA_FAILURES } from "../../shared/dsa";
 import { readTextIfExists, writeFileAtomic } from "../engine/fsutil";
 import type { Logger } from "../engine/log";
 import { MAX_LEDGER_ENTRIES } from "./compute";
@@ -20,12 +21,20 @@ export const SnapshotSchema = z.strictObject({
   /** A problem's difficulty and topics never change, so they are kept for every problem that was ever read. */
   problems: z.record(
     slug,
-    z.strictObject({
-      difficulty: z.enum(["Easy", "Medium", "Hard"]),
-      topics: z.array(z.strictObject({ name: z.string().min(1).max(100), slug })).max(60),
-    }),
+    z.union([
+      z.strictObject({
+        difficulty: z.enum(["Easy", "Medium", "Hard"]),
+        topics: z.array(z.strictObject({ name: z.string().min(1).max(100), slug })).max(60),
+      }),
+      z.strictObject({ missing: z.literal(true) }),
+    ]),
   ),
   account: AccountSnapshot.nullable(),
+  /** The newest read that failed, kept so a restart still knows why the numbers are old. */
+  lastFailure: z
+    .strictObject({ username: z.string().min(1).max(40), reason: z.enum(DSA_FAILURES), at: z.iso.datetime() })
+    .nullable()
+    .default(null),
 });
 
 export type Snapshot = z.infer<typeof SnapshotSchema>;
@@ -33,7 +42,7 @@ export type AccountSnapshot = z.infer<typeof AccountSnapshot>;
 
 export const MAX_CACHED_PROBLEMS = 20_000;
 
-export const emptySnapshot = (): Snapshot => ({ version: 1, problems: {}, account: null });
+export const emptySnapshot = (): Snapshot => ({ version: 1, problems: {}, account: null, lastFailure: null });
 
 /** A missing, unreadable or invalid file gives an empty snapshot, because the next read rebuilds it. */
 export async function loadSnapshot(path: string, log: Logger): Promise<Snapshot> {

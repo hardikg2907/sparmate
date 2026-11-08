@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computePass, computeWeek, dayStartSeconds, mergeLedger, recentRows } from "./compute";
+import { MAX_LEDGER_ENTRIES, computePass, computeWeek, dayStartSeconds, mergeLedger, recentRows } from "./compute";
 import { EASY, HARD, MEDIUM, at, solve } from "./support";
 
 const from = dayStartSeconds("2026-11-02");
@@ -7,23 +7,30 @@ const from = dayStartSeconds("2026-11-02");
 describe("mergeLedger", () => {
   it("keeps one entry for the same problem and time, so reading twice changes nothing", () => {
     const list = [solve("two-sum", at(2026, 11, 3)), solve("lru-cache", at(2026, 11, 4))];
-    const once = mergeLedger([], list, from);
-    expect(mergeLedger(once, list, from)).toEqual(once);
+    const once = mergeLedger([], list);
+    expect(mergeLedger(once, list)).toEqual(once);
     expect(once).toHaveLength(2);
   });
 
   it("keeps a second solve of the same problem as its own entry", () => {
-    const merged = mergeLedger([solve("two-sum", at(2026, 11, 3))], [solve("two-sum", at(2026, 11, 5))], from);
+    const merged = mergeLedger([solve("two-sum", at(2026, 11, 3))], [solve("two-sum", at(2026, 11, 5))]);
     expect(merged.map((e) => e.timestamp)).toEqual([at(2026, 11, 5), at(2026, 11, 3)]);
   });
 
-  it("drops solves before the count-from day, old and new", () => {
-    const merged = mergeLedger([solve("old", at(2026, 11, 1, 23, 59))], [solve("older", at(2025, 3, 1)), solve("new", at(2026, 11, 2, 0, 0))], from);
-    expect(merged.map((e) => e.slug)).toEqual(["new"]);
+  it("keeps solves from before the count-from day, so moving the day later loses nothing", () => {
+    const merged = mergeLedger([solve("old", at(2026, 11, 1, 23, 59))], [solve("older", at(2025, 3, 1)), solve("new", at(2026, 11, 2, 0, 0))]);
+    expect(merged.map((e) => e.slug)).toEqual(["new", "old", "older"]);
+  });
+
+  it("keeps the newest entries when the cap is reached", () => {
+    const many = Array.from({ length: MAX_LEDGER_ENTRIES + 10 }, (_, i) => solve(`p${i}`, 1_700_000_000 + i));
+    const merged = mergeLedger([], many);
+    expect(merged).toHaveLength(MAX_LEDGER_ENTRIES);
+    expect(merged[0]?.slug).toBe(`p${MAX_LEDGER_ENTRIES + 9}`);
   });
 
   it("adds new solves to what is already saved", () => {
-    const merged = mergeLedger([solve("a", at(2026, 11, 3))], [solve("b", at(2026, 11, 6))], from);
+    const merged = mergeLedger([solve("a", at(2026, 11, 3))], [solve("b", at(2026, 11, 6))]);
     expect(merged.map((e) => e.slug)).toEqual(["b", "a"]);
   });
 });
@@ -69,12 +76,22 @@ describe("computePass", () => {
       solve("x", at(2026, 11, 7)),
     ];
     const { pass, topics } = computePass(entries, { a: MEDIUM, b: EASY, d: HARD, early: EASY }, from);
-    expect(pass).toEqual({ solved: 4, easy: 1, medium: 1, hard: 1 });
+    expect(pass).toEqual({ solved: 4, easy: 1, medium: 1, hard: 1, unread: 1 });
     expect(topics).toEqual([
       { name: "Array", slug: "array", solved: 2 },
       { name: "Graph", slug: "graph", solved: 1 },
       { name: "Heap (Priority Queue)", slug: "heap-priority-queue", solved: 1 },
     ]);
+  });
+});
+
+describe("a problem LeetCode does not know", () => {
+  it("counts as not read and never as a difficulty, so the levels and unread add up", () => {
+    const entries = [solve("a", at(2026, 11, 3)), solve("gone", at(2026, 11, 4)), solve("b", at(2026, 11, 5))];
+    const { pass } = computePass(entries, { a: MEDIUM, b: EASY, gone: { missing: true } }, from);
+    expect(pass.easy + pass.medium + pass.hard + pass.unread).toBe(pass.solved);
+    expect(pass.unread).toBe(1);
+    expect(recentRows(entries, { gone: { missing: true } }).find((r) => r.slug === "gone")?.difficulty).toBeNull();
   });
 });
 

@@ -16,7 +16,8 @@ afterEach(() => rm(dir, { recursive: true, force: true }));
 
 const valid: Snapshot = {
   version: 1,
-  problems: { "two-sum": EASY },
+  problems: { "two-sum": EASY, "gone-problem": { missing: true } },
+  lastFailure: { username: "example_user", reason: "timeout", at: "2026-11-08T09:00:00.000Z" },
   account: {
     username: "example_user",
     fetchedAt: "2026-11-08T08:10:00.000Z",
@@ -44,6 +45,12 @@ describe("loadSnapshot", () => {
     expect(await loadSnapshot(file, memoryLogger())).toEqual(emptySnapshot());
     await writeFile(file, JSON.stringify({ ...valid, problems: { "two-sum": { difficulty: "Trivial", topics: [] } } }));
     expect(await loadSnapshot(file, memoryLogger())).toEqual(emptySnapshot());
+  });
+
+  it("loads a file saved without a failure note", async () => {
+    const { lastFailure: _drop, ...older } = valid;
+    await writeFile(file, JSON.stringify(older));
+    expect((await loadSnapshot(file, memoryLogger())).lastFailure).toBeNull();
   });
 
   it("reads back what was saved", async () => {

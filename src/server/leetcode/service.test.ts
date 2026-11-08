@@ -61,7 +61,7 @@ describe("status", () => {
     const res = await service.get();
     expect(res.status).toBe("ok");
     expect(res.countFrom).toBe("2026-11-01");
-    expect(res.pass).toEqual({ solved: 3, easy: 1, medium: 1, hard: 1 });
+    expect(res.pass).toEqual({ solved: 3, easy: 1, medium: 1, hard: 1, unread: 0 });
     expect(res.topics.map((t) => [t.slug, t.solved])).toEqual([
       ["array", 2],
       ["graph", 1],
@@ -111,6 +111,7 @@ describe("refresh interval and in-flight reads", () => {
     await saveSnapshot(file, {
       version: 1,
       problems: {},
+      lastFailure: null,
       account: { username: "example_user", fetchedAt: new Date(clock - MIN).toISOString(), lifetime: { all: 7, easy: 7, medium: 0, hard: 0 }, entries: [] },
     });
     const { service, client } = make();
@@ -207,7 +208,7 @@ describe("ledger across reads", () => {
     const client = fakeClient({ ...base, problem: async (slug) => (broken && slug === "two-sum" ? Promise.reject(new LeetcodeError("down")) : base.problem(slug)) });
     const { service } = make(client);
     const first = await service.get();
-    expect(first.pass).toEqual({ solved: 3, easy: 0, medium: 1, hard: 1 });
+    expect(first.pass).toEqual({ solved: 3, easy: 0, medium: 1, hard: 1, unread: 1 });
     expect(first.recent.find((r) => r.slug === "two-sum")?.difficulty).toBeNull();
     broken = false;
     clock += 20 * MIN;
@@ -244,5 +245,119 @@ describe("ledger across reads", () => {
     const { service } = make(ledgerClient());
     await service.get();
     expect(JSON.parse(await readFile(file, "utf8"))).toMatchObject({ version: 1 });
+  });
+});
+
+describe("moving the count-from day", () => {
+  it("keeps every solve when the day moves later and then earlier again", async () => {
+    const { service } = make(ledgerClient());
+    await service.get();
+    settings = { ...settings, dsaCountFrom: "2026-11-04" };
+    expect((await service.get()).pass.solved).toBe(1);
+    settings = { ...settings, dsaCountFrom: "2026-11-01" };
+    clock += 20 * MIN;
+    const back = await service.get();
+    expect(back.pass.solved).toBe(3);
+    expect(back.topics.length).toBeGreaterThan(0);
+  });
+
+  it("keeps old solves in the file after a read made with a later day", async () => {
+    settings = { ...settings, dsaCountFrom: "2026-11-04" };
+    const { service } = make(ledgerClient());
+    await service.get();
+    const saved = JSON.parse(await readFile(file, "utf8")) as { account: { entries: unknown[] } };
+    expect(saved.account.entries).toHaveLength(3);
+  });
+});
+
+describe("a problem LeetCode returns nothing for", () => {
+  it("is remembered as missing, asked for once, and counted as not read", async () => {
+    let asked = 0;
+    const client = fakeClient({
+      recent: async () => [solve("two-sum", at(2026, 11, 2)), solve("removed-problem", at(2026, 11, 3))],
+      problem: async (slug) => (asked++, slug === "removed-problem" ? null : EASY),
+    });
+    const { service } = make(client);
+    const first = await service.get();
+    expect(first.pass).toEqual({ solved: 2, easy: 1, medium: 0, hard: 0, unread: 1 });
+    clock += 20 * MIN;
+    await service.get();
+    expect(asked).toBe(2);
+    const saved = JSON.parse(await readFile(file, "utf8")) as { problems: Record<string, unknown> };
+    expect(saved.problems["removed-problem"]).toEqual({ missing: true });
+  });
+});
+
+describe("a name that stops resolving", () => {
+  it("shows the saved numbers as stale, not a blank not-found page", async () => {
+    let found = true;
+    const base = ledgerClient();
+    const { service } = make(
+      fakeClient({ ...base, profile: async () => (found ? { found: true, profile: { totals: { all: 5, easy: 5, medium: 0, hard: 0 } } } : { found: false }) }),
+    );
+    const first = await service.get();
+    found = false;
+    clock += 20 * MIN;
+    const res = await service.get();
+    expect(res.status).toBe("stale");
+    expect(res.failure?.reason).toBe("not_found");
+    expect(res.pass).toEqual(first.pass);
+    expect(res.fetchedAt).toBe(first.fetchedAt);
+  });
+
+  it("still says not_found for a name that never resolved, with the reason", async () => {
+    const { service } = make(fakeClient({ profile: async () => ({ found: false }) }));
+    const res = await service.get();
+    expect(res).toMatchObject({ status: "not_found", failure: { reason: "not_found" } });
+  });
+});
+
+describe("failures", () => {
+  const failing = (reason: LeetcodeError["reason"]) => fakeClient({ profile: async () => Promise.reject(new LeetcodeError("down", reason)) });
+
+  it.each(["timeout", "unreachable", "unexpected_reply", "busy"] as const)("reports %s as the reason the last read failed", async (reason) => {
+    const { service } = make(failing(reason));
+    expect((await service.get()).failure?.reason).toBe(reason);
+  });
+
+  it("remembers the failure across a restart and keeps waiting", async () => {
+    let down = false;
+    const base = ledgerClient();
+    const first = make(fakeClient({ ...base, profile: async () => (down ? Promise.reject(new LeetcodeError("down", "timeout")) : base.profile("example_user")) }));
+    await first.service.get();
+    clock += 20 * MIN;
+    down = true;
+    const failed = await first.service.get();
+    expect(failed).toMatchObject({ status: "stale", failure: { reason: "timeout" } });
+    clock += 1_000;
+    const restarted = make(fakeClient());
+    const res = await restarted.service.get();
+    expect(restarted.client.calls.profile).toBe(0);
+    expect(res).toMatchObject({ status: "stale", failure: { reason: "timeout" } });
+  });
+
+  it("clears the failure after a good read", async () => {
+    let fail = true;
+    const { service } = make(
+      fakeClient({ profile: async () => (fail ? Promise.reject(new LeetcodeError("x", "busy")) : { found: true, profile: { totals: { all: 1, easy: 1, medium: 0, hard: 0 } } }) }),
+    );
+    await service.get();
+    fail = false;
+    clock += 20_000;
+    expect((await service.get({ force: true })).failure).toBeNull();
+  });
+
+  it("tells when a read-again is allowed", async () => {
+    const { service } = make(failing("busy"));
+    const res = await service.get();
+    expect(res.nextReadAt).toBe(new Date(clock + 15_000).toISOString());
+    clock += 16_000;
+    expect((await service.get({ force: true })).failure).not.toBeNull();
+  });
+
+  it("tells when the next read of a good profile is allowed", async () => {
+    const { service } = make();
+    const fresh = await service.get();
+    expect(fresh.nextReadAt).toBe(new Date(clock + 15 * MIN).toISOString());
   });
 });

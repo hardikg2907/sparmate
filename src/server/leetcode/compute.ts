@@ -13,9 +13,16 @@ export interface ProblemInfo {
   topics: { name: string; slug: string }[];
 }
 
-export type ProblemCache = Readonly<Record<string, ProblemInfo>>;
+/** A problem LeetCode has no record of is kept as `missing`, so it is not asked for again. */
+export type ProblemEntry = ProblemInfo | { missing: true };
+export type ProblemCache = Readonly<Record<string, ProblemEntry>>;
 
-export const MAX_LEDGER_ENTRIES = 20_000;
+export const MAX_LEDGER_ENTRIES = 5_000;
+
+export function infoOf(cache: ProblemCache, slug: string): ProblemInfo | null {
+  const entry = cache[slug];
+  return entry && !("missing" in entry) ? entry : null;
+}
 
 /** Unix seconds of local midnight at the start of `day`. */
 export function dayStartSeconds(day: string): number {
@@ -24,13 +31,13 @@ export function dayStartSeconds(day: string): number {
 
 /**
  * Adds new accepted solves to the ledger. A solve is identified by its problem and its time, so merging the same
- * list twice changes nothing, and solving one problem again later makes a second entry. Solves before `fromSec`
- * are dropped. LeetCode returns only the newest 20, so more than 20 solves between two reads can be missed.
+ * list twice changes nothing, and solving one problem again later makes a second entry. The ledger is not cut at the
+ * count-from day, because moving that day later and then earlier again must not lose solves; the response filters.
+ * LeetCode returns only the newest 20, so more than 20 solves between two reads can be missed.
  */
-export function mergeLedger(existing: readonly LedgerEntry[], incoming: readonly LedgerEntry[], fromSec: number): LedgerEntry[] {
+export function mergeLedger(existing: readonly LedgerEntry[], incoming: readonly LedgerEntry[]): LedgerEntry[] {
   const merged = new Map<string, LedgerEntry>();
   for (const entry of [...existing, ...incoming]) {
-    if (entry.timestamp < fromSec) continue;
     merged.set(`${entry.slug}@${entry.timestamp}`, entry);
   }
   return [...merged.values()].sort((a, b) => b.timestamp - a.timestamp || a.slug.localeCompare(b.slug)).slice(0, MAX_LEDGER_ENTRIES);
@@ -55,7 +62,7 @@ export function computeWeek(entries: readonly LedgerEntry[], cache: ProblemCache
   for (const [slug, timestamp] of first) {
     const day = planIndex(new Date(timestamp * 1000));
     perDay[day] = (perDay[day] ?? 0) + 1;
-    if (cache[slug]?.difficulty === "Medium") mediums += 1;
+    if (infoOf(cache, slug)?.difficulty === "Medium") mediums += 1;
   }
   return { solved: first.size, mediums, perDay };
 }
@@ -65,13 +72,16 @@ export function computePass(
   entries: readonly LedgerEntry[],
   cache: ProblemCache,
   fromSec: number,
-): { pass: { solved: number; easy: number; medium: number; hard: number }; topics: DsaTopic[] } {
+): { pass: { solved: number; easy: number; medium: number; hard: number; unread: number }; topics: DsaTopic[] } {
   const slugs = new Set(entries.filter((e) => e.timestamp >= fromSec).map((e) => e.slug));
-  const pass = { solved: slugs.size, easy: 0, medium: 0, hard: 0 };
+  const pass = { solved: slugs.size, easy: 0, medium: 0, hard: 0, unread: 0 };
   const topics = new Map<string, DsaTopic>();
   for (const slug of slugs) {
-    const info = cache[slug];
-    if (!info) continue;
+    const info = infoOf(cache, slug);
+    if (!info) {
+      pass.unread += 1;
+      continue;
+    }
     if (info.difficulty === "Easy") pass.easy += 1;
     else if (info.difficulty === "Medium") pass.medium += 1;
     else pass.hard += 1;
@@ -91,7 +101,7 @@ export function recentRows(entries: readonly LedgerEntry[], cache: ProblemCache,
   for (const entry of [...entries].sort((a, b) => b.timestamp - a.timestamp)) {
     if (seen.has(entry.slug)) continue;
     seen.add(entry.slug);
-    rows.push({ title: entry.title, slug: entry.slug, difficulty: cache[entry.slug]?.difficulty ?? null, solvedAt: new Date(entry.timestamp * 1000).toISOString() });
+    rows.push({ title: entry.title, slug: entry.slug, difficulty: infoOf(cache, entry.slug)?.difficulty ?? null, solvedAt: new Date(entry.timestamp * 1000).toISOString() });
     if (rows.length === limit) break;
   }
   return rows;

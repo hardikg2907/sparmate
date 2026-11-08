@@ -518,7 +518,7 @@ REST endpoints (JSON):
 | GET | `/api/sessions/:id/board-final.png` | image |
 | GET | `/api/sessions/:id/code` | `{ version, content, path }` (LLD) |
 | GET | `/api/settings`, PUT `/api/settings` | `Settings` (strict zod schema: unknown keys are rejected). Besides models, effort, durations and theme it holds `weeklyPlan` (7 entries, Monday first, each `hld`, `lld`, `dsa`, `redo` or `rest`; default `dsa, hld, dsa, hld, dsa, lld, redo`), `leetcodeUsername` (optional, 1 to 40 of letters, digits, `_` and `-`), `dsaCountFrom` (optional local day `YYYY-MM-DD`; a real day, not in the future; the server sets today when a username is saved without one) and `dsaWeeklyGoal` (integer 1 to 30, default 3). A settings file saved before these keys loads with the defaults. |
-| GET | `/api/dsa` | `DsaResponse`: `username`, `status` (`ok`, `stale`, `no_username`, `not_found` or `error`), `fetchedAt`, `countFrom`, `pass` (distinct problems solved since `countFrom`: `solved`, `easy`, `medium`, `hard`), `topics` (`{ name, slug, solved }`, most solved first, from the ledger), `week` (`solved`, `mediums`, `perDay` with 7 entries, Monday first, local time), `recent` (up to 10 `{ title, slug, difficulty, solvedAt }`, newest first, `difficulty` null until read), `lifetimeSolved` (everything on the account, earlier years included; shown only as one quiet line in the side panel) and `weeklyGoal`. It reads LeetCode when the last read is at least 15 minutes old. |
+| GET | `/api/dsa` | `DsaResponse`: `username`, `status` (`ok`, `stale`, `no_username`, `not_found` or `error`), `fetchedAt`, `countFrom`, `pass` (distinct problems solved since `countFrom`: `solved`, `easy`, `medium`, `hard`, and `unread` for problems whose difficulty is not known, so the four add up), `topics` (`{ name, slug, solved }`, most solved first, from the ledger), `week` (`solved`, `mediums`, `perDay` with 7 entries, Monday first, local time), `recent` (up to 10 `{ title, slug, difficulty, solvedAt }`, newest first, `difficulty` null until read), `lifetimeSolved` (everything on the account, earlier years included; shown only as one quiet line in the side panel) `weeklyGoal`, `failure` (`{ reason, at }` with `timeout`, `unreachable`, `unexpected_reply`, `busy` or `not_found`; set when the numbers are stale or missing) and `nextReadAt` (before this time a read-again returns the saved numbers). A name that stops resolving after a good read gives `stale` with reason `not_found` and the saved numbers. It reads LeetCode when the last read is at least 15 minutes old. |
 | POST | `/api/dsa/refresh` | The same answer after a "read again". The 15-minute wait still applies; after a failed read the wait is 15 seconds instead of 2 minutes. Same Host, Origin and CSRF checks as every write. |
 | GET | `/api/usage` | `UsageResponse`: overall totals and breakdowns (by session, problem, role, model, day for last 30 days), cache hit rate, and `trackingSince`. |
 | GET | `/api/sessions/:id/usage` | `SessionUsageResponse`: round totals and per-role breakdown. |
@@ -976,7 +976,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 **Gym `/gym` and DSA `/dsa`**
 - Gym: a placeholder with its final header. "Drills from your gaps are coming. Each takes 10 to 15 minutes on one skill."
 - DSA measures the current pass, never the account's history. A hero shows "Mediums this week" as N of the weekly goal,
-  a Monday-first strip of solves per day (days that are DSA days in the weekly plan are outlined, today has a ring) and
+  "N problems this week" under the number and a Monday-first strip captioned "Problems solved each day" (days that are DSA days in the weekly plan are outlined and a small legend says so; today has a ring outside the cell) and
   one primary button, "Open LeetCode" (`https://leetcode.com/problemset/`, new tab, `rel="noopener noreferrer"`). The side
   card "This pass" says "N problems since <date>" and lists "Not touched yet": the common interview topics with no
   solve in the ledger (Array, String, Hash Table, Two Pointers, Sliding Window, Stack, Binary Search, Linked List, Tree,
@@ -986,15 +986,18 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   N solved, includes earlier years". The header carries an info tip (counts of practice, not a readiness call) and "From
   LeetCode, read <time>" with a tip (public profile, the last numbers stay when a read fails, no login). States: no
   username (button to Settings), not found ("No public LeetCode profile named X"), stale (the numbers with the date of
-  the last read, a quiet note and "Read again"), error with no data ("LeetCode could not be read", "Read again").
+  the last read, the reason in one sentence, a quiet note and "Read again", which stays disabled with "Try again in N s"
+  until the server allows a read), error with no data ("LeetCode could not be read", "Read again").
 - Today on a DSA day adds "N of goal mediums this week" under the hero text.
 
 **How DSA is read.** The server calls `POST https://leetcode.com/graphql` (fixed host, no login, a generic user agent, 8 s
   timeout, no redirects, 512 KiB reply cap, every reply checked with a strict zod schema). The endpoint is unofficial and can
   change. It reads `matchedUser` (lifetime totals), `recentAcSubmissionList` (only the newest 20 accepted solves) and
   `question` (difficulty and topic tags, once per problem and kept for good). Each read merges the new solves into a ledger
-  keyed by problem and time, drops solves before `dsaCountFrom`, and keeps repeat solves of one problem as separate
-  entries. More than 20 solves between two reads can be missed. The ledger and the problem cache live in
+  keyed by problem and time and keeps repeat solves of one problem as separate entries. The ledger holds the newest 5000
+  entries and is not cut at `dsaCountFrom`; the response filters by that day, so moving it later and back loses nothing.
+  A problem LeetCode returns nothing for is cached as missing and counted as "not read yet". The last failed read is saved
+  with its reason, so a restart still knows why the numbers are old. More than 20 solves between two reads can be missed. The ledger and the problem cache live in
   `data/leetcode.json` (written atomically; an invalid file is ignored and rebuilt). At most one read runs per username,
   a read happens at most every 15 minutes, and the server reads once at start when a username is set. The week counts distinct problems since local
   Monday 00:00; topic counts and the pass count distinct problems since `dsaCountFrom`. A change of username starts a new ledger.

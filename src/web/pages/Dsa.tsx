@@ -7,13 +7,53 @@ import { SidePanel } from "../components/SidePanel";
 import { InfoTip } from "../components/study";
 import { Button, Card, Skeleton, cn } from "../components/ui";
 import { dayMonth, shortDay } from "../lib/dates";
+import { failureText, waitText } from "../lib/dsaText";
 import { useNow } from "../lib/useNow";
 import { useDsa, type DsaData } from "../lib/useDsa";
 import { Link } from "../router";
 import type { PageContext } from "./context";
 
 const LEETCODE_URL = "https://leetcode.com/problemset/";
+/** The most topic chips the side card shows before it says how many more there are. */
+const SHOWN_UNTOUCHED = 8;
 const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+/** Whole seconds until `iso`, counted down each second. A fixed `now` stops the clock, for fixtures. */
+function useSecondsUntil(iso: string | null, fixed?: Date): number {
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!iso || fixed) return;
+    const timer = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [iso, fixed]);
+  if (!iso) return 0;
+  return Math.max(0, Math.ceil((Date.parse(iso) - (fixed ? fixed.getTime() : tick)) / 1000));
+}
+
+/** "Read again" that waits out the server's minimum gap and says how long is left. */
+function ReadAgain({
+  res,
+  data,
+  now,
+  size = "sm",
+  variant = "ghost",
+}: {
+  res: DsaResponse | null;
+  data: DsaData;
+  now?: Date;
+  size?: "sm" | "lg";
+  variant?: "ghost" | "secondary";
+}) {
+  const seconds = useSecondsUntil(res?.nextReadAt ?? null, now);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Button variant={variant} size={size} busy={data.refreshing} disabled={seconds > 0} onClick={data.refresh}>
+        Read again
+      </Button>
+      {seconds > 0 ? <span className="text-ui text-faint">Try again in {waitText(seconds)}</span> : null}
+    </span>
+  );
+}
 
 function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -88,7 +128,7 @@ export function DsaView({ ctx, data, now: fixedNow }: { ctx: PageContext; data: 
           }
           aside={aside}
         />
-        {shown && shown.status === "stale" ? <StaleNote res={shown} data={data} /> : null}
+        {shown && shown.status === "stale" ? <StaleNote res={shown} data={data} now={fixedNow} /> : null}
         {data.loading && named ? (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]" role="status">
             <span className="sr-only">Reading your LeetCode progress…</span>
@@ -129,9 +169,7 @@ export function DsaView({ ctx, data, now: fixedNow }: { ctx: PageContext; data: 
             title="LeetCode could not be read"
             actions={
               <>
-                <Button size="lg" variant="secondary" busy={data.refreshing} onClick={data.refresh}>
-                  Read again
-                </Button>
+                <ReadAgain res={res} data={data} now={fixedNow} size="lg" variant="secondary" />
                 <OpenLeetcode variant="ghost" />
               </>
             }
@@ -155,13 +193,13 @@ export function DsaPage({ ctx }: { ctx: PageContext }) {
   return <DsaView ctx={ctx} data={data} />;
 }
 
-function StaleNote({ res, data }: { res: DsaResponse; data: DsaData }) {
+function StaleNote({ res, data, now }: { res: DsaResponse; data: DsaData; now?: Date }) {
   return (
     <p className="flex flex-wrap items-center gap-x-3 text-ui text-muted-foreground" role="status">
-      <span>LeetCode could not be read just now. These numbers are from {res.fetchedAt ? shortDay(new Date(res.fetchedAt)) : "an earlier read"}.</span>
-      <Button variant="ghost" size="sm" busy={data.refreshing} onClick={data.refresh}>
-        Read again
-      </Button>
+      <span>
+        {failureText(res.failure?.reason)} These numbers are from {res.fetchedAt ? shortDay(new Date(res.fetchedAt)) : "an earlier read"}.
+      </span>
+      <ReadAgain res={res} data={data} now={now} />
     </p>
   );
 }
@@ -183,36 +221,44 @@ function Hero({ res, ctx, now }: { res: DsaResponse; ctx: PageContext; now: Date
             <span className="font-display text-[88px] font-extrabold leading-none tracking-[-0.03em] tabular-nums sm:text-[112px]">{res.week.mediums}</span>
             <span className="text-title font-semibold text-muted-foreground">of {res.weeklyGoal}</span>
           </p>
+          <p className="mt-2 text-ui text-muted-foreground">{countLabel(res.week.solved)} this week</p>
           <div className="mt-8">
             <OpenLeetcode />
           </div>
         </div>
-        <ol aria-label="Solved each day this week" className="mesh-tile grid grid-cols-7 gap-1.5 rounded-2xl p-4 text-center">
-          {WEEKDAYS.map((name, index) => {
-            const count = res.week.perDay[index] ?? 0;
-            const planned = ctx.settings.weeklyPlan[index] === "dsa";
-            return (
-              <li key={name} aria-current={index === today ? "date" : undefined} className="w-[30px]">
-                <span className="block text-meta text-muted-foreground" aria-hidden="true">
-                  {name.slice(0, 1)}
-                </span>
-                <span
-                  className={cn(
-                    "mx-auto mt-1.5 grid size-7 place-items-center rounded-lg text-meta font-bold tabular-nums",
-                    count > 0 ? "bg-gradient-to-b from-[#b3bcff] to-[#7c6cf0] text-[#0e1230]" : "bg-white/10",
-                    planned && count === 0 && "ring-[1.5px] ring-inset ring-white/45",
-                    index === today && "ring-[1.5px] ring-inset ring-white",
-                  )}
-                >
-                  {count > 0 ? count : null}
-                  <span className="sr-only">
-                    {name}, {count} solved{planned ? ", a DSA day" : ""}
+        <div className="mesh-tile rounded-2xl p-4">
+          <p className="text-meta text-muted-foreground">Problems solved each day</p>
+          <ol aria-label="Problems solved each day this week" className="mt-3 grid grid-cols-7 gap-1.5 text-center">
+            {WEEKDAYS.map((name, index) => {
+              const count = res.week.perDay[index] ?? 0;
+              const planned = ctx.settings.weeklyPlan[index] === "dsa";
+              return (
+                <li key={name} aria-current={index === today ? "date" : undefined} className="w-[30px]">
+                  <span className="block text-meta text-muted-foreground" aria-hidden="true">
+                    {name.slice(0, 1)}
                   </span>
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+                  <span
+                    className={cn(
+                      "mx-auto mt-1.5 grid size-7 place-items-center rounded-lg text-meta font-bold tabular-nums",
+                      count > 0 ? "bg-gradient-to-b from-[#b3bcff] to-[#7c6cf0] text-[#0e1230]" : "bg-white/10",
+                      planned && "ring-[1.5px] ring-inset ring-white/60",
+                      index === today && "outline outline-[1.5px] outline-offset-2 outline-white",
+                    )}
+                  >
+                    {count > 0 ? count : null}
+                    <span className="sr-only">
+                      {name}, {count} solved{planned ? ", a DSA day" : ""}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+          <p className="mt-3 flex items-center gap-2 text-meta text-muted-foreground">
+            <span aria-hidden="true" className="inline-block size-3 rounded-[4px] ring-[1.5px] ring-inset ring-white/60" />
+            DSA day in your plan
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -242,19 +288,19 @@ function PassCard({ res, onOpen }: { res: DsaResponse; onOpen: () => void }) {
         {countLabel(res.pass.solved)}
         {since}
       </p>
-      {res.pass.solved === 0 ? (
-        <p className="mt-5 text-ui text-muted-foreground">Nothing solved yet. A new solve shows up here after the next read.</p>
-      ) : focus.untouched ? (
+      {res.pass.solved === 0 ? <p className="mt-4 text-ui text-muted-foreground">Nothing solved yet. A new solve shows up here after the next read.</p> : null}
+      {focus.untouched ? (
         <section aria-labelledby="untouched-h" className="mt-5">
           <h3 id="untouched-h" className="text-ui font-semibold text-muted-foreground">
             Not touched yet
           </h3>
           <ul className="mt-2.5 flex flex-wrap gap-2">
-            {focus.topics.map((t) => (
+            {focus.topics.slice(0, SHOWN_UNTOUCHED).map((t) => (
               <li key={t.slug} className="rounded-full bg-muted px-3 py-1 text-ui text-foreground ring-1 ring-inset ring-border-strong/50">
                 {t.name}
               </li>
             ))}
+            {focus.topics.length > SHOWN_UNTOUCHED ? <li className="px-1 py-1 text-ui text-muted-foreground">+{focus.topics.length - SHOWN_UNTOUCHED} more</li> : null}
           </ul>
         </section>
       ) : (
@@ -294,12 +340,13 @@ function PassPanel({ res, onClose }: { res: DsaResponse; onClose: () => void }) 
     >
       <dl className="grid grid-cols-3 gap-3">
         {levels.map((level) => (
-          <div key={level.label} className="rounded-lg bg-sunken px-3 py-2.5">
-            <dd className="text-title font-bold tabular-nums">{level.value}</dd>
+          <div key={level.label} className="flex flex-col-reverse rounded-lg bg-sunken px-3 py-2.5">
             <dt className="text-ui text-muted-foreground">{level.label}</dt>
+            <dd className="text-title font-bold tabular-nums">{level.value}</dd>
           </div>
         ))}
       </dl>
+      {res.pass.unread > 0 ? <p className="mt-2 text-meta text-faint">{res.pass.unread} not read yet</p> : null}
       <h3 className="mt-7 text-lead font-semibold">Topics</h3>
       {res.topics.length === 0 ? (
         <p className="mt-2 text-ui text-muted-foreground">No topic yet. Topics appear once a solve has been read.</p>

@@ -3,6 +3,10 @@ import type { Settings } from "./types";
 export const DSA_STATUSES = ["ok", "stale", "no_username", "not_found", "error"] as const;
 export type DsaStatus = (typeof DSA_STATUSES)[number];
 
+/** Why the last read of LeetCode did not give new numbers. */
+export const DSA_FAILURES = ["timeout", "unreachable", "unexpected_reply", "busy", "not_found"] as const;
+export type DsaFailure = (typeof DSA_FAILURES)[number];
+
 export type LeetcodeDifficulty = "Easy" | "Medium" | "Hard";
 
 export interface DsaTopic {
@@ -27,8 +31,8 @@ export interface DsaResponse {
   fetchedAt: string | null;
   /** First local day that counts, "YYYY-MM-DD". */
   countFrom: string | null;
-  /** Distinct problems solved since `countFrom`, by difficulty. A problem whose difficulty is not known yet counts only in `solved`. */
-  pass: { solved: number; easy: number; medium: number; hard: number };
+  /** Distinct problems solved since `countFrom`, by difficulty. `unread` counts problems whose difficulty is not known, so the three levels plus `unread` add up to `solved`. */
+  pass: { solved: number; easy: number; medium: number; hard: number; unread: number };
   /** Topics with at least one solve since `countFrom`, most solved first. */
   topics: DsaTopic[];
   week: {
@@ -42,6 +46,10 @@ export interface DsaResponse {
   /** Everything LeetCode counts on the account, including earlier years. Null when it was not read. */
   lifetimeSolved: number | null;
   weeklyGoal: number;
+  /** Set when the numbers are stale or missing because the last read did not work. */
+  failure: { reason: DsaFailure; at: string } | null;
+  /** ISO time before which a "read again" returns the saved numbers. Null when a read is allowed now. */
+  nextReadAt: string | null;
 }
 
 /** The topics an interview round is likely to touch. LeetCode's own tag slugs map to a plain name. */
@@ -89,12 +97,14 @@ export function emptyDsa(username: string | null, status: DsaStatus, weeklyGoal:
     status,
     fetchedAt: null,
     countFrom,
-    pass: { solved: 0, easy: 0, medium: 0, hard: 0 },
+    pass: { solved: 0, easy: 0, medium: 0, hard: 0, unread: 0 },
     topics: [],
     week: { solved: 0, mediums: 0, perDay: [0, 0, 0, 0, 0, 0, 0] },
     recent: [],
     lifetimeSolved: null,
     weeklyGoal,
+    failure: null,
+    nextReadAt: null,
   };
 }
 

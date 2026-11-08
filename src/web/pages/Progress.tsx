@@ -10,6 +10,7 @@ import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Button, Card, Segmented, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
+import { mediumsTip } from "../lib/dsaText";
 import { useDsa } from "../lib/useDsa";
 import { useNow } from "../lib/useNow";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
@@ -38,7 +39,7 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa = null }: { data: S
   return (
     <PageShell testMode={ctx.testMode}>
       <div className="reveal-children space-y-6">
-        <PageHeader title="Progress" aside={<WeekStats stats={stats} dsa={dsa} />} />
+        <PageHeader title="Progress" aside={<WeekStats stats={stats} dsa={dsa} username={ctx.settings.leetcodeUsername} />} />
         {data.startError ? (
           <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
             {data.startError}
@@ -95,13 +96,13 @@ export function ProgressPage({ ctx }: { ctx: PageContext }) {
   return <ProgressView data={data} ctx={ctx} dsa={dsa.response} />;
 }
 
-function WeekStats({ stats, dsa }: { stats: ReturnType<typeof weekStats>; dsa: DsaResponse | null }) {
+function WeekStats({ stats, dsa, username }: { stats: ReturnType<typeof weekStats>; dsa: DsaResponse | null; username: string | undefined }) {
   const read = dsa !== null && (dsa.status === "ok" || dsa.status === "stale");
   const items: { label: string; value: string; note?: string }[] = [
     { label: "Rounds", value: `${stats.rounds.done}`, note: `of ${stats.rounds.planned}` },
     { label: "Redos", value: `${stats.redos.done}`, note: `of ${stats.redos.planned}` },
     { label: "Drills", value: "—", note: "Coming with the Gym" },
-    { label: "DSA mediums", value: read ? `${dsa.week.mediums}` : "—", note: read ? `of ${dsa.weeklyGoal}` : "Add your LeetCode username in Settings to count mediums" },
+    { label: "DSA mediums", value: read ? `${dsa.week.mediums}` : "—", note: read ? `of ${dsa.weeklyGoal}` : mediumsTip(username, dsa) },
   ];
   return (
     <div className="flex flex-wrap items-end gap-x-7 gap-y-3">
@@ -111,7 +112,7 @@ function WeekStats({ stats, dsa }: { stats: ReturnType<typeof weekStats>; dsa: D
           <div key={item.label}>
             <dt className="flex items-center gap-1 text-meta text-faint">
               {item.label}
-              {item.value === "—" ? <InfoTip label={`About ${item.label}`}>{item.note ?? ""}</InfoTip> : null}
+              {item.value === "—" && item.note ? <InfoTip label={`About ${item.label}`}>{item.note ?? ""}</InfoTip> : null}
             </dt>
             <dd className="mt-0.5 text-lead font-bold">
               {item.value}
