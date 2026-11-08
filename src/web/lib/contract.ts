@@ -30,8 +30,8 @@ export const KOKORO_DEFAULT_SPEED = 0.95;
 
 /** Equal to the server's defaults; a test keeps the two in step. */
 export const DEFAULT_SETTINGS: Settings = {
-  models: { interviewer: "claude-opus-5-5", judge: "claude-opus-5-5", coach: "claude-opus-5-5", scribe: "claude-opus-5-5" },
-  effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium" },
+  models: { interviewer: "claude-opus-5-5", judge: "claude-opus-5-5", coach: "claude-opus-5-5", scribe: "claude-opus-5-5", grader: "claude-sonnet-5-5" },
+  effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium", grader: "medium" },
   durations: { hld: 45, lld: 120 },
   theme: "dark",
   weeklyPlan: [...DEFAULT_WEEKLY_PLAN],

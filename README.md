@@ -19,6 +19,7 @@
 - **Voice in and out.** Speak your answers and hear the interviewer's replies.
 - **A weekly plan.** Today picks the session for the day from your plan: a redo, a new problem, a DSA day or rest.
 - **DSA progress.** The DSA page counts your LeetCode solves from a day you choose, against your weekly goal. It reads your public profile through LeetCode's unofficial GraphQL endpoint, so it can change, and it needs no login.
+- **A Gym.** Short drills of 10 to 15 minutes, queued from the gaps in your debriefs and spaced 1, 3 and 7 days apart. A grader gives Pass or Not yet and the one fix.
 - **Progress.** One focus skill each week, your scores per skill, and the redo queue.
 - **A usage page.** See tokens and cost for each round, role and model.
 
@@ -111,13 +112,13 @@ In `.env`, set `STUDY_ROOT` to the folder you want for your study files. If you 
 
 All settings in `.env`:
 
-| Variable               | Default                           | Purpose                                                     |
-| ---------------------- | --------------------------------- | ----------------------------------------------------------- |
-| `STUDY_ROOT`           | `~/sparmate-study`                | Your study folder.                                          |
-| `DATA_DIR`             | `<STUDY_ROOT>/rounds`             | Sessions, settings, custom problems, logs and usage ledger. |
-| `PORT`                 | `4747`                            | Server port.                                                |
-| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro`               | Kokoro voice files.                                         |
-| `SPARMATE_DENYLIST`    | `~/.config/sparmate/denylist.txt` | Extra words to keep out of your files (see Privacy).        |
+| Variable               | Default                           | Purpose                                                                     |
+| ---------------------- | --------------------------------- | --------------------------------------------------------------------------- |
+| `STUDY_ROOT`           | `~/sparmate-study`                | Your study folder.                                                          |
+| `DATA_DIR`             | `<STUDY_ROOT>/rounds`             | Sessions, settings, custom problems, drill schedule, logs and usage ledger. |
+| `PORT`                 | `4747`                            | Server port.                                                                |
+| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro`               | Kokoro voice files.                                                         |
+| `SPARMATE_DENYLIST`    | `~/.config/sparmate/denylist.txt` | Extra words to keep out of your files (see Privacy).                        |
 
 ## Your study folder
 

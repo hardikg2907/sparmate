@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useDueDrillCount } from "../lib/useGym";
 import { Link, useRoute, type PageName } from "../router";
 import { BarChartIcon, ChevronDownIcon, SlidersIcon } from "./icons";
 import { Logo } from "./Logo";
@@ -23,7 +24,8 @@ const INLINE_ON_PHONE = 3;
  */
 export function AppHeader({ testMode, actions }: { testMode?: boolean; actions?: ReactNode }) {
   const route = useRoute();
-  const page = route.name === "session" || route.name === "not-found" ? null : route.name;
+  const page = route.name === "session" || route.name === "drill" || route.name === "not-found" ? null : route.name;
+  const dueDrills = useDueDrillCount();
   const overflowCurrent = page !== null && LINKS.slice(INLINE_ON_PHONE).some((link) => link.pages.includes(page));
   return (
     <header className="header-hairline sticky top-0 z-20 shrink-0 border-b border-border/70 bg-card/90 shadow-xs backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-card/80">
@@ -51,6 +53,11 @@ export function AppHeader({ testMode, actions }: { testMode?: boolean; actions?:
                 )}
               >
                 {link.label}
+                {link.href === "/gym" && dueDrills > 0 ? (
+                  <span className="ml-1.5 rounded-full bg-warning-soft px-1.5 text-meta font-semibold text-warning" aria-label={`${dueDrills} due`}>
+                    {dueDrills}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -74,6 +81,7 @@ export function AppHeader({ testMode, actions }: { testMode?: boolean; actions?:
                 <DropdownMenuItem key={link.href} asChild>
                   <Link href={link.href} aria-current={page !== null && link.pages.includes(page) ? "page" : undefined}>
                     {link.label}
+                    {link.href === "/gym" && dueDrills > 0 ? ` (${dueDrills} due)` : ""}
                   </Link>
                 </DropdownMenuItem>
               ))}

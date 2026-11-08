@@ -246,8 +246,8 @@ describe("fields added later", () => {
     ]);
     expect(item.phaseTiming).toEqual([{ phase: "capacity", label: "Capacity math", plannedMinutes: 4, actualMinutes: 22 }]);
     expect(item.gaps).toEqual([
-      { title: "Capacity math", goodLooksLike: "Each number ends in which means", severity: "high", done: true },
-      { title: "Retries", goodLooksLike: "Backoff", severity: "low", done: false },
+      { title: "Capacity math", goodLooksLike: "Each number ends in which means", severity: "high", done: true, whyItMatters: "" },
+      { title: "Retries", goodLooksLike: "Backoff", severity: "low", done: false, whyItMatters: "" },
     ]);
   });
 

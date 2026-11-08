@@ -1,11 +1,18 @@
 import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from "react";
 import { flushSync } from "react-dom";
+import { DrillTargetSchema, type DrillTarget } from "../shared/drills";
 
 export type PageName = "home" | "library" | "library-new" | "gym" | "dsa" | "progress" | "history" | "settings" | "usage";
 
-export type Route = { name: PageName } | { name: "session"; id: string } | { name: "not-found" };
+export type Route = { name: PageName } | { name: "session"; id: string } | { name: "drill"; target: DrillTarget } | { name: "not-found" };
 
 const SESSION_PATH = /^\/session\/([A-Za-z0-9_-]{1,160})\/?$/;
+const DRILL_PATH = /^\/gym\/drill\/([a-z_]{1,20})\/([a-z0-9][a-z0-9-]{1,80})(?:\/([a-f0-9]{16}))?\/?$/;
+
+/** The address of one drill. A queued drill carries its id, so the attempt counts toward its schedule. */
+export function drillPath(target: DrillTarget): string {
+  return `/gym/drill/${target.drill}/${target.problemId}${target.drillId ? `/${target.drillId}` : ""}`;
+}
 
 const PAGE_PATHS: Record<string, PageName> = {
   "/": "home",
@@ -26,6 +33,11 @@ export function parseRoute(pathname: string): Route {
   if (pathname === "") return { name: "home" };
   const match = SESSION_PATH.exec(pathname);
   if (match?.[1]) return { name: "session", id: match[1] };
+  const drill = DRILL_PATH.exec(pathname);
+  if (drill?.[1] && drill[2]) {
+    const target = DrillTargetSchema.safeParse({ drill: drill[1], problemId: drill[2], ...(drill[3] ? { drillId: drill[3] } : {}) });
+    if (target.success) return { name: "drill", target: target.data };
+  }
   return { name: "not-found" };
 }
 

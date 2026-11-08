@@ -183,6 +183,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
 | brief-writer | custom problem preparation | one-shot | WebSearch (<= 8), WebFetch (<= 6) | `{ meta: { title, difficulty, tags }, body, sources, confidence }` structured |
 | brief-checker | custom problem verification | one-shot | WebFetch, WebSearch (<= 3) | `{ body, corrections, unconfirmed? }` structured |
+| grader | when the candidate submits a Gym drill (section 12.1) | one-shot, default `claude-sonnet-5-5` at effort `medium`, set in Settings `models.grader` and `effort.grader` | none | `{ verdict, fix, yourLine, passSounds }` structured, checked and trimmed by the server |
 | checker | when the round leaves a step, when the round ends, on a guided step check, and when the guide re-reads a step (section 5.11) | one-shot, always `claude-sonnet-5-5` at effort `low` | none (a frame PNG attached as an image block when needed) | `{ items[{ id, state, source, quote, detail }] }` structured, verified and stored in `Session.stepChecks` |
 
 Tool definitions (zod input schemas, every input validated, size-capped):
@@ -521,6 +522,9 @@ REST endpoints (JSON):
 | GET | `/api/dsa` | `DsaResponse`: `username`, `status` (`ok`, `stale`, `no_username`, `not_found` or `error`), `fetchedAt`, `countFrom`, `pass` (distinct problems solved since `countFrom`: `solved`, `easy`, `medium`, `hard`, and `unread` for problems whose difficulty is not known, so the four add up), `topics` (`{ name, slug, solved }`, most solved first, from the ledger), `week` (`solved`, `mediums`, `perDay` with 7 entries, Monday first, local time), `recent` (up to 10 `{ title, slug, difficulty, solvedAt }`, newest first, `difficulty` null until read), `lifetimeSolved` (everything on the account, earlier years included; shown only as one quiet line in the side panel) `weeklyGoal`, `failure` (`{ reason, at }` with `timeout`, `unreachable`, `unexpected_reply`, `busy` or `not_found`; set when the numbers are stale or missing) and `nextReadAt` (before this time a read-again returns the saved numbers). A name that stops resolving after a good read gives `stale` with reason `not_found` and the saved numbers. It reads LeetCode when the last read is at least 15 minutes old. |
 | POST | `/api/dsa/refresh` | The same answer after a "read again". The 15-minute wait still applies; after a failed read the wait is 15 seconds instead of 2 minutes. Same Host, Origin and CSRF checks as every write. |
 | GET | `/api/usage` | `UsageResponse`: overall totals and breakdowns (by session, problem, role, model, day for last 30 days), cache hit rate, and `trackingSince`. |
+| GET | `/api/gym` | `GymSummary`: the drill queue, due count, usable problems and week stats. |
+| POST | `/api/gym/prompt` | `DrillPrompt` for `{ drill, problemId, drillId? }`. 404 for a problem never played; 400 for a drill that does not fit the track. |
+| POST | `/api/gym/submit` | `DrillResult` for `{ drill, problemId, drillId?, answer }`. 502 when the grader fails. |
 | GET | `/api/sessions/:id/usage` | `SessionUsageResponse`: round totals and per-role breakdown. |
 | GET | `/api/tts/status` | `{ available: boolean }` |
 | POST | `/api/tts` | `{ text, voice, speed }` (zod strict) -> `audio/wav` bytes, `Cache-Control: no-store`. Queued requests whose HTTP client disconnects are dropped. The Kokoro worker idles out and stops after 3 minutes without requests. |
@@ -925,7 +929,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 **Main bar** (every page except the room, the debrief and the start flow)
 - "Sparmate" and six links: Today, Library, Gym, DSA, Progress, History. The current page is underlined. Usage and
   Settings are icons on the right, with the Test mode pill beside them. On a phone the links scroll sideways inside
-  the bar, so the page never does. The Gym link shows no count until the Gym exists.
+  the bar, so the page never does. The Gym link shows the number of due drills, and nothing when none is due.
 
 **Today `/`**
 - Kicker date and the day's title ("System design day", "Machine coding day", "DSA day", "Redo day", "Rest day"). A
@@ -955,8 +959,8 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   `rel="noreferrer noopener"`).
 
 **Progress `/progress`**
-- Header row with "This week": Rounds finished of planned, Redos of planned, and Drills as "—" with an
-  info tip ("Coming with the Gym") until that page exists, and DSA mediums as this week's count of the goal ("2 of 3"),
+- Header row with "This week": Rounds finished of planned, Redos of planned, Drills as passed of attempted this week (free drills
+  included), and DSA mediums as this week's count of the goal ("2 of 3"),
   or "—" with an info tip when no profile has been read.
 - Main card "Focus this week": the lowest skill from the newest scored rounds, its score out of 4, one supporting number,
   and one chart with a bar per step, planned minutes against used minutes, from the newest scorecard's phase timing. The
@@ -973,8 +977,16 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   round carries an "Unfinished" chip. Discard asks first, with the same confirm text as the room, then calls
   `DELETE /api/sessions/:id`. It is disabled while the status is Debriefing.
 
-**Gym `/gym` and DSA `/dsa`**
-- Gym: a placeholder with its final header. "Drills from your gaps are coming. Each takes 10 to 15 minutes on one skill."
+**Gym `/gym`**
+- The next due drill is the hero: title, problem, length, due day, passes in a row (three pips, with an info tip on how a gap closes), the one-line task and "Start drill". "Also due" lists the next three due drills and says how many more wait. "All drills" opens a side panel with the five drill kinds, then the problems that can supply the drill. With nothing due the hero says so and "All drills" is the one primary button. With no round played and no custom problem, the page explains that drills start after the first round.
+- Drill kinds are fixed: `capacity`, `walk`, `requirements`, `deep_dive` (system design) and `lld_skeleton` (machine coding). Capacity, walk and requirements take 10 minutes; the other two take 15. Each reads one section of the problem brief: capacity keys on "Capacity math" and prompts with the numeric lines of "Hidden facts"; walk keys on "Reference design"; requirements prompts with the opening prompt only and keys on "Expected requirements" plus the held-back facts, so it grades the questions and settled requirements the candidate writes; deep dive keys on one "Deep dives" entry, chosen by words shared with the gap, else rotating; the LLD skeleton prompts with the facts and keys on "Entities and relationships" and "Behaviour and states". The skeleton is a plain-text answer graded on structure, not the C++ editor.
+- Drills use only problems with a finished round (ended, debriefing, debriefed or failed; a live or paused round never counts) and custom problems. A judge gap queues a drill: the gap's optional `drill` field, else a keyword match on its title and then its reason (`drillForGap`), else nothing. A gap about pacing, leading the round or communication queues nothing. The first build of the schedule queues only debriefs from the last 14 days and records `backfilledOn`; after that every round debriefed since queues its drills, however long the candidate stayed away. A drill queued late falls due that day, never in the past. A file saved before the marker counts as built. Gaps from gap-practice rounds queue drills too. State lives in `DATA_DIR/drills.json` (strict schema, atomic write; a bad file is kept as `drills.json.bad` and the schedule starts empty).
+- Schedule, in local days: due the day after the debrief. A pass moves the next drill out 3 days, then 7; the third pass in a row closes it. A Not yet resets the count to 0 and brings the drill back the next day. A free drill that matches a queued drill (same kind and problem) counts for it only when that drill is due; an attempt before its day, and any other free drill, is logged and changes no schedule. A second submit for a drill still being graded gets 409. Due reads as "Due today", "Overdue", "Tomorrow" or the date; each row names its gap, and a deep dive names its topic. Every attempt is logged for the week stat.
+- `GET /api/gym` returns the queue, the due count, the usable problems with the drills each supports, and the week's passed and attempted. `POST /api/gym/prompt` returns the prompt without the answer key. `POST /api/gym/submit` takes the target and an answer (1 to 8000 characters), grades it with the `grader` role and returns the verdict, the one fix, the candidate's own line (quote-checked, else the first line), what a pass sounds like, the passes in a row, the next due day and the next due drill. Bodies are strict, ids are validated, and nothing is read from a path built from an id.
+- `/gym/drill/:drill/:problemId[/:drillId]` is full screen like a round, without the main bar: the task and material on the left, a monospace answer box on the right, and a soft countdown that shows overtime and never blocks. Leaving with an unsent answer asks first. The result screen shows Pass or Not yet, the one fix, "Your line" beside "What a pass sounds like", passes in a row and the next due day. Its one primary button is "Next drill" when another is due, else "Back to the Gym".
+- The fake agent grades by word overlap with the key, so the whole flow runs without a model.
+
+**DSA `/dsa`**
 - DSA measures the current pass, never the account's history. A hero shows "Mediums this week" as N of the weekly goal,
   "N problems this week" under the number and a Monday-first strip captioned "Problems solved each day" (days that are DSA days in the weekly plan are outlined and a small legend says so; today has a ring outside the cell) and
   one primary button, "Open LeetCode" (`https://leetcode.com/problemset/`, new tab, `rel="noopener noreferrer"`). The side

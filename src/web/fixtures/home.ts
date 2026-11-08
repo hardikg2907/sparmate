@@ -28,8 +28,8 @@ export const fixtureBootstrap: BootstrapResponse = {
 
 export function fixtureSettings(theme: Theme): Settings {
   return {
-    models: { interviewer: "claude-opus-5-5", judge: "claude-opus-5-5", coach: "claude-opus-5-5", scribe: "claude-opus-5-5" },
-    effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium" },
+    models: { interviewer: "claude-opus-5-5", judge: "claude-opus-5-5", coach: "claude-opus-5-5", scribe: "claude-opus-5-5", grader: "claude-sonnet-5-5" },
+    effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium", grader: "medium" },
     durations: { hld: 45, lld: 120 },
     theme,
     weeklyPlan: ["dsa", "hld", "dsa", "hld", "dsa", "lld", "redo"],

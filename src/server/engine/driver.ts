@@ -6,7 +6,7 @@ import type { ChecklistItem, Effort, ModelId, Scorecard, Session } from "../../s
 import type { CheckpointKind } from "./clock";
 import type { TesterOutput } from "./schemas";
 
-export type RoleName = "interviewer" | "guide" | "tester" | "judge" | "coach" | "scribe" | "brief-writer" | "brief-checker" | "checker";
+export type RoleName = "interviewer" | "guide" | "tester" | "judge" | "coach" | "scribe" | "brief-writer" | "brief-checker" | "checker" | "grader";
 
 export type ToolContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: "image/png" };
 
@@ -109,6 +109,8 @@ export interface FakeFacts {
   codeText?: string;
   imageAttached?: boolean;
   pinTargets?: () => PinTarget[];
+  /** The grader's input: the drill's answer key and the candidate's answer. */
+  drill?: { key: string; answer: string };
 }
 
 export interface UsageContext {

@@ -276,6 +276,7 @@ function fakeScorecard(facts: FakeFacts): Scorecard {
         whyItMatters: "Numbers that do not change a decision waste the time they take.",
         whatGoodLooksLike: "Each number ends with the decision it forces, such as a cache in front of the database.",
         teachMinutes: 10,
+        drill: facts.track === "lld" ? "lld_skeleton" : "capacity",
       },
       {
         title: "Deep dive on the hardest requirement",
@@ -283,6 +284,7 @@ function fakeScorecard(facts: FakeFacts): Scorecard {
         whyItMatters: "Most of the level signal comes from the follow-ups after the first design.",
         whatGoodLooksLike: "Pick the hardest requirement and go one level deeper without being asked.",
         teachMinutes: 10,
+        ...(facts.track === "lld" ? {} : { drill: "deep_dive" as const }),
       },
     ],
     timeline: [{ at: "00:00", note: "Round started." }],
@@ -424,6 +426,55 @@ function fakeScribeOps(facts: FakeFacts): BookkeepingOp[] {
   return ops;
 }
 
+const GRADER_STOP = new Set([
+  "which",
+  "means",
+  "about",
+  "their",
+  "there",
+  "would",
+  "should",
+  "because",
+  "every",
+  "other",
+  "these",
+  "those",
+  "where",
+  "while",
+  "after",
+  "before",
+  "never",
+  "using",
+]);
+
+/** Words of six letters or more, lower case, in order of first appearance. */
+function longWords(text: string): string[] {
+  return [...new Set(text.toLowerCase().match(/[a-z]{6,}/g) ?? [])].filter((w) => !GRADER_STOP.has(w));
+}
+
+/**
+ * A scripted grader: an answer that uses at least three of the key's longer words passes. It stands in for a model
+ * so the whole drill flow can run without one.
+ */
+export function fakeGrade(facts: FakeFacts): { verdict: "pass" | "not_yet"; fix: string; yourLine: string; passSounds: string } {
+  const key = facts.drill?.key ?? "";
+  const answer = facts.drill?.answer ?? "";
+  const lines = answer.split("\n").filter((l) => l.trim() !== "");
+  const present = new Set(longWords(answer));
+  const keyWords = longWords(key);
+  const hits = keyWords.filter((w) => present.has(w));
+  const pass = hits.length >= 3;
+  const missing = keyWords.find((w) => !present.has(w));
+  return {
+    verdict: pass ? "pass" : "not_yet",
+    fix: pass
+      ? "Tie your last point to a decision in the design, so each claim ends in something you would build."
+      : `Say what ${missing ?? "the key point"} means for the design, and end with the decision it forces.`,
+    yourLine: (lines[0] ?? "").slice(0, 200),
+    passSounds: "Each number or step ends with what it forces: a cache in front of the database, because reads outnumber writes by a hundred to one.",
+  };
+}
+
 async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
   const facts = setup.fake;
   switch (setup.role) {
@@ -454,6 +505,8 @@ async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
       return fakeCheck(facts);
     case "scribe":
       return { ops: fakeScribeOps(facts) };
+    case "grader":
+      return fakeGrade(facts);
     case "brief-writer": {
       const example = facts.exampleProblem;
       if (!example) throw new DriverError("No example problem to copy.");
@@ -502,6 +555,8 @@ function fakeOneShotStats(setup: OneShotSetup<unknown>, durationMs: number): Tur
       return { durationMs, costUsd: 0.01, inputTokens: 2000, outputTokens: 500, cacheReadTokens: 1500, cacheCreationTokens: 500, model: setup.model };
     case "scribe":
       return { durationMs, costUsd: 0.015, inputTokens: 2500, outputTokens: 800, cacheReadTokens: 2000, cacheCreationTokens: 500, model: setup.model };
+    case "grader":
+      return { durationMs, costUsd: 0.003, inputTokens: 1600, outputTokens: 140, cacheReadTokens: 800, cacheCreationTokens: 200, model: setup.model };
     case "checker":
       return { durationMs, costUsd: 0.004, inputTokens: 1400, outputTokens: 220, cacheReadTokens: 900, cacheCreationTokens: 200, model: setup.model };
     case "brief-writer":
