@@ -16,6 +16,7 @@ export const fixtureBootstrap: BootstrapResponse = {
   version: "0.1.0",
   studyRoot: "/Users/you/study",
   fakeAgent: true,
+  setup: [],
 };
 
 export function fixtureSettings(theme: Theme): Settings {

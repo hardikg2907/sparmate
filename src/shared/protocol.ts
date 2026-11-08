@@ -97,11 +97,24 @@ export type ServerMsg =
 // ---------------------------------------------------------------------------
 // REST (all JSON; every non-GET needs the header "x-csrf-token" and a same-origin Origin header)
 
+export type SetupCheckId = "compiler" | "claude-login" | "kokoro";
+
+/** One prerequisite of the app. `fix` is a command for the user to run; the app never runs it. */
+export interface SetupCheck {
+  id: SetupCheckId;
+  ok: boolean;
+  optional: boolean;
+  title: string;
+  detail: string;
+  fix?: string;
+}
+
 export interface BootstrapResponse {
   csrfToken: string;
   version: string;
   studyRoot: string; // shown in settings so the user knows which folder bookkeeping writes to
   fakeAgent: boolean; // true when SPARMATE_FAKE_AGENT=1 (UI testing without model calls)
+  setup: SetupCheck[]; // prerequisites, so the home page can say what is still missing
 }
 
 export const CreateSessionSchema = z.strictObject({

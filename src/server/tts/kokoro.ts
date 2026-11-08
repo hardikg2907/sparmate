@@ -36,6 +36,11 @@ export function resolveKokoroPaths(kokoroHome: string, appRoot: string): KokoroP
   };
 }
 
+/** True only when the Python, both model files and the worker script are all present. */
+export function kokoroFilesPresent(paths: KokoroPaths, exists: (path: string) => boolean = existsSync): boolean {
+  return exists(paths.python) && exists(paths.onnx) && exists(paths.voices) && exists(paths.workerScript);
+}
+
 interface QueuedRequest {
   req: TtsRequest;
   resolve: (wav: Buffer) => void;
@@ -72,7 +77,7 @@ export class KokoroManager {
 
   /** Returns true only when every required binary, model and worker file is present on disk. */
   isAvailable(): boolean {
-    return existsSync(this.paths.python) && existsSync(this.paths.onnx) && existsSync(this.paths.voices) && existsSync(this.paths.workerScript);
+    return kokoroFilesPresent(this.paths);
   }
 
   /** Synthesizes text into 16-bit mono WAV audio bytes. */

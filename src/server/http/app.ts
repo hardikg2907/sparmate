@@ -11,6 +11,7 @@ import type { SettingsStore } from "../engine/settings";
 import type { SessionStore } from "../engine/store";
 import type { KokoroManager } from "../tts/kokoro";
 import type { UsageLedger } from "../engine/usage-ledger";
+import type { SetupStatus } from "../setup/checks";
 import { registerRoutes } from "./routes";
 import { registerSecurity } from "./security";
 import { registerSocket } from "./socket";
@@ -24,6 +25,7 @@ export interface AppDeps {
   kokoro?: KokoroManager;
   log: Logger;
   usageLedger?: UsageLedger;
+  setupStatus?: SetupStatus;
 }
 
 // The largest browser message is a board PNG; the scene and JSON framing ride on top of it.

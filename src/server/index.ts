@@ -17,6 +17,7 @@ import { UsageLedger } from "./engine/usage-ledger";
 import { wrapDriverWithLedger } from "./engine/usage-driver";
 import { killLiveProcessGroups } from "./runner/process";
 import { initStudyKit } from "./study/kit";
+import { runSetupChecks, SetupStatus } from "./setup/checks";
 
 export interface ShutdownDeps {
   kokoro: { shutdown(): void };
@@ -114,7 +115,11 @@ async function main(): Promise<void> {
 
   const kokoro = new KokoroManager({ kokoroHome: config.kokoroHome, appRoot: config.appRoot });
 
-  const app = await buildApp({ config, csrfToken, manager, settings, store, kokoro, log, usageLedger });
+  // Advisory only: the checks run in the background, and a failing one never stops the server.
+  const setupStatus = new SetupStatus(() => runSetupChecks({ kokoroHome: config.kokoroHome, appRoot: config.appRoot, fakeAgent: config.fakeAgent }));
+  setupStatus.start();
+
+  const app = await buildApp({ config, csrfToken, manager, settings, store, kokoro, log, usageLedger, setupStatus });
   const listenHost = process.env.SPARMATE_IN_CONTAINER === "1" ? "0.0.0.0" : "127.0.0.1";
   await app.listen({ port: config.port, host: listenHost });
   log.info(`Started on port ${config.port}${config.fakeAgent ? " with the fake agent" : ""}; ${guard.size()} privacy terms loaded`);

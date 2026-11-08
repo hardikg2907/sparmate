@@ -75,7 +75,7 @@ export const OUTPUT_CUT_PATTERN = /\[output cut at \d+ KB\]/;
 
 export type SanitizerMode = "address,undefined" | "undefined" | "none";
 
-const DEFAULT_COMPILER = "/usr/bin/clang++";
+export const DEFAULT_COMPILER = "/usr/bin/clang++";
 const BASE_FLAGS = [
   "-std=c++17",
   "-Wall",

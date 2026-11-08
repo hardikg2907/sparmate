@@ -13,6 +13,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "build": "vite build",
     "serve": "tsx src/server/index.ts",
     "start": "vite build && tsx src/server/index.ts",
