@@ -31,3 +31,33 @@ export function plannedPhaseAt(plan: readonly PlanPhase[], roundMs: number): str
   const windows = planWindows(plan);
   return (windows.find((w) => roundMs < w.endMs) ?? windows[windows.length - 1])?.id ?? null;
 }
+
+/** No step gets less than this share of the rail, so a two-minute step still shows its name. */
+export const MIN_RAIL_SHARE = 0.15;
+
+/** Each phase's width weight on the rail: its planned minutes, raised to the floor share of the whole plan. */
+export function railWeights(plan: readonly PlanPhase[]): number[] {
+  const total = plan.reduce((sum, p) => sum + p.minutes, 0);
+  return plan.map((p) => Math.max(p.minutes, total * MIN_RAIL_SHARE));
+}
+
+/**
+ * Where "now" sits on the rail, from 0 to 1. Widths are not strictly to scale, so the needle moves through each
+ * phase's own segment at that phase's planned pace and always points into the phase the plan expects.
+ */
+export function railPosition(plan: readonly PlanPhase[], roundMs: number): number {
+  const weights = railWeights(plan);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return 0;
+  let before = 0;
+  for (const [i, w] of planWindows(plan).entries()) {
+    const weight = weights[i] ?? 0;
+    if (roundMs < w.endMs) {
+      const span = w.endMs - w.startMs;
+      const into = span > 0 ? Math.max(0, roundMs - w.startMs) / span : 0;
+      return (before + into * weight) / sum;
+    }
+    before += weight;
+  }
+  return 1;
+}

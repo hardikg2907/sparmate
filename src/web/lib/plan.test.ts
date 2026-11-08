@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { behindPlanMs, planWindows, plannedPhaseAt } from "./plan";
+import { MIN_RAIL_SHARE, behindPlanMs, planWindows, plannedPhaseAt, railPosition, railWeights } from "./plan";
 
 const MIN = 60_000;
 const PLAN = [
@@ -48,5 +48,43 @@ describe("plannedPhaseAt", () => {
 
   it("is null for an empty plan", () => {
     expect(plannedPhaseAt([], 1000)).toBeNull();
+  });
+});
+
+describe("rail layout", () => {
+  const HLD = [
+    { id: "requirements", label: "Requirements", minutes: 5 },
+    { id: "entities", label: "Core entities", minutes: 2 },
+    { id: "api", label: "API", minutes: 5 },
+    { id: "design", label: "High-level design", minutes: 13 },
+    { id: "deep_dives", label: "Deep dives", minutes: 20 },
+  ];
+
+  it("gives a short step at least the floor share and leaves long steps to scale", () => {
+    const weights = railWeights(HLD);
+    expect(weights[1]).toBeCloseTo(45 * MIN_RAIL_SHARE);
+    expect(weights[3]).toBe(13);
+    expect(weights[4]).toBe(20);
+  });
+
+  it("keeps the needle inside the phase the plan expects", () => {
+    const weights = railWeights(HLD);
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const startOf = (i: number) => weights.slice(0, i).reduce((a, b) => a + b, 0) / sum;
+    expect(railPosition(HLD, 0)).toBe(0);
+    // Halfway through core entities (minute 6) is halfway through its widened segment.
+    expect(railPosition(HLD, 6 * MIN)).toBeCloseTo((startOf(1) + startOf(2)) / 2);
+    expect(railPosition(HLD, 12 * MIN)).toBeCloseTo(startOf(3));
+    expect(railPosition(HLD, 45 * MIN)).toBe(1);
+    expect(railPosition(HLD, 60 * MIN)).toBe(1);
+  });
+
+  it("is plain to scale when every step is above the floor", () => {
+    const even = [
+      { id: "a", label: "A", minutes: 10 },
+      { id: "b", label: "B", minutes: 10 },
+    ];
+    expect(railWeights(even)).toEqual([10, 10]);
+    expect(railPosition(even, 5 * MIN)).toBeCloseTo(0.25);
   });
 });
