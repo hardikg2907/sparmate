@@ -8,7 +8,9 @@ export interface DrillContent {
 }
 
 export interface DrillContext {
-  /** The gap's own words, used to pick the deep dive that matches it. */
+  /** The gap's title, used to pick the deep dive that matches it. */
+  gapTitle?: string;
+  /** Why the gap matters; it only breaks ties between deep dives. */
   hint?: string;
   /** How many drills of this kind the candidate already tried on the problem, so a free drill moves on to the next topic. */
   rotation?: number;
@@ -93,17 +95,23 @@ function stems(text: string): Set<string> {
  * The deep dive that shares the most words with the gap, counting its whole text and its title three times over.
  * Without a shared word the rotation points at one.
  */
-export function pickDeepDive(entries: readonly DeepDiveEntry[], hint = "", rotation = 0): DeepDiveEntry | null {
+export function pickDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", reason = "", rotation = 0): DeepDiveEntry | null {
   if (entries.length === 0) return null;
-  const wanted = stems(hint);
+  const fromTitle = stems(gapTitle);
+  const fromReason = stems(reason);
   let best = -1;
   let score = 0;
   entries.forEach((entry, index) => {
     const title = stems(entry.title);
-    let shared = 0;
-    for (const s of stems(`${entry.title} ${entry.text}`)) if (wanted.has(s)) shared += title.has(s) ? 3 : 1;
-    if (shared > score) {
-      score = shared;
+    let total = 0;
+    for (const s of stems(`${entry.title} ${entry.text}`)) {
+      const weight = title.has(s) ? 3 : 1;
+      // The gap's own title decides the topic; the longer reason only breaks ties.
+      if (fromTitle.has(s)) total += weight * 2;
+      else if (fromReason.has(s)) total += weight * 0.5;
+    }
+    if (total > score) {
+      score = total;
       best = index;
     }
   });
@@ -198,7 +206,7 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
         ].join("\n\n"),
       };
     case "deep_dive": {
-      const entry = pickDeepDive(deepDiveEntries(problem), ctx.hint, ctx.rotation);
+      const entry = pickDeepDive(deepDiveEntries(problem), ctx.gapTitle, ctx.hint, ctx.rotation);
       if (!entry) return null;
       return {
         prompt: {

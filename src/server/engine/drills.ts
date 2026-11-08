@@ -107,7 +107,7 @@ export function playableProblems(all: readonly Problem[], history: readonly Pick
 }
 
 function asRow(item: DrillItem, problem: Problem, today: string, rotation: number): GymDrillRow {
-  const content = buildDrill(problem, item.drill, { hint: `${item.gapTitle} ${item.gapHint}`, rotation });
+  const content = buildDrill(problem, item.drill, { gapTitle: item.gapTitle, hint: item.gapHint, rotation });
   return {
     id: item.id,
     gapTitle: item.gapTitle,
@@ -171,7 +171,7 @@ export class DrillService {
     if (!drillsForTrack(problem.meta.track).includes(target.drill)) throw new HttpError(400, "That drill does not fit this problem.");
     const item = this.matchItem(state, target, this.today());
     const rotation = state.attempts.filter((a) => a.problemId === problem.meta.id && a.drill === target.drill).length;
-    const content = buildDrill(problem, target.drill, { hint: item ? `${item.gapTitle} ${item.gapHint}` : "", rotation });
+    const content = buildDrill(problem, target.drill, { ...(item ? { gapTitle: item.gapTitle, hint: item.gapHint } : {}), rotation });
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
     return { problem, item, content };
   }
