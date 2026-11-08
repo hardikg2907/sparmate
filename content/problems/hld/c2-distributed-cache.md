@@ -71,6 +71,7 @@ Extras (credit when they name one, never a gap):
 
 ## API and entities
 
+External API:
 Data API, sent by the client library over persistent TCP connections with a compact binary protocol and pipelining. HTTP and JSON on every call would cost more than the lookup itself.
 - `GET key` returns the value or `nil`.
 - `SET key value [ttlSeconds]` returns `OK`. It replaces the value and replaces or clears any old TTL. A value over 1 MB returns an error.

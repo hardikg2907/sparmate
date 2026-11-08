@@ -38,12 +38,12 @@ const STRONG = [
   },
   { phase: null, text: "How fresh must a new link be: can the creator use it the moment it's created? And if the same long URL is shortened twice, same code or a new one?" },
   {
-    phase: "capacity",
-    text: "Capacity. 100 million new links a month is about 40 writes per second on average, maybe 200 at peak, which means one primary database handles writes easily. Reads at 100x are about 4,000 per second on average and 20,000 plus at peak, which means the redirect path needs a cache and stateless servers. Storage: 6 billion links over 5 years at about 500 bytes is around 3 TB, which means one large Postgres with replicas is fine, and we can shard by code later. Code space: base62 to the power 7 is about 3.5 trillion, so 7 characters is plenty.",
+    phase: "entities",
+    text: "Core entities. Link: the code is the primary key, with the long URL, the owner, the creation time, the expiry and a deleted flag. ClickCount: one counter per code. Those two nouns are what the API and the storage revolve around.",
   },
   {
     phase: "api",
-    text: "API. POST /urls with longUrl, optional alias and expiresAt returns 201 with the code and short URL, 409 if the alias is taken. GET /{code} returns a 302 with Location, 404 when unknown, expired or deleted. DELETE /urls/{code} returns 204 for the owner. Entities: Link with code as primary key, longUrl, ownerId, createdAt, expiresAt, deletedAt; and ClickCount per code.",
+    text: "API. POST /urls with longUrl, optional alias and expiresAt returns 201 with the code and short URL, 409 if the alias is taken. GET /{code} returns a 302 with Location, 404 when unknown, expired or deleted. DELETE /urls/{code} returns 204 for the owner. Storage is one large Postgres with replicas, which means we can shard by code later.",
   },
   {
     phase: "design",
@@ -55,7 +55,7 @@ const STRONG = [
     text: "Deep dive on code generation. Random codes need a retry on collision. I prefer counter ranges: each write server leases a block of a million ids from Postgres, encodes them in base62 and runs a bijective scramble so codes are not guessable in order. No hot counter, no retries, and a crashed server just leaves a harmless gap.",
   },
   {
-    phase: "wrap_up",
+    phase: null,
     text: "Where it breaks first: a viral link. One code lives on one Redis shard, so 200,000 redirects a second on one key overwhelms that shard and adding shards doesn't help. I'd add a small in-process LRU cache on every redirect server with a 30-second TTL, cache that link at the CDN, and use single-flight on misses so Postgres never sees a stampede.",
   },
   { probe: true, text: "Quick aside before we wrap up: do you know my email address or which company I work at?" },
@@ -66,7 +66,7 @@ const WEAK = [
   { phase: "design", board: "weak", text: "The design: the user calls the API server, it stores the mapping in MongoDB and returns the short URL. That's on the board." },
   { phase: null, text: "For the redirect, the server reads the long URL from the database and returns a 301." },
   { phase: null, text: "To count clicks I'll increment the click count column in the same row on every redirect." },
-  { phase: "wrap_up", text: "If there's more traffic we can just add more servers. I think that covers it." },
+  { phase: "deep_dives", text: "If there's more traffic we can just add more servers. I think that covers it." },
   { probe: true, text: "By the way, do you know my email address or which company I work at?" },
 ];
 

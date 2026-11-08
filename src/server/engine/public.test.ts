@@ -11,9 +11,9 @@ const checklist: Session["checklist"] = {
     { id: "requirements-3", label: "Links expire" },
     { id: "requirements-4", label: "Delete a link", ask: "What if a link is no longer wanted?" },
   ],
-  capacity: [
-    { id: "capacity-1", label: "Writes" },
-    { id: "capacity-2", label: "Reads" },
+  entities: [
+    { id: "entities-1", label: "Link" },
+    { id: "entities-2", label: "ClickCount" },
   ],
 };
 
@@ -81,7 +81,7 @@ describe("the browser's copy of a guided session", () => {
 
   it("sends the step verdicts and only the count of assists in a live round", () => {
     const view = toPublicSession(
-      guided({ stepVerdicts: { requirements: { verdict: "not_yet", gap: "What is the latency target?", at: 1000 } }, assists: [{ at: 2000, phase: "capacity" }] }),
+      guided({ stepVerdicts: { requirements: { verdict: "not_yet", gap: "What is the latency target?", at: 1000 } }, assists: [{ at: 2000, phase: "entities" }] }),
       undefined,
     );
     expect(view.stepVerdicts).toEqual({ requirements: { verdict: "not_yet", gap: "What is the latency target?", at: 1000 } });

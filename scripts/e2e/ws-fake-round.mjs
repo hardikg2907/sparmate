@@ -512,7 +512,7 @@ async function hldRound(dirs) {
   // The step checker: chat and frame evidence, the leave-time frame image, and the interview-mode filter.
   c.send({ type: "board.update", version: 2, elements: framedScene() });
   mark = c.mark();
-  c.send({ type: "phase.set", phase: "capacity" });
+  c.send({ type: "phase.set", phase: "entities" });
   const frameAsked = await c.waitFor((m) => m.type === "board.png.request" && m.frameId === "f-req", { since: mark, label: "frame image for the step he left" });
   check("leaving a step asks the page for that step's frame image", frameAsked.frameId === "f-req");
   // An interview round sends the browser no checklist, so the result is read from the session file once it is saved.
@@ -558,12 +558,12 @@ async function hldRound(dirs) {
   c.send({ type: "board.update", version: 4, elements: scene() });
 
   mark = c.mark();
-  c.send({ type: "phase.set", phase: "capacity" });
+  c.send({ type: "phase.set", phase: "entities" });
   const changed = await c.waitFor((m) => m.type === "phase.changed", { since: mark, label: "phase.changed" });
-  const stateAfter = await c.waitFor((m) => m.type === "session.state" && m.session.phase === "capacity", { since: mark, label: "state after phase" });
+  const stateAfter = await c.waitFor((m) => m.type === "session.state" && m.session.phase === "entities", { since: mark, label: "state after phase" });
   check(
     "phase.set records the candidate's move",
-    changed.phase === "capacity" && changed.by === "candidate" && stateAfter.session.phaseHistory.some((h) => h.phase === "capacity" && h.by === "candidate"),
+    changed.phase === "entities" && changed.by === "candidate" && stateAfter.session.phaseHistory.some((h) => h.phase === "entities" && h.by === "candidate"),
   );
 
   mark = c.mark();
@@ -598,13 +598,13 @@ async function hldRound(dirs) {
   );
   const again = await say(c, "What do my notes say?", "n2");
   check("the notes block is left out while the notes are unchanged", again.reply.entry.text.includes("no notes block"), again.reply.entry.text);
-  c.send({ type: "notes.update", phase: "capacity", text: "400 reads/s, which means one cache.", version: 2 });
+  c.send({ type: "notes.update", phase: "entities", text: "Link: code, long URL, expiry.", version: 2 });
   await new Promise((r) => setTimeout(r, 1500));
   const reopened = await openRoom(id, "hld-reload");
   const reloadState = reopened.msgs.find((m) => m.type === "session.state").session;
   check(
     "notes survive a reload and the stale write was ignored",
-    reloadState.stepNotes.requirements === req && reloadState.stepNotes.capacity.startsWith("400 reads/s") && reloadState.stepNotesVersion === 2,
+    reloadState.stepNotes.requirements === req && reloadState.stepNotes.entities.startsWith("Link:") && reloadState.stepNotesVersion === 2,
     JSON.stringify(reloadState.stepNotes),
   );
   const onDisk = JSON.parse(await readFile(join(dirs.data, "sessions", id, "session.json"), "utf8"));
@@ -635,7 +635,7 @@ async function hldRound(dirs) {
   check("quote checks: real quotes verified, the invented one failed", qc.length >= 2 && failedQuotes === 1, `${qc.length} checks, ${failedQuotes} failed`);
   check(
     "scorecard has phase timing and lint issues",
-    Array.isArray(debrief.scorecard.phaseTiming) && debrief.scorecard.phaseTiming.length === 6 && Array.isArray(debrief.scorecard.lintIssues),
+    Array.isArray(debrief.scorecard.phaseTiming) && debrief.scorecard.phaseTiming.length === 5 && Array.isArray(debrief.scorecard.lintIssues),
   );
   check("reference answer appears once debriefed", debrief.state.reference && debrief.state.reference.sections.some((s) => s.heading === "Reference design"));
   const png = await api.get(`/api/sessions/${id}/board-final.png`);
@@ -648,7 +648,7 @@ async function hldRound(dirs) {
   });
   check("coach opens after the debrief", coachOpen.entry.text.includes("Let's start with"), coachOpen.entry.text.slice(0, 80));
   mark = c.mark();
-  c.send({ type: "chat.send", channel: "coach", clientMsgId: "k1", text: "Can you explain the capacity gap?" });
+  c.send({ type: "chat.send", channel: "coach", clientMsgId: "k1", text: "Can you explain the first gap?" });
   const coachReply = await c.waitFor((m) => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach", { since: mark, label: "coach reply" });
   check("coach answers on the coach channel", coachReply.entry.text.length > 20);
 
@@ -955,7 +955,7 @@ async function restartMidRound(dirs, server) {
   let mark = c2.mark();
   c2.send({ type: "session.resume" });
   await c2.waitFor((m) => m.type === "session.state" && m.session.status === "live", { since: mark, label: "live again" });
-  const reply = await say(c2, "Next, the capacity math.", "r2");
+  const reply = await say(c2, "Next, the core entities.", "r2");
   check("the round carries on after the restart", reply.reply.entry.text.length > 0 && !reply.reply.entry.text.includes("carry on"), reply.reply.entry.text);
   c2.close();
   return next;

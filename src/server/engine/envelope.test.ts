@@ -164,23 +164,23 @@ describe("transcript and code text", () => {
     ];
     const history = [
       { phase: "requirements", at: 0 },
-      { phase: "capacity", at: 100 },
+      { phase: "entities", at: 100 },
       { phase: "requirements", at: 200 },
     ];
     expect(stepEntries(entries, history, "requirements", 300).map((x) => x.id)).toEqual(["a", "e"]);
-    expect(stepEntries(entries, history, "capacity", 300).map((x) => x.id)).toEqual(["b"]);
+    expect(stepEntries(entries, history, "entities", 300).map((x) => x.id)).toEqual(["b"]);
   });
 
   it("lists only finished notepads, in step order", () => {
     const phases = [
       { id: "requirements", label: "Requirements" },
-      { id: "capacity", label: "Capacity" },
+      { id: "entities", label: "Core entities" },
     ];
     const text = stepSummariesText(phases, {
-      capacity: { status: "done", proposed: ["40 writes/s"], agreed: [] },
+      entities: { status: "done", proposed: ["Link", "ClickCount"], agreed: [] },
       requirements: { status: "pending", proposed: ["old"], agreed: [] },
     });
-    expect(text).toBe("[Capacity]\nHe proposed:\n- 40 writes/s");
+    expect(text).toBe("[Core entities]\nHe proposed:\n- Link\n- ClickCount");
   });
 
   it("numbers code lines", () => {

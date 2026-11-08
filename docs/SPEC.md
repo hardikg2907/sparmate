@@ -23,7 +23,7 @@ Read these before building: `src/shared/*.ts` (the typed contract), the two fixt
    volunteered, no teaching or rescuing while the clock runs, one level deeper where a real interviewer would
    push, the extension at the right time (HLD: 10 minutes left; LLD: 15 minutes left). Syntax help in C++ is
    allowed at once; design help is not.
-3. **The candidate's own methods drive the phase rail:** six HLD steps and seven LLD steps
+3. **The candidate's own methods drive the phase rail:** five HLD steps and seven LLD steps
    (`src/shared/phases.ts`). The rail is a guide, never a gate: the candidate may move freely.
 4. **Marks follow the tracker rules.** Guided rounds earn at most `[~]`, and get a readiness call instead of a hire verdict (section 5.7). `[x]` needs: finished inside the
    time, the code ran (LLD), and no gap at the target level bar.
@@ -545,9 +545,10 @@ Behaviour of client messages:
 
 **Step checker.** Every step has a checklist (`Session.checklist`), derived when the session is created from the
 problem brief by `deriveChecklist` (`src/shared/checklist.ts`): HLD requirements from the numbered lines of "Expected
-requirements", capacity from the bold leads of "Capacity math", API from the bullets of "API and entities" (endpoints,
-then `Entity <name>`), design from the "Walk one ..." lines of "Reference design", deep dives from the `###` headings of
-"Deep dives", and the wrap-up from two fixed items that do not name the curveball. LLD: clarify from "Expected
+requirements", core entities from the "Core entities:" bullets of "API and entities", API from the other bullets of
+that section (endpoints and messages), design from the "Walk one ..." lines of "Reference design", and deep dives from
+the `###` headings of "Deep dives" plus one fixed item for the curveball that does not name it. "Capacity math" is the
+answer key for numbers in the deep dives and adds no items. LLD: clarify from "Expected
 requirements", entities from the code-span names of "Entities and relationships", behaviour from "Behaviour and states",
 thin slice from the first demo scenario and fill out from the rest; skeleton and extension have fixed items. A step whose
 sections yield nothing gets its goal as the one item. Item ids are `<phase>-<n>`.
@@ -711,8 +712,7 @@ scribe read them.
 - `onSceneChange` is called at most once per 1.5 s with the non-deleted elements and an incrementing version.
 - **Step frames.** A fresh board (version 0, no step frames) starts with one Excalidraw frame per step that is answered
   on the board, laid out by `src/shared/stepFrames.ts`, named after the step and tagged `customData: { step }`. HLD:
-  Requirements, Capacity and API in a row above High-level design and Deep dives; the wrap-up step reads the High-level
-  design frame. LLD: Entities and States (the behaviour step); the other LLD steps are answered in the code. The frames
+  Requirements, Core entities and API in a row above High-level design and Deep dives. LLD: Entities and States (the behaviour step); the other LLD steps are answered in the code. The frames
   go in through `initialData` and are sent with the first scene report. A palette insert that lands inside a step frame
   is put in that frame.
 - `showStep(step)` pans and zooms to a step's frame (`scrollToContent` with `fitToViewport`, animated unless reduced
@@ -756,7 +756,7 @@ Edges:
 - [API service] -> [Postgres] "SQL" (dashed)
 - [Worker] -> ? (dangling)
 Text on the board:
-- "100M URLs/month → 40 writes/s" in frame "Capacity"
+- "Link { code, longUrl, expiresAt }" in frame "Core entities"
 Not readable as text: 2 freehand strokes
 Warnings: node [Cache] has no connections
 ```
@@ -1119,8 +1119,8 @@ Guide (guided mode), modelled on step-by-step guided practice:
 - Checks requirements against the brief's Core items and the Level bar; a missing Extra is never a gap. When a step
   meets the Level bar it calls `step_verdict` with `pass` and says so plainly; it never says "nearly done" or "close to
   done". Otherwise it names exactly one gap, the most important, as a missing question or a missing decision and not
-  its answer. It never raises a passed step again, and small items go to the debrief. Capacity numbers need to be right
-  to an order of magnitude, and only the numbers that drive a decision need their consequence.
+  its answer. It never raises a passed step again, and small items go to the debrief. In the deep dives, numbers need to
+  be right to an order of magnitude, and only the numbers that drive a decision need their consequence.
 - Teaches short in the round: after H3, or on "no idea", "idk" or "teach me", a model answer of about 150 words for
   the gap with no tables or quizzes, then the step goes back to him. An "I'm stuck" request gets the same answer plus
   a line asking him to redo the step, never a `pass` and never a `note_hint`. Longer teaching waits for the coach after

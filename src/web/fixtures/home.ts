@@ -186,9 +186,10 @@ export const fixtureProblems: ProblemSummary[] = [
 
 const TIMING = [
   { phase: "requirements", label: "Requirements", plannedMinutes: 5, actualMinutes: 7.2 },
-  { phase: "capacity", label: "Capacity math", plannedMinutes: 3, actualMinutes: 21.8 },
-  { phase: "api", label: "API", plannedMinutes: 4, actualMinutes: 5.4 },
-  { phase: "design", label: "High-level design", plannedMinutes: 10, actualMinutes: 9.1 },
+  { phase: "entities", label: "Core entities", plannedMinutes: 2, actualMinutes: 1.8 },
+  { phase: "api", label: "API", plannedMinutes: 5, actualMinutes: 5.4 },
+  { phase: "design", label: "High-level design", plannedMinutes: 13, actualMinutes: 30.6 },
+  { phase: "deep_dives", label: "Deep dives", plannedMinutes: 20, actualMinutes: 0 },
 ];
 
 const SCORES = (driving: number, depth: number) => [
@@ -254,7 +255,7 @@ export const fixtureHistory: SessionHistoryItem[] = [
     scores: SCORES(1, 2),
     phaseTiming: TIMING,
     gaps: [
-      { title: "Capacity math drifts", goodLooksLike: "Each number ends in a line that says which means.", severity: "high", done: false },
+      { title: "Numbers that decide nothing", goodLooksLike: "Each number in a deep dive ends in a line that says which means.", severity: "high", done: false },
       { title: "Driving the clock", goodLooksLike: "Moves on at the planned time for each step.", severity: "high", done: false },
     ],
   },

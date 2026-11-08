@@ -1,6 +1,6 @@
 import { phasesFor, type Track } from "../../shared/phases";
 import { formatClock, formatMinutes } from "../lib/format";
-import type { PlanPhase } from "../lib/plan";
+import { railPosition, railWeights, type PlanPhase } from "../lib/plan";
 import { CheckIcon } from "./icons";
 import { Tooltip, cn } from "./ui";
 
@@ -29,8 +29,8 @@ function PassedMark({ passed }: { passed: boolean }) {
 }
 
 /**
- * The round's plan drawn to scale, with the time spent in each phase, a needle for "now", and a passed mark per step in a guided round. Widths follow planned minutes, so a three-minute phase looks short and
- * a fifteen-minute one looks long.
+ * The round's plan drawn to scale, with the time spent in each phase, a needle for "now", and a passed mark per step in a guided round. Widths follow planned minutes, so a five-minute phase looks short and
+ * a twenty-minute one looks long, but no phase is too narrow to name.
  */
 export function PlanTrack({
   plan,
@@ -54,8 +54,8 @@ export function PlanTrack({
   disabled?: boolean;
 }) {
   const goals = goalsOf(track);
-  const totalMs = plan.reduce((sum, p) => sum + p.minutes * MIN, 0) || 1;
-  const needle = Math.min(1, Math.max(0, roundMs / totalMs));
+  const weights = railWeights(plan);
+  const needle = railPosition(plan, roundMs);
   const currentIndex = plan.findIndex((p) => p.id === currentPhase);
 
   return (
@@ -76,7 +76,7 @@ export function PlanTrack({
                 ? shortClock(spentMs)
                 : `${formatMinutes(phase.minutes)} min`;
           return (
-            <li key={phase.id} style={{ flexGrow: phase.minutes, flexBasis: 0 }} className="@container min-w-0">
+            <li key={phase.id} style={{ flexGrow: weights[index], flexBasis: 0 }} className="@container min-w-0">
               <Tooltip
                 content={
                   <>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
 import { MAX_GAP_CHARS, parseStepVerdict, recordStepVerdict } from "./step-verdict";
 
-const PHASES = ["requirements", "capacity", "api"];
+const PHASES = ["requirements", "entities", "api"];
 const parse = (args: unknown) => parseStepVerdict(args, PHASES);
 
 describe("parseStepVerdict", () => {
@@ -11,18 +11,18 @@ describe("parseStepVerdict", () => {
   });
 
   it("trims a not_yet gap and keeps it as plain text", () => {
-    const out = parse({ phase: "capacity", verdict: "not_yet", gap: "  What is the\nread rate?\t " });
-    expect(out).toEqual({ ok: true, value: { phase: "capacity", verdict: "not_yet", gap: "What is the read rate?" } });
+    const out = parse({ phase: "entities", verdict: "not_yet", gap: "  What is the\nread rate?\t " });
+    expect(out).toEqual({ ok: true, value: { phase: "entities", verdict: "not_yet", gap: "What is the read rate?" } });
   });
 
   it("keeps markup as text for the page to escape, never as HTML", () => {
-    const out = parse({ phase: "capacity", verdict: "not_yet", gap: "<img src=x onerror=alert(1)>" });
+    const out = parse({ phase: "entities", verdict: "not_yet", gap: "<img src=x onerror=alert(1)>" });
     expect(out.ok && out.value.gap).toBe("<img src=x onerror=alert(1)>");
   });
 
   it("rejects unknown fields, an unknown step and a bad verdict", () => {
     expect(parse({ phase: "api", verdict: "pass", extra: 1 }).ok).toBe(false);
-    expect(parse({ phase: "wrap_up", verdict: "pass" })).toMatchObject({ ok: false, error: expect.stringContaining("requirements, capacity, api") });
+    expect(parse({ phase: "deep_dives", verdict: "pass" })).toMatchObject({ ok: false, error: expect.stringContaining("requirements, entities, api") });
     expect(parse({ phase: "api", verdict: "nearly" }).ok).toBe(false);
     expect(parse({ verdict: "pass" }).ok).toBe(false);
   });
@@ -63,6 +63,6 @@ describe("recordStepVerdict", () => {
   it("keeps each step's call apart", () => {
     const s = held();
     recordStepVerdict(s, { phase: "api", verdict: "pass" }, 1);
-    expect(recordStepVerdict(s, { phase: "capacity", verdict: "not_yet", gap: "Which number?" }, 2)).toEqual({ ok: true });
+    expect(recordStepVerdict(s, { phase: "entities", verdict: "not_yet", gap: "Which number?" }, 2)).toEqual({ ok: true });
   });
 });

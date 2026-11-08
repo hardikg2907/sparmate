@@ -577,7 +577,7 @@ describe("the step checker", () => {
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c2", text: "Every short code is unique forever." }, t.peer);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(calls.filter((r) => r === "checker")).toHaveLength(0);
-    await rt.handle({ type: "phase.set", phase: "capacity" }, t.peer);
+    await rt.handle({ type: "phase.set", phase: "entities" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(calls.filter((r) => r === "checker")).toHaveLength(1);
     const check = session.stepChecks.requirements!;
@@ -635,7 +635,7 @@ describe("the step checker", () => {
     const rt = await t.start(session);
     await vi.advanceTimersByTimeAsync(1_000);
     await rt.handle({ type: "board.update", version: 1, elements: [req, design, ...box("n", 40, 60, "Redirect a short link to its long URL; an expired link stops")] }, t.peer);
-    await rt.handle({ type: "phase.set", phase: "capacity" }, t.peer);
+    await rt.handle({ type: "phase.set", phase: "entities" }, t.peer);
     expect(session.stepChecks.requirements?.status).toBe("checking");
     await vi.advanceTimersByTimeAsync(1_000);
     expect(t.msgs.filter((m) => m.type === "board.png.request" && m.frameId === "f-req")).toHaveLength(1);
@@ -648,7 +648,7 @@ describe("the step checker", () => {
     const session = newSession("interview");
     const rt = await t.start(session);
     await vi.advanceTimersByTimeAsync(1_000);
-    await rt.handle({ type: "phase.set", phase: "capacity" }, t.peer);
+    await rt.handle({ type: "phase.set", phase: "entities" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(session.stepChecks.requirements).toBeUndefined();
     rt.dispose();
@@ -1194,7 +1194,7 @@ describe("the interviewer queue", () => {
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "We need short links and redirects." }, t.peer);
     // The planned end of requirements passes while that reply streams, so its nudge waits in the queue.
     await vi.advanceTimersByTimeAsync(1.5 * MIN);
-    await rt.handle({ type: "phase.set", phase: "capacity" }, t.peer);
+    await rt.handle({ type: "phase.set", phase: "entities" }, t.peer);
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c2", text: "About 100 million links a month." }, t.peer);
     await vi.advanceTimersByTimeAsync(2 * MIN);
     expect(interviewerTexts(t.msgs)).toHaveLength(3);
@@ -1526,7 +1526,7 @@ describe("step quotes in the debrief", () => {
     const session = newSession("interview");
     const rt = await t.start(session);
     await vi.advanceTimersByTimeAsync(1_000);
-    await rt.handle({ type: "phase.set", phase: "capacity" }, t.peer);
+    await rt.handle({ type: "phase.set", phase: "entities" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Reads outnumber writes by a hundred to one here." }, t.peer);
     await rt.handle({ type: "session.end" }, t.peer);
@@ -1534,7 +1534,7 @@ describe("step quotes in the debrief", () => {
       await vi.advanceTimersByTimeAsync(1_000);
       expect(session.status).toBe("debriefed");
     });
-    // The fake judge quotes his only line under the first step, but he said it in the capacity step.
+    // The fake judge quotes his only line under the first step, but he said it in the entities step.
     const first = session.scorecard?.steps?.[0]?.phase;
     expect(first).toBe("requirements");
     expect(session.scorecard?.stepQuoteChecks?.filter((c) => c.phase === first).map((c) => c.verified)).toEqual([false]);
@@ -1735,19 +1735,19 @@ describe("guided step verdicts, assists and move-on offers", () => {
       const { session, rt, move } = await room();
       await vi.advanceTimersByTimeAsync(12 * MIN);
       expect(offersFor(session, "requirements")).toBe(1);
-      await move("capacity");
-      // Capacity is planned for 3 minutes: the offer falls 6 minutes after he entered, though its window closed long ago.
-      await vi.advanceTimersByTimeAsync(5 * MIN);
-      expect(offersFor(session, "capacity")).toBe(0);
+      await move("entities");
+      // Core entities is planned for 2 minutes: the offer falls 4 minutes after he entered, though its window closed long ago.
+      await vi.advanceTimersByTimeAsync(3 * MIN);
+      expect(offersFor(session, "entities")).toBe(0);
       await vi.advanceTimersByTimeAsync(2 * MIN);
-      expect(offersFor(session, "capacity")).toBe(1);
+      expect(offersFor(session, "entities")).toBe(1);
       rt.dispose();
     });
 
     it("counts the time of earlier visits when he comes back", async () => {
       const { session, rt, move } = await room();
       await vi.advanceTimersByTimeAsync(4 * MIN);
-      await move("capacity");
+      await move("entities");
       await vi.advanceTimersByTimeAsync(1 * MIN);
       await move("requirements");
       // Four minutes were spent before he left, so six remain, not ten.
@@ -1761,7 +1761,7 @@ describe("guided step verdicts, assists and move-on offers", () => {
     it("drops the pending offer when he leaves, and restores it when he returns", async () => {
       const { session, rt, move } = await room();
       await vi.advanceTimersByTimeAsync(8 * MIN);
-      await move("capacity");
+      await move("entities");
       await vi.advanceTimersByTimeAsync(5 * MIN);
       expect(offersFor(session, "requirements")).toBe(0);
       await move("requirements");
@@ -1776,7 +1776,7 @@ describe("guided step verdicts, assists and move-on offers", () => {
       const { session, rt, move } = await room();
       await vi.advanceTimersByTimeAsync(11 * MIN);
       expect(offersFor(session, "requirements")).toBe(1);
-      await move("capacity");
+      await move("entities");
       await move("requirements");
       await vi.advanceTimersByTimeAsync(30 * MIN);
       expect(offersFor(session, "requirements")).toBe(1);
@@ -1811,9 +1811,9 @@ describe("guided step verdicts, assists and move-on offers", () => {
 
     it("makes no offer on the last step", async () => {
       const { session, rt, move } = await room();
-      await move("wrap_up");
+      await move("deep_dives");
       await vi.advanceTimersByTimeAsync(60 * MIN);
-      expect(offersFor(session, "wrap_up")).toBe(0);
+      expect(offersFor(session, "deep_dives")).toBe(0);
       rt.dispose();
     });
   });

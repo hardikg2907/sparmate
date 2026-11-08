@@ -5,7 +5,7 @@ import { computeReadiness } from "./readiness";
 const MIN = 60_000;
 const PLAN = [
   { id: "requirements", label: "Requirements" },
-  { id: "capacity", label: "Capacity math" },
+  { id: "entities", label: "Core entities" },
   { id: "api", label: "API" },
 ];
 const START = Date.parse("2026-11-01T10:00:00.000Z");
@@ -41,18 +41,18 @@ describe("computeReadiness", () => {
   });
 
   it("names steps that did not pass by their labels", () => {
-    const out = computeReadiness(round({ stepVerdicts: { requirements: { verdict: "pass", at: 1 }, capacity: { verdict: "not_yet", gap: "x", at: 2 } } }), PLAN);
+    const out = computeReadiness(round({ stepVerdicts: { requirements: { verdict: "pass", at: 1 }, entities: { verdict: "not_yet", gap: "x", at: 2 } } }), PLAN);
     expect(out.call).toBe("not_yet");
-    expect(out.reasons).toEqual(["These steps did not pass: Capacity math and API."]);
+    expect(out.reasons).toEqual(["These steps did not pass: Core entities and API."]);
   });
 
   it("treats a round with no verdicts at all as nothing passed", () => {
     const out = computeReadiness(round({ stepVerdicts: undefined, assists: undefined }), PLAN);
-    expect(out.reasons).toEqual(["These steps did not pass: Requirements, Capacity math and API."]);
+    expect(out.reasons).toEqual(["These steps did not pass: Requirements, Core entities and API."]);
   });
 
   it("names a single step in the singular", () => {
-    const out = computeReadiness(round({ stepVerdicts: { requirements: { verdict: "pass", at: 1 }, capacity: { verdict: "pass", at: 2 } } }), PLAN);
+    const out = computeReadiness(round({ stepVerdicts: { requirements: { verdict: "pass", at: 1 }, entities: { verdict: "pass", at: 2 } } }), PLAN);
     expect(out.reasons).toEqual(["This step did not pass: API."]);
   });
 
@@ -60,23 +60,23 @@ describe("computeReadiness", () => {
     const out = computeReadiness(
       round({
         assists: [
-          { at: 5, phase: "capacity" },
-          { at: 6, phase: "capacity" },
+          { at: 5, phase: "entities" },
+          { at: 6, phase: "entities" },
         ],
       }),
       PLAN,
     );
-    expect(out).toEqual({ call: "not_yet", reasons: ["Capacity math was assisted."] });
+    expect(out).toEqual({ call: "not_yet", reasons: ["Core entities was assisted."] });
     const two = computeReadiness(
       round({
         assists: [
-          { at: 5, phase: "capacity" },
+          { at: 5, phase: "entities" },
           { at: 6, phase: "api" },
         ],
       }),
       PLAN,
     );
-    expect(two.reasons).toEqual(["Capacity math and API were assisted."]);
+    expect(two.reasons).toEqual(["Core entities and API were assisted."]);
   });
 
   it("counts every hint and the level 3 ones", () => {

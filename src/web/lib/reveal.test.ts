@@ -12,10 +12,10 @@ describe("revealFor", () => {
   });
 
   it("brings a high-level step's frame into view", () => {
-    expect(revealFor("hld", "capacity")).toEqual({ view: "board", step: "capacity" });
+    expect(revealFor("hld", "entities")).toEqual({ view: "board", step: "entities" });
   });
 
-  it("reads a borrowed step from the frame it borrows", () => {
-    expect(revealFor("hld", "wrap_up")).toEqual({ view: "board", step: "design" });
+  it("sends a step without a frame to the whole board", () => {
+    expect(revealFor("hld", "unknown_step")).toEqual({ view: "board", step: null });
   });
 });

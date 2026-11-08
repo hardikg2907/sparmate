@@ -15,7 +15,7 @@ A signal that starts with "When" applies only if that situation came up in the r
 
 A red flag caps its dimension at 2, unless they noticed and fixed it themselves during the round.
 
-The order of their steps is not graded. They follow their own six-step plan, but judge what they produced, not whether they produced it in that order.
+The order of their steps is not graded. They follow their own five-step plan, but judge what they produced, not whether they produced it in that order.
 
 ## Outside the bar
 
@@ -40,7 +40,7 @@ Measures whether they find the real problem before solving it: the requirements,
   - They ask targeted functional and non-functional questions, and confirm the scope before designing.
   - They write down the core features and the quality targets, each non-functional one with a number or a rule.
   - They state their assumptions out loud.
-  - When the scale shapes the design, they do rough capacity math without being asked, and the numbers that drive a decision end in that decision. Order of magnitude is enough, and a number that drives nothing needs no consequence.
+  - When the scale shapes the design, they do rough capacity math without being asked, at the point where a number decides something, and the numbers that drive a decision end in that decision. Order of magnitude is enough, and a number that drives nothing needs no consequence.
 - **4, all of 3 plus at least two of these:**
   - They name early what makes this particular system hard.
   - They state non-goals explicitly.
@@ -129,9 +129,9 @@ Name: Driving and time
 Measures whether they lead the round and finish a complete design inside the time.
 
 - **1:** They wait to be led throughout, or have no complete design when time runs out.
-- **2:** The interviewer has to move them between phases, or one phase eats the round (for example twenty minutes on requirements), so the design ends incomplete or rushed.
+- **2:** The interviewer has to move them between phases, or one phase eats the round (for example twenty minutes on requirements, or a long capacity calculation before any design), so the design ends incomplete or rushed.
 - **3, every one of these:**
-  - They lead the early phases themselves (requirements, math, API, first design) without being told to move on.
+  - They lead the early phases themselves (requirements, entities, API, first design) without being told to move on.
   - They have a complete first design by about the middle of the round.
   - They keep each phase near its plan, or notice an overrun and recover.
   - They leave time for the deep dives and the curveball.
@@ -139,7 +139,7 @@ Measures whether they lead the round and finish a complete design inside the tim
   - They set the agenda for the deep dives, offering two or three and saying why each matters.
   - They find the limits of their own design before the interviewer does.
   - They manage time out loud, for example "I'll give this five minutes, then move on".
-- **Red flags:** thirty minutes on one component; nothing on the board at the halfway point.
+- **Red flags:** thirty minutes on one component; nothing on the board at the halfway point; a long capacity calculation before any design exists, when math belongs in the deep dives where a number decides something.
 
 ## Hints
 

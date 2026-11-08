@@ -53,7 +53,7 @@ function session(overrides: Partial<PublicSession> = {}): PublicSession {
     },
     phasePlan: [
       { id: "requirements", label: "Requirements", minutes: 5 },
-      { id: "capacity", label: "Capacity math", minutes: 3 },
+      { id: "entities", label: "Core entities", minutes: 3 },
     ],
     reference: null,
     ...overrides,
@@ -275,18 +275,18 @@ describe("chat items", () => {
 describe("phase changes", () => {
   it("moves the phase and records it once", () => {
     let state = loaded();
-    state = server(state, { type: "phase.changed", phase: "capacity", by: "interviewer" });
-    expect(state.session?.phase).toBe("capacity");
-    expect(state.session?.phaseHistory.at(-1)).toMatchObject({ phase: "capacity", by: "interviewer" });
+    state = server(state, { type: "phase.changed", phase: "entities", by: "interviewer" });
+    expect(state.session?.phase).toBe("entities");
+    expect(state.session?.phaseHistory.at(-1)).toMatchObject({ phase: "entities", by: "interviewer" });
 
-    const again = server(state, { type: "phase.changed", phase: "capacity", by: "interviewer" });
+    const again = server(state, { type: "phase.changed", phase: "entities", by: "interviewer" });
     expect(again.session?.phaseHistory).toHaveLength(state.session?.phaseHistory.length ?? 0);
   });
 
   it("applies the user's own click at once, before the server confirms", () => {
-    const state = reducer(loaded(), { type: "phase-local", phase: "capacity", now: T0 + 120_000 });
-    expect(state.session?.phase).toBe("capacity");
-    expect(state.session?.phaseHistory.at(-1)).toMatchObject({ phase: "capacity", by: "candidate" });
+    const state = reducer(loaded(), { type: "phase-local", phase: "entities", now: T0 + 120_000 });
+    expect(state.session?.phase).toBe("entities");
+    expect(state.session?.phaseHistory.at(-1)).toMatchObject({ phase: "entities", by: "candidate" });
   });
 });
 

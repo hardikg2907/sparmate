@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HLD_PHASES, LLD_PHASES } from "./phases";
+import { HLD_PHASES, LLD_PHASES, phasePlan } from "./phases";
 import { deriveChecklist, firstSentence, plainLabel } from "./checklist";
 
 const HLD_BRIEF = {
@@ -23,19 +23,19 @@ describe("deriveChecklist", () => {
     expect(Object.keys(list)).toEqual(HLD_PHASES.map((ph) => ph.id));
     const labels = (phase: string) => list[phase]?.map((i) => i.label);
     expect(labels("requirements")).toEqual(["Create a short link", "Redirect adds under 50 ms at p99", "Links expire"]);
-    expect(labels("capacity")).toEqual(["Writes", "Reads", "Storage"]);
-    expect(labels("api")).toEqual(["POST /urls", "GET /{code}", "Entity Link"]);
+    expect(labels("entities")).toEqual(["Link"]);
+    expect(labels("api")).toEqual(["POST /urls", "GET /{code}"]);
     expect(labels("design")).toEqual(["Walk one redirect through every box", "Walk one create through every box"]);
-    expect(labels("deep_dives")).toEqual(["Generating unique short codes", "Fast redirects"]);
+    expect(labels("deep_dives")).toEqual(["Generating unique short codes", "Fast redirects", "The curveball handled"]);
     expect(list.api?.[0]?.id).toBe("api-1");
   });
 
   it("never names the curveball before it is delivered", () => {
-    const wrap =
+    const dives =
       deriveChecklist("hld", HLD_BRIEF)
-        .wrap_up?.map((i) => i.label)
+        .deep_dives?.map((i) => i.label)
         .join(" ") ?? "";
-    expect(wrap).not.toMatch(/celebrity|Redis is down|Asia/i);
+    expect(dives).not.toMatch(/celebrity|Redis is down|Asia/i);
   });
 
   it("reads LLD entities and behaviour from their sections and splits the demo scenarios", () => {
@@ -117,7 +117,8 @@ describe("deriveChecklist", () => {
     expect(labels).toContain("POST /conversations/{id}/members");
     expect(labels).toContain("DELETE /conversations/{id}/members/{userId}");
     expect(labels.some((l) => l.includes("read") && l.includes("watch") && l.includes("unwatch"))).toBe(true);
-    expect(labels).toContain("Entity SentLog");
+    expect(labels).not.toContain("SentLog");
+    expect(list.entities?.map((i) => i.label)).toContain("SentLog");
     expect(labels.length).toBeLessThanOrEqual(12);
   });
 
@@ -332,21 +333,21 @@ describe("label cuts and limits", () => {
     expect(list.api?.[0]?.label).toBe("fetched");
   });
 
-  it("groups entity names into one item when the API step is over its limit", () => {
+  it("keeps API endpoints and entity names in their own steps", () => {
     const endpoints = Array.from({ length: 10 }, (_, i) => `- \`GET /r${i}\` returns it.`);
     const entities = ["Alpha", "Beta", "Gamma", "Delta"].map((n) => `- \`${n} { id }\``);
     const list = deriveChecklist("hld", { ...HLD_BRIEF, "API and entities": ["External API:", ...endpoints, "", "Core entities:", ...entities].join("\n") });
     const labels = list.api?.map((i) => i.label) ?? [];
-    expect(labels.length).toBeLessThanOrEqual(12);
-    expect(labels).toContain("Entities: Alpha, Beta, Gamma, Delta");
-    expect(labels.filter((l) => l.startsWith("GET")).length).toBe(10);
+    expect(labels).toHaveLength(10);
+    expect(labels.every((l) => l.startsWith("GET"))).toBe(true);
+    expect(list.entities?.map((i) => i.label)).toEqual(["Alpha", "Beta", "Gamma", "Delta"]);
   });
 
   it("folds items past the limit into one last item instead of dropping them", () => {
-    const caps = Array.from({ length: 14 }, (_, i) => `- **Item${i + 1}:** x.`).join("\n");
-    const labels = deriveChecklist("hld", { ...HLD_BRIEF, "Capacity math": caps }).capacity?.map((i) => i.label) ?? [];
+    const dives = Array.from({ length: 13 }, (_, i) => `### Item${i + 1}\ntext`).join("\n");
+    const labels = deriveChecklist("hld", { ...HLD_BRIEF, "Deep dives": dives }).deep_dives?.map((i) => i.label) ?? [];
     expect(labels).toHaveLength(12);
-    expect(labels[11]).toBe("Also: Item12; Item13; Item14");
+    expect(labels[11]).toBe("Also: Item12; Item13; The curveball handled");
     expect(labels[10]).toBe("Item11");
   });
 
@@ -356,5 +357,85 @@ describe("label cuts and limits", () => {
       "Demo scenarios": ["1. First run. Details.", "2. Continues 1. `go(2)` returns id 2. More."].join("\n"),
     });
     expect(list.fill_out?.map((i) => i.label)).toEqual(["Demo: Continues 1: go(2) returns id 2"]);
+  });
+});
+
+describe("HLD entities, API and deep dives", () => {
+  it("splits a brief with External API and Core entities into the two steps", () => {
+    const list = deriveChecklist("hld", {
+      ...HLD_BRIEF,
+      "API and entities": [
+        "External API:",
+        "- `POST /urls` with `{ longUrl }` returns `201`.",
+        "- `GET /{code}` returns `302`.",
+        "",
+        "Core entities:",
+        "- `Link { code, longUrl }`",
+        "- `ClickCount { code, clicks }`",
+      ].join("\n"),
+    });
+    expect(list.api?.map((i) => i.label)).toEqual(["POST /urls", "GET /{code}"]);
+    expect(list.entities?.map((i) => i.label)).toEqual(["Link", "ClickCount"]);
+    expect(list.entities?.[0]?.id).toBe("entities-1");
+  });
+
+  it("counts bullets before any External API line as API", () => {
+    const list = deriveChecklist("hld", {
+      ...HLD_BRIEF,
+      "API and entities": [
+        "Real-time API, one socket per phone:",
+        "- `send { id, body }` returns `sent`.",
+        "- `GET /history` returns `200`.",
+        "",
+        "Core entities:",
+        "- `Conversation { id }`",
+      ].join("\n"),
+    });
+    expect(list.api?.map((i) => i.label)).toEqual(["send { id, body }", "GET /history"]);
+    expect(list.entities?.map((i) => i.label)).toEqual(["Conversation"]);
+  });
+
+  it("falls back to the goals when the section lists no entities", () => {
+    const list = deriveChecklist("hld", { ...HLD_BRIEF, "API and entities": "External API:\n- `GET /a` returns it." });
+    expect(list.entities).toEqual([{ id: "entities-1", label: plainLabel(HLD_PHASES[1]!.goal) }]);
+  });
+
+  it("shares items among entity names past the limit, so none is dropped", () => {
+    const names = Array.from({ length: 14 }, (_, i) => `Entity${String.fromCharCode(65 + i)}`);
+    const list = deriveChecklist("hld", {
+      ...HLD_BRIEF,
+      "API and entities": ["External API:", "- `GET /a` returns it.", "", "Core entities:", ...names.map((n) => `- \`${n} { id }\``)].join("\n"),
+    });
+    const labels = list.entities?.map((i) => i.label) ?? [];
+    expect(labels.length).toBeLessThan(names.length);
+    for (const n of names) expect(labels.join(" ")).toContain(n);
+  });
+
+  it("ends the deep dives with the curveball item", () => {
+    const labels = deriveChecklist("hld", HLD_BRIEF).deep_dives?.map((i) => i.label) ?? [];
+    expect(labels.at(-1)).toBe("The curveball handled");
+    expect(deriveChecklist("hld", { "Expected requirements": "1. x" }).deep_dives?.map((i) => i.label)).toEqual(["The curveball handled"]);
+  });
+});
+
+describe("phasePlan for HLD", () => {
+  it("uses the base minutes at 45 minutes", () => {
+    expect(phasePlan("hld", 45).map((p) => [p.id, p.minutes])).toEqual([
+      ["requirements", 5],
+      ["entities", 2],
+      ["api", 5],
+      ["design", 13],
+      ["deep_dives", 20],
+    ]);
+  });
+
+  it("scales the steps at 60 minutes", () => {
+    expect(phasePlan("hld", 60).map((p) => [p.id, p.minutes])).toEqual([
+      ["requirements", 7],
+      ["entities", 3],
+      ["api", 7],
+      ["design", 17],
+      ["deep_dives", 27],
+    ]);
   });
 });

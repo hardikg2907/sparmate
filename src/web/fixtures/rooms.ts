@@ -21,7 +21,7 @@ const LLD_GUIDE_PINS: BoardPin[] = [pin("g1", "ticket", "entities", "note", "Who
 
 const HLD_JUDGE_PINS: BoardPin[] = [
   pin("j1", "req-latency", "requirements", "held", "The latency target has a number and a percentile."),
-  pin("j2", "cap-rate", "capacity", "gap", "Storage over five years is not estimated."),
+  pin("j2", "ent-clicks", "entities", "gap", "Say whether ClickCount is a counter or aggregated click events."),
   pin("j3", "pg", "design", "held", "The read path is clear: a cache miss falls back to Postgres."),
   pin("j4", "redirect", "design", "gap", "Say what happens when a redirect service instance dies."),
   pin("j5", "redis", "design", "gap", "No eviction policy or TTL for the hot set."),
@@ -41,7 +41,7 @@ const HLD_DEBRIEF_CHECKLIST: FixtureChecklist = {
     "design-2": ["partial", "board", null, "the key generator is not joined"],
     "deep_dives-1": ["covered", "chat", 1500],
     "deep_dives-2": ["partial", "chat", 1800, "no plan for a Redis outage"],
-    "wrap_up-1": ["covered", "chat", 2520],
+    "deep_dives-4": ["covered", "chat", 2520],
   },
 };
 
@@ -60,12 +60,12 @@ export function hldRoom(mode: Mode, status: "live" | "paused" = "live", pauseRea
     e("t3", 38, "interviewer", "Anyone with an API key can create links. A custom alias is optional. An expiry date is optional too."),
     e("t4", 72, "candidate", "Next, scale. How many new links a month, and what is the read to write ratio?"),
     e("t5", 90, "interviewer", "About 100 million new links a month. Roughly 100 redirects for every link created."),
-    e("t6", 276, "system", "Moved to Capacity math", { kind: "phase" }),
+    e("t6", 276, "system", "Moved to Core entities", { kind: "phase" }),
     e(
       "t7",
       290,
       "candidate",
-      "100 million a month is about 40 writes per second, which means one Postgres primary handles writes. Reads are about 4,000 per second, which means the redirect path needs a cache.",
+      "I see two nouns. A Link holds the code, the long URL and the expiry, which means it is the row every redirect reads. A ClickCount holds one counter per code, which means clicks stay off the hot row.",
     ),
     e("t8", 322, "interviewer", "Okay, go on."),
     e("t9", 432, "system", "Moved to API", { kind: "phase" }),
@@ -89,7 +89,7 @@ export function hldRoom(mode: Mode, status: "live" | "paused" = "live", pauseRea
     phase: "design",
     phaseHistory: [
       { phase: "requirements", at: 0, by: "candidate" },
-      { phase: "capacity", at: 276_000, by: "candidate" },
+      { phase: "entities", at: 276_000, by: "candidate" },
       { phase: "api", at: 432_000, by: "candidate" },
       { phase: "design", at: 684_000, by: "candidate" },
     ],
@@ -164,7 +164,12 @@ export const HLD_SCORECARD: Scorecard = {
       score: 3,
       evidence: [
         { quote: "Before I design anything, I want to pin down scope. Who creates links, and do we need custom aliases?", source: "candidate", at: "00:20", polarity: "plus" },
-        { quote: "100 million a month is about 40 writes per second, which means one Postgres primary handles writes.", source: "candidate", at: "04:50", polarity: "plus" },
+        {
+          quote: "I see two nouns. A Link holds the code, the long URL and the expiry, which means it is the row every redirect reads.",
+          source: "candidate",
+          at: "04:50",
+          polarity: "plus",
+        },
         { quote: "I will leave out real-time analytics for now and keep a click count.", source: "candidate", at: "02:05", polarity: "plus" },
       ],
       whatA4LooksLike: "A 4 names early that the redirect path is the hard part, states the latency target in numbers before drawing, and lists what is out of scope.",
@@ -281,29 +286,28 @@ export const HLD_SCORECARD: Scorecard = {
       missing: ["Did not state availability numbers or error budget."],
     },
     {
-      phase: "capacity",
+      phase: "entities",
       took: [
         {
-          point: "Calculated write throughput and sized database requirements directly.",
+          point: "Named the two nouns and tied each to how the redirect path reads it.",
           dimensionId: "navigation",
           evidence: {
-            quote: "100 million a month is about 40 writes per second, which means one Postgres primary handles writes.",
+            quote: "I see two nouns. A Link holds the code, the long URL and the expiry, which means it is the row every redirect reads.",
             source: "candidate",
             at: "04:50",
             polarity: "plus",
           },
         },
       ],
-      missing: ["Read cache size calculation was deferred."],
+      missing: ["Did not say how ClickCount is updated."],
     },
   ],
   phaseTiming: [
     { phase: "requirements", label: "Requirements", plannedMinutes: 5, actualMinutes: 4.6 },
-    { phase: "capacity", label: "Capacity math", plannedMinutes: 3, actualMinutes: 2.6 },
-    { phase: "api", label: "API", plannedMinutes: 4, actualMinutes: 4.2 },
-    { phase: "design", label: "High-level design", plannedMinutes: 10, actualMinutes: 12.4 },
-    { phase: "deep_dives", label: "Deep dives", plannedMinutes: 15, actualMinutes: 17.8 },
-    { phase: "wrap_up", label: "Bottleneck and extension", plannedMinutes: 8, actualMinutes: 2.4 },
+    { phase: "entities", label: "Core entities", plannedMinutes: 2, actualMinutes: 2.6 },
+    { phase: "api", label: "API", plannedMinutes: 5, actualMinutes: 4.2 },
+    { phase: "design", label: "High-level design", plannedMinutes: 13, actualMinutes: 12.4 },
+    { phase: "deep_dives", label: "Deep dives", plannedMinutes: 20, actualMinutes: 20.2 },
   ],
   quoteChecks: [
     { dimensionId: "navigation", index: 0, verified: true },
@@ -322,7 +326,7 @@ export const HLD_SCORECARD: Scorecard = {
   ],
   stepQuoteChecks: [
     { phase: "requirements", index: 0, verified: true },
-    { phase: "capacity", index: 0, verified: true },
+    { phase: "entities", index: 0, verified: true },
   ],
   lintIssues: [{ field: "verdict.summary", issue: "Paragraph has two em-dashes" }],
 };
@@ -398,14 +402,13 @@ export function hldDebrief(status: PublicSession["status"] = "debriefed"): Publi
     durationMin: 45,
     roundMs,
     status,
-    phase: "wrap_up",
+    phase: "deep_dives",
     phaseHistory: [
       { phase: "requirements", at: 0, by: "candidate" },
-      { phase: "capacity", at: 276_000, by: "candidate" },
+      { phase: "entities", at: 276_000, by: "candidate" },
       { phase: "api", at: 432_000, by: "candidate" },
       { phase: "design", at: 684_000, by: "candidate" },
       { phase: "deep_dives", at: 1_428_000, by: "candidate" },
-      { phase: "wrap_up", at: 2_496_000, by: "candidate" },
     ],
     transcript,
     graphText: HLD_GRAPH_TEXT,

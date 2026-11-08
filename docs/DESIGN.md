@@ -22,7 +22,7 @@ His own notes show where rounds go wrong. The design should help with these firs
 |---|---|---|
 | **Time against plan** | Parking lot: clarify, entities and behaviour took about 70 minutes against a plan of 25. Nothing ran inside the time. | Show the plan and where he is on it, all the time, in a form he reads in one glance. |
 | **Driving the round** | The bar asks him to state structure and move phases himself. | Show what the current phase must produce, in his own words, next to the work. |
-| **Structure of the answer** | Rate limiter: missed identity, the 429 response and the latency budget in requirements. | Keep his six-step and seven-step methods visible, with each step's goal. |
+| **Structure of the answer** | Rate limiter: missed identity, the 429 response and the latency budget in requirements. | Keep his five-step and seven-step methods visible, with each step's goal. |
 | **Closing the loop** | Gaps must be taught and written to the tracker, or they come back. | Make "teach the gaps, then save the notes" an explicit, visible sequence after the score. |
 
 ### Jobs per screen
@@ -353,11 +353,11 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
  ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
  │ ← URL Shortener  HLD interview                      27:26 left   1:40 behind   Pause   End   ⋯ │  56 px
  ├───────────────────────────────────────────────────────────────────────────────────────────────┤
- │ ◔ Requirements │ ◑ Capacity │ ◔ API │ ◔ High-level design ▌   │ ○ Deep dives      │ ○ Bottleneck …│  48 px
+ │ ◔ Requirements │ ◑ Core entities │ ◔ API │ ◔ High-level design ▌      │ ○ Deep dives           │  48 px
  ├───────────────────────────────────────────────────────────┬───────────────────────────────────┤
  │ High-level design. Boxes and arrows, then walk one …      │ ╭ ◔ Checklist · High-level design ╮│
  │ [Show this step] [Whole board] [Interviewer's view 2]     │ │ ◐ Walk one redirect      Partly ││
- │ ┌──────┐ ┌ Requirements ┐ ┌ Capacity ┐ ┌ API ─────┐       │ │ ○ Walk one create       Not yet ││
+ │ ┌──────┐ ┌ Requirements ┐ ┌ Entities ┐ ┌ API ─────┐       │ │ ○ Walk one create       Not yet ││
  │ │ pal  │ │              │ │          │ │          │       │ ╰ Checked at 17:18 ───────────────╯│
  │ │      │ └──────────────┘ └──────────┘ └──────────┘       │  Interviewer 08:25                │
  │ │      │ ┌ High-level design ──────────┐ ┌ Deep dives ┐   │  Why a 302 and not a 301?         │
@@ -494,7 +494,7 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
   line, the LLD tabs (their underline is the indigo-to-violet gradient), and "Show this step", "Whole board" and "What
   the interviewer sees" as matching outlined buttons; the last one turns soft accent glass while the panel is open and
   carries a warn count.
-- **Board.** A fresh board starts with one empty frame per step (HLD: Requirements, Capacity, API, High-level design,
+- **Board.** A fresh board starts with one empty frame per step (HLD: Requirements, Core entities, API, High-level design,
   Deep dives; LLD: Entities and States), and opens on the current step's frame. Pins are numbered circles over the
   canvas: a brand gradient for a guide's note, outlined green or red for what the judge marked held or a gap, each
   with a soft glow in its own colour. A pin whose element sits under one of the board's controls (the top toolbar,

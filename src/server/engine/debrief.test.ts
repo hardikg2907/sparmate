@@ -53,7 +53,7 @@ describe("phaseTiming", () => {
       {
         phaseHistory: [
           { phase: "requirements", at: 0, by: "candidate" },
-          { phase: "capacity", at: 6 * MIN, by: "candidate" },
+          { phase: "entities", at: 6 * MIN, by: "candidate" },
           { phase: "requirements", at: 9 * MIN, by: "candidate" },
           { phase: "api", at: 10 * MIN, by: "interviewer" },
         ],
@@ -62,9 +62,9 @@ describe("phaseTiming", () => {
       15 * MIN,
     );
     expect(timing.find((t) => t.phase === "requirements")?.actualMinutes).toBe(7);
-    expect(timing.find((t) => t.phase === "capacity")?.actualMinutes).toBe(3);
+    expect(timing.find((t) => t.phase === "entities")?.actualMinutes).toBe(3);
     expect(timing.find((t) => t.phase === "api")?.actualMinutes).toBe(5);
-    expect(timing.find((t) => t.phase === "design")).toMatchObject({ plannedMinutes: 10, actualMinutes: 0 });
+    expect(timing.find((t) => t.phase === "design")).toMatchObject({ plannedMinutes: 13, actualMinutes: 0 });
   });
 
   it("assumes the first phase from zero when the history starts later", () => {
@@ -224,7 +224,7 @@ describe("judgeMessage", () => {
       durationMs: 45 * MIN,
       phaseHistory: [
         { phase: "requirements", at: 0 },
-        { phase: "capacity", at: 5 * MIN },
+        { phase: "entities", at: 5 * MIN },
         { phase: "requirements", at: 10 * MIN },
       ],
       transcript: [],
@@ -243,7 +243,7 @@ describe("judgeMessage", () => {
       tester: null,
       hasImage: false,
     });
-    expect(text).toContain("<step_windows>\n- requirements: 00:00–05:00, 10:00–45:00\n- capacity: 05:00–10:00\n</step_windows>");
+    expect(text).toContain("<step_windows>\n- requirements: 00:00–05:00, 10:00–45:00\n- entities: 05:00–10:00\n</step_windows>");
   });
 });
 

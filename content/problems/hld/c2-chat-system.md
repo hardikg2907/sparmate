@@ -79,6 +79,7 @@ Per-server and per-row figures below are assumptions. Accept other reasonable va
 
 ## API and entities
 
+External API:
 Real-time API, one WebSocket per phone, authenticated on connect:
 - Phone to server: `send { clientMsgId, conversationId, body }`. Reply: `sent { clientMsgId, seq, sentAt }` (one tick), or `error { clientMsgId, code }` with `NOT_MEMBER`, `TOO_LONG` or `RATE_LIMITED`. A repeated `clientMsgId` gets the original `sent`.
 - Phone to server: `ack { conversationId, seq }` (this phone holds everything up to `seq`), `read { conversationId, seq }`, `watch { userId }` and `unwatch { userId }` for presence in an open chat, and `ping` every 30 seconds.

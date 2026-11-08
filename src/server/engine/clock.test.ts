@@ -40,11 +40,10 @@ describe("planCheckpoints", () => {
     const cps = planCheckpoints("hld", "interview", 45 * MIN, phasePlan("hld", 45));
     expect(cps.map((c) => [c.id, c.atMs / MIN])).toEqual([
       ["phase_end:requirements", 5],
-      ["phase_end:capacity", 8],
+      ["phase_end:entities", 7],
       ["phase_end:api", 12],
-      ["phase_end:design", 22],
+      ["phase_end:design", 25],
       ["extension", 35],
-      ["phase_end:deep_dives", 37],
       ["five_minutes", 40],
       ["time_up", 45],
     ]);
@@ -59,12 +58,12 @@ describe("planCheckpoints", () => {
   it("keeps only the phase_end nudges in guided mode, and none of the move-on offers", () => {
     const cps = planCheckpoints("hld", "guided", 45 * MIN, phasePlan("hld", 45));
     expect(cps.every((c) => c.kind === "phase_end")).toBe(true);
-    expect(cps).toHaveLength(5);
+    expect(cps).toHaveLength(4);
   });
 
   it("computes planned windows from the scaled plan", () => {
     const w = phaseWindows(phasePlan("hld", 45));
-    expect(w[2]).toEqual({ id: "api", startMs: 8 * MIN, endMs: 12 * MIN });
+    expect(w[2]).toEqual({ id: "api", startMs: 7 * MIN, endMs: 12 * MIN });
   });
 });
 
@@ -170,12 +169,12 @@ describe("time in a step and the move-on offer", () => {
   it("sums every visit to a step and counts the open visit up to now", () => {
     const history = [
       { phase: "requirements", at: 0 },
-      { phase: "capacity", at: 4 * MIN },
+      { phase: "entities", at: 4 * MIN },
       { phase: "requirements", at: 6 * MIN },
-      { phase: "capacity", at: 7 * MIN },
+      { phase: "entities", at: 7 * MIN },
     ];
     expect(timeInPhase(history, first, "requirements", 10 * MIN)).toBe(5 * MIN);
-    expect(timeInPhase(history, first, "capacity", 10 * MIN)).toBe(5 * MIN);
+    expect(timeInPhase(history, first, "entities", 10 * MIN)).toBe(5 * MIN);
     expect(timeInPhase(history, first, "api", 10 * MIN)).toBe(0);
   });
 
@@ -184,7 +183,7 @@ describe("time in a step and the move-on offer", () => {
     expect(phaseOverCheckpoint(plan, [{ phase: "requirements", at: 0 }], "requirements", 0)).toMatchObject({ id: "phase_over:requirements", kind: "phase_over", atMs: 10 * MIN });
     const history = [
       { phase: "requirements", at: 0 },
-      { phase: "capacity", at: 4 * MIN },
+      { phase: "entities", at: 4 * MIN },
       { phase: "requirements", at: 20 * MIN },
     ];
     // 4 minutes were spent before he left, so 6 are left when he comes back at 20:00.
@@ -194,10 +193,10 @@ describe("time in a step and the move-on offer", () => {
   it("gives a step entered late its full time, whatever the round clock says", () => {
     const history = [
       { phase: "requirements", at: 0 },
-      { phase: "capacity", at: 12 * MIN },
+      { phase: "entities", at: 12 * MIN },
     ];
-    // Capacity is planned for 3 minutes, so the offer falls 6 minutes after he entered it.
-    expect(phaseOverCheckpoint(plan, history, "capacity", 12 * MIN)?.atMs).toBe(18 * MIN);
+    // Core entities is planned for 2 minutes, so the offer falls 4 minutes after he entered it.
+    expect(phaseOverCheckpoint(plan, history, "entities", 12 * MIN)?.atMs).toBe(16 * MIN);
   });
 
   it("is due now once the time in the step already passed twice its plan", () => {
@@ -205,6 +204,6 @@ describe("time in a step and the move-on offer", () => {
   });
 
   it("makes no offer for the last step", () => {
-    expect(phaseOverCheckpoint(plan, [{ phase: "wrap_up", at: 0 }], "wrap_up", 0)).toBeNull();
+    expect(phaseOverCheckpoint(plan, [{ phase: "deep_dives", at: 0 }], "deep_dives", 0)).toBeNull();
   });
 });
