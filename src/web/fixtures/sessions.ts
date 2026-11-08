@@ -230,6 +230,7 @@ export function buildSession(o: BuildOptions): PublicSession {
     stepNotesVersion: 0,
     stepSummaries: {},
     steps: o.steps ?? {},
+    assistCount: 0,
     pins: o.pins ?? [],
     focus: null,
     gapProgress: {},
@@ -273,6 +274,7 @@ export function withLegacyNotes(session: PublicSession): PublicSession {
     stepNotesVersion: 3,
     stepSummaries: session.track === "hld" ? HLD_SUMMARIES : LLD_SUMMARIES,
     steps: {},
+    assistCount: 0,
     pins: [],
   };
 }

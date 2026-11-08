@@ -4,7 +4,7 @@ import { useCountUp } from "../../hooks/useCountUp";
 import { DEFAULT_TARGET } from "../../../shared/target";
 import type { Scorecard } from "../../../shared/types";
 import { MARK_LABEL, MARK_TONE, SCORE_TONE, SCORE_WORD, VERDICT_TONE } from "../../lib/format";
-import { VERDICT_EXPLANATION, VERDICT_LABEL } from "../../lib/verdict";
+import { READINESS_TITLE, VERDICT_EXPLANATION, VERDICT_LABEL } from "../../lib/verdict";
 import { Markdown } from "../Markdown";
 import { ChevronDownIcon } from "../icons";
 import { Badge, Button, Card, TONE_FILL, TONE_TEXT, cn } from "../ui";
@@ -75,7 +75,9 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
 
 export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
   const { verdict, trackerMark, trackerMarkReason } = scorecard;
-  const tone = VERDICT_TONE[verdict.sde2];
+  // A guided round gets a readiness call from the server's fixed rule; one saved before that shows its verdict as before.
+  const readiness = scorecard.readiness;
+  const tone = readiness ? (readiness.call === "ready" ? "good" : "warn") : VERDICT_TONE[verdict.sde2];
   const levels = levelNames(verdict);
   const gapCount = scorecard.gaps.length;
   return (
@@ -87,14 +89,18 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
         <div className="relative grid gap-x-12 gap-y-5 px-6 pb-4 pt-8 sm:px-9 md:grid-cols-[auto_1fr] md:items-center">
           <span aria-hidden="true" className={cn("absolute inset-y-6 left-0 w-1.5 rounded-r-full", TONE_FILL[tone], BAND_GLOW[tone])} />
           <div>
-            <p className="text-ui font-semibold text-muted-foreground">At the {levels.target} bar</p>
-            <p className="font-display text-display font-extrabold tracking-[-0.02em] text-foreground sm:text-mega">{VERDICT_LABEL[verdict.sde2]}</p>
+            <p className="text-ui font-semibold text-muted-foreground">{readiness ? "Guided round" : `At the ${levels.target} bar`}</p>
+            <p className="font-display text-display font-extrabold tracking-[-0.02em] text-foreground sm:text-mega">
+              {readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}
+            </p>
           </div>
           <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-ui sm:grid-cols-3 md:justify-self-end">
-            <div>
-              <dt className="text-muted-foreground">{capitalize(levels.stretch)} bar</dt>
-              <dd className={cn("text-lead font-bold", TONE_TEXT[VERDICT_TONE[verdict.senior]])}>{VERDICT_LABEL[verdict.senior]}</dd>
-            </div>
+            {readiness ? null : (
+              <div>
+                <dt className="text-muted-foreground">{capitalize(levels.stretch)} bar</dt>
+                <dd className={cn("text-lead font-bold", TONE_TEXT[VERDICT_TONE[verdict.senior]])}>{VERDICT_LABEL[verdict.senior]}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-muted-foreground">Confidence</dt>
               <dd className="text-lead font-bold capitalize text-foreground">{verdict.confidence}</dd>
@@ -108,7 +114,19 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
               </dd>
             </div>
           </dl>
-          <p className="text-body text-foreground md:col-span-2">{VERDICT_EXPLANATION[verdict.sde2]}</p>
+          {readiness ? (
+            readiness.reasons.length > 0 ? (
+              <ul className="list-disc space-y-1 pl-5 text-body text-foreground md:col-span-2">
+                {readiness.reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-body text-foreground md:col-span-2">Every step passed on your own, inside the planned time. Interview mode is the next test.</p>
+            )
+          ) : (
+            <p className="text-body text-foreground md:col-span-2">{VERDICT_EXPLANATION[verdict.sde2]}</p>
+          )}
         </div>
 
         <div className="reveal space-y-3 px-6 pb-4 pt-2 sm:px-9" style={stagger(1)}>

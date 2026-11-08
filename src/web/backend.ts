@@ -1,6 +1,6 @@
 import type { BootstrapResponse, ClientMsg, CreateSessionRequest, CustomProblemJobStatus, ServerMsg } from "../shared/protocol";
 import type { Mode, Track } from "../shared/phases";
-import type { ProblemSummary, PublicSession, SessionStatus, Settings, Verdict } from "../shared/types";
+import type { ProblemSummary, PublicSession, Readiness, SessionStatus, Settings, Verdict } from "../shared/types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -90,6 +90,7 @@ export interface SessionHistoryItem {
   createdAt: string;
   status: SessionStatus;
   verdict: Verdict | null;
+  readiness?: Readiness["call"] | null;
   /** Set while paused: why, and the round time left (null in a guided round). */
   pause: { reason: NonNullable<PublicSession["pauseReason"]>; timeLeftMs: number | null } | null;
   notesSaved: boolean;

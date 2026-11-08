@@ -390,6 +390,9 @@ export function useSessionController(source: SessionSource): SessionController {
       guidedHint() {
         send({ type: "guided.hint" });
       },
+      guidedStuck() {
+        send({ type: "guided.stuck" });
+      },
 
       onBoardChange(elements, version) {
         io.boardVersion = version;

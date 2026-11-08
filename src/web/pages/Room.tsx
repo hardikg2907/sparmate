@@ -11,12 +11,11 @@ import { ArrowLeftIcon, CheckIcon, CopyIcon, EyeIcon, InfoIcon, PauseIcon, PlayI
 import { ConnectionBanner, MessageBanners } from "../components/Notices";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { PlanTrack } from "../components/PlanTrack";
-import { StepChecklist } from "../components/StepChecklist";
+import { StepVerdictNote } from "../components/StepVerdictNote";
 import { Timer } from "../components/Timer";
 import { Banner, Button, Badge, EmptyState, Tooltip, cn, toast } from "../components/ui";
 import { OVERLAY_SURFACE } from "../components/ui/layer";
 import { phasesFor } from "../../shared/phases";
-import { codeScopeFor } from "../../shared/stepCode";
 import { evidenceStepFor } from "../../shared/stepFrames";
 import { behindPlanMs } from "../lib/plan";
 import { revealFor } from "../lib/reveal";
@@ -69,6 +68,9 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   const frameStep = evidenceStepFor(session.track, session.phase);
   const boardShown = !lld || tab === "diagram";
   const phaseLabel = phasesFor(session.track).find((p) => p.id === session.phase)?.label ?? session.phase;
+  const verdict = session.stepVerdicts?.[session.phase];
+  // A passed step turns the check button into "Move on"; the last step has nowhere to go, so it stays a check.
+  const nextStep = verdict?.verdict === "pass" ? session.phasePlan[session.phasePlan.findIndex((p) => p.id === session.phase) + 1] : undefined;
 
   // The class diagram mounts hidden behind the code, so its first view is fitted when the tab is first opened.
   const diagramFitted = useRef(false);
@@ -249,9 +251,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
 
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside style={{ width: chatWidth }} className="room-side flex min-h-0 shrink-0 flex-col overflow-hidden" inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
-          {session.mode === "guided" ? (
-            <StepChecklist stepLabel={phaseLabel} step={session.steps[session.phase]} reads={checkerReads(session.track, session.phase, frameStep !== null)} className="shrink-0" />
-          ) : null}
+          {guided ? <StepVerdictNote stepLabel={phaseLabel} verdict={verdict} className="shrink-0" /> : null}
           <div className="min-h-0 flex-1">
             <ChatPanel
               heading={speaker}
@@ -277,12 +277,20 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
               tools={
                 guided ? (
                   <>
-                    <Button size="sm" variant="outline" onClick={actions.guidedFeedback} disabled={agent.state === "thinking" || chatLocked || !connected}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={nextStep ? () => actions.setPhase(nextStep.id) : actions.guidedFeedback}
+                      disabled={agent.state === "thinking" || chatLocked || !connected}
+                    >
                       <CheckIcon size={14} className="text-primary-text" />
-                      Check this step
+                      {nextStep ? "Move on" : "Check this step"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={actions.guidedHint} disabled={agent.state === "thinking" || chatLocked || !connected}>
                       Hint
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={actions.guidedStuck} disabled={agent.state === "thinking" || chatLocked || !connected}>
+                      I&apos;m stuck
                     </Button>
                     {session.hints.length > 0 ? (
                       <span className="ml-auto text-meta text-muted-foreground">
@@ -380,6 +388,11 @@ function RoomHeader({
   const guided = session.mode === "guided";
   const spent = phaseSpentMs(session.phaseHistory, session.phasePlan[0]?.id, session.phase, roundMs);
   const behind = guided || frozen ? 0 : behindPlanMs(session.phasePlan, session.phase, roundMs);
+  const passed = new Set(
+    Object.entries(session.stepVerdicts ?? {})
+      .filter(([, v]) => v.verdict === "pass")
+      .map(([id]) => id),
+  );
 
   return (
     <header className="room-header shrink-0">
@@ -429,10 +442,15 @@ function RoomHeader({
           currentPhase={session.phase}
           spent={spent}
           roundMs={roundMs}
-          steps={session.mode === "guided" ? session.steps : undefined}
+          passed={guided ? passed : undefined}
           onSelect={onSelectPhase}
           disabled={frozen}
         />
+        {guided ? (
+          <p className="mt-1.5 text-meta text-muted-foreground" aria-live="polite">
+            <span className="font-semibold tabular-nums text-foreground">{passed.size}</span> of {session.phasePlan.length} steps passed
+          </p>
+        ) : null}
       </div>
     </header>
   );
@@ -541,14 +559,6 @@ function Pane({ active, id, labelledBy, column, children }: { active: boolean; i
       {children}
     </div>
   );
-}
-
-/** What the checker read for this step, so a tick or a gap can be traced to where he answered. */
-function checkerReads(track: PublicSession["track"], phase: string, framed: boolean): string {
-  const scope = codeScopeFor(track, phase);
-  const code = scope === "step" ? "your code from this step" : scope === "file" ? "the code" : null;
-  const parts = ["the chat", ...(framed ? ["the frame"] : []), ...(code ? [code] : [])];
-  return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
 function WorkTabs({ tab, onChange, errorCount }: { tab: Tab; onChange: (tab: Tab) => void; errorCount: number }) {

@@ -4,6 +4,7 @@ import { formatClock, formatMinutes } from "../lib/format";
 import type { PlanPhase } from "../lib/plan";
 import { ringView } from "../lib/steps";
 import { ChecklistItems } from "./ChecklistItems";
+import { CheckIcon } from "./icons";
 import { StepRing } from "./StepRing";
 import { Tooltip, cn } from "./ui";
 
@@ -43,6 +44,19 @@ function StepTip({ label, goal, step }: { label: string; goal: string | undefine
   );
 }
 
+/** A small round mark: filled with a tick once the guide passed the step, an empty outline before that. */
+function PassedMark({ passed }: { passed: boolean }) {
+  return (
+    <span
+      aria-hidden={passed ? undefined : "true"}
+      className={cn("hidden size-4 shrink-0 place-items-center rounded-full @[5rem]:inline-grid", passed ? "bg-success-fill text-background" : "border border-border")}
+    >
+      {passed ? <CheckIcon size={10} /> : null}
+      {passed ? <span className="sr-only">Passed</span> : null}
+    </span>
+  );
+}
+
 /**
  * The round's plan drawn to scale, with the time spent in each phase, a needle for "now", and a ring per step for
  * how much of its checklist he has covered. Widths follow planned minutes, so a three-minute phase looks short and
@@ -55,6 +69,7 @@ export function PlanTrack({
   spent,
   roundMs,
   steps,
+  passed,
   onSelect,
   disabled,
 }: {
@@ -65,6 +80,8 @@ export function PlanTrack({
   spent: Record<string, number>;
   roundMs: number;
   steps?: Readonly<Record<string, PublicStepCheck>>;
+  /** Step ids the guide passed. Given in a live guided round, where a passed mark stands in for the coverage ring. */
+  passed?: ReadonlySet<string>;
   onSelect: (phaseId: string) => void;
   disabled?: boolean;
 }) {
@@ -107,6 +124,7 @@ export function PlanTrack({
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     {steps ? <StepRing view={ringView(steps[phase.id])} size={16} className="hidden @[5rem]:inline-grid" /> : null}
+                    {passed ? <PassedMark passed={passed.has(phase.id)} /> : null}
                     <span className={cn("truncate text-ui font-semibold", current ? "text-primary-soft-foreground" : visited ? "text-foreground" : "text-muted-foreground")}>
                       {phase.label}
                     </span>
