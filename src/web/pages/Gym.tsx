@@ -141,7 +141,7 @@ function Fact({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="min-w-0 px-3 py-3 sm:px-5 sm:py-3.5">
       <dt className="text-meta text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 flex items-center gap-2.5 text-body font-semibold text-foreground sm:text-lead">{value}</dd>
+      <dd className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 whitespace-nowrap text-body font-semibold text-foreground sm:text-lead">{value}</dd>
     </div>
   );
 }

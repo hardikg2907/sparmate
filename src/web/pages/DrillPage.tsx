@@ -157,7 +157,7 @@ function TopBar({ prompt, startedAt }: { prompt: DrillPrompt | null; startedAt: 
             <span className="truncate">{prompt.title}</span>
           </span>
         ) : null}
-        <div className="ml-auto">{prompt ? <DrillTimer minutes={prompt.minutes} startedAt={startedAt} /> : null}</div>
+        <div className="ml-auto">{prompt && startedAt !== null ? <DrillTimer minutes={prompt.minutes} startedAt={startedAt} /> : null}</div>
       </div>
     </header>
   );
@@ -331,8 +331,8 @@ function ScheduleFacts({ result }: { result: DrillResult }) {
           Passes in a row
           <InfoTip label="How a gap closes">{HOW_A_GAP_CLOSES}</InfoTip>
         </dt>
-        <dd className="mt-0.5 flex items-center gap-2.5 text-body font-semibold sm:text-lead">
-          <span>
+        <dd className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-body font-semibold sm:text-lead">
+          <span className="whitespace-nowrap">
             {items.passes} of {PASSES_TO_CLOSE}
           </span>
           <Pips filled={items.passes} onMesh />
