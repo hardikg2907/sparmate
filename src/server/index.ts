@@ -17,6 +17,10 @@ import { UsageLedger } from "./engine/usage-ledger";
 import { wrapDriverWithLedger } from "./engine/usage-driver";
 import { killLiveProcessGroups } from "./runner/process";
 import { initStudyKit } from "./study/kit";
+import { createLeetcodeClient } from "./leetcode/client";
+import { LeetcodeService } from "./leetcode/service";
+import { withDefaultCountFrom } from "../shared/dsa";
+import { localDay } from "../shared/week";
 import { runSetupChecks, SetupStatus } from "./setup/checks";
 
 export interface ShutdownDeps {
@@ -98,6 +102,10 @@ async function main(): Promise<void> {
   const store = new SessionStore(paths.sessions, log);
   const settings = new SettingsStore(paths.settings, log);
   await settings.load();
+  // A username saved before the count-from day existed starts counting today.
+  const loaded = settings.get();
+  const dated = withDefaultCountFrom(loaded, localDay(new Date()));
+  if (dated !== loaded) await settings.save(dated);
   const problems = new ProblemCatalog(
     [
       { dir: join(config.contentDir, "problems"), custom: false, recursive: true },
@@ -119,7 +127,16 @@ async function main(): Promise<void> {
   const setupStatus = new SetupStatus(() => runSetupChecks({ kokoroHome: config.kokoroHome, appRoot: config.appRoot, fakeAgent: config.fakeAgent }));
   setupStatus.start();
 
-  const app = await buildApp({ config, csrfToken, manager, settings, store, kokoro, log, usageLedger, setupStatus });
+  const leetcode = new LeetcodeService({
+    client: createLeetcodeClient({ fetch: globalThis.fetch, userAgent: `sparmate/${config.version}` }),
+    settings,
+    filePath: paths.leetcode,
+    log,
+  });
+  // Read once at start, so a gap between visits stays small. The service still keeps its minimum wait.
+  void leetcode.get().catch((err) => log.warn("The first LeetCode read failed", err));
+
+  const app = await buildApp({ config, csrfToken, manager, settings, store, kokoro, log, usageLedger, setupStatus, leetcode });
   const listenHost = process.env.SPARMATE_IN_CONTAINER === "1" ? "0.0.0.0" : "127.0.0.1";
   await app.listen({ port: config.port, host: listenHost });
   log.info(`Started on port ${config.port}${config.fakeAgent ? " with the fake agent" : ""}; ${guard.size()} privacy terms loaded`);

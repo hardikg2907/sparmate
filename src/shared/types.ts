@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Mode, Track } from "./phases";
 import { LIMITS } from "./protocol";
-import { DAY_KINDS, DEFAULT_DSA_GOAL, DEFAULT_WEEKLY_PLAN, DSA_GOAL_MAX, DSA_GOAL_MIN, LEETCODE_USERNAME_PATTERN } from "./week";
+import { DAY_KINDS, DEFAULT_DSA_GOAL, DEFAULT_WEEKLY_PLAN, DSA_GOAL_MAX, DSA_GOAL_MIN, LEETCODE_USERNAME_PATTERN, isPastOrToday } from "./week";
 
 export const MODEL_IDS = ["claude-opus-5-5", "claude-sonnet-5-5"] as const;
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -36,6 +36,11 @@ export const SettingsSchema = z.strictObject({
     .default(() => [...DEFAULT_WEEKLY_PLAN]),
   leetcodeUsername: z.string().regex(LEETCODE_USERNAME_PATTERN).optional(),
   dsaWeeklyGoal: z.number().int().min(DSA_GOAL_MIN).max(DSA_GOAL_MAX).default(DEFAULT_DSA_GOAL),
+  /** First local day whose LeetCode solves count on the DSA page, so earlier years never show. */
+  dsaCountFrom: z
+    .string()
+    .refine((day) => isPastOrToday(day), "Pick a real day that is not in the future")
+    .optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
