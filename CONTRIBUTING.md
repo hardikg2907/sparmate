@@ -5,10 +5,12 @@ Thanks for helping. This guide is short on purpose.
 ## Set up
 
 ```sh
-npm install
+npm run setup
 ```
 
-`npm install` also sets up the git hooks (see "Git hooks" below). You need Node.js 22.12 or newer, and `clang++` for the C++ runner tests. On Linux the runner tests also need `bubblewrap`.
+`npm run setup` installs the packages with `npm ci`, which also sets up the git hooks (see "Git hooks" below). It then checks for `clang++` and offers the Claude sign-in and the optional Kokoro voice. You need Node.js 22.12 or newer. `npm install` also works if you only want the packages.
+
+Native setup is for macOS. On Linux and Windows, run the app through the container route in the README. To run the tests on Linux, install `clang` and `bubblewrap`.
 
 ## Scripts
 
