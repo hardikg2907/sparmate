@@ -573,8 +573,9 @@ function PlanPanel({
                       {p.label}
                     </th>
                     <td className="py-2.5 text-right tabular-nums">{p.minutes} min</td>
-                    <td className={cn("py-2.5 text-right tabular-nums", actual === undefined ? "text-faint" : over ? "font-semibold text-warning" : "")}>
-                      {actual !== undefined ? `${Math.round(actual * 10) / 10} min` : attempt?.phaseTiming ? "Not reached" : "—"}
+                    <td className={cn("py-2.5 text-right tabular-nums", actual === undefined || actual === 0 ? "text-faint" : over ? "font-semibold text-warning" : "")}>
+                      {/* Every step of a round has a timing row, so a missing row means that round used another step list. */}
+                      {actual === undefined ? "—" : actual > 0 ? `${Math.round(actual * 10) / 10} min` : "Not reached"}
                     </td>
                   </tr>
                 );
