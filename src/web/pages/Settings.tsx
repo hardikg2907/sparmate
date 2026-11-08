@@ -8,6 +8,8 @@ import { Alert, Button, Card, Input, Segmented, Switch, cn } from "../components
 import { DEFAULT_SETTINGS } from "../lib/contract";
 import { DEFAULT_VOICE_SETTINGS, getVoiceSettings, saveVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 import type { Theme } from "../theme";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { guardNavigation, navigate } from "../router";
 import type { PageContext } from "./context";
 
 // Typed as records so a model or effort added to the settings schema is a compile error until it has a label.
@@ -124,6 +126,19 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
     setVoice({ ...DEFAULT_VOICE_SETTINGS });
     setStatus("idle");
   };
+
+  // Leaving with unsaved changes asks first: in-app links through the router guard, a reload or a closed tab through the browser.
+  const [leaving, setLeaving] = useState<string | null>(null);
+  useEffect(() => {
+    if (!dirty) return;
+    guardNavigation((to) => setLeaving(to));
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      guardNavigation(null);
+      window.removeEventListener("beforeunload", warn);
+    };
+  }, [dirty]);
 
   const goTo = (id: string) => {
     setActive(id);
@@ -371,6 +386,23 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
           </div>
         </div>
       </div>
+      {leaving ? (
+        <ConfirmModal
+          title="Leave without saving?"
+          confirmLabel="Leave"
+          cancelLabel="Stay and keep editing"
+          danger
+          onCancel={() => setLeaving(null)}
+          onConfirm={() => {
+            const to = leaving;
+            setLeaving(null);
+            guardNavigation(null);
+            navigate(to, { force: true });
+          }}
+        >
+          <p>Your changes to the settings are not saved. Leaving now throws them away.</p>
+        </ConfirmModal>
+      ) : null}
     </PageShell>
   );
 }

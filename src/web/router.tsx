@@ -70,8 +70,23 @@ function crossFade(update: () => void): void {
   document.startViewTransition(() => flushSync(update));
 }
 
-export function navigate(to: string, options: { replace?: boolean } = {}): void {
+type NavigationGuard = (to: string, proceed: () => void) => void;
+let guard: NavigationGuard | null = null;
+
+/**
+ * While a guard is set, an in-app navigation calls it instead of leaving. The guard decides, and calls `proceed`
+ * to go on. Pass null to remove it. A page with unsaved work uses this to ask first.
+ */
+export function guardNavigation(next: NavigationGuard | null): void {
+  guard = next;
+}
+
+export function navigate(to: string, options: { replace?: boolean; force?: boolean } = {}): void {
   if (locked) return;
+  if (guard && !options.force) {
+    guard(to, () => navigate(to, { ...options, force: true }));
+    return;
+  }
   const url = withKeptParams(to);
   crossFade(() => {
     if (options.replace) history.replaceState(null, "", url);
