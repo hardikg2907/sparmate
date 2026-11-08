@@ -418,6 +418,14 @@ function RoomHeader({
         </span>
         <div className="ml-auto flex items-center gap-2">
           {behind >= 30_000 ? <BehindPlan ms={behind} /> : null}
+          {guided ? (
+            <span className="shrink-0 text-meta text-muted-foreground" aria-live="polite" title={`${passed.size} of ${session.phasePlan.length} steps passed`}>
+              <span className="font-semibold tabular-nums text-foreground">
+                {passed.size}/{session.phasePlan.length}
+              </span>{" "}
+              passed
+            </span>
+          ) : null}
           <Timer mode={session.mode} roundMs={roundMs} durationMs={session.clock.durationMs} status={session.status} />
           <Tooltip content={paused ? "Resume the round" : "Pause the clock"}>
             <Button variant="ghost" onClick={paused ? onResume : onPause} disabled={!connected || frozen}>
@@ -446,11 +454,6 @@ function RoomHeader({
           onSelect={onSelectPhase}
           disabled={frozen}
         />
-        {guided ? (
-          <p className="mt-1.5 text-meta text-muted-foreground" aria-live="polite">
-            <span className="font-semibold tabular-nums text-foreground">{passed.size}</span> of {session.phasePlan.length} steps passed
-          </p>
-        ) : null}
       </div>
     </header>
   );

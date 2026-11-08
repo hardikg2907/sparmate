@@ -925,8 +925,8 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   An "I use headphones" setting enables full-duplex with voice barge-in. Spoken replies stream sentence by sentence
   via local Kokoro neural TTS (with automatic fallback to local speech synthesis), omitting code blocks ("code block omitted")
   and stripping Markdown formatting. Pausing the round halts both recognition and synthesis.
-- Step bar: in a guided round the phase rail shows a passed mark per step the guide passed, and a line under it reads
-  "n of m steps passed". An interview round shows neither. Clicking a step moves the phase and brings that step's frame into view; in an LLD round a step
+- Step bar: in a guided round the phase rail shows a passed mark per step the guide passed, and the header bar shows
+  "n/m passed" beside the timer. An interview round shows neither. Clicking a step moves the phase and brings that step's frame into view; in an LLD round a step
   without a frame brings the Code tab forward instead.
 - The work toolbar has "Show this step" (the current step's frame) and "Whole board" while the board is in view.
 - Step verdict (live guided rounds only), a card at the top of the chat column, for the current step: "Passed" with a
