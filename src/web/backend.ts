@@ -1,5 +1,6 @@
 import type { BootstrapResponse, ClientMsg, CreateSessionRequest, CustomProblemJobStatus, ServerMsg } from "../shared/protocol";
 import type { DsaResponse } from "../shared/dsa";
+import type { DrillPrompt, DrillResult, DrillTarget, GymSummary } from "../shared/drills";
 import type { Mode, Track } from "../shared/phases";
 import type { ProblemSummary, PublicSession, SessionHistoryItem, Settings } from "../shared/types";
 
@@ -111,6 +112,9 @@ export const api = {
   board: (id: string) => request<BoardSnapshot>("GET", `/api/sessions/${enc(id)}/board`),
   code: (id: string) => request<CodeSnapshot>("GET", `/api/sessions/${enc(id)}/code`),
   boardPngUrl: (id: string) => `/api/sessions/${enc(id)}/board-final.png`,
+  gym: () => request<GymSummary>("GET", "/api/gym"),
+  gymPrompt: (target: DrillTarget) => request<DrillPrompt>("POST", "/api/gym/prompt", target),
+  gymSubmit: (target: DrillTarget, answer: string) => request<DrillResult>("POST", "/api/gym/submit", { ...target, answer }),
   settings: () => request<Settings>("GET", "/api/settings"),
   saveSettings: (settings: Settings) => request<unknown>("PUT", "/api/settings", settings),
   ttsStatus: () => request<{ available: boolean }>("GET", "/api/tts/status"),

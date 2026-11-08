@@ -8,7 +8,8 @@ import { HistoryPage } from "./pages/History";
 import { LibraryPage } from "./pages/Library";
 import { LibraryNewPage } from "./pages/LibraryNew";
 import { DsaPage } from "./pages/Dsa";
-import { GymPage } from "./pages/Placeholders";
+import { DrillPage } from "./pages/DrillPage";
+import { GymPage } from "./pages/Gym";
 import { ProgressPage } from "./pages/Progress";
 import { SettingsPage } from "./pages/Settings";
 import { TodayPage } from "./pages/Today";
@@ -113,7 +114,8 @@ function Shell() {
 
   // Keyed by page, so each page mounts fresh. Reading pages stagger their own sections in; the room only fades,
   // because the whiteboard measures its position when it mounts and a moving page would offset every pointer event.
-  const pageKey = route.name === "session" ? `session:${route.id}` : route.name;
+  const pageKey =
+    route.name === "session" ? `session:${route.id}` : route.name === "drill" ? `drill:${route.target.drill}:${route.target.problemId}:${route.target.drillId ?? ""}` : route.name;
   const enter = route.name === "session" ? "fade-in " : "";
   return (
     <>
@@ -138,6 +140,7 @@ function Shell() {
             <SessionPage key={route.id} id={route.id} theme={theme} studyRoot={bootstrap.studyRoot} />
           </Suspense>
         ) : null}
+        {route.name === "drill" ? <DrillPage ctx={ctx} target={route.target} /> : null}
         {route.name === "not-found" ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
             <h1 className="text-lead font-semibold">Page not found</h1>

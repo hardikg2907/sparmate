@@ -12,6 +12,7 @@ import { parseDay, shortDay } from "../lib/dates";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
 import { mediumsTip } from "../lib/dsaText";
 import { useDsa } from "../lib/useDsa";
+import { useGym } from "../lib/useGym";
 import { useNow } from "../lib/useNow";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
 import { Link } from "../router";
@@ -22,7 +23,19 @@ function dueLabel(entry: RedoEntry): string {
   return shortDay(parseDay(entry.dueOn));
 }
 
-export function ProgressView({ data, ctx, now: fixedNow, dsa = null }: { data: StudyData; ctx: PageContext; now?: Date; dsa?: DsaResponse | null }) {
+export function ProgressView({
+  data,
+  ctx,
+  now: fixedNow,
+  dsa = null,
+  drillWeek = null,
+}: {
+  data: StudyData;
+  ctx: PageContext;
+  now?: Date;
+  dsa?: DsaResponse | null;
+  drillWeek?: { passed: number; attempted: number } | null;
+}) {
   const liveNow = useNow();
   const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
@@ -39,7 +52,7 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa = null }: { data: S
   return (
     <PageShell testMode={ctx.testMode}>
       <div className="reveal-children space-y-6">
-        <PageHeader title="Progress" aside={<WeekStats stats={stats} dsa={dsa} username={ctx.settings.leetcodeUsername} />} />
+        <PageHeader title="Progress" aside={<WeekStats stats={stats} dsa={dsa} username={ctx.settings.leetcodeUsername} drills={drillWeek} />} />
         {data.startError ? (
           <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
             {data.startError}
@@ -90,18 +103,29 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa = null }: { data: S
 export function ProgressPage({ ctx }: { ctx: PageContext }) {
   const data = useStudyData();
   const dsa = useDsa(ctx.settings.leetcodeUsername !== undefined, ctx.settings.leetcodeUsername);
+  const { gym } = useGym();
   useEffect(() => {
     document.title = "Progress · Sparmate";
   }, []);
-  return <ProgressView data={data} ctx={ctx} dsa={dsa.response} />;
+  return <ProgressView data={data} ctx={ctx} dsa={dsa.response} drillWeek={gym?.week ?? null} />;
 }
 
-function WeekStats({ stats, dsa, username }: { stats: ReturnType<typeof weekStats>; dsa: DsaResponse | null; username: string | undefined }) {
+function WeekStats({
+  stats,
+  dsa,
+  username,
+  drills,
+}: {
+  stats: ReturnType<typeof weekStats>;
+  dsa: DsaResponse | null;
+  username: string | undefined;
+  drills: { passed: number; attempted: number } | null;
+}) {
   const read = dsa !== null && (dsa.status === "ok" || dsa.status === "stale");
   const items: { label: string; value: string; note?: string }[] = [
     { label: "Rounds", value: `${stats.rounds.done}`, note: `of ${stats.rounds.planned}` },
     { label: "Redos", value: `${stats.redos.done}`, note: `of ${stats.redos.planned}` },
-    { label: "Drills", value: "—", note: "Coming with the Gym" },
+    drills ? { label: "Drills", value: `${drills.passed}`, note: `of ${drills.attempted}` } : { label: "Drills", value: "—", note: "The drill count could not be loaded." },
     { label: "DSA mediums", value: read ? `${dsa.week.mediums}` : "—", note: read ? `of ${dsa.weeklyGoal}` : mediumsTip(username, dsa) },
   ];
   return (

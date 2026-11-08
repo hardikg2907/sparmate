@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, beforeEach, vi } from "vitest";
-import { guardNavigation, navigate, parseRoute, subscribeToRoute } from "./router";
+import { drillPath, guardNavigation, navigate, parseRoute, subscribeToRoute } from "./router";
 
 describe("parseRoute", () => {
   it.each([
@@ -24,6 +24,20 @@ describe("parseRoute", () => {
     expect(parseRoute("/session/20261030-0900-c2-url-shortener-abcd")).toEqual({ name: "session", id: "20261030-0900-c2-url-shortener-abcd" });
     expect(parseRoute("/session/20261030-0900-c2-url-shortener-abcd/")).toMatchObject({ name: "session" });
   });
+
+  it("reads a free drill and a queued drill from the address, and builds the same address back", () => {
+    expect(parseRoute("/gym/drill/capacity/c2-url-shortener")).toEqual({ name: "drill", target: { drill: "capacity", problemId: "c2-url-shortener" } });
+    const queued = parseRoute("/gym/drill/deep_dive/c2-news-feed/0123456789abcdef/");
+    expect(queued).toEqual({ name: "drill", target: { drill: "deep_dive", problemId: "c2-news-feed", drillId: "0123456789abcdef" } });
+    if (queued.name === "drill") expect(drillPath(queued.target)).toBe("/gym/drill/deep_dive/c2-news-feed/0123456789abcdef");
+  });
+
+  it.each(["/gym/drill", "/gym/drill/juggling/c2-url-shortener", "/gym/drill/capacity/../x", "/gym/drill/capacity/c2-url-shortener/zz", "/gym/drill/capacity/C2"])(
+    "does not read %s as a drill",
+    (path) => {
+      expect(parseRoute(path)).toEqual({ name: "not-found" });
+    },
+  );
 
   it("does not match inherited object keys or unknown paths", () => {
     expect(parseRoute("/constructor")).toEqual({ name: "not-found" });

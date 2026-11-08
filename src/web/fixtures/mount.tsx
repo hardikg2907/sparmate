@@ -5,7 +5,7 @@ import { HistoryView } from "../pages/History";
 import { LibraryView } from "../pages/Library";
 import { LibraryNewView } from "../pages/LibraryNew";
 import { DsaView } from "../pages/Dsa";
-import { GymView } from "../pages/Placeholders";
+import { GymView } from "../pages/Gym";
 import { ProgressView } from "../pages/Progress";
 import { SettingsView } from "../pages/Settings";
 import { TodayView } from "../pages/Today";
@@ -15,6 +15,7 @@ import { applyTheme, type Theme } from "../theme";
 import type { Mode } from "../../shared/phases";
 import type { PublicSession } from "../../shared/types";
 import { FakeServer } from "./fakeServer";
+import { fixtureGym } from "./gym";
 import { fixtureAllHistory, fixtureBootstrap, fixtureHistory, fixtureOpenRounds, fixtureProblems, fixtureSettings } from "./home";
 import { fixtureDsa } from "./dsa";
 import { useFixtureStudyData } from "./studyData";
@@ -226,9 +227,9 @@ function FixturePage({
 
   if (name === "library") return <LibraryView data={data} ctx={ctx} />;
   if (name === "library-new") return <LibraryNewView data={data} ctx={ctx} />;
-  if (name === "progress") return <ProgressView data={data} ctx={ctx} now={now} dsa={dsaState ? dsa.response : null} />;
+  if (name === "progress") return <ProgressView data={data} ctx={ctx} now={now} dsa={dsaState ? dsa.response : null} drillWeek={fixtureGym.week} />;
   if (name === "history") return <HistoryView data={data} ctx={ctx} />;
-  if (name === "gym") return <GymView ctx={ctx} />;
+  if (name === "gym") return <GymView data={{ gym: fixtureGym, error: null, reload: () => undefined }} ctx={ctx} />;
   if (name === "dsa") return <DsaView ctx={ctx} data={dsa} now={now} />;
   if (name === "settings") {
     return (

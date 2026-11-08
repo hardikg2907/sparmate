@@ -16,6 +16,7 @@ import { dayMonth, longDate, parseDay, shortDay, weekday, wholeMinutes } from ".
 import { MODE_LABEL, formatDate } from "../lib/format";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
 import { useDsa } from "../lib/useDsa";
+import { useDueDrillCount } from "../lib/useGym";
 import { useNow } from "../lib/useNow";
 import { redoCardTitle } from "../lib/redoLabel";
 import { READINESS_LABEL, VERDICT_LABEL, attemptBadge } from "../lib/verdict";
@@ -31,7 +32,19 @@ function minutesFor(track: ProblemSummary["track"], durations: Settings["duratio
   return durations[track] ?? BASE_MINUTES[track];
 }
 
-export function TodayView({ data, ctx, now: fixedNow, dsa = null }: { data: StudyData; ctx: PageContext; now?: Date; dsa?: DsaResponse | null }) {
+export function TodayView({
+  data,
+  ctx,
+  now: fixedNow,
+  dsa = null,
+  dueDrills = 0,
+}: {
+  data: StudyData;
+  ctx: PageContext;
+  now?: Date;
+  dsa?: DsaResponse | null;
+  dueDrills?: number;
+}) {
   const liveNow = useNow();
   const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
@@ -75,7 +88,7 @@ export function TodayView({ data, ctx, now: fixedNow, dsa = null }: { data: Stud
           <TodaySkeleton />
         ) : pick ? (
           <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_372px]">
-            <Hero hero={pick.hero} data={data} ctx={ctx} now={now} dsa={dsa} onSeePlan={() => setPlanOpen(true)} onDiscard={askDiscard} />
+            <Hero hero={pick.hero} data={data} ctx={ctx} now={now} dsa={dsa} dueDrills={dueDrills} onSeePlan={() => setPlanOpen(true)} onDiscard={askDiscard} />
             <div className="flex flex-col gap-4">
               <UnfinishedCard rounds={pick.unfinished} data={data} onDiscard={askDiscard} now={now} />
               <MoreRedos redos={pick.moreRedos} heroIsRedo={pick.hero.kind === "problem" && pick.hero.reason === "redo"} />
@@ -115,10 +128,11 @@ export function TodayPage({ ctx }: { ctx: PageContext }) {
   const data = useStudyData();
   const dsaDay = ctx.settings.weeklyPlan[planIndex(new Date())] === "dsa";
   const dsa = useDsa(dsaDay && ctx.settings.leetcodeUsername !== undefined, ctx.settings.leetcodeUsername);
+  const dueDrills = useDueDrillCount();
   useEffect(() => {
     document.title = "Today · Sparmate";
   }, []);
-  return <TodayView data={data} ctx={ctx} dsa={dsa.response} />;
+  return <TodayView data={data} ctx={ctx} dsa={dsa.response} dueDrills={dueDrills} />;
 }
 
 /** A quiet row of the week: today is marked, and a day with a finished round shows its label in green. */
@@ -193,6 +207,7 @@ function Hero({
   ctx,
   now,
   dsa,
+  dueDrills,
   onSeePlan,
   onDiscard,
 }: {
@@ -201,6 +216,7 @@ function Hero({
   ctx: PageContext;
   now: Date;
   dsa: DsaResponse | null;
+  dueDrills: number;
   onSeePlan: () => void;
   onDiscard: (item: SessionHistoryItem) => void;
 }) {
@@ -338,7 +354,11 @@ function Hero({
               Open LeetCode
             </a>
           </Button>
-          {gap ? (
+          {dueDrills > 0 ? (
+            <Button asChild size="lg" variant="secondary">
+              <Link href="/gym">Do a due drill</Link>
+            </Button>
+          ) : gap ? (
             <Button
               size="lg"
               variant="secondary"
@@ -350,7 +370,7 @@ function Hero({
             </Button>
           ) : null}
         </div>
-        {gap ? (
+        {gap && dueDrills === 0 ? (
           <p className="mt-4 text-ui text-muted-foreground">
             Gap: {gap.gap.title}, from {gap.item.title}.
           </p>
