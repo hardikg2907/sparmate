@@ -53,7 +53,7 @@ export function textOutput(text: string, isError = false): ToolOutput {
 export interface TurnMeta {
   kind: "start" | "candidate" | "clock" | "request" | "replay" | "oneshot";
   checkpoint?: CheckpointKind;
-  request?: "feedback" | "hint" | "coach_open";
+  request?: "feedback" | "hint" | "stuck" | "coach_open";
   candidateText?: string;
 }
 

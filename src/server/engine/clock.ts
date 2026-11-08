@@ -11,13 +11,13 @@ export function roundTimeMs(clock: ClockFields, nowMs: number): number {
   return Math.max(0, end - started - clock.pausedMs - currentPause);
 }
 
-export type CheckpointKind = "phase_end" | "extension" | "five_minutes" | "time_up";
+export type CheckpointKind = "phase_end" | "phase_over" | "extension" | "five_minutes" | "time_up";
 
 export interface Checkpoint {
   id: string;
   kind: CheckpointKind;
   atMs: number;
-  /** For phase_end: the phase whose planned window closes at atMs. */
+  /** For phase_end and phase_over: the phase the checkpoint is about. */
   phase?: string;
 }
 
@@ -35,7 +35,8 @@ export function phaseWindows(plan: readonly { id: string; minutes: number }[]): 
 
 /**
  * Every checkpoint of a round. Guided rounds keep only the phase nudges: they count up, have no end and no
- * extension. The last phase's end is left out because time-up (or nothing, in guided mode) covers it.
+ * extension. The last phase's end is left out because time-up (or nothing, in guided mode) covers it. A guided round
+ * adds one offer to move on per step, at twice the step's planned time; the last step has no next step to offer.
  */
 export function planCheckpoints(track: Track, mode: Mode, durationMs: number, plan: readonly { id: string; minutes: number }[]): Checkpoint[] {
   const out: Checkpoint[] = [];
@@ -44,6 +45,9 @@ export function planCheckpoints(track: Track, mode: Mode, durationMs: number, pl
     if (mode === "interview" && w.endMs >= durationMs - MINUTE) return;
     out.push({ id: `phase_end:${w.id}`, kind: "phase_end", atMs: w.endMs, phase: w.id });
   });
+  if (mode === "guided") {
+    windows.slice(0, -1).forEach((w) => out.push({ id: `phase_over:${w.id}`, kind: "phase_over", atMs: w.endMs + (w.endMs - w.startMs), phase: w.id }));
+  }
   if (mode === "interview") {
     out.push({ id: "extension", kind: "extension", atMs: durationMs - EXTENSION_LEAD_MINUTES[track] * MINUTE });
     out.push({ id: "five_minutes", kind: "five_minutes", atMs: durationMs - 5 * MINUTE });

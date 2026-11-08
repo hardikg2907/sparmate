@@ -55,6 +55,7 @@ export const ClientMsgSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("phase.set"), phase: z.string().min(1).max(40) }),
   z.strictObject({ type: z.literal("guided.feedback") }), // guided mode: "check my current step"
   z.strictObject({ type: z.literal("guided.hint") }), // guided mode: "give me a nudge"
+  z.strictObject({ type: z.literal("guided.stuck") }), // guided mode: "show me a model answer for this step"
   z.strictObject({ type: z.literal("session.pause") }), // either mode: the user steps away
   z.strictObject({ type: z.literal("session.discard") }), // delete the round without a debrief
   z.strictObject({ type: z.literal("session.resume") }), // guided mode, or retry after a backend error

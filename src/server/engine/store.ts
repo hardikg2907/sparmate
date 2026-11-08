@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { Mode, Track } from "../../shared/phases";
 import { DEFAULT_TARGET } from "../../shared/target";
-import type { Proposal, Session, SessionStatus, Verdict } from "../../shared/types";
+import type { Proposal, Readiness, Session, SessionStatus, Verdict } from "../../shared/types";
 import { resolveInside } from "../study/files";
 import { writeFileAtomic } from "./fsutil";
 import type { Logger } from "./log";
@@ -20,6 +20,8 @@ export interface SessionSummary {
   createdAt: string;
   status: SessionStatus;
   verdict: Verdict | null;
+  /** Guided rounds only: the readiness call the history badge shows in place of the hire verdict. */
+  readiness?: Readiness["call"] | null;
   /** Set while the round is paused: why, and how much of the round is left (null in a guided round, which has no limit). */
   pause: { reason: NonNullable<Session["pauseReason"]>; timeLeftMs: number | null } | null;
   /** The study-notes draft was saved to the study files. */
@@ -56,6 +58,7 @@ export function summarize(s: Session): SessionSummary {
     createdAt: s.createdAt,
     status: s.status,
     verdict: s.scorecard?.verdict.sde2 ?? null,
+    readiness: s.scorecard?.readiness?.call ?? null,
     pause: pauseSummary(s),
     notesSaved: (s.studyNotes?.appliedCount ?? 0) > 0,
   };

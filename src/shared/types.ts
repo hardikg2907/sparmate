@@ -51,7 +51,7 @@ export interface ProblemSummary {
   tags: string[];
   /** Mark of the matching TRACKER.md bullet, or null when the problem is not in the tracker (custom problems). */
   trackerMark: TrackerMark | null;
-  lastAttempt: { sessionId: string; date: string; mode: Mode; verdict: Verdict | null } | null;
+  lastAttempt: { sessionId: string; date: string; mode: Mode; verdict: Verdict | null; readiness?: Readiness["call"] | null } | null;
   /** First sentence of the problem's opening prompt, which the candidate would hear anyway. */
   summary: string;
   /** "next" = recommended new problem; "redo" = a [~] problem whose last attempt is 7 or more days old. */
@@ -141,6 +141,16 @@ export interface StepCheck {
   items: Record<string, StepCheckItem>;
 }
 
+/**
+ * The guide's call on one guided step, which is the only "passed" the candidate sees. `at` is round time in
+ * milliseconds. A pass is final for the round; a "not yet" carries the one gap the guide named.
+ */
+export interface StepVerdict {
+  verdict: "pass" | "not_yet";
+  gap?: string;
+  at: number;
+}
+
 /** A short note an AI role attached to one board element. */
 export interface BoardPin {
   id: string;
@@ -184,6 +194,10 @@ export interface Session {
   phaseHistory: { phase: string; at: number; by: "candidate" | "interviewer" }[];
   transcript: TranscriptEntry[];
   hints: { at: number; level: 1 | 2 | 3; topic: string }[];
+  /** Guided rounds. Per phase id, the guide's latest call on the step. Sessions saved before this existed load without it. */
+  stepVerdicts?: Record<string, StepVerdict>;
+  /** Guided rounds. Each time he asked for a model answer; the server records it, never the model. */
+  assists?: { at: number; phase: string }[];
   extension: { at: number; text: string } | null;
   board: { version: number; graphText: string; updatedAt: number | null };
   /** The candidate's written answer per phase id, plain text. Sessions saved before this existed load with {}. */
@@ -242,7 +256,9 @@ export interface PublicStepCheck {
 }
 
 /** What the browser gets: the session minus anything that would reveal the hidden brief early. */
-export type PublicSession = Omit<Session, "sdk" | "checklist" | "stepChecks" | "stepCode" | "pendingEvents"> & {
+export type PublicSession = Omit<Session, "sdk" | "checklist" | "stepChecks" | "stepCode" | "pendingEvents" | "assists"> & {
+  /** How many times he asked for a model answer. The steps stay on the server until the debrief. */
+  assistCount: number;
   /** Per phase id, the checklist filtered for the mode and the status of the round. */
   steps: Record<string, PublicStepCheck>;
   clock: { startedAt: string; pausedMs: number; pauseStartedAt: string | null; durationMs: number; serverNow: string };
@@ -320,7 +336,16 @@ export const ScorecardSchema = z.strictObject({
     .describe("LLD only: the scenario results the tester produced. Empty array for HLD."),
 });
 
+/** Whether a guided round shows the unaided work interview mode asks for. A fixed rule, never the model's call. */
+export interface Readiness {
+  call: "ready" | "not_yet";
+  /** One plain sentence per failed condition. Empty exactly when the call is "ready". */
+  reasons: string[];
+}
+
 export type Scorecard = z.infer<typeof ScorecardSchema> & {
+  /** Guided rounds only; added by the server after validation, not by the model. */
+  readiness?: Readiness;
   /** Added by the server after validation, not by the model. */
   quoteChecks?: { dimensionId: string; index: number; verified: boolean }[];
   stepQuoteChecks?: { phase: string; index: number; verified: boolean }[];

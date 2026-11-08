@@ -74,7 +74,9 @@ export function buildProblemSummaries(problems: readonly Problem[], tracker: Tra
   const rows = problems.map((p) => {
     const bullet = p.meta.tracker ? (tracker.bullets.get(p.meta.id) ?? null) : null;
     const latest = latestByProblem.get(p.meta.id) ?? null;
-    const lastAttempt = latest ? { sessionId: latest.id, date: localDate(new Date(latest.createdAt)), mode: latest.mode, verdict: latest.verdict } : null;
+    const lastAttempt = latest
+      ? { sessionId: latest.id, date: localDate(new Date(latest.createdAt)), mode: latest.mode, verdict: latest.verdict, readiness: latest.readiness ?? null }
+      : null;
     let badge: ProblemSummary["badge"] = null;
     if (bullet?.mark === "[~]") {
       const since = lastAttempt?.date ?? newestDate(bullet.suffix);

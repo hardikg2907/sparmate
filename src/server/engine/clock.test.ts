@@ -45,10 +45,31 @@ describe("planCheckpoints", () => {
     expect(cps.at(-1)?.kind).toBe("time_up");
   });
 
-  it("keeps only phase nudges in guided mode", () => {
+  it("keeps only phase nudges in guided mode, with one offer to move on per step", () => {
     const cps = planCheckpoints("hld", "guided", 45 * MIN, phasePlan("hld", 45));
-    expect(cps.every((c) => c.kind === "phase_end")).toBe(true);
-    expect(cps).toHaveLength(5);
+    expect(cps.every((c) => c.kind === "phase_end" || c.kind === "phase_over")).toBe(true);
+    expect(cps.filter((c) => c.kind === "phase_end")).toHaveLength(5);
+    const over = cps.filter((c) => c.kind === "phase_over");
+    expect(over.map((c) => c.phase)).toEqual(["requirements", "capacity", "api", "design", "deep_dives"]);
+    expect(new Set(cps.map((c) => c.id)).size).toBe(cps.length);
+    // The step's planned window is 5 minutes from 0:00, so twice its planned time is 10 minutes in.
+    expect(over[0]?.atMs).toBe(10 * MIN);
+    // The 3-minute capacity window runs 5 to 8 minutes, so its offer falls at 11 minutes.
+    expect(over[1]?.atMs).toBe(11 * MIN);
+  });
+
+  it("plans no move-on offer in interview mode", () => {
+    expect(planCheckpoints("hld", "interview", 45 * MIN, phasePlan("hld", 45)).some((c) => c.kind === "phase_over")).toBe(false);
+  });
+
+  it("fires an offer once, and a restart does not repeat one already past", () => {
+    const cps = planCheckpoints("hld", "guided", 45 * MIN, phasePlan("hld", 45));
+    const fired = CheckpointScheduler.restoreFired(cps, 10.5 * MIN, false);
+    expect(fired.has("phase_over:requirements")).toBe(true);
+    expect(fired.has("phase_over:capacity")).toBe(false);
+    expect(dueCheckpoints(cps, fired, 11 * MIN).due.map((c) => c.id)).toContain("phase_over:capacity");
+    fired.add("phase_over:capacity");
+    expect(dueCheckpoints(cps, fired, 12 * MIN).due.map((c) => c.id)).not.toContain("phase_over:capacity");
   });
 
   it("computes planned windows from the scaled plan", () => {

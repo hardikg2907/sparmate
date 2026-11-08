@@ -177,8 +177,9 @@ describe("what the browser sees of the checklist and the pins", () => {
     for (const status of ["live", "paused", "ended"] as const) expect(publicSteps(base("interview", status))).toEqual({});
   });
 
-  it("shows a checked guided step and every debrief the counts, and a debrief every label", () => {
-    for (const s of [base("guided", "live"), base("interview", "debriefed")]) {
+  it("sends a live guided round no checklist, and every debrief the counts and labels", () => {
+    expect(publicSteps(base("guided", "live"))).toEqual({});
+    for (const s of [base("guided", "debriefed"), base("interview", "debriefed")]) {
       const step = publicSteps(s).requirements;
       expect(step).toMatchObject({ covered: 1, partial: 1, total: 3 });
       expect(step?.items.map((i) => i.state)).toEqual(["covered", "partial", "missing"]);

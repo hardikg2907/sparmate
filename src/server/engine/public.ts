@@ -9,11 +9,12 @@ const AFTER_ROUND = new Set<Session["status"]>(["debriefing", "debriefed", "fail
  * reference answer appears only once the debrief is ready.
  */
 export function toPublicSession(session: Session, problem: Problem | undefined, now: Date = new Date()): PublicSession {
-  const { sdk: _sdk, checklist: _checklist, stepChecks: _stepChecks, stepCode: _stepCode, pendingEvents: _pendingEvents, ...rest } = session;
+  const { sdk: _sdk, checklist: _checklist, stepChecks: _stepChecks, stepCode: _stepCode, pendingEvents: _pendingEvents, assists, ...rest } = session;
   const after = AFTER_ROUND.has(session.status);
   return {
     ...rest,
     steps: publicSteps(session),
+    assistCount: assists?.length ?? 0,
     pins: publicPins(session),
     transcript: after ? rest.transcript : rest.transcript.filter((e) => !e.hidden),
     hints: after ? rest.hints : [],
@@ -36,33 +37,24 @@ export function toPublicSession(session: Session, problem: Problem | undefined, 
 }
 
 /**
- * The checklist as the browser may see it. An interview round shows none of it until the round ends: the list is
- * drawn from the hidden brief, and even a count of what he covered tells him whether a step is done, which a real
- * interviewer never does. A guided round keeps the labels back too, because for the requirements step they are the
- * facts he is meant to find by asking. Before a step's first check only its size leaves the server. After a check, a
- * covered item shows its label, and an open one shows the question that draws it out, or its label when the brief
- * gave none. A debrief shows every label.
+ * The checklist as the browser may see it: only once the round is over. The list is drawn from the hidden brief, and
+ * even a count of what he covered tells him whether a step is done, which a real interviewer never does. A guided
+ * round shows him the guide's step verdict instead, so the ticks stay on the server until the debrief, which shows
+ * every label.
  */
 export function publicSteps(session: Pick<Session, "mode" | "status" | "checklist" | "stepChecks">): Record<string, PublicStepCheck> {
-  const after = AFTER_ROUND.has(session.status);
-  if (session.mode !== "guided" && !after) return {};
+  if (!AFTER_ROUND.has(session.status)) return {};
   const out: Record<string, PublicStepCheck> = {};
   for (const [phase, defs] of Object.entries(session.checklist ?? {})) {
     const check = session.stepChecks?.[phase];
     const base = { status: check?.status ?? "idle", checkedAt: check?.checkedAt ?? null, usedImage: check?.usedImage ?? false } as const;
-    if (!after && base.checkedAt === null) {
-      out[phase] = { ...base, items: [], covered: 0, partial: 0, total: defs.length };
-      continue;
-    }
     const items: PublicStepItem[] = defs.map((def) => {
       const item = check?.items[def.id];
-      const state = item?.state ?? "missing";
-      const asked = !after && state !== "covered" && def.ask !== undefined;
       return {
         id: def.id,
-        label: asked ? (def.ask ?? def.label) : def.label,
-        question: asked,
-        state,
+        label: def.label,
+        question: false,
+        state: item?.state ?? "missing",
         source: item?.source ?? null,
         at: item?.at ?? null,
         detail: item?.state === "partial" && item.detail ? item.detail : null,

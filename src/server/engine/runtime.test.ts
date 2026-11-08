@@ -856,7 +856,8 @@ describe("the step checker in a machine-coding round", () => {
     expect(body).toMatch(/- clarify-2: Entry: assign the first free fitting spot and return a ticket; reject if nothing fits — (covered|partial), in the code/);
     expect(body).toContain("- clarify-1: Configure floors, spots per floor with sizes, gates and rates at setup — missing");
     expect(body).toContain("- clarify-5: Safe under concurrent entry and exit calls — partial, in the code; lacks only part of it is stated");
-    expect(body).toContain("Your feedback must agree with this list. If you think an item is wrong, name the item and say why.");
+    expect(body).toContain("Your step_verdict is the call he sees");
+    expect(body).toContain("call step_verdict exactly once");
     rt.dispose();
   });
 
@@ -1535,6 +1536,242 @@ describe("step quotes in the debrief", () => {
     const first = session.scorecard?.steps?.[0]?.phase;
     expect(first).toBe("requirements");
     expect(session.scorecard?.stepQuoteChecks?.filter((c) => c.phase === first).map((c) => c.verified)).toEqual([false]);
+    rt.dispose();
+  });
+});
+
+describe("guided step verdicts, assists and move-on offers", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  /** A fake driver that records the interviewer's tools and the turns it gets, and can add to a turn's reply. */
+  function watched(onTurn?: (turn: UserTurn, tool: (name: string, input: unknown) => Promise<{ text: string; isError: boolean }>) => Promise<void>) {
+    const fake = createFakeDriver({ chunkDelayMs: 0 });
+    let tools: RoomTool[] = [];
+    const turns: UserTurn[] = [];
+    const tool = async (name: string, input: unknown) => {
+      const found = tools.find((x) => x.name === name);
+      if (!found) throw new Error(`no ${name} tool`);
+      const out = await found.run(input);
+      return { text: out.content.map((c) => ("text" in c ? c.text : "")).join(""), isError: out.isError === true };
+    };
+    const driver: Driver = {
+      ...fake,
+      startConversation(s) {
+        if (s.role !== "coach") tools = s.tools;
+        const conv = fake.startConversation(s);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          async send(turn, handlers) {
+            if (s.role !== "coach") turns.push(turn);
+            await onTurn?.(turn, tool);
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    return { driver, tool, turns, toolNames: () => tools.map((x) => x.name) };
+  }
+
+  const lastState = (msgs: ServerMsg[]) => {
+    const m = [...msgs].reverse().find((x) => x.type === "session.state");
+    if (m?.type !== "session.state") throw new Error("no session.state");
+    return m.session;
+  };
+
+  it("gives only the guide a step_verdict tool", async () => {
+    for (const mode of ["guided", "interview"] as const) {
+      const w = watched();
+      const t = setup(w.driver, mode);
+      const rt = await t.start(newSession(mode));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(w.toolNames().includes("step_verdict")).toBe(mode === "guided");
+      rt.dispose();
+    }
+  });
+
+  it("stores verdicts, keeps a pass, and shows the room the update", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect((await w.tool("step_verdict", { phase: "requirements", verdict: "not_yet" })).isError).toBe(true);
+    expect((await w.tool("step_verdict", { phase: "nowhere", verdict: "pass" })).isError).toBe(true);
+    expect((await w.tool("step_verdict", { phase: "requirements", verdict: "pass", extra: true })).isError).toBe(true);
+    expect(session.stepVerdicts).toBeUndefined();
+
+    expect((await w.tool("step_verdict", { phase: "requirements", verdict: "not_yet", gap: "What latency does a redirect need?" })).isError).toBe(false);
+    expect(lastState(t.msgs).stepVerdicts?.requirements).toMatchObject({ verdict: "not_yet", gap: "What latency does a redirect need?" });
+
+    expect((await w.tool("step_verdict", { phase: "requirements", verdict: "pass" })).isError).toBe(false);
+    const refused = await w.tool("step_verdict", { phase: "requirements", verdict: "not_yet", gap: "One more thing" });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("already passed");
+    expect(lastState(t.msgs).stepVerdicts?.requirements?.verdict).toBe("pass");
+    rt.dispose();
+  });
+
+  it("asks the guide for a verdict on a step check, and never sends the checklist to the room", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const request = w.turns.find((x) => x.meta.request === "feedback");
+    expect(request?.text).toContain("call step_verdict exactly once");
+    // The fake guide names a gap on the first check, then passes on the next.
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("not_yet");
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("pass");
+    expect(lastState(t.msgs).steps).toEqual({});
+    rt.dispose();
+  });
+
+  it("records an assist itself on 'I'm stuck', asks for a short model answer and does not count a hint", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.stuck" }, t.peer);
+    expect(session.assists).toHaveLength(1);
+    expect(session.assists?.[0]).toMatchObject({ phase: "requirements" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const request = w.turns.find((x) => x.meta.request === "stuck");
+    expect(request?.text).toContain("about 150 words");
+    expect(request?.text).toContain("no tables and no quiz");
+    expect(request?.text).toContain("redo the step in his own words");
+    expect(session.hints).toEqual([]);
+    expect(lastState(t.msgs).assistCount).toBe(1);
+    expect("assists" in lastState(t.msgs)).toBe(false);
+    rt.dispose();
+  });
+
+  it("refuses a pass in the reply to 'I'm stuck', and accepts one on a later turn", async () => {
+    let seen: { text: string; isError: boolean } | null = null;
+    const w = watched(async (turn, tool) => {
+      if (turn.meta.request === "stuck") seen = await tool("step_verdict", { phase: "requirements", verdict: "pass" });
+    });
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.stuck" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(seen).toMatchObject({ isError: true });
+    expect(session.stepVerdicts).toBeUndefined();
+    expect((await w.tool("step_verdict", { phase: "requirements", verdict: "pass" })).isError).toBe(false);
+    rt.dispose();
+  });
+
+  it("rejects 'I'm stuck' in an interview round, while paused and after the end", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "interview");
+    const interview = newSession("interview");
+    const rt = await t.start(interview);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.stuck" }, t.peer);
+    expect(t.msgs.find((m) => m.type === "error")).toMatchObject({ code: "not_guided" });
+    expect(interview.assists).toBeUndefined();
+    rt.dispose();
+
+    const g = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const guided = newSession("guided");
+    const grt = await g.start(guided);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await grt.handle({ type: "session.pause" }, g.peer);
+    await grt.handle({ type: "guided.stuck" }, g.peer);
+    expect(g.msgs.find((m) => m.type === "error")).toMatchObject({ code: "paused" });
+    expect(guided.assists).toBeUndefined();
+    grt.dispose();
+  });
+
+  it("offers to move on once per step at twice its planned time, in a guided round only", async () => {
+    const offers = (session: Session) => session.transcript.filter((e) => e.kind === "clock" && e.text.includes("twice the planned time"));
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(9 * MIN);
+    expect(offers(session)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    expect(offers(session)).toHaveLength(1);
+    expect(interviewerTexts(t.msgs).at(-1)).toMatch(/move on to the next one/);
+    const turn = w.turns.find((x) => x.meta.checkpoint === "phase_over");
+    expect(turn?.text).toContain("offers to move on");
+    expect(turn?.text).not.toContain("<silent/>");
+    await vi.advanceTimersByTimeAsync(20 * MIN);
+    expect(w.turns.filter((x) => x.meta.checkpoint === "phase_over")).toHaveLength(1);
+    rt.dispose();
+
+    const iw = watched();
+    const it2 = setup(iw.driver, "interview");
+    const interview = newSession("interview");
+    const irt = await it2.start(interview);
+    await vi.advanceTimersByTimeAsync(12 * MIN);
+    expect(iw.turns.some((x) => x.meta.checkpoint === "phase_over")).toBe(false);
+    irt.dispose();
+  });
+
+  it("makes no offer for a step that already passed", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    session.stepVerdicts = { requirements: { verdict: "pass", at: 1 } };
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(12 * MIN);
+    expect(w.turns.some((x) => x.meta.checkpoint === "phase_over")).toBe(false);
+    rt.dispose();
+  });
+
+  it("gives a guided debrief a readiness call, and an interview debrief none", async () => {
+    const guided = newSession("guided");
+    guided.assists = [{ at: 1_000, phase: "requirements" }];
+    guided.stepVerdicts = { requirements: { verdict: "pass", at: 2_000 } };
+    const g = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const grt = await g.start(guided);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await grt.handle({ type: "session.end" }, g.peer);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(guided.status).toBe("debriefed");
+    });
+    expect(guided.scorecard?.readiness?.call).toBe("not_yet");
+    expect(guided.scorecard?.readiness?.reasons).toContain("Requirements was assisted.");
+    expect(guided.scorecard?.readiness?.reasons.some((r) => r.startsWith("These steps did not pass"))).toBe(true);
+    // The judge's own data is unchanged.
+    expect(guided.scorecard?.verdict.sde2).toBe("lean_no_hire");
+    expect(guided.scorecard?.trackerMark).toBe("[~]");
+    grt.dispose();
+
+    const interview = newSession("interview");
+    const i = setup(createFakeDriver({ chunkDelayMs: 0 }), "interview");
+    const irt = await i.start(interview);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await irt.handle({ type: "session.end" }, i.peer);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(interview.status).toBe("debriefed");
+    });
+    expect(interview.scorecard?.readiness).toBeUndefined();
+    irt.dispose();
+  });
+
+  it("loads a guided round saved without verdicts or assists", async () => {
+    const old = newSession("guided");
+    expect(old.stepVerdicts).toBeUndefined();
+    expect(old.assists).toBeUndefined();
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const rt = await t.start(old);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const view = lastState(t.msgs);
+    expect(view.stepVerdicts).toBeUndefined();
+    expect(view.assistCount).toBe(0);
     rt.dispose();
   });
 });

@@ -778,24 +778,42 @@ async function guidedRound() {
   mark = c.mark();
   c.send({ type: "guided.feedback" });
   const fb = await c.waitFor(isInterviewerMsg, { since: mark, label: "feedback reply" });
-  check("a step check gets feedback", fb.entry.text.includes("most important fix"));
-  const guidedCheck = await c.waitFor((m) => m.type === "session.state" && m.session.steps.requirements?.status === "done", {
+  check("a step check gets feedback", fb.entry.text.includes("One thing is missing"));
+  const named = await c.waitFor((m) => m.type === "session.state" && m.session.stepVerdicts?.requirements?.verdict === "not_yet", {
     since: mark,
     timeout: 10_000,
-    label: "checklist after a guided check",
+    label: "step verdict after a guided check",
   });
-  check("a guided step check also runs the checker on the current step", guidedCheck.session.steps.requirements.checkedAt !== null);
+  check(
+    "a step check ends in one step verdict that names a gap",
+    typeof named.session.stepVerdicts.requirements.gap === "string" && named.session.stepVerdicts.requirements.gap.length > 0,
+  );
   const pinned = await c.waitFor((m) => m.type === "session.state" && m.session.pins.length > 0, { since: mark, label: "guide pin" });
   check(
     "the guide pins a real box and its made-up id is refused",
     pinned.session.pins.length === 1 && pinned.session.pins[0].elementId === "lb" && pinned.session.pins[0].phase === "design" && pinned.session.pins[0].tone === "note",
     JSON.stringify(pinned.session.pins),
   );
-  const guidedSteps = Object.values(pinned.session.steps);
+  check("a live guided round sends no checklist", Object.keys(pinned.session.steps).length === 0);
+
+  mark = c.mark();
+  c.send({ type: "guided.feedback" });
+  const passed = await c.waitFor((m) => m.type === "session.state" && m.session.stepVerdicts?.requirements?.verdict === "pass", {
+    since: mark,
+    timeout: 10_000,
+    label: "pass after a second check",
+  });
+  check("a pass replaces a not_yet and drops its gap", passed.session.stepVerdicts.requirements.gap === undefined);
+  await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to the second check" });
+
+  mark = c.mark();
+  c.send({ type: "guided.stuck" });
+  const stuck = await c.waitFor(isInterviewerMsg, { since: mark, label: "model answer" });
+  const assisted = await c.waitFor((m) => m.type === "session.state" && m.session.assistCount === 1, { since: mark, label: "assist count" });
   check(
-    "a guided round holds a step's labels back until its first check, and sends the size either way",
-    guidedSteps.length > 0 && guidedSteps.every((s) => s.total > 0 && (s.checkedAt === null ? s.items.length === 0 && s.covered === 0 : s.items.length === s.total)),
-    JSON.stringify(guidedSteps.map((s) => [s.checkedAt !== null, s.items.length, s.total])),
+    "'I'm stuck' gets a model answer and the server counts the assist",
+    stuck.entry.text.includes("model answer") && assisted.session.assistCount === 1 && !("assists" in assisted.session),
+    stuck.entry.text.slice(0, 60),
   );
 
   mark = c.mark();
@@ -811,6 +829,11 @@ async function guidedRound() {
 
   const debrief = await runDebrief(c, "guided");
   check("guided rounds are capped at [~]", debrief.scorecard.trackerMark === "[~]");
+  check(
+    "a guided debrief gets a readiness call that names the assisted step, and keeps the judge's verdict in the data",
+    debrief.scorecard.readiness?.call === "not_yet" && debrief.scorecard.readiness.reasons.includes("Requirements was assisted.") && Boolean(debrief.scorecard.verdict.sde2),
+    JSON.stringify(debrief.scorecard.readiness),
+  );
   check("hints show up once the round is over", debrief.state.hints.length === 1 && debrief.state.hints[0].level === 1);
   const judgePins = debrief.state.pins.filter((p) => p.by === "judge");
   check(

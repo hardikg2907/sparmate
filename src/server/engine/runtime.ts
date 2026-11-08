@@ -85,6 +85,8 @@ import {
 import { decodePng, localDate, randomId, sha256Hex } from "./fsutil";
 import { describeError, type Logger } from "./log";
 import { validatePin, withPin } from "./pins";
+import { computeReadiness } from "./readiness";
+import { parseStepVerdict, recordStepVerdict, StepVerdictShape } from "./step-verdict";
 import { PromptError, commonVars, extensionMinute, focusText, formatPhasePlan, type PromptLoader, type PromptName } from "./prompts";
 import { toPublicSession } from "./public";
 import { TesterOutputSchema, toApiSchema, toCompatSchema, type TesterOutput } from "./schemas";
@@ -236,6 +238,8 @@ export class SessionRuntime {
   private endRequested = false;
   private boardLooksThisTurn = 0;
   private rechecksThisTurn = 0;
+  /** True while the guide answers "I'm stuck": a model answer never earns a pass, whatever the guide says. */
+  private passBarredThisTurn = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private boardWrites: Promise<void> = Promise.resolve();
   /** Wall time until which board and code edits still count after time ran out; null when none may land. */
@@ -538,6 +542,8 @@ export class SessionRuntime {
           return this.onGuided("feedback");
         case "guided.hint":
           return this.onGuided("hint");
+        case "guided.stuck":
+          return this.onGuided("stuck");
         case "session.pause":
           return await this.onPause();
         case "session.resume":
@@ -641,16 +647,26 @@ export class SessionRuntime {
     this.changePhase(phase, "candidate");
   }
 
-  private onGuided(kind: "feedback" | "hint"): void {
-    if (this.session.mode !== "guided") throw new UserError("not_guided", "Step checks and hints are only for guided rounds.");
+  private onGuided(kind: "feedback" | "hint" | "stuck"): void {
+    if (this.session.mode !== "guided") throw new UserError("not_guided", "Step checks, hints and model answers are only for guided rounds.");
     this.requireLiveRound();
     const label = this.currentPhase()?.label ?? this.session.phase;
-    this.addEntry({ channel: "interview", role: "system", kind: "note", text: kind === "feedback" ? `Asked for a check of ${label}.` : `Asked for a hint on ${label}.` });
+    const noted = kind === "feedback" ? `Asked for a check of ${label}.` : kind === "hint" ? `Asked for a hint on ${label}.` : `Asked for a model answer for ${label}.`;
+    this.addEntry({ channel: "interview", role: "system", kind: "note", text: noted });
     if (kind === "hint") {
       this.enqueue(this.interview, this.hintTurn());
       return;
     }
-    // The guide's feedback must agree with the list he sees, so its turn holds its place and waits for the checker.
+    if (kind === "stuck") {
+      // The server keeps this count itself: a step with a model answer never counts as unaided, whatever the guide does next.
+      const phase = this.session.phase;
+      this.session.assists = [...(this.session.assists ?? []), { at: this.roundNow(), phase }];
+      this.saveSoon();
+      this.sendState();
+      this.enqueue(this.interview, this.stuckTurn(phase));
+      return;
+    }
+    // The checker's reading goes to the guide as evidence, so its turn holds its place and waits for the checker.
     const phase = this.session.phase;
     const checked = settleWithin(this.checkStep(phase), FEEDBACK_WAIT_MS);
     this.enqueue(this.interview, this.feedbackTurn(phase, checked));
@@ -911,7 +927,7 @@ export class SessionRuntime {
 
   private onCheckpoint(cp: Checkpoint): void {
     if (this.session.status !== "live") return;
-    if (cp.kind === "phase_end" && this.session.phase !== cp.phase) return;
+    if ((cp.kind === "phase_end" || cp.kind === "phase_over") && this.session.phase !== cp.phase) return;
     if (cp.kind === "time_up") {
       void this.endRound("time");
       return;
@@ -1047,6 +1063,7 @@ export class SessionRuntime {
       if (ch.status !== "thinking") this.setChannelStatus(ch, "thinking");
       this.boardLooksThisTurn = 0;
       this.rechecksThisTurn = 0;
+      this.passBarredThisTurn = built.turn.meta.request === "stuck";
       entryId = newEntryId();
       const f = new SilentFilter((text) => this.broadcast({ type: "chat.delta", channel: ch.name, messageId: entryId, textDelta: text }));
       filter = f;
@@ -1076,6 +1093,7 @@ export class SessionRuntime {
       await this.onTurnError(ch, err);
     } finally {
       ch.busy = false;
+      this.passBarredThisTurn = false;
       if (ch === this.interview) {
         if (this.session.status === "paused") {
           ch.conv?.close();
@@ -1223,13 +1241,32 @@ export class SessionRuntime {
         const label = phase?.label ?? phaseId;
         const written = (this.session.stepNotes[phaseId] ?? "").trim();
         const body = [
-          `The candidate pressed "Check this step" for the step "${label}"${phase ? ` (goal: ${phase.goal})` : ""}. Give feedback on this step only: what holds, what is missing, and the single most important fix.`,
+          `The candidate pressed "Check this step" for the step "${label}"${phase ? ` (goal: ${phase.goal})` : ""}. Give feedback on this step only: one thing that holds, then call step_verdict exactly once for this step (phase "${phaseId}"). If it does not pass, name the one most important gap, as a missing question or a missing decision and not its answer.`,
           ...(written ? ["His written answer for this step:", "<notes>", written, "</notes>"] : []),
           this.checklistBlock(phaseId),
           this.pinTargetsBlock(),
         ].join("\n");
         const { view, commit } = this.interviewContext(this.interview, false);
         return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "feedback" } }, commit };
+      },
+      after: () => this.afterInterviewerTurn(),
+    };
+  }
+
+  /** "I'm stuck" for the current step: a short model answer, then the step goes back to him. */
+  private stuckTurn(phaseId: string): QueuedTurn {
+    return {
+      kind: "request",
+      build: () => {
+        const phase = this.phases.find((p) => p.id === phaseId);
+        const label = phase?.label ?? phaseId;
+        const body = [
+          `The candidate pressed "I'm stuck" on the step "${label}"${phase ? ` (goal: ${phase.goal})` : ""}. Give a short model answer for this step: at most about 150 words, no tables and no quiz. Then add one line asking him to redo the step in his own words.`,
+          `Do not call step_verdict with "pass" in this reply, and do not call note_hint: the server has already recorded this as an assist. Longer teaching waits for the coach after the round.`,
+          this.checklistBlock(phaseId),
+        ].join("\n");
+        const { view, commit } = this.interviewContext(this.interview, false);
+        return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "stuck" } }, commit };
       },
       after: () => this.afterInterviewerTurn(),
     };
@@ -1250,18 +1287,18 @@ export class SessionRuntime {
     };
   }
 
-  /** The checker's last finished reading of a step, which the guide's feedback on that step must agree with. */
+  /** The checker's last finished reading of a step. It is evidence for the guide; the candidate never sees the list in a live round. */
   private checklistBlock(phase: string): string {
     const items = this.session.checklist[phase] ?? [];
     if (items.length === 0) return "This step has no checklist.";
     const check = this.session.stepChecks[phase];
     if (check?.checkedAt == null) return "The checker has no finished reading of this step yet, so his checklist shows only how many items the step has.";
     return [
-      `This is the checker's reading of the step checklist as of ${formatClock(check.checkedAt)}. He sees this list beside the chat.`,
+      `This is the checker's reading of the step checklist as of ${formatClock(check.checkedAt)}. It may lag his latest work, and he does not see this list.`,
       "<checklist>",
       stepReadingText(items, check),
       "</checklist>",
-      "Your feedback must agree with this list. If you think an item is wrong, name the item and say why.",
+      "Use it as evidence. Your step_verdict is the call he sees, so base it on what he has said and drawn.",
     ].join("\n");
   }
 
@@ -1271,7 +1308,9 @@ export class SessionRuntime {
       build: () => {
         const status = this.session.status;
         if (cp.kind === "time_up" ? status !== "ended" : status !== "live") return null;
-        if (cp.kind === "phase_end" && this.session.phase !== cp.phase) return null;
+        if ((cp.kind === "phase_end" || cp.kind === "phase_over") && this.session.phase !== cp.phase) return null;
+        // A step that already passed has the "Move on" button; an offer would only nag.
+        if (cp.kind === "phase_over" && this.session.stepVerdicts?.[cp.phase ?? ""]?.verdict === "pass") return null;
         const since = this.lastCandidateAt === null ? null : Math.max(0, this.roundNow() - this.lastCandidateAt);
         return {
           turn: { text: clockTurn(this.timeView(), since, cp.kind, this.session.track), meta: { kind: "clock", checkpoint: cp.kind } },
@@ -1282,11 +1321,13 @@ export class SessionRuntime {
         const label =
           cp.kind === "phase_end"
             ? `clock: planned end of phase "${cp.phase}"`
-            : cp.kind === "extension"
-              ? "clock: extension point"
-              : cp.kind === "five_minutes"
-                ? "clock: five minutes left"
-                : "clock: time up";
+            : cp.kind === "phase_over"
+              ? `clock: twice the planned time in phase "${cp.phase}"`
+              : cp.kind === "extension"
+                ? "clock: extension point"
+                : cp.kind === "five_minutes"
+                  ? "clock: five minutes left"
+                  : "clock: time up";
         this.addEntry({ channel: "interview", role: "system", kind: "clock", hidden: true, text: label });
         if (cp.kind === "extension" && text) {
           this.session.extension = { at: this.roundNow(), text };
@@ -1481,6 +1522,25 @@ export class SessionRuntime {
           "Attach a short note to one box or arrow on the candidate's board, where the remark applies. Use an id from the pin targets that view_whiteboard lists. One plain sentence.",
           { elementId: z.string().min(1).max(64), note: z.string().min(1).max(LIMITS.pinNoteChars) },
           async ({ elementId, note }) => this.addPin({ elementId, note, tone: "note", by: "guide" }),
+        ),
+        defineTool(
+          "step_verdict",
+          `Record your call on one step. This is the only "passed" the candidate sees, so call it once for each step check. Use "pass" when the step meets the level bar; a pass is final and you must not raise that step again. Use "not_yet" with one gap, the most important one, phrased as a missing question or a missing decision and not its answer. Steps: ${phaseIds}.`,
+          StepVerdictShape,
+          async (args) => {
+            const parsed = parseStepVerdict(
+              args,
+              this.phases.map((p) => p.id),
+            );
+            if (!parsed.ok) return textOutput(parsed.error, true);
+            if (parsed.value.verdict === "pass" && this.passBarredThisTurn)
+              return textOutput("This reply gives a model answer, so the step cannot pass now. Ask him to redo the step; judge it on his next check.", true);
+            const done = recordStepVerdict(this.session, parsed.value, this.roundNow());
+            if (!done.ok) return textOutput(done.error, true);
+            this.saveSoon();
+            this.sendState();
+            return textOutput(parsed.value.verdict === "pass" ? "Recorded: the step passed." : "Recorded: not yet.");
+          },
         ),
         defineTool(
           "recheck_step",
@@ -1886,7 +1946,14 @@ export class SessionRuntime {
         }
       }
       const ruled = enforceRules(card, { mode: s.mode, track: s.track, tester });
-      const scorecard: Scorecard = { ...ruled, quoteChecks: checks, stepQuoteChecks: stepChecks, phaseTiming: timing, lintIssues: this.safeLint(ruled) };
+      const scorecard: Scorecard = {
+        ...ruled,
+        ...(s.mode === "guided" ? { readiness: computeReadiness(s, this.plan) } : {}),
+        quoteChecks: checks,
+        stepQuoteChecks: stepChecks,
+        phaseTiming: timing,
+        lintIssues: this.safeLint(ruled),
+      };
       s.scorecard = scorecard;
       s.pins = [...s.pins.filter((p) => p.by !== "judge"), ...pins];
       s.status = "debriefed";
