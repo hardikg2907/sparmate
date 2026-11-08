@@ -31,13 +31,38 @@ export function parseRoute(pathname: string): Route {
 
 const listeners = new Set<() => void>();
 let locked = false;
+/** The address the page on screen belongs to, so a guarded Back can put it back. */
+let current: string | null = null;
 
-function subscribe(listener: () => void): () => void {
+function notify(): void {
+  for (const listener of [...listeners]) listener();
+}
+
+/**
+ * The browser has already changed the address when Back or Forward fires popstate, so a guard cannot stop it the
+ * way it stops a link. The page's own address goes back on top, and the guard decides as it does for a link.
+ */
+function onPopState(): void {
+  const target = location.pathname + location.search;
+  if (guard && current !== null && current !== target) {
+    const decide = guard;
+    history.pushState(null, "", current);
+    decide(target, () => navigate(target, { replace: true, force: true }));
+    return;
+  }
+  current = target;
+  notify();
+}
+
+export function subscribeToRoute(listener: () => void): () => void {
+  if (listeners.size === 0) {
+    current ??= location.pathname + location.search;
+    window.addEventListener("popstate", onPopState);
+  }
   listeners.add(listener);
-  window.addEventListener("popstate", listener);
   return () => {
     listeners.delete(listener);
-    window.removeEventListener("popstate", listener);
+    if (listeners.size === 0) window.removeEventListener("popstate", onPopState);
   };
 }
 
@@ -91,14 +116,15 @@ export function navigate(to: string, options: { replace?: boolean; force?: boole
   crossFade(() => {
     if (options.replace) history.replaceState(null, "", url);
     else history.pushState(null, "", url);
-    for (const listener of [...listeners]) listener();
+    current = url;
+    notify();
     window.scrollTo(0, 0);
   });
 }
 
 export function useRoute(): Route {
   const pathname = useSyncExternalStore(
-    subscribe,
+    subscribeToRoute,
     () => location.pathname,
     () => "/",
   );

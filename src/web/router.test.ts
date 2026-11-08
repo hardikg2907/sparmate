@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, beforeEach, vi } from "vitest";
-import { guardNavigation, navigate, parseRoute } from "./router";
+import { guardNavigation, navigate, parseRoute, subscribeToRoute } from "./router";
 
 describe("parseRoute", () => {
   it.each([
@@ -70,5 +70,79 @@ describe("navigation guard", () => {
     guardNavigation(null);
     navigate("/library");
     expect(pushed).toEqual(["/library"]);
+  });
+});
+
+describe("Back and Forward with a guard", () => {
+  const pushed: string[] = [];
+  const replaced: string[] = [];
+  let pop: (() => void) | null = null;
+  let unsubscribe: (() => void) | null = null;
+  const loc = { search: "", pathname: "/settings" };
+  beforeEach(() => {
+    pushed.length = 0;
+    replaced.length = 0;
+    loc.pathname = "/settings";
+    vi.stubGlobal("document", {});
+    vi.stubGlobal("window", {
+      addEventListener: (type: string, fn: () => void) => {
+        if (type === "popstate") pop = fn;
+      },
+      removeEventListener: () => {
+        pop = null;
+      },
+      scrollTo: () => {},
+    });
+    vi.stubGlobal("location", loc);
+    vi.stubGlobal("history", {
+      pushState: (_s: unknown, _t: string, url: string) => {
+        pushed.push(url);
+        loc.pathname = url;
+      },
+      replaceState: (_s: unknown, _t: string, url: string) => {
+        replaced.push(url);
+        loc.pathname = url;
+      },
+    });
+    navigate("/settings", { replace: true });
+    replaced.length = 0;
+  });
+  afterEach(() => {
+    guardNavigation(null);
+    unsubscribe?.();
+    unsubscribe = null;
+    vi.unstubAllGlobals();
+  });
+
+  it("puts the page's address back and asks the guard where Back was going", () => {
+    const heard: string[] = [];
+    unsubscribe = subscribeToRoute(() => heard.push(loc.pathname));
+    const asked: string[] = [];
+    guardNavigation((to) => asked.push(to));
+    loc.pathname = "/library";
+    pop?.();
+    expect(asked).toEqual(["/library"]);
+    expect(pushed).toEqual(["/settings"]);
+    expect(loc.pathname).toBe("/settings");
+    expect(heard).toEqual([]);
+  });
+
+  it("goes where Back was going once the guard lets it", () => {
+    const heard: string[] = [];
+    unsubscribe = subscribeToRoute(() => heard.push(loc.pathname));
+    guardNavigation((_to, proceed) => proceed());
+    loc.pathname = "/library";
+    pop?.();
+    expect(replaced).toEqual(["/library"]);
+    expect(heard).toEqual(["/library"]);
+  });
+
+  it("follows Back at once when no guard is set", () => {
+    const heard: string[] = [];
+    unsubscribe = subscribeToRoute(() => heard.push(loc.pathname));
+    loc.pathname = "/library";
+    pop?.();
+    expect(pushed).toEqual([]);
+    expect(heard).toEqual(["/library"]);
   });
 });

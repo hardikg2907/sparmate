@@ -1058,7 +1058,9 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   a reset to the default plan); the LeetCode username (1 to 40 letters, digits, underscores or hyphens) and the weekly DSA goal; the HLD and
   LLD round lengths; models and effort per role; theme and voice options (speak replies on or off, speed, "I use
   headphones", and the voice input send mode: review before sending or auto-send after a pause); the study root path.
-  Server settings are saved with PUT; voice options are stored in browser local storage.
+  Server settings are saved with PUT; voice options are stored in browser local storage. Leaving with unsaved edits asks
+  "Leave without saving?" first, whether by an in-app link, the browser's Back or Forward (the router puts the settings
+  address back and asks), or a reload or closed tab (the browser's own prompt).
 
 ### 12.2 Data flow
 
