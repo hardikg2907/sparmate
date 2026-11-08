@@ -1,15 +1,12 @@
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
-import { isOpenRound } from "../../shared/today";
+import { isFresh, isOpenRound } from "../../shared/today";
 
 export type LibraryTab = "hld" | "lld" | "custom";
 export type LibraryFilter = "fresh" | "redo" | "all";
 
 export const FILTER_LABEL: Record<LibraryFilter, string> = { fresh: "Fresh first", redo: "Redo due", all: "All" };
 
-/** A problem with no attempt and no mark: nothing about it has been tried. */
-export function isFresh(problem: ProblemSummary): boolean {
-  return problem.lastAttempt === null && problem.trackerMark !== "[x]" && problem.trackerMark !== "[~]";
-}
+export { isFresh };
 
 export function inTab(problem: ProblemSummary, tab: LibraryTab): boolean {
   return tab === "custom" ? problem.custom : !problem.custom && problem.track === tab;

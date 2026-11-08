@@ -64,6 +64,11 @@ export interface ProblemSummary {
   lastAttempt: { sessionId: string; date: string; mode: Mode; verdict: Verdict | null; readiness?: Readiness["call"] | null } | null;
   /** First sentence of the problem's opening prompt, which the candidate would hear anyway. */
   summary: string;
+  /**
+   * The day a redo falls due: seven days after the date the redo rule used, which is the last attempt, else the newest
+   * date on the tracker bullet. Null when the problem is not partly done or no date is known.
+   */
+  redoDueOn?: string | null;
   /** "next" = recommended new problem; "redo" = a [~] problem whose last attempt is 7 or more days old. */
   badge: "next" | "redo" | null;
   custom: boolean;
@@ -275,6 +280,8 @@ export interface SessionHistoryItem {
   notesSaved: boolean;
   /** The raw clock, so the page can work out the time used at any moment. Absent from a server that predates it. */
   clock?: { startedAt: string; pausedMs: number; pauseStartedAt: string | null; durationMs: number };
+  /** A short round practising one gap. It is not an attempt at the problem, so no clock or score counts it. */
+  focus?: boolean;
   /** Scored rounds only. */
   scores?: HistoryScore[];
   phaseTiming?: { phase: string; label: string; plannedMinutes: number; actualMinutes: number }[];

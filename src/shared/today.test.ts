@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "./phases";
-import { clockUsedMs, largestOverrun, modeFor, redoQueue, selectToday, type TodayInput } from "./today";
+import { clockUsedMs, isFresh, largestOverrun, modeFor, redoQueue, selectToday, type TodayInput } from "./today";
 import type { ProblemSummary, SessionHistoryItem } from "./types";
 import { DEFAULT_WEEKLY_PLAN, type DayKind } from "./week";
 
@@ -267,6 +267,58 @@ describe("redo queue", () => {
   it("puts the other redos in moreRedos without the hero", () => {
     const result = pick({ problems: catalog });
     expect(result.moreRedos.map((e) => e.problem.id)).toEqual(["lld-redo"]);
+  });
+});
+
+describe("redo due dates from the server", () => {
+  it("sorts and labels a tracker-only redo by the date the server sent", () => {
+    const trackerOnly = problem("tracker-only", "hld", { trackerMark: "[~]", badge: "redo", lastAttempt: null, redoDueOn: "2026-11-01" });
+    const withAttempt = redoProblem("with-attempt", "hld", "2026-10-20");
+    const queue = redoQueue([withAttempt, trackerOnly], []);
+    expect(queue.map((e) => [e.problem.id, e.dueOn, e.due])).toEqual([
+      ["with-attempt", "2026-10-27", true],
+      ["tracker-only", "2026-11-01", true],
+    ]);
+  });
+
+  it("offers a due tracker-only redo as the hero with its due date", () => {
+    const trackerOnly = problem("tracker-only", "hld", { trackerMark: "[~]", badge: "redo", lastAttempt: null, redoDueOn: "2026-11-03" });
+    expect(pick({ problems: [trackerOnly] }).hero).toMatchObject({ kind: "problem", reason: "redo", dueOn: "2026-11-03", problem: { id: "tracker-only" } });
+  });
+
+  it("puts a redo with no known date after the dated ones", () => {
+    const undated = problem("undated", "hld", { trackerMark: "[~]", badge: null, lastAttempt: null, redoDueOn: null });
+    const dated = problem("dated", "hld", { trackerMark: "[~]", badge: null, lastAttempt: null, redoDueOn: "2026-12-01" });
+    expect(redoQueue([undated, dated], []).map((e) => e.problem.id)).toEqual(["dated", "undated"]);
+  });
+});
+
+describe("a new problem is a fresh one", () => {
+  it("needs the tracker open mark and no attempt, the same rule as the library", () => {
+    expect(isFresh({ trackerMark: "[ ]", lastAttempt: null })).toBe(true);
+    expect(isFresh({ trackerMark: "[ ]", lastAttempt: { sessionId: "s", date: "2026-11-01", mode: "interview", verdict: null } })).toBe(false);
+    expect(isFresh({ trackerMark: "[~]", lastAttempt: null })).toBe(false);
+    expect(isFresh({ trackerMark: "[x]", lastAttempt: null })).toBe(false);
+  });
+
+  it("does not offer a tried problem whose tracker mark is still open", () => {
+    const tried = problem("tried", "hld", { badge: "next", lastAttempt: { sessionId: "s", date: "2026-11-09", mode: "interview", verdict: null } });
+    const result = pick({ problems: [tried, problem("fresh", "hld")] });
+    expect(result.hero).toMatchObject({ reason: "new", problem: { id: "fresh" } });
+  });
+});
+
+describe("gap rounds are not attempts", () => {
+  it("leaves them out of the Redo day track count", () => {
+    const gap = (id: string, track: Track) => round(id, `p-${id}`, track, { createdAt: at(8).toISOString(), focus: true });
+    const history = [gap("a", "lld"), gap("b", "lld"), round("c", "x", "hld", { createdAt: at(8).toISOString() })];
+    const result = pick({ now: at(15), problems: [problem("hld-new", "hld"), problem("lld-new", "lld")], history });
+    expect(result.hero).toMatchObject({ problem: { id: "lld-new" } });
+  });
+
+  it("does not offer a gap from a gap round on a DSA day", () => {
+    const history = [round("g", "p", "hld", { createdAt: at(8).toISOString(), focus: true, gaps: [{ title: "G", goodLooksLike: "x", severity: "high", done: false }] })];
+    expect(pick({ now: at(9), problems: catalog, history }).hero).toEqual({ kind: "dsa", gap: null });
   });
 });
 

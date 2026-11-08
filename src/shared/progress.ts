@@ -1,5 +1,5 @@
 import type { Mode } from "./phases";
-import { isOpenRound } from "./today";
+import { isAttempt, isOpenRound } from "./today";
 import type { HistoryGap, HistoryScore, SessionHistoryItem } from "./types";
 import { DEFAULT_WEEKLY_PLAN, weekStart, type DayKind } from "./week";
 
@@ -11,7 +11,7 @@ export const FOCUS_ROUNDS = 3;
 export const SKILL_DOTS = 6;
 
 const scored = (history: readonly SessionHistoryItem[], mode: Mode) =>
-  history.filter((h) => h.mode === mode && h.status === "debriefed" && (h.scores?.length ?? 0) > 0).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  history.filter((h) => isAttempt(h) && h.mode === mode && h.status === "debriefed" && (h.scores?.length ?? 0) > 0).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
 /** Interview rounds when there are any, since they show unaided work. Guided rounds otherwise. */
 export function scoredRounds(history: readonly SessionHistoryItem[]): { mode: Mode; rounds: SessionHistoryItem[] } {
@@ -62,7 +62,7 @@ export function focusSkill(history: readonly SessionHistoryItem[]): FocusSkill |
 /** The newest open gap whose text names the skill. The scorecard does not link gaps to skills, so the words decide. */
 export function gapForSkill(history: readonly SessionHistoryItem[], skill: { id: string; name: string }): { item: SessionHistoryItem; gap: HistoryGap } | null {
   const needles = [skill.name, skill.id.replace(/[_-]+/g, " ")].map((n) => n.trim().toLowerCase()).filter((n) => n.length >= 3);
-  const rounds = [...history].filter((h) => h.status === "debriefed").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const rounds = [...history].filter((h) => isAttempt(h) && h.status === "debriefed").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   for (const item of rounds) {
     const gap = item.gaps?.find((g) => !g.done && needles.some((n) => `${g.title} ${g.goodLooksLike}`.toLowerCase().includes(n)));
     if (gap) return { item, gap };
@@ -105,9 +105,11 @@ export interface WeekStats {
 export function weekStats(history: readonly SessionHistoryItem[], plan: readonly DayKind[] = DEFAULT_WEEKLY_PLAN, now: Date = new Date()): WeekStats {
   const start = weekStart(now).getTime();
   const end = start + 7 * 86_400_000;
-  const finished = (h: SessionHistoryItem) => !isOpenRound(h) && h.status !== "failed";
+  const finished = (h: SessionHistoryItem) => isAttempt(h) && !isOpenRound(h) && h.status !== "failed";
   const mine = history.filter((h) => finished(h) && Date.parse(h.createdAt) >= start && Date.parse(h.createdAt) < end);
-  const isRedo = (h: SessionHistoryItem) => history.some((o) => o.problemId === h.problemId && o.id !== h.id && o.createdAt < h.createdAt);
+  // Only an earlier round that was debriefed makes this one a redo. An open or failed earlier round was never finished.
+  const isRedo = (h: SessionHistoryItem) =>
+    history.some((o) => isAttempt(o) && o.status === "debriefed" && o.problemId === h.problemId && o.id !== h.id && o.createdAt < h.createdAt);
   const redos = mine.filter(isRedo).length;
   return {
     rounds: { done: mine.length - redos, planned: plan.filter((d) => d === "hld" || d === "lld").length },

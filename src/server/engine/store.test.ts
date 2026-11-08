@@ -251,6 +251,13 @@ describe("fields added later", () => {
     ]);
   });
 
+  it("marks a gap round in its summary, and an ordinary or older round as not one", () => {
+    expect(summarize(session({ focus: { title: "Capacity math", goodLooksLike: "x" } })).focus).toBe(true);
+    expect(summarize(session()).focus).toBe(false);
+    const { focus: _f, ...old } = session();
+    expect(summarize(old as Session).focus).toBe(false);
+  });
+
   it("says when a paused round stopped", () => {
     const at = "2026-11-07T09:00:00.000Z";
     const item = summarize(session({ status: "paused", pauseReason: "user", pauseStartedAt: at, startedAt: "2026-11-07T08:00:00.000Z" }));

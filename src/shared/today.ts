@@ -14,6 +14,19 @@ export const REDO_AFTER_DAYS = 7;
 /** Rounds in this window count when the Redo day chooses the track with less practice. */
 const RECENT_ROUNDS_DAYS = 14;
 
+/**
+ * Nothing about the problem has been tried: no real attempt, and the tracker has not marked it partly done or done.
+ * Today's "new problem" and the Library's Fresh group both use this one rule.
+ */
+export function isFresh(problem: Pick<ProblemSummary, "trackerMark" | "lastAttempt">): boolean {
+  return problem.lastAttempt === null && (problem.trackerMark === "[ ]" || problem.trackerMark === null);
+}
+
+/** A gap round is practice on one gap, not an attempt, so nothing that counts attempts may include it. */
+export function isAttempt(item: Pick<SessionHistoryItem, "focus">): boolean {
+  return !item.focus;
+}
+
 export function isOpenRound(item: Pick<SessionHistoryItem, "status">): boolean {
   return item.status === "live" || item.status === "paused";
 }
@@ -68,8 +81,10 @@ export function redoQueue(problems: readonly ProblemSummary[], history: readonly
   const entries = problems
     .filter((p) => p.trackerMark === "[~]" && !open.has(p.id))
     .map((problem): RedoEntry => {
+      // The server sends the date its redo rule used. It covers a problem with only a tracker date and no app attempt.
       const date = problem.lastAttempt?.date ?? null;
-      return { problem, dueOn: date ? redoDueOn(date) : null, due: problem.badge === "redo" };
+      const dueOn = problem.redoDueOn ?? (date ? redoDueOn(date) : null);
+      return { problem, dueOn, due: problem.badge === "redo" };
     });
   const key = (e: RedoEntry) => e.dueOn ?? "9999-12-31";
   return entries.sort((a, b) => Number(b.due) - Number(a.due) || key(a).localeCompare(key(b)) || a.problem.title.localeCompare(b.problem.title));
@@ -113,7 +128,7 @@ function unfinishedRound(item: SessionHistoryItem, nowMs: number): UnfinishedRou
 /** The newest gap the coach has not finished, from the newest scored round that has one. */
 export function newestOpenGap(history: readonly SessionHistoryItem[]): { item: SessionHistoryItem; gap: HistoryGap } | null {
   const severity = { high: 0, medium: 1, low: 2 } as const;
-  const rounds = [...history].filter((h) => h.status === "debriefed" && h.gaps?.some((g) => !g.done)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const rounds = [...history].filter((h) => isAttempt(h) && h.status === "debriefed" && h.gaps?.some((g) => !g.done)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const item = rounds[0];
   const gap = item?.gaps?.filter((g) => !g.done).sort((a, b) => severity[a.severity] - severity[b.severity])[0];
   return item && gap ? { item, gap } : null;
@@ -134,7 +149,7 @@ export function selectToday({ now, plan, problems, history }: TodayInput): Today
   const queue = redoQueue(problems, history);
   const dueRedos = queue.filter((e) => e.due);
 
-  const fresh = problems.filter((p) => p.trackerMark === "[ ]" && !p.custom && !openProblems.has(p.id));
+  const fresh = problems.filter((p) => isFresh(p) && !p.custom && !openProblems.has(p.id));
   const newFor = (track: Track): ProblemSummary | undefined => fresh.find((p) => p.track === track && p.badge === "next") ?? fresh.find((p) => p.track === track);
 
   const finish = (hero: TodayHero): TodayPick => {
@@ -160,7 +175,7 @@ export function selectToday({ now, plan, problems, history }: TodayInput): Today
     const oldest = dueRedos[0];
     if (oldest) return finish(redoHero(oldest));
     const since = nowMs - RECENT_ROUNDS_DAYS * DAY;
-    const rounds = (track: Track) => history.filter((h) => h.track === track && Date.parse(h.createdAt) >= since).length;
+    const rounds = (track: Track) => history.filter((h) => isAttempt(h) && h.track === track && Date.parse(h.createdAt) >= since).length;
     const first: Track = rounds("hld") <= rounds("lld") ? "hld" : "lld";
     const other: Track = first === "hld" ? "lld" : "hld";
     const pick = newFor(first) ?? newFor(other);

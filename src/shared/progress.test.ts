@@ -108,6 +108,19 @@ describe("skillRows", () => {
   });
 });
 
+describe("gap rounds are not attempts", () => {
+  it("leaves them out of the focus skill and the skill rows", () => {
+    const history = [scored("real", 5, { depth: 3, driving: 2 }), scored("gap", 8, { depth: 1, driving: 1 }, { focus: true })];
+    expect(focusSkill(history)).toMatchObject({ id: "driving", score: 2, roundsCounted: 1 });
+    expect(skillRows(history, "interview").rounds).toBe(1);
+  });
+
+  it("does not take a gap from a gap round", () => {
+    const gap = { title: "Driving the clock", goodLooksLike: "x", severity: "high" as const, done: false };
+    expect(gapForSkill([scored("gap", 8, {}, { focus: true, gaps: [gap] })], { id: "driving", name: "Driving" })).toBeNull();
+  });
+});
+
 describe("weekStats", () => {
   const plan = ["dsa", "hld", "dsa", "hld", "dsa", "lld", "redo"] as const;
   const now = new Date(2026, 10, 12, 9);
@@ -126,5 +139,19 @@ describe("weekStats", () => {
       scored("failed", 11, {}, { problemId: "crawler", status: "failed" }),
     ];
     expect(weekStats(history, plan, now)).toEqual({ rounds: { done: 2, planned: 3 }, redos: { done: 1, planned: 1 } });
+  });
+
+  it("counts a repeat as a redo only when the earlier round was debriefed", () => {
+    for (const status of ["paused", "live", "failed", "ended"] as const) {
+      const history = [scored("early", 3, {}, { problemId: "url", status }), scored("later", 11, {}, { problemId: "url" })];
+      expect(weekStats(history, plan, now)).toEqual({ rounds: { done: 1, planned: 3 }, redos: { done: 0, planned: 1 } });
+    }
+    const done = [scored("early", 3, {}, { problemId: "url" }), scored("later", 11, {}, { problemId: "url" })];
+    expect(weekStats(done, plan, now).redos.done).toBe(1);
+  });
+
+  it("does not count a gap round, nor let one make a later round a redo", () => {
+    const history = [scored("gap", 9, {}, { problemId: "url", focus: true }), scored("real", 11, {}, { problemId: "url" })];
+    expect(weekStats(history, plan, now)).toEqual({ rounds: { done: 1, planned: 3 }, redos: { done: 0, planned: 1 } });
   });
 });

@@ -27,6 +27,13 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((parse(to) - parse(from)) / 86_400_000);
 }
 
+/** A calendar day plus some days, as YYYY-MM-DD. */
+export function addDays(day: string, days: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const next = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + days));
+  return next.toISOString().slice(0, 10);
+}
+
 export function newestDate(text: string | null): string | null {
   if (!text) return null;
   const dates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? [];
@@ -67,6 +74,8 @@ export function openingSummary(opening: string): string {
 export function buildProblemSummaries(problems: readonly Problem[], tracker: TrackerView, history: readonly SessionSummary[], today: string = localDate()): ProblemSummary[] {
   const latestByProblem = new Map<string, SessionSummary>();
   for (const s of history) {
+    // A round that practises one gap is not an attempt at the problem: it must not move the redo clock or the mode.
+    if (s.focus) continue;
     const prev = latestByProblem.get(s.problemId);
     if (!prev || s.createdAt > prev.createdAt) latestByProblem.set(s.problemId, s);
   }
@@ -78,9 +87,13 @@ export function buildProblemSummaries(problems: readonly Problem[], tracker: Tra
       ? { sessionId: latest.id, date: localDate(new Date(latest.createdAt)), mode: latest.mode, verdict: latest.verdict, readiness: latest.readiness ?? null }
       : null;
     let badge: ProblemSummary["badge"] = null;
+    let redoDueOn: string | null = null;
     if (bullet?.mark === "[~]") {
       const since = lastAttempt?.date ?? newestDate(bullet.suffix);
-      if (since && daysBetween(since, today) >= REDO_AFTER_DAYS) badge = "redo";
+      if (since) {
+        redoDueOn = addDays(since, REDO_AFTER_DAYS);
+        if (daysBetween(since, today) >= REDO_AFTER_DAYS) badge = "redo";
+      }
     }
     const summary: ProblemSummary = {
       id: p.meta.id,
@@ -91,13 +104,14 @@ export function buildProblemSummaries(problems: readonly Problem[], tracker: Tra
       trackerMark: bullet?.mark ?? null,
       summary: openingSummary(p.sections["Opening prompt"] ?? ""),
       lastAttempt,
+      redoDueOn,
       badge,
       custom: p.custom,
     };
     return { summary, lineIndex: bullet?.lineIndex ?? Number.MAX_SAFE_INTEGER };
   });
 
-  const newest = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const newest = history.filter((h) => !h.focus).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const lastTrack = newest?.track ?? tracker.lastLogTrack;
   const fresh = rows.filter((r) => r.summary.trackerMark === "[ ]" && !r.summary.custom).sort((a, b) => a.lineIndex - b.lineIndex);
   const wanted: Track | null = lastTrack === null ? null : lastTrack === "hld" ? "lld" : "hld";

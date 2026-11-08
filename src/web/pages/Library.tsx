@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BASE_MINUTES, type Mode } from "../../shared/phases";
-import { redoDueOn } from "../../shared/today";
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
 import { ChevronRightIcon, ListIcon, PlayFilledIcon, RedoIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
@@ -23,8 +22,8 @@ function resultOf(problem: ProblemSummary, open: boolean): { word: string; tone:
     badge ?? (problem.trackerMark === "[~]" ? { label: "Partly done", tone: "warn" as const } : problem.trackerMark === "[x]" ? { label: "Done", tone: "good" as const } : null);
   const detail = open
     ? "Round open"
-    : problem.badge === "redo" && problem.lastAttempt
-      ? `Redo due ${dayMonth(redoDueOn(problem.lastAttempt.date))}`
+    : problem.badge === "redo"
+      ? `Redo due ${problem.redoDueOn ? dayMonth(problem.redoDueOn) : "now"}`
       : problem.lastAttempt
         ? `Tried ${dayMonth(problem.lastAttempt.date)}`
         : null;

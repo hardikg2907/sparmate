@@ -56,6 +56,7 @@ export function summarize(s: Session): SessionSummary {
     readiness: s.scorecard?.readiness?.call ?? null,
     pause: pauseSummary(s),
     notesSaved: (s.studyNotes?.appliedCount ?? 0) > 0,
+    focus: s.focus !== null && s.focus !== undefined,
     clock: { startedAt: s.startedAt, pausedMs: s.pausedMs, pauseStartedAt: s.pauseStartedAt, durationMs: s.durationMs },
     ...scoredParts(s),
   };
