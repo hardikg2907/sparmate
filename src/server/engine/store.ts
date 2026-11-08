@@ -1,9 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { Mode, Track } from "../../shared/phases";
 import { DEFAULT_TARGET } from "../../shared/target";
-import type { Proposal, Readiness, Session, SessionStatus, Verdict } from "../../shared/types";
+import type { Proposal, Session, SessionHistoryItem } from "../../shared/types";
 import { resolveInside } from "../study/files";
 import { writeFileAtomic } from "./fsutil";
 import type { Logger } from "./log";
@@ -11,22 +10,7 @@ import type { Logger } from "./log";
 export const SESSION_ID = /^\d{8}-\d{4}-[a-z0-9][a-z0-9-]{1,80}-[a-z0-9]{4}$/;
 export const PROPOSAL_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-export interface SessionSummary {
-  id: string;
-  problemId: string;
-  title: string;
-  track: Track;
-  mode: Mode;
-  createdAt: string;
-  status: SessionStatus;
-  verdict: Verdict | null;
-  /** Guided rounds only: the readiness call the history badge shows in place of the hire verdict. */
-  readiness?: Readiness["call"] | null;
-  /** Set while the round is paused: why, and how much of the round is left (null in a guided round, which has no limit). */
-  pause: { reason: NonNullable<Session["pauseReason"]>; timeLeftMs: number | null } | null;
-  /** The study-notes draft was saved to the study files. */
-  notesSaved: boolean;
-}
+export type SessionSummary = SessionHistoryItem;
 
 export interface BoardFile {
   version: number;
@@ -45,7 +29,18 @@ export function newSessionId(problemId: string, now: Date = new Date()): string 
 function pauseSummary(s: Session): SessionSummary["pause"] {
   if (s.status !== "paused" || !s.pauseStartedAt || !s.pauseReason) return null;
   const roundMs = Math.max(0, Date.parse(s.pauseStartedAt) - Date.parse(s.startedAt) - s.pausedMs);
-  return { reason: s.pauseReason, timeLeftMs: s.mode === "guided" ? null : Math.max(0, s.durationMs - roundMs) };
+  return { reason: s.pauseReason, pausedAt: s.pauseStartedAt, timeLeftMs: s.mode === "guided" ? null : Math.max(0, s.durationMs - roundMs) };
+}
+
+/** Scorecards saved by older versions can lack parts, so each read tolerates a missing one. */
+function scoredParts(s: Session): Pick<SessionSummary, "scores" | "phaseTiming" | "gaps"> {
+  const card = s.scorecard;
+  if (!card) return {};
+  return {
+    scores: (card.dimensions ?? []).map((d) => ({ id: d.id, name: d.name, score: d.score })),
+    ...(card.phaseTiming ? { phaseTiming: card.phaseTiming.map((p) => ({ ...p })) } : {}),
+    gaps: (card.gaps ?? []).map((g) => ({ title: g.title, goodLooksLike: g.whatGoodLooksLike, severity: g.severity, done: s.gapProgress?.[g.title]?.state === "taught" })),
+  };
 }
 
 export function summarize(s: Session): SessionSummary {
@@ -61,6 +56,8 @@ export function summarize(s: Session): SessionSummary {
     readiness: s.scorecard?.readiness?.call ?? null,
     pause: pauseSummary(s),
     notesSaved: (s.studyNotes?.appliedCount ?? 0) > 0,
+    clock: { startedAt: s.startedAt, pausedMs: s.pausedMs, pauseStartedAt: s.pauseStartedAt, durationMs: s.durationMs },
+    ...scoredParts(s),
   };
 }
 

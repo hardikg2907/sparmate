@@ -24,6 +24,7 @@ import {
   type RunResult,
   type Scorecard,
   type Session,
+  type SessionStatus,
   type GapProgress,
   type TranscriptEntry,
 } from "../../shared/types";
@@ -716,6 +717,14 @@ export class SessionRuntime {
       else void this.pump(this.interview);
     }
     if (s.status === "debriefed" && this.coach.status === "error") this.retry(this.coach);
+  }
+
+  statusNow(): SessionStatus {
+    return this.session.status;
+  }
+
+  endByRequest(): Promise<void> {
+    return this.onEnd();
   }
 
   private async onEnd(): Promise<void> {

@@ -241,6 +241,46 @@ export interface Session {
   models: { interviewer: ModelId; judge: ModelId };
 }
 
+/** One scored skill from a round's scorecard. */
+export interface HistoryScore {
+  id: string;
+  name: string;
+  score: number;
+}
+
+/** A scorecard gap with what the coach did about it, so a practice round can start without opening the round. */
+export interface HistoryGap {
+  title: string;
+  goodLooksLike: string;
+  severity: "high" | "medium" | "low";
+  /** The coach taught it all the way. */
+  done: boolean;
+}
+
+/** One row of the round history: enough for Today, Progress and History without fetching each round. */
+export interface SessionHistoryItem {
+  id: string;
+  problemId: string;
+  title: string;
+  track: Track;
+  mode: Mode;
+  createdAt: string;
+  status: SessionStatus;
+  verdict: Verdict | null;
+  /** Guided rounds only: the readiness call the history badge shows in place of the hire verdict. */
+  readiness?: Readiness["call"] | null;
+  /** Set while the round is paused: why, when, and how much of the round is left (null in a guided round, which has no limit). */
+  pause: { reason: NonNullable<Session["pauseReason"]>; pausedAt?: string; timeLeftMs: number | null } | null;
+  /** The study-notes draft was saved to the study files. */
+  notesSaved: boolean;
+  /** The raw clock, so the page can work out the time used at any moment. Absent from a server that predates it. */
+  clock?: { startedAt: string; pausedMs: number; pauseStartedAt: string | null; durationMs: number };
+  /** Scored rounds only. */
+  scores?: HistoryScore[];
+  phaseTiming?: { phase: string; label: string; plannedMinutes: number; actualMinutes: number }[];
+  gaps?: HistoryGap[];
+}
+
 /** A checklist item as the browser shows it. */
 export interface PublicStepItem {
   id: string;

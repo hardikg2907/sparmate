@@ -25,6 +25,8 @@ export function fixtureSettings(theme: Theme): Settings {
     effort: { interviewer: "low", judge: "high", coach: "medium", scribe: "medium" },
     durations: { hld: 45, lld: 120 },
     theme,
+    weeklyPlan: ["dsa", "hld", "dsa", "hld", "dsa", "lld", "redo"],
+    dsaWeeklyGoal: 3,
   };
 }
 

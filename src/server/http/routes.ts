@@ -101,6 +101,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     }
   });
 
+  app.post<{ Params: { id: string } }>("/api/sessions/:id/end", async (req, reply) => {
+    if (!SESSION_ID.test(req.params.id)) return notFound(reply);
+    try {
+      await manager.end(req.params.id);
+      return { ok: true };
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
+  });
+
   app.get<{ Params: { id: string } }>("/api/sessions/:id/board", async (req, reply) => {
     if (!SESSION_ID.test(req.params.id) || !(await manager.session(req.params.id))) return notFound(reply);
     return store.readBoard(req.params.id);
