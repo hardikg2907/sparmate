@@ -1,15 +1,16 @@
 // Browser test: while a reply streams in, a small scroll up keeps its place, and scrolling back to the end follows again.
-//   PORT=4795 node scripts/e2e/chat-scroll.mjs     (4750-4799, not 4780; starts its own fake-agent server)
+//   node scripts/e2e/chat-scroll.mjs     PORT, or a free port from 4750 to 4799 (not 4780); starts its own fake-agent server
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { pickFreePort } from "../lib/freePort.mjs";
 import { copyStudyKit } from "../lib/tempStudy.mjs";
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PORT = Number(process.env.PORT ?? 4795);
+const PORT = process.env.PORT ? Number(process.env.PORT) : await pickFreePort();
 if (!(PORT >= 4750 && PORT <= 4799) || PORT === 4780) throw new Error("Use a port from 4750 to 4799, except 4780");
 const BASE = `http://127.0.0.1:${PORT}`;
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";

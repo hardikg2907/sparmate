@@ -20,10 +20,32 @@ npm install
 | `npm run lint:fix`     | Runs ESLint and fixes what it can.                 |
 | `npm run format`       | Formats the code with Prettier.                    |
 | `npm run format:check` | Checks the formatting without changing files.      |
+| `npm run verify`       | Runs all checks. Stops at the first failure.       |
 | `npm run build`        | Builds the web app.                                |
 | `npm run dev`          | Starts the app with hot reload.                    |
 
+`npm run verify` runs typecheck, lint, format check, tests, `vite build` and the fake-agent end-to-end round. The round picks a free port.
+
 A pull request must pass typecheck, lint, format check and tests. CI runs the same four scripts.
+
+## Working in parallel
+
+Several people or agents can work on this repo at once. These rules keep them apart.
+
+- One task is one git worktree and one branch. Never share a checkout between two agents or people. Never switch branches in a checkout that someone else uses.
+- Make a worktree like this, then install in it:
+
+  ```sh
+  git worktree add ../sparmate-<topic> -b <type>/<topic> main
+  cd ../sparmate-<topic>
+  npm ci
+  ```
+
+- The main checkout stays on `main` and only receives merges. Nobody commits to `main` directly.
+- Every change lands through a pull request, squash-merged. After a merge, other open branches rebase on `main` before they merge.
+- Run `npm run verify` before you open or update a pull request. While CI is not running, paste the result in the pull request body.
+- A worktree has no `.env`. For a manual run, set `STUDY_ROOT` and `DATA_DIR` to scratch folders, so the app does not create or change a real study folder.
+- The end-to-end scripts pick a free port from 4750 to 4799 when `PORT` is unset. Do not use the app's default port 4747 for tests, because someone may be using the app.
 
 ## Commit messages
 

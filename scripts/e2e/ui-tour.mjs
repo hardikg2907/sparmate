@@ -1,15 +1,16 @@
 // Screenshot tour of the real app with the fake model driver, against a temp copy of the study folder.
-//   node scripts/e2e/ui-tour.mjs [outDir]     (PORT defaults to 4756; needs `npx vite build` first)
+//   node scripts/e2e/ui-tour.mjs [outDir]     (PORT, or a free port from 4750 to 4799 when unset; needs `npx vite build` first)
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { pickFreePort } from "../lib/freePort.mjs";
 import { copyStudyKit } from "../lib/tempStudy.mjs";
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PORT = Number(process.env.PORT ?? 4756);
+const PORT = process.env.PORT ? Number(process.env.PORT) : await pickFreePort();
 const BASE = `http://127.0.0.1:${PORT}`;
 const OUT = process.argv[2] ?? "/tmp/ir-tour";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";

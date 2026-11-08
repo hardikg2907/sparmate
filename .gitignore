@@ -5,3 +5,6 @@ data/
 .DS_Store
 docs/research-notes.md
 .env
+
+# Agent worktrees
+.claude/worktrees/

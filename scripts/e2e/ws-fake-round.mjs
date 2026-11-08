@@ -1,6 +1,6 @@
 // End-to-end check of the engine with the fake model driver (SPARMATE_FAKE_AGENT=1).
 //
-//   node scripts/e2e/ws-fake-round.mjs            uses port 4751 unless PORT is set (4750-4799, not 4780)
+//   node scripts/e2e/ws-fake-round.mjs            uses PORT (4750-4799, not 4780), or a free port in that range when PORT is unset
 //   node scripts/e2e/ws-fake-round.mjs --keep     keeps the temp folder for inspection
 //
 // It copies TRACKER.md, REVIEW.md, TEACHING.md, notes/ and lld/compile_flags.txt from the study folder into a
@@ -16,10 +16,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyPatch } from "diff";
 import WebSocket from "ws";
+import { pickFreePort } from "../lib/freePort.mjs";
 import { KIT_DIR, copyStudyKit } from "../lib/tempStudy.mjs";
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PORT = Number(process.env.PORT ?? 4751);
+const PORT = process.env.PORT ? Number(process.env.PORT) : await pickFreePort();
 const TARGET_EXISTING = Boolean(process.env.TARGET_EXISTING || process.env.NO_SPAWN_SERVER);
 // 4780 belongs to the container check, which points this script at its already running server.
 if (!(PORT >= 4750 && PORT <= 4799) || (PORT === 4780 && !TARGET_EXISTING)) throw new Error("Use a port from 4750 to 4799, except 4780");
