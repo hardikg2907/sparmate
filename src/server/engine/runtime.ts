@@ -32,7 +32,7 @@ import type { CppRunner } from "../runner/cpp";
 import { applyProposal, planProposal } from "../study/bookkeeping";
 import { atomicWrite, resolveInside } from "../study/files";
 import { CheckerOutputSchema, checkerMessage, evidenceKey, mergeCheck, stepReadingText, type CheckerEvidence } from "./checker";
-import { CheckpointScheduler, formatClock, phaseWindows, planCheckpoints, roundTimeMs, type Checkpoint } from "./clock";
+import { CheckpointScheduler, formatClock, phaseOverCheckpoint, phaseWindows, planCheckpoints, roundTimeMs, type Checkpoint } from "./clock";
 import type { ServerConfig } from "./config";
 import {
   candidateLines,
@@ -127,6 +127,11 @@ interface StepCheckRun {
 }
 
 /** Resolves true when `p` settles within `ms`, false after `ms`; it never rejects. */
+/** The hidden note that records a move-on offer, which also tells a restarted round the step was already offered. */
+function phaseOverLabel(phase: string): string {
+  return `clock: twice the planned time in phase "${phase}"`;
+}
+
 function settleWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), ms);
@@ -229,6 +234,9 @@ export class SessionRuntime {
   private readonly phases: readonly PhaseDef[];
   private readonly plan: { id: string; label: string; minutes: number }[];
   private scheduler: CheckpointScheduler | null = null;
+  /** The list the scheduler reads. A guided round swaps its one move-on offer in and out as he changes step. */
+  private checkpoints: Checkpoint[] = [];
+  private firedCheckpoints = new Set<string>();
   private readonly checkRuns = new Map<string, StepCheckRun>();
   /** The latest scene, kept so the checker and the pin tools read the board as it is now. */
   private boardElements: Record<string, unknown>[] = [];
@@ -312,11 +320,11 @@ export class SessionRuntime {
       s.stepCode = s.track === "lld" && open && first ? { [first]: newLines("", this.codeContent).slice(0, MAX_STEP_LINES) } : {};
       if (open) this.saveSoon();
     }
-    const checkpoints = planCheckpoints(s.track, s.mode, s.durationMs, this.plan);
-    const fired = CheckpointScheduler.restoreFired(checkpoints, this.roundNow(), s.extension !== null);
+    this.checkpoints = planCheckpoints(s.track, s.mode, s.durationMs, this.plan);
+    this.firedCheckpoints = CheckpointScheduler.restoreFired(this.checkpoints, this.roundNow(), s.extension !== null);
     this.scheduler = new CheckpointScheduler({
-      checkpoints,
-      fired,
+      checkpoints: this.checkpoints,
+      fired: this.firedCheckpoints,
       roundTime: () => this.roundNow(),
       running: () => this.session.status === "live" && !this.disposed,
       onDue: (cp) => this.onCheckpoint(cp),
@@ -331,6 +339,7 @@ export class SessionRuntime {
         this.interview.status = "error";
         this.interview.error = "The interviewer could not answer. Press Retry to continue.";
       }
+      this.armPhaseOver();
       this.scheduler.reschedule();
       this.syncAwayTimer();
     }
@@ -754,7 +763,27 @@ export class SessionRuntime {
     }
     this.broadcast({ type: "phase.changed", phase, by });
     this.sendState();
+    this.armPhaseOver();
+    this.scheduler?.reschedule();
     void this.checkStep(left, { leaving: true });
+  }
+
+  /**
+   * Keeps exactly one pending move-on offer, for the step on the rail, timed by his total time in that step. Leaving a
+   * step drops its offer. A step that already got its offer, in this run or before a restart, never gets another.
+   */
+  private armPhaseOver(): void {
+    const s = this.session;
+    if (s.mode !== "guided") return;
+    this.checkpoints = this.checkpoints.filter((c) => c.kind !== "phase_over");
+    this.scheduler?.setCheckpoints(this.checkpoints);
+    const offered = s.transcript.some((e) => e.kind === "clock" && e.text === phaseOverLabel(s.phase));
+    if (offered || this.firedCheckpoints.has(`phase_over:${s.phase}`)) return;
+    const cp = phaseOverCheckpoint(this.plan, s.phaseHistory, s.phase, this.roundNow());
+    if (cp) {
+      this.checkpoints.push(cp);
+      this.scheduler?.setCheckpoints(this.checkpoints);
+    }
   }
 
   private checkRun(phase: string): StepCheckRun {
@@ -1322,7 +1351,7 @@ export class SessionRuntime {
           cp.kind === "phase_end"
             ? `clock: planned end of phase "${cp.phase}"`
             : cp.kind === "phase_over"
-              ? `clock: twice the planned time in phase "${cp.phase}"`
+              ? phaseOverLabel(cp.phase ?? "")
               : cp.kind === "extension"
                 ? "clock: extension point"
                 : cp.kind === "five_minutes"

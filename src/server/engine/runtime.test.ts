@@ -1718,6 +1718,104 @@ describe("guided step verdicts, assists and move-on offers", () => {
     irt.dispose();
   });
 
+  describe("the move-on offer follows time in the step", () => {
+    const offersFor = (session: Session, phase: string) =>
+      session.transcript.filter((e) => e.kind === "clock" && e.text === `clock: twice the planned time in phase "${phase}"`).length;
+
+    async function room() {
+      const t = setup(watched().driver, "guided");
+      const session = newSession("guided");
+      const rt = await t.start(session);
+      return { t, session, rt, move: (phase: string) => rt.handle({ type: "phase.set", phase }, t.peer) };
+    }
+
+    it("still offers in later steps after a slow first step", async () => {
+      const { session, rt, move } = await room();
+      await vi.advanceTimersByTimeAsync(12 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      await move("capacity");
+      // Capacity is planned for 3 minutes: the offer falls 6 minutes after he entered, though its window closed long ago.
+      await vi.advanceTimersByTimeAsync(5 * MIN);
+      expect(offersFor(session, "capacity")).toBe(0);
+      await vi.advanceTimersByTimeAsync(2 * MIN);
+      expect(offersFor(session, "capacity")).toBe(1);
+      rt.dispose();
+    });
+
+    it("counts the time of earlier visits when he comes back", async () => {
+      const { session, rt, move } = await room();
+      await vi.advanceTimersByTimeAsync(4 * MIN);
+      await move("capacity");
+      await vi.advanceTimersByTimeAsync(1 * MIN);
+      await move("requirements");
+      // Four minutes were spent before he left, so six remain, not ten.
+      await vi.advanceTimersByTimeAsync(5.5 * MIN);
+      expect(offersFor(session, "requirements")).toBe(0);
+      await vi.advanceTimersByTimeAsync(1 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      rt.dispose();
+    });
+
+    it("drops the pending offer when he leaves, and restores it when he returns", async () => {
+      const { session, rt, move } = await room();
+      await vi.advanceTimersByTimeAsync(8 * MIN);
+      await move("capacity");
+      await vi.advanceTimersByTimeAsync(5 * MIN);
+      expect(offersFor(session, "requirements")).toBe(0);
+      await move("requirements");
+      await vi.advanceTimersByTimeAsync(1 * MIN);
+      expect(offersFor(session, "requirements")).toBe(0);
+      await vi.advanceTimersByTimeAsync(1.5 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      rt.dispose();
+    });
+
+    it("offers once per step even when he leaves and returns", async () => {
+      const { session, rt, move } = await room();
+      await vi.advanceTimersByTimeAsync(11 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      await move("capacity");
+      await move("requirements");
+      await vi.advanceTimersByTimeAsync(30 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      rt.dispose();
+    });
+
+    it("does not count paused time", async () => {
+      const { session, rt, t } = await room();
+      await vi.advanceTimersByTimeAsync(8 * MIN);
+      await rt.handle({ type: "session.pause" }, t.peer);
+      await vi.advanceTimersByTimeAsync(30 * MIN);
+      expect(offersFor(session, "requirements")).toBe(0);
+      await rt.handle({ type: "session.resume" }, t.peer);
+      await vi.advanceTimersByTimeAsync(1 * MIN);
+      expect(offersFor(session, "requirements")).toBe(0);
+      await vi.advanceTimersByTimeAsync(1.5 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      rt.dispose();
+    });
+
+    it("keeps an offer already given across a restart", async () => {
+      const { session, rt } = await room();
+      await vi.advanceTimersByTimeAsync(11 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      rt.dispose();
+      const again = setup(watched().driver, "guided");
+      const rt2 = await again.start(session);
+      await vi.advanceTimersByTimeAsync(30 * MIN);
+      expect(offersFor(session, "requirements")).toBe(1);
+      rt2.dispose();
+    });
+
+    it("makes no offer on the last step", async () => {
+      const { session, rt, move } = await room();
+      await move("wrap_up");
+      await vi.advanceTimersByTimeAsync(60 * MIN);
+      expect(offersFor(session, "wrap_up")).toBe(0);
+      rt.dispose();
+    });
+  });
+
   it("makes no offer for a step that already passed", async () => {
     const w = watched();
     const t = setup(w.driver, "guided");

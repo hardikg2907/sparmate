@@ -337,12 +337,16 @@ if it is mid-reply, fire right after):
   zero, so for 2 seconds after a time-up end the server still takes `board.update` and `code.update`, and the
   debrief waits for the window to close. After it, and after any other end, both are refused with `not_live`.
 
-Guided mode has no extension checkpoint and no time-up end: the clock counts up and the candidate ends it. It has two
-checkpoints per step except the last: `phase_end` at the end of the step's planned window, and `phase_over` at twice the
-step's planned time, counted from the start of its window (`planCheckpoints` in `src/server/engine/clock.ts`). Each fires
-at most once, and only while that step is on the rail. The `phase_over` turn asks the guide for one short line that
-offers to move on; it is not `<silent/>`. A step that has already passed gets no offer, because the "Move on" button
-is there.
+Guided mode has no extension checkpoint and no time-up end: the clock counts up and the candidate ends it. It keeps
+the `phase_end` checkpoint of every step except the last (`planCheckpoints` in `src/server/engine/clock.ts`). It adds
+one `phase_over` offer, which depends on time in the step and not on the round clock. The offer for a step falls when
+his total time in that step, summed over every visit from `phaseHistory` with pauses left out, reaches twice the step's
+planned minutes (`phaseOverCheckpoint` and `timeInPhase`). When he enters a step that has not had its offer, the
+runtime schedules it at now plus twice the plan minus the time already spent there, on the same scheduler as the other
+checkpoints. When he leaves, the pending offer is dropped, and it is scheduled again on his return. Each step gets at
+most one offer per round: a hidden clock note in the transcript records it, so a restart does not repeat it. The last
+step has no next step and gets none. The `phase_over` turn asks the guide for one short line that offers to move on;
+it is never `<silent/>`. A step that has already passed gets no offer, because the "Move on" button is there.
 
 ### 5.6 Failure handling
 
@@ -1032,7 +1036,7 @@ Interviewer (interview mode), from TEACHING.md section 10 and the research:
 - Accepts any valid design: judges against the requirements, not the reference design.
 - Uses the hint ladder only when the candidate is clearly stuck for a while (H1 points at an area, H2 names the
   concern, H3 offers two options) and records each with `note_hint`.
-- Time: nudges at phase overruns via clock events (in a guided round, one offer to move on at twice a step's plan); delivers the extension when told; closes without feedback.
+- Time: nudges at phase overruns via clock events (in a guided round, one offer to move on once his time in a step reaches twice its plan); delivers the extension when told; closes without feedback.
 - LLD: answers C++ syntax questions at once with a tiny snippet; never writes the candidate's design or
   code; may ask "run it and show me" and use `run_code`/`read_code` near the end; asks the concurrency
   follow-up if time allows.

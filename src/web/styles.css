@@ -1237,7 +1237,7 @@ body {
   background: linear-gradient(180deg, var(--card), color-mix(in srgb, var(--sunken) 55%, var(--card)));
 }
 
-/* The checklist is the room's one raised card: lit from above, with the brand hairline along its top edge. */
+/* The step verdict is the room's one raised card: lit from above, with the brand hairline along its top edge. */
 .room-checklist {
   position: relative;
   display: flex;
@@ -1260,41 +1260,6 @@ body {
   height: 1px;
   background: var(--hairline);
   pointer-events: none;
-}
-.room-checklist__body {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 0 8px 8px;
-}
-.room-check-icon {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
-  border-radius: 9999px;
-  border: 1.5px solid currentColor;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  background-image: linear-gradient(180deg, color-mix(in srgb, currentColor 16%, transparent), transparent 90%);
-  box-shadow: inset 0 1px 0 var(--highlight);
-}
-.room-check-icon[data-state="covered"] {
-  color: var(--success);
-  background-color: var(--success-soft);
-  box-shadow:
-    inset 0 1px 0 var(--highlight),
-    0 0 8px -2px color-mix(in srgb, var(--success-fill) 60%, transparent);
-}
-.room-check-icon[data-state="partial"] {
-  color: var(--warning);
-  background-color: var(--warning-soft);
-}
-.room-check-icon[data-state="missing"] {
-  color: var(--faint);
-  background-color: var(--muted);
 }
 
 /* Pins sit over the canvas; only the pins themselves take the pointer, so drawing under them still works. */
