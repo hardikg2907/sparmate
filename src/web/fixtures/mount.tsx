@@ -82,7 +82,13 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
   const agentError = params.get("error") === "1" ? "The interviewer could not answer. The service is busy." : undefined;
   const offline = params.get("offline") === "1";
   const timeUp = params.get("timeup") === "1";
-  const legacy = (session: PublicSession) => (params.get("legacy") === "1" ? withLegacyNotes(session) : session);
+  const guidedCall = (session: PublicSession): PublicSession => {
+    if (mode !== "guided" || !session.scorecard) return session;
+    const ready = params.get("ready") === "1";
+    const readiness = { call: ready ? ("ready" as const) : ("not_yet" as const), reasons: ready ? [] : ["Not passed: design, deep dives", "Requirements was assisted"] };
+    return { ...session, mode: "guided", scorecard: { ...session.scorecard, readiness } };
+  };
+  const legacy = (session: PublicSession) => guidedCall(params.get("legacy") === "1" ? withLegacyNotes(session) : session);
   // The board converter measures label text when it builds the scene, so the hand-drawn font must be ready first or the
   // labels come out too narrow and get clipped.
   await document.fonts.load("28px Excalifont", "Redirect service Postgres Key generator").catch(() => undefined);

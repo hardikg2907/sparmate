@@ -75,9 +75,7 @@ try {
   });
 
   // Wait for debrief page
-  await page.waitForFunction(() => /What the judge saw|Strengths|Teach me|This round used/i.test(document.body.innerText), { timeout: 60000 });
-  // Wait for the usage card to load its data from /api/sessions/:id/usage
-  await page.waitForFunction(() => /This round used/i.test(document.body.innerText), { timeout: 15000 });
+  await page.waitForFunction(() => /What the judge saw|Strengths|Teach me/i.test(document.body.innerText), { timeout: 60000 });
   await sleep(1000);
 
   // Helper to set theme

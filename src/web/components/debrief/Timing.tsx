@@ -1,7 +1,7 @@
 import type { Scorecard } from "../../../shared/types";
 import { formatMinutes } from "../../lib/format";
 import { PlanVsActual, overPlan } from "../PlanTrack";
-import { Card, SectionTitle, cn } from "../ui";
+import { Card, cn } from "../ui";
 
 type Row = NonNullable<Scorecard["phaseTiming"]>[number];
 
@@ -50,10 +50,7 @@ export function TimingSection({ scorecard }: { scorecard: Scorecard }) {
   if (rows.length === 0 && scorecard.timeline.length === 0) return null;
 
   return (
-    <section id="timing" aria-labelledby="timing-heading" className="scroll-mt-16">
-      <SectionTitle id="timing-heading" aside="Your plan against what happened">
-        Where the time went
-      </SectionTitle>
+    <section id="timing" aria-label="Where the time went">
       <Card variant="raised" className="p-5 sm:p-6">
         {rows.length > 0 ? <TimingRows rows={rows} /> : null}
 

@@ -749,6 +749,18 @@ body {
  * All of it stops under prefers-reduced-motion; static gradients stay.
  * ---------------------------------------------------------------------------------------------------- */
 
+@keyframes chat-flash {
+  0%,
+  60% {
+    background: var(--primary-soft);
+    color: var(--foreground);
+  }
+}
+.chat-flash {
+  border-radius: var(--radius-md, 6px);
+  animation: chat-flash 1.6s ease-out;
+}
+
 @keyframes ir-dot {
   0%,
   80%,
@@ -835,21 +847,6 @@ body {
     box-shadow: 0 0 0 10px transparent;
   }
 }
-@keyframes ir-ring-pulse {
-  0% {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-  40% {
-    opacity: 1;
-    transform: scale(1.008);
-  }
-  100% {
-    opacity: 0.6;
-    transform: none;
-  }
-}
-
 .typing-dot {
   animation: ir-dot 1.2s infinite ease-in-out;
 }
@@ -919,25 +916,6 @@ body {
 /* A one-off ring that draws the eye to something that just appeared, such as a new requirement. */
 .attention {
   animation: ir-attention 0.9s ease-out 2;
-}
-/* The next thing to do carries a gradient ring that flares once when the page opens. */
-.ring-pulse {
-  position: relative;
-}
-.ring-pulse::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: linear-gradient(120deg, var(--primary), #8b5cf6 50%, #0ea5b7);
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  opacity: 0.6;
-  pointer-events: none;
-  animation: ir-ring-pulse 1.6s ease-out 0.5s backwards;
 }
 /* Interactive cards and rows rise on hover, so it is clear they act as one target. */
 .lift {

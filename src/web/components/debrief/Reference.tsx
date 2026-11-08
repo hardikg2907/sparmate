@@ -1,12 +1,11 @@
 import type { PublicSession } from "../../../shared/types";
 import { Markdown } from "../Markdown";
-import { Card, Disclosure, SectionTitle } from "../ui";
+import { Card, Disclosure } from "../ui";
 
 export function ReferenceAnswer({ reference }: { reference: NonNullable<PublicSession["reference"]> }) {
   if (reference.sections.length === 0) return null;
   return (
-    <section id="reference" aria-labelledby="reference-heading" className="scroll-mt-14">
-      <SectionTitle id="reference-heading">Reference answer</SectionTitle>
+    <section id="reference" aria-label="Reference answer">
       <Card variant="raised" className="p-4 sm:p-5">
         <Disclosure summary="Show the reference answer">
           <p className="mb-3 text-ui text-muted-foreground">One good answer, not the only one. Read the scorecard first, then compare.</p>

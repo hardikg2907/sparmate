@@ -4,26 +4,24 @@ import type { PublicSession, Scorecard } from "../../shared/types";
 import { ChatPanel } from "../components/ChatPanel";
 import { ChatResizeHandle, useChatWidth } from "../components/ChatWidth";
 import { DebriefFailed, DebriefProgress } from "../components/debrief/Progress";
-import { DimensionsTable } from "../components/debrief/Dimensions";
+import { Details, type DetailTab, type EvidenceView } from "../components/debrief/Details";
 import { GapsSection } from "../components/debrief/Gaps";
-import { JudgeSaw } from "../components/debrief/JudgeSaw";
-import { ReferenceAnswer } from "../components/debrief/Reference";
-import { ScenarioTable } from "../components/debrief/Scenarios";
-import { Steps } from "../components/debrief/Steps";
+import { GapProgressLine, NextStep } from "../components/debrief/NextStep";
 import { StudyNotes } from "../components/debrief/StudyNotes";
-import { TimingRows, TimingSection } from "../components/debrief/Timing";
-import { VerdictCard, jumpTo } from "../components/debrief/Verdict";
-import { READINESS_SUMMARY, VERDICT_LABEL } from "../lib/verdict";
-import { RoundUsageCard } from "../components/debrief/RoundUsageCard";
-import { ArrowLeftIcon, CheckIcon, WarnIcon } from "../components/icons";
+import { SummaryCard } from "../components/debrief/Summary";
+import { TimingRows } from "../components/debrief/Timing";
+import { ScoreRow, VerdictCard, jumpTo } from "../components/debrief/Verdict";
+import { sortedGaps } from "../components/debrief/Gaps";
+import { ArrowLeftIcon, WarnIcon } from "../components/icons";
 import { ConnectionBanner, MessageBanners } from "../components/Notices";
-import { Banner, Badge, Card, SectionTitle, cn } from "../components/ui";
-import { gapMarks, workedText, type GapMark } from "../lib/gapMarks";
-import { teachMessage } from "../../shared/gaps";
+import { Banner, Badge, Card, SectionTitle } from "../components/ui";
+import { currentGap, gapCounts, gapMarks, gapState, type GapMark } from "../lib/gapMarks";
+import { nextAction } from "../lib/debriefNext";
+import { gapDividerText, teachMessage } from "../../shared/gaps";
 import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatClock, formatDate } from "../lib/format";
 import { finalRoundMs, phaseSpentMs } from "../lib/timing";
 import { Link, navigate } from "../router";
-import type { ChatItem, NotesState, SessionController } from "../session/types";
+import type { ChatItem, SessionController } from "../session/types";
 import type { Theme } from "../theme";
 
 interface DebriefViewProps {
@@ -56,9 +54,11 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
           {TRACK_LABEL[session.track]} {MODE_LABEL[session.mode].toLowerCase()}, {formatDate(session.createdAt)}
           {roundMs !== null ? `, ${formatClock(roundMs)} of ${Math.round(session.clock.durationMs / 60_000)}:00` : ""}
         </span>
-        <span className="ml-auto">
-          <StatusChip status={session.status} />
-        </span>
+        {session.status === "debriefed" ? null : (
+          <span className="ml-auto">
+            <StatusChip status={session.status} />
+          </span>
+        )}
       </header>
 
       <ConnectionBanner status={state.connection} onRetry={actions.reconnect} />
@@ -66,8 +66,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         <main className="page-canvas relative min-w-0 flex-1 overflow-y-auto" tabIndex={-1}>
-          {scorecard ? <StepsBar session={session} scorecard={scorecard} notes={state.notes} marks={marks} /> : null}
-          <div className="reveal-children mx-auto max-w-4xl space-y-12 px-4 pb-20 pt-8 sm:px-8">
+          <div className="reveal-children mx-auto max-w-4xl space-y-6 px-4 pb-20 pt-6 sm:px-8">
             {session.status === "debriefing" ? (
               <DebriefProgress track={session.track} debrief={state.debrief}>
                 <WhileYouWait session={session} />
@@ -116,7 +115,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
 }
 
 function StatusChip({ status }: { status: PublicSession["status"] }) {
-  if (status === "debriefed") return <Badge tone="good">Debrief ready</Badge>;
+  if (status === "debriefed") return null;
   if (status === "failed") return <Badge tone="bad">Debrief failed</Badge>;
   return <Badge tone="accent">Debriefing</Badge>;
 }
@@ -130,105 +129,6 @@ function useGapMarks(scorecard: Scorecard | null, session: PublicSession, coach:
     const texts = coach.filter((item) => item.role === "candidate").map((item) => item.text);
     return gapMarks(scorecard?.gaps ?? [], session.gapProgress, texts);
   }, [scorecard, session.gapProgress, coach]);
-}
-
-const MORE_LINKS = [
-  { id: "timing", label: "Time" },
-  { id: "steps", label: "Step by step" },
-  { id: "dimensions", label: "Evidence" },
-  { id: "scenarios", label: "Scenarios" },
-  { id: "judge-saw", label: "What the judge saw" },
-  { id: "reference", label: "Reference" },
-] as const;
-
-type StepState = "done" | "next" | "todo";
-
-/**
- * The debrief is finished only when the gaps are taught and the notes are saved, so the three steps stay in view
- * with their state, and the first open one is marked as next.
- */
-function StepsBar({ session, scorecard, notes, marks }: { session: PublicSession; scorecard: Scorecard; notes: NotesState; marks: ReadonlyMap<string, GapMark> }) {
-  const gapCount = scorecard.gaps.length;
-  const gapsDone = gapCount === 0 || marks.size >= gapCount;
-  const saved = notes.result?.applied.length ?? session.studyNotes?.appliedCount ?? 0;
-  const notesDone = saved > 0;
-  const notesText = notesDone
-    ? `Saved ${saved} ${saved === 1 ? "change" : "changes"}`
-    : notes.drafting
-      ? "Drafting…"
-      : notes.proposal?.status === "stale"
-        ? "Draft is out of date"
-        : notes.proposal
-          ? "Draft ready to review"
-          : "Not drafted yet";
-  const steps: { id: string; title: string; detail: string; state: StepState }[] = [
-    { id: "verdict", title: "Read the score", detail: scorecard.readiness ? READINESS_SUMMARY[scorecard.readiness.call] : VERDICT_LABEL[scorecard.verdict.sde2], state: "done" },
-    { id: "gaps", title: "Work the gaps", detail: gapCount === 0 ? "No gaps listed" : workedText(marks.size, gapCount), state: gapsDone ? "done" : "next" },
-    { id: "notes", title: "Save study notes", detail: notesText, state: notesDone ? "done" : gapsDone ? "next" : "todo" },
-  ];
-
-  const available = new Set<string>(["dimensions", "judge-saw"]);
-  if ((scorecard.phaseTiming?.length ?? 0) > 0 || scorecard.timeline.length > 0) available.add("timing");
-  if ((scorecard.steps?.length ?? 0) > 0) available.add("steps");
-  if (scorecard.lldScenarios.length > 0) available.add("scenarios");
-  if (session.reference && session.reference.sections.length > 0) available.add("reference");
-
-  return (
-    <nav aria-label="Debrief steps" className="sticky top-0 z-10 border-b border-border/70 bg-card/85 shadow-xs backdrop-blur-xl backdrop-saturate-150">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 sm:px-6">
-        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {steps.map((step, index) => (
-            <li key={step.id} className="flex items-center gap-2">
-              {index > 0 ? <span className="h-px w-5 bg-border-strong max-sm:hidden" aria-hidden="true" /> : null}
-              <button
-                type="button"
-                onClick={() => jumpTo(step.id)}
-                aria-current={step.state === "next" ? "step" : undefined}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-lg border px-3 py-1.5 text-left transition-colors duration-150",
-                  step.state === "next" ? "border-primary bg-primary-soft text-primary-soft-foreground" : "border-transparent hover:bg-accent",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-meta font-bold",
-                    step.state === "done"
-                      ? "bg-success-fill text-success-soft"
-                      : step.state === "next"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground ring-1 ring-inset ring-border",
-                  )}
-                  aria-hidden="true"
-                >
-                  {step.state === "done" ? <CheckIcon size={12} /> : index + 1}
-                </span>
-                <span className="flex flex-col">
-                  <span className={cn("text-ui font-bold", step.state === "next" ? "text-primary-soft-foreground" : "text-foreground")}>{step.title}</span>
-                  <span className={cn("text-meta max-sm:hidden", step.state === "next" ? "text-primary-soft-foreground" : "text-muted-foreground")}>
-                    {step.detail}
-                    {step.state === "done" ? <span className="sr-only">, done</span> : null}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ol>
-        <ul className="ml-auto flex flex-wrap gap-x-1 max-sm:hidden">
-          {MORE_LINKS.filter((link) => available.has(link.id)).map((link) => (
-            <li key={link.id}>
-              <button
-                type="button"
-                onClick={() => jumpTo(link.id)}
-                className="whitespace-nowrap rounded-md px-2 py-1 text-ui font-semibold text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
-              >
-                {link.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </nav>
-  );
 }
 
 /** The plan against the clock, worked out from the phase history while the judge is still busy. */
@@ -252,6 +152,26 @@ function WhileYouWait({ session }: { session: PublicSession }) {
   );
 }
 
+/**
+ * Brings the coach chat to the divider where the gap began, or to the chat itself when the round has no divider.
+ * The gap's newest divider is often already on screen at the foot of the chat, so scrolling alone shows no change.
+ * The divider flashes to show which lesson is meant, and the cursor lands in the coach's box, ready for an answer.
+ */
+function showGapInChat(title: string): void {
+  const text = gapDividerText(title);
+  const coach = document.querySelector<HTMLElement>('section[aria-label="Coach"]');
+  const dividers = [...document.querySelectorAll<HTMLElement>("[data-gap-divider]")].filter((el) => el.dataset.gapDivider === text);
+  const divider = dividers.at(-1);
+  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  (divider ?? coach)?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: divider ? "nearest" : "start" });
+  if (divider) {
+    divider.classList.remove("chat-flash");
+    void divider.offsetWidth;
+    divider.classList.add("chat-flash");
+  }
+  coach?.querySelector<HTMLTextAreaElement>("textarea")?.focus({ preventScroll: true });
+}
+
 function ScorecardBody({
   ctl,
   session,
@@ -268,32 +188,76 @@ function ScorecardBody({
   marks: ReadonlyMap<string, GapMark>;
 }) {
   const { state, actions } = ctl;
-  const lld = session.track === "lld";
+  const [tab, setTab] = useState<DetailTab>("evidence");
+  const [view, setView] = useState<EvidenceView>("step");
   const [practising, setPractising] = useState<string | null>(null);
-  const [practiseError, setPractiseError] = useState<string | null>(null);
-  const practise = (gap: Scorecard["gaps"][number]) => {
-    setPractising(gap.title);
-    setPractiseError(null);
-    api.createSession({ problemId: session.problemId, mode: "guided", focus: { title: gap.title, goodLooksLike: gap.whatGoodLooksLike } }).then(
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const start = (body: Parameters<typeof api.createSession>[0], fallback: string, onFail: () => void) => {
+    setStartError(null);
+    api.createSession(body).then(
       ({ sessionId }) => navigate(`/session/${sessionId}`),
       (error: unknown) => {
-        setPractising(null);
-        setPractiseError(error instanceof ApiError && error.message ? error.message : "The practice round could not start.");
+        onFail();
+        setStartError(error instanceof ApiError && error.message ? error.message : fallback);
       },
     );
   };
-  const lint = scorecard.lintIssues ?? [];
+  const practise = (gap: Scorecard["gaps"][number]) => {
+    setPractising(gap.title);
+    start({ problemId: session.problemId, mode: "guided", focus: { title: gap.title, goodLooksLike: gap.whatGoodLooksLike } }, "The practice round could not start.", () =>
+      setPractising(null),
+    );
+  };
+  const tryInterview = () => {
+    setStarting(true);
+    start({ problemId: session.problemId, mode: "interview" }, "The interview could not be started.", () => setStarting(false));
+  };
+
+  const gaps = sortedGaps(scorecard);
+  const current = currentGap(gaps, marks);
+  const counts = gapCounts(gaps, marks);
+  const notesSaved = (state.notes.result?.applied.length ?? session.studyNotes?.appliedCount ?? 0) > 0;
+  const next = nextAction({ gaps, marks, notesSaved, mode: session.mode, readiness: scorecard.readiness?.call ?? null });
+  const teach = (gap: Scorecard["gaps"][number]) => actions.sendChat("coach", teachMessage(gap));
+  const act = () => {
+    if (next.kind === "answer_coach") showGapInChat(next.gap.title);
+    else if (next.kind === "start_gap") teach(next.gap);
+    else if (next.kind === "draft_notes") jumpTo("notes");
+    else if (next.kind === "try_interview") tryInterview();
+    else if (next.kind === "practise_gap") practise(next.gap);
+  };
+  const openEvidence = (dimensionId: string) => {
+    setTab("evidence");
+    setView("score");
+    // The tab content mounts on the next render, so the target is looked up one frame later.
+    requestAnimationFrame(() => requestAnimationFrame(() => jumpTo(`dim-${dimensionId}`)));
+  };
+  const canSend = session.status === "debriefed" && state.connection === "open";
 
   return (
     <>
       <VerdictCard scorecard={scorecard} />
-      {practiseError ? (
+      <ScoreRow scorecard={scorecard} onEvidence={openEvidence} />
+      <div className="space-y-2">
+        <NextStep next={next} busy={practising !== null || starting} canSend={canSend} onAct={act} />
+        <GapProgressLine counts={counts} states={gaps.map((gap) => gapState(marks.get(gap.title)))} />
+      </div>
+      {startError ? (
         <Banner tone="bad" role="alert">
           <WarnIcon size={16} />
-          <span>{practiseError}</span>
+          <span>{startError}</span>
         </Banner>
       ) : null}
-      <GapsSection scorecard={scorecard} marks={marks} onTeach={(gap) => actions.sendChat("coach", teachMessage(gap))} practise={{ busy: practising, onStart: practise }} />
+      <GapsSection
+        scorecard={scorecard}
+        marks={marks}
+        current={current}
+        onTeach={teach}
+        onContinue={(gap) => showGapInChat(gap.title)}
+        practise={{ busy: practising, onStart: practise }}
+        canSend={canSend}
+      />
       <StudyNotes
         notes={state.notes}
         saved={session.studyNotes}
@@ -301,34 +265,20 @@ function ScorecardBody({
         onDraft={actions.draftNotes}
         onApply={actions.applyNotes}
       />
-      <TimingSection scorecard={scorecard} />
-      <RoundUsageCard sessionId={session.id} />
-      <Steps
+      <SummaryCard scorecard={scorecard} />
+      <Details
+        tab={tab}
+        onTab={setTab}
+        view={view}
+        onView={setView}
+        session={session}
         scorecard={scorecard}
-        track={session.track}
-        steps={session.steps}
-        pins={session.pins}
-        elements={state.board?.elements ?? null}
-        notes={session.stepNotes}
-        summaries={session.stepSummaries}
+        board={state.board?.elements ?? null}
+        graphText={state.graph.text}
+        code={state.code}
+        theme={theme}
+        boardImageUrl={boardImageUrl}
       />
-      <DimensionsTable scorecard={scorecard} />
-      {lld ? <ScenarioTable scorecard={scorecard} /> : null}
-      <JudgeSaw imageUrl={boardImageUrl} graphText={state.graph.text} code={state.code} lld={lld} theme={theme} track={session.track} answers={session.stepNotes} />
-      {session.reference ? <ReferenceAnswer reference={session.reference} /> : null}
-
-      {lint.length > 0 ? (
-        <details className="text-meta text-faint">
-          <summary className="w-fit rounded">Writing checks ({lint.length})</summary>
-          <ul className="mt-1.5 list-inside list-disc space-y-0.5">
-            {lint.map((issue, index) => (
-              <li key={index}>
-                {issue.field}: {issue.issue}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
     </>
   );
 }

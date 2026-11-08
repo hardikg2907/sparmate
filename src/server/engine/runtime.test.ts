@@ -1086,20 +1086,22 @@ describe("the coach and the scorecard gaps", () => {
     rt.dispose();
   });
 
-  it("never changes who opened a gap, and leaves an existing record alone on a repeat click", async () => {
+  it("never changes who opened a gap, and reopens a settled gap on a repeat click", async () => {
     const { rt, session, say, tool, dividers } = await coachRoom();
     await say(teachMessage({ title: "Hot keys" }));
     await tool({ title: "Hot keys", state: "taught" });
     expect(session.gapProgress["Hot keys"]).toMatchObject({ by: "candidate", state: "taught" });
     const taughtAt = session.gapProgress["Hot keys"]!.at;
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await say(teachMessage({ title: "Hot keys" }));
-    expect(session.gapProgress["Hot keys"]).toMatchObject({ by: "candidate", state: "taught", at: taughtAt });
+    expect(session.gapProgress["Hot keys"]).toMatchObject({ by: "candidate", state: "started" });
+    expect(Date.parse(session.gapProgress["Hot keys"]!.at)).toBeGreaterThan(Date.parse(taughtAt));
 
     await tool({ title: "Retry storms", state: "started" });
-    await tool({ title: "Retry storms", state: "taught" });
+    await tool({ title: "Retry storms", state: "core_only" });
     await say(teachMessage({ title: "Retry storms" }));
-    expect(session.gapProgress["Retry storms"]).toMatchObject({ by: "coach", state: "taught" });
-    // Hot keys, then Retry storms: a repeat click on the current gap added nothing.
+    expect(session.gapProgress["Retry storms"]).toMatchObject({ by: "coach", state: "started" });
+    // Hot keys, then Retry storms: a repeat click on the current gap added no second divider.
     expect(dividers().map((e) => e.text)).toEqual(["Now on: Hot keys", "Now on: Retry storms"]);
     rt.dispose();
   });

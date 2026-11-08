@@ -943,34 +943,27 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 
 **Debrief `/session/:id`** (status `debriefing`, `debriefed`, `failed`)
 - While `debriefing`: a progress list from `debrief.progress`.
-- The call at the target level and the call at the stretch level, each named with the round's own level names, shown as plain labels ("Strong pass", "Pass", "Close, not yet", "Not yet") with a one-line plain meaning under the target level call, then confidence and summary. A guided round with a readiness call shows no hire verdict: the headline asks "Ready for interview mode?" and answers "Ready" or "Not yet", with the reasons listed under it (section 5.7). A guided round saved before the call existed shows its verdict as above.
-- Dimension table: name, score 1–4 as a short bar with the word (1 Missing, 2 Below bar, 3 At bar,
-  4 Senior signal), evidence quotes with time and a check mark or a "not found in transcript" warning from
-  `quoteChecks`, and "what a 4 looks like" behind a disclosure.
-- Strengths; gaps ordered by severity, each with a "Teach me this" button that sends a coach message and a
-  "Practise this gap" button that starts a 20-minute guided round on the same problem, aimed at that gap. A gap
-  card shows a badge from `Session.gapProgress`: "Sent to the coach" (opened by him, started), "Started by the
-  coach", "Taught" or "Core idea only, topic session later". The button reads "Teach me this" until the gap has
-  a record, then "Ask again". The "Start here" card is the first gap in severity order with no record. The step bar
-  reads "n of m worked with the coach", counting every record. A session with no records at all (saved before the
-  field existed) is read from its coach chat instead: a "Teach me this" message marks a gap "Sent to the coach".
-- Phase timing: planned against actual minutes per phase, as simple horizontal bars.
-- "Step by step": one card per step that the judge read, that has coverage, pins or notes. Each card shows the
-  step's frame as an image (exported in the browser from the saved board, cropped to the frame) with every pin of the
-  step numbered at its element, the checklist count with a ring, "What held" (the judge's points with a + mark, the
-  dimension, the quote and its check mark), "What's missing" (the judge's missing lines and the points against him; for
-  a step the judge did not read, the checklist items not covered), "Pinned on the board" (number, held, gap or guide's
-  note, and the note), and "Your notes from the round" when the session holds step text or a notepad.
-- LLD: the scenario table (pass or fail with detail).
-- "What the judge saw": the final board PNG and the graph text; any written step text (read-only, one card per
-  phase with text); LLD final code (read-only Monaco).
-- "Reference answer": collapsed by default; renders `reference.sections`.
+- Verdict, compact: a small eyebrow, a headline at about 22 px, a coloured bar on the left edge by tone, and small text beside the headline. A guided round with a readiness call asks "Ready for interview mode?" and answers "Ready" or "Not yet", with the confidence beside it and the reasons joined on one or two lines (section 5.7). An interview round, or a guided round saved before the call existed, reads "At the <target level> bar" with the target-level call as the headline (plain labels: "Strong pass", "Pass", "Close, not yet", "Not yet"), the stretch-level call and the confidence as small text, and one plain sentence of meaning. Both level names are the round's own. The judge's summary sits in the Summary card.
+- Scores: one strip of equal cells, one per dimension, each with its name, the score out of 4 and a four-segment meter. A score below 3 (the target level bar) is in the warning colour, a score of 3 or more in the success colour. The strip is one target that opens the Evidence tab; a tooltip says that scores run from 1 to 4.
+- NEXT: one card that always names one action, with a progress line under it ("Gaps: N of M done" and, when any gap is with the coach, "K with the coach") and a segmented bar. Order: the current gap ("Answer the coach: <gap>" with "Go to chat" when the gap is with the coach, "Start: <gap>" with "Teach me this" when it is not started); when no gap is not started or with the coach, "Draft your study notes" (scrolls to Study notes); once notes are saved, a guided round that is ready gets "Try interview mode" (starts the same problem in interview mode), a guided round that is not yet ready gets "Practise the top gap", and any other round gets "Back to home". It holds the only filled primary button on the page.
+- Gaps to work on, ordered by severity. Each gap is in one of four states, read from `Session.gapProgress`: not started (no record), with the coach (`started`, set by the coach or by him, or the "sent" mark), done (`taught`) and for later (`core_only`). The current gap is the with-coach gap with the newest record time (the first in severity order when records carry no time), else the first gap not started, else none; a gap that is with the coach is never skipped. Only the current gap is expanded: a state badge, the title, the minutes, "Why it matters", "What good looks like", one button and a menu. Every other gap is one quiet line (a state dot or a tick for done, title, minutes, chevron) that opens on a click; several may be open. A severity badge shows only when the gaps differ in severity.
+
+  | State | Badge | Button | Menu |
+  | --- | --- | --- | --- |
+  | Not started | none | Teach me this | Practise this gap |
+  | With the coach | With the coach | Continue in chat (scrolls the coach chat to that gap's "Now on" divider) | Restart lesson, Practise this gap |
+  | Done | Done, with a tick | Practise this gap | Restart lesson |
+  | For later | Core idea done, rest later | Finish the lesson | Practise this gap |
+
+  "Teach me this", "Finish the lesson" and "Restart lesson" send the same teach message. "Practise this gap" starts a 20-minute guided round on the same problem, aimed at that gap. The gaps step is complete only when every gap is done or for later. A session with no records at all (saved before the field existed) is read from its coach chat instead: a "Teach me this" message marks a gap "with the coach".
+- Study notes: a short hint, "Draft once the gaps are done. You can draft any time." Drafting is never blocked.
+- Summary: the judge's summary, the strengths and the practice task in one card.
+- Details, as tabs. Evidence has a "By step" and "By score" toggle plus the tracker mark with its reason and, for LLD, the demo scenario table (pass or fail with detail). By score shows each dimension with its score, evidence quotes with time and a check mark or a "not found in transcript" warning from `quoteChecks`, and "what a 4 looks like" behind a disclosure. By step shows one card per step that the judge read, that has coverage, pins or notes: the step's frame as an image (exported in the browser from the saved board, cropped to the frame) with every pin numbered at its element, the checklist count with a ring, "What held", "What's missing", "Pinned on the board" and "Your notes from the round". Time shows planned against actual minutes per phase as horizontal bars, then the key moments. "What the judge saw" shows the final board PNG, the graph text, any written step text (read-only, one card per phase with text), LLD final code (read-only Monaco) and the judge's writing checks. "Reference" is closed by default and renders `reference.sections`.
 - The coach chat on the right (same chat component, coach channel).
 - "Study notes": "Draft study notes" -> the proposal, grouped by file, each op with a checkbox (blocked ops
   shown disabled with the reason), the unified diff per file (green and red lines, monospace), and "Save
   selected". Then a success or failure list. "Draft again" on a stale proposal. After a reload, a round whose notes
   were saved shows "Saved N changes to your study files on <date>" with a "Draft again" button.
-- "This round used" card (hidden when the round has no usage data): cost, tokens (input, output, cache read, cache creation), cache hit rate, and per-role breakdown.
 
 **Usage `/usage`**
 - Linked from the app header next to Settings.

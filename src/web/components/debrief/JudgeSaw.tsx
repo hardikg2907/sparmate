@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { CodeEditor } from "../../code/CodeEditor";
 import { phasesFor, type Track } from "../../../shared/phases";
+import { lintText } from "../../lib/lintLabel";
 import { StepAnswers } from "../StepAnswers";
 import type { CodeState } from "../../session/types";
 import type { Theme } from "../../theme";
-import { Card, SectionTitle, Tooltip } from "../ui";
+import { Card, Tooltip } from "../ui";
 
 interface JudgeSawProps {
   imageUrl: string;
@@ -16,17 +17,16 @@ interface JudgeSawProps {
   track: Track;
   /** His written step answers, as the judge read them. */
   answers: Readonly<Record<string, string>>;
+  /** The judge's own checks of its writing. */
+  lint: readonly { field: string; issue: string }[];
 }
 
-export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers }: JudgeSawProps) {
+export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers, lint }: JudgeSawProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const text = graphText.trim();
 
   return (
-    <section id="judge-saw" aria-labelledby="judge-saw-heading" className="scroll-mt-14">
-      <SectionTitle id="judge-saw-heading" aside="The record the judge read">
-        What the judge saw
-      </SectionTitle>
+    <section id="judge-saw" aria-label="What the judge saw">
       <div className="space-y-4">
         <Card variant="raised" className="p-4 sm:p-5">
           <h3 className="mb-2 text-ui font-semibold text-muted-foreground">Final board</h3>
@@ -74,6 +74,16 @@ export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers
               <p className="text-ui text-muted-foreground">The final code is not available.</p>
             )}
           </Card>
+        ) : null}
+        {lint.length > 0 ? (
+          <details className="text-ui text-muted-foreground">
+            <summary className="w-fit cursor-pointer rounded">Writing checks ({lint.length})</summary>
+            <ul className="mt-1.5 list-inside list-disc space-y-0.5">
+              {lint.map((issue, index) => (
+                <li key={index}>{lintText(issue)}</li>
+              ))}
+            </ul>
+          </details>
         ) : null}
       </div>
     </section>
