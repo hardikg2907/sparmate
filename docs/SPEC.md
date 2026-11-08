@@ -25,7 +25,7 @@ Read these before building: `src/shared/*.ts` (the typed contract), the two fixt
    allowed at once; design help is not.
 3. **The candidate's own methods drive the phase rail:** six HLD steps and seven LLD steps
    (`src/shared/phases.ts`). The rail is a guide, never a gate: the candidate may move freely.
-4. **Marks follow the tracker rules.** Guided rounds earn at most `[~]`. `[x]` needs: finished inside the
+4. **Marks follow the tracker rules.** Guided rounds earn at most `[~]`, and get a readiness call instead of a hire verdict (section 5.7). `[x]` needs: finished inside the
    time, the code ran (LLD), and no gap at the target level bar.
 5. **Never edit the candidate's code or `main()`.** Tests compile his file plus a separate harness `main()`.
 6. **Nothing is written to `TRACKER.md`, `REVIEW.md` or `notes/` without the user approving the exact diff.**
@@ -52,7 +52,7 @@ Environment variables (all optional). The server also reads them from a gitignor
 | `STUDY_ROOT` | `~/sparmate-study` | Where `TRACKER.md`, `REVIEW.md`, `notes/`, `lld/` live. Tests point it at a temp copy. |
 | `DATA_DIR` | `<STUDY_ROOT>/rounds` | Sessions, settings, custom problems, logs. |
 | `SPARMATE_IN_CONTAINER` | unset | `1` enables container mode: server listens on `0.0.0.0`, strict host/origin allow-lists applied. |
-| `SPARMATE_FAKE_AGENT` | unset | `1` replaces every model call with the deterministic fake driver (section 5.9). |
+| `SPARMATE_FAKE_AGENT` | unset | `1` replaces every model call with the deterministic fake driver (section 5.7). |
 | `SPARMATE_CLAUDE_JSON` | `~/.claude.json` | Where the privacy guard reads the account email (section 11). |
 | `SPARMATE_DENYLIST` | `~/.config/sparmate/denylist.txt` | Extra deny-listed terms, one per line, kept outside the repo. |
 | `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro` | Local Kokoro neural TTS folder holding `.venv/bin/python`, `kokoro-v1.0.onnx` and `voices-v1.0.bin`. |
@@ -175,7 +175,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 | Role | When | Mode | Tools | Output |
 |---|---|---|---|---|
 | interviewer | live round, interview mode | streaming, persisted | view_whiteboard, set_phase, note_hint, end_interview; LLD adds read_code, run_code | chat text |
-| guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note and recheck_step | chat text |
+| guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note, recheck_step and step_verdict | chat text |
 | tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail}], notes }` structured |
 | judge | after the round (and the tester) | one-shot | pin_element (board PNG attached as an image block) | `ScorecardSchema` structured |
 | coach | after the debrief | streaming, persisted | view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
@@ -200,6 +200,14 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   note replaces the old one); at most 30 guide pins per round and 12 judge pins. The pin records the step of the frame
   that holds the element. The models get the ids from a pin targets list (`pinTargets` in `src/shared/graph/frames.ts`):
   the guide in `view_whiteboard` and in every "Check this step" request, the judge as `<pin_targets>`.
+- `step_verdict({ phase, verdict: "pass"|"not_yet", gap? })` (guide only) -> the guide's call on one step, and the only
+  "passed" the candidate sees. The input is a strict schema (unknown fields are refused). `phase` must be a step of the
+  round. For `not_yet`, `gap` is required: control characters and line breaks become spaces, it is trimmed, and it must
+  be 1 to 200 characters of plain text; for `pass`, `gap` is dropped. It is stored in `Session.stepVerdicts[phase]` as
+  `{ verdict, gap?, at }` (`at` is round time in ms) and the session state is broadcast. A pass is final: a later
+  `not_yet` for a passed step is refused with an error that says the step already passed and must not be raised again.
+  A `pass` may replace a `not_yet`. The guide calls it once per step check. In the reply to "I'm stuck" a `pass` is
+  refused, so a model answer never earns one. Each check ends with a verdict.
 - `recheck_step({ phase })` (guide only) -> the phase must belong to the track, else an error that lists the valid
   ids. Reads that step's checklist again from scratch (section 5.11): it bypasses the unchanged-evidence skip, and its
   result replaces the step's items. Any step, not only the current one. It waits for a check of that step that is
@@ -277,7 +285,7 @@ treat it like words he said. A "check this step" request leaves the notes out of
 text in its own `<notes>` block, then the checker's reading of the step (section 5.11), then the pin targets list.
 
 Other engine turns use their own tags: `<start>` opens the round (the interviewer answers with the brief's
-opening prompt), `<request>` carries a guided "check this step" or "hint" and the coach's opening, and
+opening prompt), `<request>` carries a guided "check this step", "hint" or "I'm stuck" and the coach's opening, and
 `<replay>` restarts a conversation after a failure with the transcript so far, saying the round is already open.
 
 Clock events are sent as their own turn:
@@ -329,7 +337,12 @@ if it is mid-reply, fire right after):
   zero, so for 2 seconds after a time-up end the server still takes `board.update` and `code.update`, and the
   debrief waits for the window to close. After it, and after any other end, both are refused with `not_live`.
 
-Guided mode has no extension checkpoint and no time-up end: the clock counts up and the candidate ends it.
+Guided mode has no extension checkpoint and no time-up end: the clock counts up and the candidate ends it. It has two
+checkpoints per step except the last: `phase_end` at the end of the step's planned window, and `phase_over` at twice the
+step's planned time, counted from the start of its window (`planCheckpoints` in `src/server/engine/clock.ts`). Each fires
+at most once, and only while that step is on the rail. The `phase_over` turn asks the guide for one short line that
+offers to move on; it is not `<silent/>`. A step that has already passed gets no offer, because the "Move on" button
+is there.
 
 ### 5.6 Failure handling
 
@@ -369,9 +382,18 @@ On end: status `debriefing`, `debrief.progress` updates, then:
    scorecard without `steps` loads with an empty list. If more than 30% of quotes fail, run the judge once more with a note
    listing the failed quotes; keep the better result. Lint the prose fields (`verdict.summary`, gaps,
    strengths) with `lintProse`; store issues in `lintIssues` (shown only in a small dev note).
-5. Add `phaseTiming` and `quoteChecks`, save, status `debriefed`, send `debrief.ready` and a fresh
+5. **Readiness (guided rounds only).** The server computes `scorecard.readiness = { call: "ready"|"not_yet", reasons[] }`
+   with a fixed rule (`computeReadiness` in `src/server/engine/readiness.ts`), never the model. Each failed condition adds
+   one plain sentence: the steps that have no `pass` in `Session.stepVerdicts` (named by their labels); the steps in
+   `Session.assists` (named by label); any hint at level 3 ("3 hints, including 1 at level 3."); and an active time
+   (end minus start minus pauses) above 1.5 times the round's planned duration ("The round took 80 minutes against a
+   45-minute plan."). The call is `ready` only when there are no reasons. The judge, the dimension scores, the gaps, the
+   coach and the tracker mark (`[~]`) work as before, and `verdict.sde2` stays in the data, but the page shows no hire
+   verdict for a guided round that has a readiness call. `GET /api/sessions` and the home list carry `readiness.call`
+   for the badge. Sessions saved before the field existed have none and show their verdict.
+6. Add `phaseTiming` and `quoteChecks`, save, status `debriefed`, send `debrief.ready` and a fresh
    `session.state` (which now includes `reference`).
-6. On repeated failure: status `failed`, keep everything, offer `debrief.retry`.
+7. On repeated failure: status `failed`, keep everything, offer `debrief.retry`.
 
 ### 5.8 Coach and bookkeeping
 
@@ -426,7 +448,8 @@ about 300 ms):
   least half of the item's words, `partial` when it holds fewer, and it quotes that text exactly. It also claims one
   more item with a quote he never said, so every run exercises the server's quote check.
 - guide: on "Check this step" it calls `pin_note` with an id that is not on the board (refused), then pins the first
-  labelled box. judge: pins the first labelled element as held and the second as gap.
+  labelled box, and calls `step_verdict` (`not_yet` with a gap on the first check of a step, `pass` on the next). An
+  "I'm stuck" request gets a short model answer. judge: pins the first labelled element as held and the second as gap.
 
 Keep the FakeDriver in its own file so the Claude driver has no test-only branches.
 
@@ -454,7 +477,7 @@ REST endpoints (JSON):
 | GET | `/api/custom-problems/:jobId` | `CustomProblemJobStatus` (`{ id, stage, searches, pages, problemId?, title?, track?, sourcesCount?, checksCount?, corrections?, confidence?, costUsd?, error? }`). `stage` is `researching`, `writing`, `checking`, `ready`, `failed` or `cancelled`. |
 | DELETE | `/api/custom-problems/:jobId` | Cancels a running custom problem preparation job, aborts its model process, and marks the job `cancelled`. Same Host, Origin and CSRF checks as other writes. Answers the updated status, or 404 if not found. |
 | POST | `/api/sessions` | `CreateSessionRequest` -> `{ sessionId }`. Custom prompt runs the brief-writer first (can take a minute). LLD creates the attempt file. A `focus` (gap title and "what good looks like") is allowed only with `problemId` and mode `guided`; it starts a 20-minute guided round and is kept on the session. |
-| GET | `/api/sessions` | history: `{ id, problemId, title, track, mode, createdAt, status, verdict, pause, notesSaved }[]`, newest first. `pause` is `{ reason, timeLeftMs }` while paused (`timeLeftMs` is null in a guided round), else null. `notesSaved` is true once study notes were written. |
+| GET | `/api/sessions` | history: `{ id, problemId, title, track, mode, createdAt, status, verdict, readiness, pause, notesSaved }[]`, newest first. `pause` is `{ reason, timeLeftMs }` while paused (`timeLeftMs` is null in a guided round), else null. `notesSaved` is true once study notes were written. |
 | GET | `/api/sessions/:id` | `PublicSession` |
 | DELETE | `/api/sessions/:id` | Discard the round (below). Answers `{ ok: true }`. `404` for an id that fails the id regex or a round that does not exist; `409` while the status is `debriefing`. Same Host, Origin and CSRF checks as every other write. |
 | GET | `/api/sessions/:id/board` | `{ version, elements }` |
@@ -557,17 +580,17 @@ While it waits, the channel reports `agent.status` `thinking`, the state in whic
 during the wait leaves the turn queued until he resumes; an end or a discard drops it. The request body carries the
 step's checklist as the checker last read it, after a line that gives the round time of that reading: one line per item
 with its id, label, state, where it was found (said at mm:ss, on the board, in the code) and what a partial item lacks.
-It tells the guide that its feedback must agree with the list, or name the item it thinks is wrong and why. When no
-check of the step has finished, the body says so instead.
+It tells the guide that the list is evidence that may lag his latest work, and that its own `step_verdict` is the call he
+sees. The request tells the guide to call `step_verdict` once for the step, with one gap on `not_yet`. When no check of
+the step has finished, the body says so instead.
 
 `session.state` carries the checklist as `steps` (`publicSteps` in `src/server/engine/public.ts`), never `checklist` or
-`stepChecks`. A debrief gets every item with its label, state and where it was covered. A guided round gets, for a step
-not yet checked, only the item count (`items` empty, `total` set), so the list never shows the answer before he tries;
-once the step is checked, covered items carry their label and partial or missing items carry their `ask` question in
-its place (`question: true`) when the brief gives one. An interview round
-gets an empty `steps` until the round ends, because the list comes from the hidden brief and even a count of covered
-items tells him whether a step is done. `pins` follows the same rule: none in an interview round, the guide's in a guided
-round, all of them once the round is over.
+`stepChecks`. A debrief gets every item with its label, state and where it was covered. Every live round, guided or
+interview, gets an empty `steps` until the round ends, because the list comes from the hidden brief and even a count of
+covered items tells him whether a step is done. A guided round shows him the guide's `stepVerdicts` instead, and an
+`assistCount` (how many times he asked for a model answer; the steps stay on the server until the debrief). `pins`
+follows the checklist rule: none in an interview round, the guide's in a guided round, all of them once the round is
+over.
 
 Sessions that hold `stepSummaries` (a notepad per step: `proposed` and `agreed` lines) keep them; the debrief and the
 scribe read them.
@@ -581,9 +604,13 @@ scribe read them.
 - `code.run`: compile and run (section 8), store `code.lastRun`, send `code.run.result`, add a hidden `run`
   note for the next envelope.
 - `phase.set`: validate, record, broadcast `phase.changed` and `session.state`; mention in the next envelope.
-- `guided.feedback` / `guided.hint`: guided mode only; send the guide a `<request>` turn naming the step and
-  what is asked (feedback on this step only; or the next rung of the hint ladder, recorded with `note_hint`). The
-  feedback turn waits for the step's check first ("Check this step" order, above).
+- `guided.feedback` / `guided.hint` / `guided.stuck`: guided mode in a live round only (else an error, as for the
+  others); send the guide a `<request>` turn naming the step and what is asked (feedback on this step, ending in a
+  `step_verdict`; the next rung of the hint ladder, recorded with `note_hint`; or, for `guided.stuck`, a short model
+  answer of at most about 150 words with no tables and no quizzes, then one line asking him to redo the step in his
+  own words). The feedback turn waits for the step's check first ("Check this step" order, above). `guided.stuck` makes
+  the server itself append `{ at, phase }` to `Session.assists`, so the record never depends on the model; the guide
+  does not also call `note_hint` for it.
 - `session.pause` / `session.resume`: pause works in both modes (`pauseReason: "user"`). Resume lifts any pause,
   retries after an error, and is the only way out of an away or restart pause.
 - `session.discard`: discards the round (below). A refusal arrives as an `error` message with code `discard_refused`.
@@ -864,9 +891,9 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 - "Up next" card for the problem with `badge: "next"` and any `redo` problems, each with "Start interview" and an outlined secondary "Guided" button of matching height.
 - Single full-width problem list with a track switch at the top: segmented tabs ("System design · HLD" and "Machine coding · LLD", each with count, persisted in `localStorage`).
 - Status filter (All, Not started, Partly done, Done, Redo due) and sort (Tracker order, Difficulty, Last attempt) in one compact row above the problem list, persisted in `localStorage`, with an empty state and "Clear filter" button.
-- Problem list rows: mark chip (`[ ]`, `[~]`, `[x]`), title, summary, difficulty, last attempt (date and verdict label chip), badge, and matching-height "Start interview" and outlined "Guided" buttons.
+- Problem list rows: mark chip (`[ ]`, `[~]`, `[x]`), title, summary, difficulty, last attempt (date and verdict label chip; a guided attempt with a readiness call shows "Ready" or "Not yet" instead), badge, and matching-height "Start interview" and outlined "Guided" buttons.
 - "Practise any question": a textarea for a pasted prompt, an HLD/LLD toggle, and a Prepare button. Displays multi-stage preparation progress ("Researching · N searches, M pages", "Writing the brief", "Checking facts"). Once ready, shows a setup card with problem title, track, sources count, checks count, corrections applied, confidence note, and "Start interview" / "Guided" buttons without revealing the hidden brief text. The debrief reference answer section renders the verified research sources with secure outbound links (`target="_blank"`, `rel="noreferrer noopener"`).
-- History: recent sessions with date, title, mode, a result chip (the verdict as its plain label, or the status: In progress, Paused, Round ended, Debriefing, Debriefed, Debrief failed), a link (Resume for a live or paused round, else Open debrief or Open) and a "Discard" button. A debriefed round shows "Notes saved" or "Notes not saved". The open-round strip at the top says why a paused round paused and how many minutes were left. Discard asks first, with the same confirm text as the room, then calls `DELETE /api/sessions/:id` and preserves scroll position using `focus({ preventScroll: true })`. It is disabled while the status is Debriefing.
+- History: recent sessions with date, title, mode, a result chip (the verdict as its plain label, or "Ready" or "Not yet" for a guided round with a readiness call, or the status: In progress, Paused, Round ended, Debriefing, Debriefed, Debrief failed), a link (Resume for a live or paused round, else Open debrief or Open) and a "Discard" button. A debriefed round shows "Notes saved" or "Notes not saved". The open-round strip at the top says why a paused round paused and how many minutes were left. Discard asks first, with the same confirm text as the room, then calls `DELETE /api/sessions/:id` and preserves scroll position using `focus({ preventScroll: true })`. It is disabled while the status is Debriefing.
 
 **Room `/session/:id`** (status `live` or `paused`)
 - Top bar: title, mode chip, the phase rail (click a phase to move there; shows each phase's planned minutes;
@@ -883,8 +910,9 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   open it in your editor.
 - Chat panel: interviewer messages (Markdown) on the left, the candidate's on the right, system events as
   small grey lines (phase changes, runs, the extension), streaming text with a typing indicator, Enter to send
-  and Shift+Enter for a new line, the input keeps focus after sending. Guided mode adds "Check this step" and
-  "Hint" buttons. Voice dialogue layers on top of text chat: continuous on-device speech-to-text (Ctrl+M or mic button)
+  and Shift+Enter for a new line, the input keeps focus after sending. Guided mode adds "Check this step", "Hint" and "I'm stuck" buttons; the last two share the disabled rules.
+  When the current step has a `pass` and a next step exists, "Check this step" reads "Move on" and sends `phase.set` for
+  the next step; he can still go back to a passed step. On the last step it stays "Check this step". Voice dialogue layers on top of text chat: continuous on-device speech-to-text (Ctrl+M or mic button)
   streams live interim transcripts into the input, with either auto-send after 2 seconds of silence or manual review
   before sending. Half-duplex is enabled by default: while a reply is spoken, speech recognition is paused (aborting
   recognition and discarding interim text) so speaker audio is not transcribed into the candidate's box, resuming
@@ -892,27 +920,25 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   An "I use headphones" setting enables full-duplex with voice barge-in. Spoken replies stream sentence by sentence
   via local Kokoro neural TTS (with automatic fallback to local speech synthesis), omitting code blocks ("code block omitted")
   and stripping Markdown formatting. Pausing the round halts both recognition and synthesis.
-- Step bar: in a guided round the phase rail shows a coverage ring per step, the covered share of its checklist with a
-  partial item counting half. An interview round shows no rings. Clicking a step moves the phase and brings that step's frame into view; in an LLD round a step
+- Step bar: in a guided round the phase rail shows a passed mark per step the guide passed, and a line under it reads
+  "n of m steps passed". An interview round shows neither. Clicking a step moves the phase and brings that step's frame into view; in an LLD round a step
   without a frame brings the Code tab forward instead.
 - The work toolbar has "Show this step" (the current step's frame) and "Whole board" while the board is in view.
-- Step checklist (guided rounds only), a raised card at the top of the chat column, for the current step. Before the
-  step's first check it shows only how many things the step covers. After a check: each item
-  with a mark (covered, partly, not yet, a missing requirement shown as the question that uncovers it), "n of m", and where it was covered ("Said at 04:12", "On the board", "In the
-  code", or "Partly, on the board: <what it lacks>"). An interview round has no checklist card. A status line says when the step was last checked and
-  whether an image of the frame was read. The card collapses to its header.
+- Step verdict (live guided rounds only), a card at the top of the chat column, for the current step: "Passed" with a
+  check, or "Not yet" followed by the guide's one gap, shown as plain text. Before the first check it shows nothing.
+  The checklist is not shown during the round, in either mode.
 - Guided rounds show the guide's pins on the board.
 - "What the interviewer sees" toggle: shows the current graph text (and its warnings). It makes the board's
   text form visible, so the user can fix an unlabeled box or a dangling arrow.
 - Pause banner, chosen by `pauseReason`, with a "Resume" button on each: `away` says "Paused because the room was
   closed. Resume when you're ready."; `user` says "Paused."; `restart` says "Paused because the app restarted.";
   `error` (also shown whenever `agent.status` is `error`) is the error banner: the plain message and "Retry". Chat,
-  "Check this step" and "Hint" are disabled while the round is paused.
+  "Check this step", "Hint" and "I'm stuck" are disabled while the round is paused.
 - Reconnect the WebSocket with backoff; show "Reconnecting…" while down.
 
 **Debrief `/session/:id`** (status `debriefing`, `debriefed`, `failed`)
 - While `debriefing`: a progress list from `debrief.progress`.
-- The call at the target level and the call at the stretch level, each named with the round's own level names, shown as plain labels ("Strong pass", "Pass", "Close, not yet", "Not yet") with a one-line plain meaning under the target level call, then confidence and summary.
+- The call at the target level and the call at the stretch level, each named with the round's own level names, shown as plain labels ("Strong pass", "Pass", "Close, not yet", "Not yet") with a one-line plain meaning under the target level call, then confidence and summary. A guided round with a readiness call shows no hire verdict: the headline reads "Ready for interview mode" or "Not yet ready for interview mode", with the reasons listed under it (section 5.7). A guided round saved before the call existed shows its verdict as above.
 - Dimension table: name, score 1–4 as a short bar with the word (1 Missing, 2 Below bar, 3 At bar,
   4 Senior signal), evidence quotes with time and a check mark or a "not found in transcript" warning from
   `quoteChecks`, and "what a 4 looks like" behind a disclosure.
@@ -1005,7 +1031,7 @@ Interviewer (interview mode), from TEACHING.md section 10 and the research:
 - Accepts any valid design: judges against the requirements, not the reference design.
 - Uses the hint ladder only when the candidate is clearly stuck for a while (H1 points at an area, H2 names the
   concern, H3 offers two options) and records each with `note_hint`.
-- Time: nudges at phase overruns via clock events; delivers the extension when told; closes without feedback.
+- Time: nudges at phase overruns via clock events (in a guided round, one offer to move on at twice a step's plan); delivers the extension when told; closes without feedback.
 - LLD: answers C++ syntax questions at once with a tiny snippet; never writes the candidate's design or
   code; may ask "run it and show me" and use `run_code`/`read_code` near the end; asks the concurrency
   follow-up if time allows.
@@ -1013,20 +1039,23 @@ Interviewer (interview mode), from TEACHING.md section 10 and the research:
 Guide (guided mode), modelled on step-by-step guided practice:
 - Works through the phase rail one step at a time. Asks the candidate for the step's output, then gives
   feedback on that step only when asked ("Check this step") or when the candidate says they are done with it:
-  what holds, what is missing, the single most important fix. Gives hints on request, one rung at a time.
-- Checks requirements against the brief's Core items and the Level bar; a missing Extra is never a gap. Says when a
-  step is good enough to move on, names at most one optional improvement, and raises each point once. Capacity numbers
-  need to be right to an order of magnitude, and only the numbers that drive a decision need their consequence.
-- Teaches when the candidate is stuck after two nudges (TEACHING.md section 1 and 5). Keeps TEACHING.md
-  section 2's prose rules.
+  one thing that holds, then a `step_verdict`. Gives hints on request, one rung at a time.
+- Checks requirements against the brief's Core items and the Level bar; a missing Extra is never a gap. When a step
+  meets the Level bar it calls `step_verdict` with `pass` and says so plainly; it never says "nearly done" or "close to
+  done". Otherwise it names exactly one gap, the most important, as a missing question or a missing decision and not
+  its answer. It never raises a passed step again, and small items go to the debrief. Capacity numbers need to be right
+  to an order of magnitude, and only the numbers that drive a decision need their consequence.
+- Teaches short in the round: after H3, or on "no idea", "idk" or "teach me", a model answer of about 150 words for
+  the gap with no tables or quizzes, then the step goes back to him. An "I'm stuck" request gets the same answer plus
+  a line asking him to redo the step, never a `pass` and never a `note_hint`. Longer teaching waits for the coach after
+  the round (TEACHING.md section 1 and 5). Keeps TEACHING.md section 2's prose rules.
 - Knows how the step checklist works: a separate checker fills it from his chat in the step, the step's frame and, in
   LLD, the code he wrote while the step was on the rail (build steps read the whole file); every tick needs a quote the
-  app finds there; it feeds the debrief's step cards and the study-notes draft; nobody ticks an item by hand. Step
-  feedback agrees with the checker's reading in the request, or names the item it thinks is wrong and why. When the
-  candidate says the list looks wrong or stale, the guide calls `recheck_step` for that step and never moves the rail
-  to refresh it.
-- The candidate moves the rail. The guide never calls `set_phase` in a reply to "Check this step"; it says the step is
-  good enough and lets him move. It calls `set_phase` only when he says he is moving on or asks it to move the rail, or
+  app finds there; it is evidence for the guide and feeds the debrief's step cards and the study-notes draft; he does
+  not see it during the round; nobody ticks an item by hand. The guide's `step_verdict` is the call he sees. When it
+  doubts the reading, the guide calls `recheck_step` for that step and never moves the rail to refresh it.
+- The candidate moves the rail. The guide never calls `set_phase` in a reply to "Check this step"; it says the step
+  passed and lets him move. It calls `set_phase` only when he says he is moving on or asks it to move the rail, or
   when his work has clearly sat in another step for a few minutes while the rail lags.
 
 Tester (LLD): adapts each "Demo scenarios" item to the candidate's real classes and method names, writes one
