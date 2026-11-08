@@ -83,7 +83,7 @@ function GymBody({ gym, onAll }: { gym: GymSummary; onAll: () => void }) {
   const rest = due.slice(1);
   if (gym.problems.length === 0 && gym.queue.length === 0) return <NothingYet />;
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
       {hero ? <Hero row={hero} today={gym.today} /> : <NothingDue gym={gym} onAll={onAll} />}
       <AlsoDue rows={rest} today={gym.today} onAll={onAll} hasHero={hero !== undefined} />
     </div>
@@ -128,7 +128,7 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
           }
           value={
             <>
-              <span>
+              <span className="whitespace-nowrap">
                 {row.passes} of {PASSES_TO_CLOSE}
               </span>
               <Pips filled={row.passes} onMesh />
@@ -158,7 +158,7 @@ function Fact({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="min-w-0 px-3 py-3 sm:px-5 sm:py-3.5">
       <dt className="text-meta text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 whitespace-nowrap text-body font-semibold text-foreground sm:text-lead">{value}</dd>
+      <dd className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-body font-semibold text-foreground sm:text-lead">{value}</dd>
     </div>
   );
 }
