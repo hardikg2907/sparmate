@@ -14,6 +14,8 @@ import { Alert, Button, Card, Skeleton, cn } from "../components/ui";
 import { dayMonth, longDate, parseDay, shortDay, weekday, wholeMinutes } from "../lib/dates";
 import { MODE_LABEL, formatDate } from "../lib/format";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
+import { useNow } from "../lib/useNow";
+import { redoCardTitle } from "../lib/redoLabel";
 import { READINESS_LABEL, VERDICT_LABEL, attemptBadge } from "../lib/verdict";
 import { Link } from "../router";
 import type { PageContext } from "./context";
@@ -27,16 +29,18 @@ function minutesFor(track: ProblemSummary["track"], durations: Settings["duratio
   return durations[track] ?? BASE_MINUTES[track];
 }
 
-export function TodayView({ data, ctx, now = new Date() }: { data: StudyData; ctx: PageContext; now?: Date }) {
+export function TodayView({ data, ctx, now: fixedNow }: { data: StudyData; ctx: PageContext; now?: Date }) {
+  const liveNow = useNow();
+  const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
   const [confirm, setConfirm] = useState<SessionHistoryItem | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
 
   const pick = useMemo(
     () => (problems && history ? selectToday({ now, plan: ctx.settings.weeklyPlan, problems, history }) : null),
-    // `now` is the render-time clock; the pick only needs to move when the data does.
+    // `now` changes only when the tab shows again or the local day turns, which is when the day's pick can change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [problems, history, ctx.settings.weeklyPlan],
+    [problems, history, ctx.settings.weeklyPlan, now.getTime()],
   );
   const dayKind = ctx.settings.weeklyPlan[planIndex(now)] ?? "rest";
   const title = DAY_TITLE[dayKind];
@@ -72,7 +76,7 @@ export function TodayView({ data, ctx, now = new Date() }: { data: StudyData; ct
             <Hero hero={pick.hero} data={data} ctx={ctx} now={now} onSeePlan={() => setPlanOpen(true)} onDiscard={askDiscard} />
             <div className="flex flex-col gap-4">
               <UnfinishedCard rounds={pick.unfinished} data={data} onDiscard={askDiscard} now={now} />
-              <MoreRedos redos={pick.moreRedos} />
+              <MoreRedos redos={pick.moreRedos} heroIsRedo={pick.hero.kind === "problem" && pick.hero.reason === "redo"} />
             </div>
           </div>
         ) : null}
@@ -466,7 +470,7 @@ function UnfinishedCard({ rounds, data, onDiscard, now }: { rounds: UnfinishedRo
   );
 }
 
-function MoreRedos({ redos }: { redos: RedoEntry[] }) {
+function MoreRedos({ redos, heroIsRedo }: { redos: RedoEntry[]; heroIsRedo: boolean }) {
   const next = redos[0];
   if (!next) return null;
   return (
@@ -476,9 +480,7 @@ function MoreRedos({ redos }: { redos: RedoEntry[] }) {
           <CalendarIcon size={18} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-body font-semibold">
-            {redos.length} more {redos.length === 1 ? "redo" : "redos"}
-          </span>
+          <span className="block text-body font-semibold">{redoCardTitle(redos.length, heroIsRedo)}</span>
           <span className="block truncate text-ui text-muted-foreground">
             Next: {next.problem.title}
             {next.dueOn ? `, ${next.due ? "now" : shortDay(parseDay(next.dueOn))}` : ""}
