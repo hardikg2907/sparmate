@@ -8,7 +8,7 @@ const design = frame("f-design", 0, 500, 1560, 820, "High-level design", { custo
 describe("stepFrames", () => {
   it("maps each step to the frame tagged with it and ignores untagged or deleted frames", () => {
     const other = frame("f-other", 3000, 0, 100, 100, "Scratch");
-    const gone = frame("f-gone", 0, 0, 10, 10, "Old", { customData: { step: "capacity" }, isDeleted: true });
+    const gone = frame("f-gone", 0, 0, 10, 10, "Old", { customData: { step: "entities" }, isDeleted: true });
     const map = stepFrames([req, design, other, gone]);
     expect([...map.keys()]).toEqual(["requirements", "design"]);
     expect(map.get("design")?.id).toBe("f-design");

@@ -271,7 +271,7 @@ function fakeScorecard(facts: FakeFacts): Scorecard {
     strengths: ["Asked about scale before drawing anything."],
     gaps: [
       {
-        title: "Capacity math that changes the design",
+        title: "Numbers that drive a decision",
         severity: "high",
         whyItMatters: "Numbers that do not change a decision waste the time they take.",
         whatGoodLooksLike: "Each number ends with the decision it forces, such as a cache in front of the database.",
@@ -286,7 +286,7 @@ function fakeScorecard(facts: FakeFacts): Scorecard {
       },
     ],
     timeline: [{ at: "00:00", note: "Round started." }],
-    practiceTask: "Redo the capacity step in five minutes and end each number with the decision it forces.",
+    practiceTask: "Redo one deep dive in five minutes and end each number with the decision it forces.",
     trackerMark: "[~]",
     trackerMarkReason: "A practice round with gaps at the target level.",
     lldScenarios: facts.track === "lld" ? (facts.tester?.scenarios ?? []) : [],

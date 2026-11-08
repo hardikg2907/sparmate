@@ -29,8 +29,8 @@ describe("prompt helpers", () => {
   it("formats the phase plan one line per phase", () => {
     const text = formatPhasePlan("hld", 45);
     const lines = text.split("\n");
-    expect(lines).toHaveLength(6);
-    expect(lines[0]).toBe("- Requirements: about 5 min — 3-4 functional and 3-4 non-functional requirements, each with a number or a rule");
+    expect(lines).toHaveLength(5);
+    expect(lines[0]).toBe("- Requirements: about 5 min — 3 core functional requirements; non-functional ones each with a number or a rule; scale as numbers");
   });
 
   it("scales the plan for a longer round", () => {

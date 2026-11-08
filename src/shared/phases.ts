@@ -10,14 +10,18 @@ export interface PhaseDef {
   goal: string;
 }
 
-// The candidate's own six-step HLD method.
+// The five-step HLD delivery order: requirements first, numbers only inside the deep dives where one decides something.
 export const HLD_PHASES: readonly PhaseDef[] = [
-  { id: "requirements", label: "Requirements", baseMinutes: 5, goal: "3-4 functional and 3-4 non-functional requirements, each with a number or a rule" },
-  { id: "capacity", label: "Capacity math", baseMinutes: 3, goal: "Only the numbers that change the design, each ending in 'which means'" },
-  { id: "api", label: "API", baseMinutes: 4, goal: "The external API, the internal calls and the core entities" },
-  { id: "design", label: "High-level design", baseMinutes: 10, goal: "Boxes and arrows, then walk one request through every box" },
-  { id: "deep_dives", label: "Deep dives", baseMinutes: 15, goal: "One deep dive per hard non-functional requirement" },
-  { id: "wrap_up", label: "Bottleneck and extension", baseMinutes: 8, goal: "Name where it breaks first, then handle the curveball" },
+  { id: "requirements", label: "Requirements", baseMinutes: 5, goal: "3 core functional requirements; non-functional ones each with a number or a rule; scale as numbers" },
+  { id: "entities", label: "Core entities", baseMinutes: 2, goal: "The few nouns the API and the storage revolve around" },
+  { id: "api", label: "API", baseMinutes: 5, goal: "The external endpoints with request, response and status codes" },
+  {
+    id: "design",
+    label: "High-level design",
+    baseMinutes: 13,
+    goal: "Boxes and arrows that meet the functional requirements; walk one request through every box, cache miss included",
+  },
+  { id: "deep_dives", label: "Deep dives", baseMinutes: 20, goal: "One per hard non-functional requirement; math only where a number decides something; then the curveball" },
 ];
 
 // The candidate's own seven-step machine-coding method.

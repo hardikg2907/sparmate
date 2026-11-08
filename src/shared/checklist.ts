@@ -107,12 +107,6 @@ function bullets(section: string | undefined): string[] {
   });
 }
 
-/** The bold lead of a bullet ("**Writes:** ..." gives "Writes"), or null. */
-function boldLead(text: string): string | null {
-  const m = /^\*\*([^*]+?):?\*\*/.exec(text.trim());
-  return m?.[1] ? m[1].replace(/:$/, "") : null;
-}
-
 /** The code span a bullet opens with ("`POST /urls` with ..." gives "POST /urls"), or null. */
 function codeLead(text: string): string | null {
   const m = /^`([^`]+)`/.exec(text.trim());
@@ -152,8 +146,11 @@ export function firstSentence(text: string): string {
   return plainLabel(sentence);
 }
 
-/** "API and entities" splits into the endpoints under "External API" and the entities under "Core entities". */
-function apiItems(section: string | undefined): string[] {
+/**
+ * "API and entities" splits into the endpoints (under "External API", or before any heading) and the entities
+ * under "Core entities", each as its own step's items.
+ */
+function apiAndEntityItems(section: string | undefined): { api: string[]; entities: string[] } {
   let part: "api" | "entities" | null = null;
   const rawApi: string[] = [];
   const rawEntities: string[] = [];
@@ -239,15 +236,13 @@ function apiItems(section: string | undefined): string[] {
     return [...mergedMap.entries()].map(([p, msgs]) => `${p}: ${[...new Set(msgs)].join(", ")}`);
   };
   const plainGroups = () => messageGroups.map((g) => `${g.prefix}: ${g.messages.join(", ")}`);
-  const entityItems = rawEntities.map((e) => `Entity ${e}`);
-
-  // Combining related messages under the channel maintains coverage without exceeding the display limit.
+  // Combining related messages under the channel keeps coverage without exceeding the display limit.
   let groupItems = plainGroups();
-  if (rawApi.length + groupItems.length + entityItems.length <= MAX_ITEMS) return [...rawApi, ...groupItems, ...entityItems];
-  groupItems = mergeGroups();
-  if (rawApi.length + groupItems.length + entityItems.length <= MAX_ITEMS) return [...rawApi, ...groupItems, ...entityItems];
+  if (rawApi.length + groupItems.length > MAX_ITEMS) groupItems = mergeGroups();
+  const api = [...rawApi, ...groupItems];
 
-  // Still over the limit: entity names share items, so none is dropped.
+  // Past the limit, entity names share items, so none is dropped.
+  if (rawEntities.length <= MAX_ITEMS) return { api, entities: rawEntities };
   const chunks: string[] = [];
   let current = "";
   for (const name of rawEntities) {
@@ -260,7 +255,7 @@ function apiItems(section: string | undefined): string[] {
     }
   }
   if (current !== "") chunks.push(current);
-  return [...rawApi, ...groupItems, ...chunks];
+  return { api, entities: chunks };
 }
 
 function walks(section: string | undefined): string[] {
@@ -441,19 +436,16 @@ function fitToLimit(labels: string[]): string[] {
  */
 export function deriveChecklist(track: Track, sections: Sections): Record<string, ChecklistItem[]> {
   const requirements = requirementItems(sections["Expected requirements"]);
+  const apiParts = apiAndEntityItems(sections["API and entities"]);
   const raw: Record<string, string[]> =
     track === "hld"
       ? {
           requirements: requirements.map((r) => r.text),
-          capacity: bullets(sections["Capacity math"]).flatMap((b) => {
-            const lead = boldLead(b);
-            return lead ? [lead] : [];
-          }),
-          api: apiItems(sections["API and entities"]),
+          entities: apiParts.entities,
+          api: apiParts.api,
           design: walks(sections["Reference design"]),
-          deep_dives: headings(sections["Deep dives"]),
-          // The curveball stays hidden until the interviewer delivers it, so this step names only its shape.
-          wrap_up: ["Where the design breaks first", "The extension handled"],
+          // The curveball stays hidden until the interviewer delivers it, so the last item names only its shape.
+          deep_dives: [...headings(sections["Deep dives"]), "The curveball handled"],
         }
       : {
           clarify: requirements.map((r) => r.text),

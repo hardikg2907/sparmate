@@ -173,7 +173,7 @@ interface BuildOptions {
 
 const HLD_NOTES: Record<string, string> = {
   requirements: "Functional: shorten a URL, redirect, custom alias.\nNon-functional: redirect p99 under 50 ms, 99.99% available, links never reused.",
-  capacity: "100M new links a month, about 40 writes/s. 10:1 reads, so 400 reads/s, which means one cache layer is enough.",
+  entities: "Link: the code, the long URL, the expiry. ClickCount: one counter per code.",
 };
 
 const LLD_NOTES: Record<string, string> = {
@@ -187,7 +187,7 @@ const HLD_SUMMARIES: Record<string, StepSummary> = {
     proposed: ["Shorten a URL, redirect, custom alias", "Redirect p99 under 50 ms, 99.99% available", "Links are never reused"],
     agreed: ["Links never expire", "No analytics in scope", "Custom aliases up to 16 characters"],
   },
-  capacity: { status: "pending", proposed: [], agreed: [] },
+  entities: { status: "pending", proposed: [], agreed: [] },
 };
 
 const LLD_SUMMARIES: Record<string, StepSummary> = {
@@ -340,11 +340,10 @@ export const HLD_CHECKLIST: FixtureChecklist = {
       "99.99% availability for redirects",
       "Read-heavy: about 100 reads per write, with viral spikes",
     ],
-    capacity: ["Writes", "Reads", "Storage", "Hot set", "Code space"],
-    api: ["POST /urls", "GET /{code}", "DELETE /urls/{code}", "Entity Link"],
+    entities: ["Link", "ClickCount"],
+    api: ["POST /urls", "GET /{code}", "DELETE /urls/{code}"],
     design: ["Walk one redirect through every box", "Walk one create through every box"],
-    deep_dives: ["Generating unique short codes", "Fast, highly available redirects", "Counting clicks without slowing redirects"],
-    wrap_up: ["Where the design breaks first", "The extension handled"],
+    deep_dives: ["Generating unique short codes", "Fast, highly available redirects", "Counting clicks without slowing redirects", "The curveball handled"],
   },
   asks: {
     "requirements-3": "What happens when a link is no longer wanted?",
@@ -356,8 +355,8 @@ export const HLD_CHECKLIST: FixtureChecklist = {
     "requirements-4": ["covered", "board", null],
     "requirements-5": ["covered", "board", null],
     "requirements-6": ["partial", "chat", 72, "no read to write ratio stated"],
-    "capacity-1": ["covered", "chat", 290],
-    "capacity-2": ["covered", "chat", 290],
+    "entities-1": ["covered", "chat", 290],
+    "entities-2": ["covered", "chat", 290],
     "api-1": ["covered", "board", null],
     "api-2": ["covered", "chat", 470],
     "design-1": ["partial", "board", null, "the key generator is not joined"],

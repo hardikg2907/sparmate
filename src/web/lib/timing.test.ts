@@ -60,17 +60,17 @@ describe("finalRoundMs", () => {
 describe("phaseSpentMs", () => {
   const history = [
     { phase: "requirements", at: 0, by: "candidate" as const },
-    { phase: "capacity", at: 4 * MIN, by: "candidate" as const },
+    { phase: "entities", at: 4 * MIN, by: "candidate" as const },
     { phase: "api", at: 7 * MIN, by: "interviewer" as const },
   ];
 
   it("splits round time by phase", () => {
-    expect(phaseSpentMs(history, "requirements", "api", 11 * MIN)).toEqual({ requirements: 4 * MIN, capacity: 3 * MIN, api: 4 * MIN });
+    expect(phaseSpentMs(history, "requirements", "api", 11 * MIN)).toEqual({ requirements: 4 * MIN, entities: 3 * MIN, api: 4 * MIN });
   });
 
   it("adds up a phase visited twice", () => {
-    const back = [...history, { phase: "capacity", at: 9 * MIN, by: "candidate" as const }];
-    expect(phaseSpentMs(back, "requirements", "capacity", 10 * MIN)).toEqual({ requirements: 4 * MIN, capacity: 4 * MIN, api: 2 * MIN });
+    const back = [...history, { phase: "entities", at: 9 * MIN, by: "candidate" as const }];
+    expect(phaseSpentMs(back, "requirements", "entities", 10 * MIN)).toEqual({ requirements: 4 * MIN, entities: 4 * MIN, api: 2 * MIN });
   });
 
   it("puts everything in the first phase when nothing was recorded", () => {
@@ -84,6 +84,6 @@ describe("phaseSpentMs", () => {
   it("does not count time past the end of the round", () => {
     const spent = phaseSpentMs(history, "requirements", "api", 5 * MIN);
     expect(spent.requirements).toBe(4 * MIN);
-    expect(spent.capacity).toBe(MIN);
+    expect(spent.entities).toBe(MIN);
   });
 });

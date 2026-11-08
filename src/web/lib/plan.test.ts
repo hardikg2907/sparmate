@@ -4,7 +4,7 @@ import { behindPlanMs, planWindows, plannedPhaseAt } from "./plan";
 const MIN = 60_000;
 const PLAN = [
   { id: "requirements", label: "Requirements", minutes: 5 },
-  { id: "capacity", label: "Capacity math", minutes: 3 },
+  { id: "entities", label: "Core entities", minutes: 3 },
   { id: "api", label: "API", minutes: 4 },
 ];
 
@@ -12,7 +12,7 @@ describe("planWindows", () => {
   it("lays the phases end to end", () => {
     expect(planWindows(PLAN)).toEqual([
       { id: "requirements", startMs: 0, endMs: 5 * MIN },
-      { id: "capacity", startMs: 5 * MIN, endMs: 8 * MIN },
+      { id: "entities", startMs: 5 * MIN, endMs: 8 * MIN },
       { id: "api", startMs: 8 * MIN, endMs: 12 * MIN },
     ]);
   });
@@ -20,7 +20,7 @@ describe("planWindows", () => {
 
 describe("behindPlanMs", () => {
   it("is zero inside the current phase's window", () => {
-    expect(behindPlanMs(PLAN, "capacity", 7 * MIN)).toBe(0);
+    expect(behindPlanMs(PLAN, "entities", 7 * MIN)).toBe(0);
   });
 
   it("counts the time past the current phase's planned end", () => {
@@ -39,7 +39,7 @@ describe("behindPlanMs", () => {
 describe("plannedPhaseAt", () => {
   it("finds the phase whose window holds the time", () => {
     expect(plannedPhaseAt(PLAN, 0)).toBe("requirements");
-    expect(plannedPhaseAt(PLAN, 5 * MIN)).toBe("capacity");
+    expect(plannedPhaseAt(PLAN, 5 * MIN)).toBe("entities");
   });
 
   it("stays on the last phase after the plan runs out", () => {
