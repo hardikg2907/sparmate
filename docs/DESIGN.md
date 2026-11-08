@@ -33,7 +33,7 @@ His own notes show where rounds go wrong. The design should help with these firs
 | Start (new) | "Get me ready for the round." | He sees the length, the mode and his plan, then starts with one key press. |
 | Room | "Let me work, keep me honest about time, and let me talk to the interviewer." | Work area as large as possible, time plan always readable, chat always ready. |
 | Pause | "Stop the clock, and make it obvious how to carry on." | Work hidden, one large Resume button, the reason for the pause stated. |
-| Debrief | "Tell me straight how it went, then fix my gaps." | Verdict and scores in one screen, gaps next, evidence on demand. |
+| Debrief | "Tell me straight how it went, then fix my gaps." | The call, the scores and one next step in one screen, gaps next, evidence on demand in tabs. |
 | Coach | "Teach me the gap now, in plain words." | The coach chat sits beside the gaps, and each gap starts a lesson with one click. |
 | Study notes | "Write the right things to my files, and only what I approve." | Every change shown as a diff with a tick box, and a clear Save. |
 | History | "Find an old round, or clean up a dead one." | Status, result and the right action on each row. |
@@ -89,16 +89,16 @@ dark set is the one designed first.
 Everything else stays disciplined, and the reading pages (home, debrief, usage) separate their parts by **surface
 level, not by outline**. The page canvas is sunken and lit by soft light from three corners: brand indigo at the
 top left, violet at the top right and a cool teal at the bottom. In dark it is a near-black plum (`#0c0a17`). Content
-sits on it in raised panels that are lit from above. The thing to do next gets a **mesh panel**: the verdict header on
-the debrief and the recommended round on home. Three tones blend as layered radial gradients, not as stripes: a
+sits on it in raised panels that are lit from above. The thing to do next gets a **mesh panel**: the recommended round on
+home and the NEXT card on the debrief. Three tones blend as layered radial gradients, not as stripes: a
 near-black corner at the top right, a bright saturated tone through the middle (brand indigo, with violet at the left)
 and a pale lilac glow that rises from the bottom. White text sits only on the dark and bright tones. Whatever sits
 over the glow (the score cells, the plan) sits on a dark glass tile, so white keeps its contrast. The usage page keeps
 the older deep panel for its cost and chart. A hairline card is for repeated rows and for secondary blocks only.
 
 Controls stay flat and quiet. A primary button is a plain brand fill with a 1 px lighter edge along the top and one
-small shadow, and it moves 1 px when pressed. The debrief's three steps are flat, separate items on one row. Only the
-verdict word and the recommended round's title use the bold rounded face.
+small shadow, and it moves 1 px when pressed. Only the
+recommended round's title uses the bold rounded face.
 
 ### Type
 
@@ -116,10 +116,10 @@ The scale is a minor third (1.2) on a 15 px base, because chat and debrief text 
 | `text-body` | 15 / 24 | 400 | Chat, debrief prose, gap text |
 | `text-lead` | 18 / 26 | 600 | Card titles, section headings |
 | `text-title` | 22 / 28 | 650 | Page titles |
-| `text-display` | 32 / 36 | 700 | The room clock, page titles on usage, the verdict word and round title on a phone |
-| `text-mega` | 48 / 52 | 700 | The verdict word, the recommended round title, the progress counts, the total cost |
+| `text-display` | 32 / 36 | 700 | The room clock, page titles on usage, the round title on a phone |
+| `text-mega` | 48 / 52 | 700 | The recommended round title, the progress counts, the total cost |
 
-`font-display` is for the two big headings in the mesh panels: the verdict word and the recommended round's title. It is `ui-rounded` (the system's rounded face, no download, so the CSP is unchanged) and falls
+`font-display` is for the big heading in the mesh panel: the recommended round's title. It is `ui-rounded` (the system's rounded face, no download, so the CSP is unchanged) and falls
 back to Atkinson at weight 800.
 
 Labels are sentence case. There are no uppercase tracked labels. Prose lines stay under about 70 characters.
@@ -157,7 +157,7 @@ accent are extensions of that set.
 | `--mesh-tile` / `--mesh-tile-ring` | `#1a1030` at 82% / `#ece8ff` at 20% | `#0c0828` at 80% / `#b9adff` at 22% | The dark glass tile over the glow |
 | `--btn-primary` / `-hover` / `-foreground` | `#3443c0` / `#4150d2` / `#ffffff` | `#4c58d8` / `#5a66e6` / `#ffffff` | The primary button's fill |
 | `--btn-secondary-bg` / `-hover` / `-fg` / `-ring` | `#f3f4f8` / `#e8ebf1` / `#181b22` / `#c5cad4` | `#221c45` / `#2c2558` / `#cfc7ff` / `#352c66` | The secondary button; the ring is its 1 px border |
-| `--amber` / `-foreground` | `#f6c96a` / `#3d2900` | `#f6c96a` / `#3d2900` | The one warm accent: "Start here" and the recommended-round pill. Never a status colour |
+| `--amber` / `-foreground` | `#f6c96a` / `#3d2900` | `#f6c96a` / `#3d2900` | The one warm accent: the recommended-round pill. Never a status colour |
 | `--hero-foreground` / `--hero-muted` | `#ffffff` / `#cdd2ff` | `#f2f3ff` / `#c3c9ff` | Text and secondary text on the deep panel |
 | `--hero-accent` / foreground | `#ffffff` / `#1f2780` | `#8e9cff` / `#0e1230` | The chart bars on the usage page's deep panel |
 | `--bar-top` / `--bar-bottom` | `#ffffff` / `#b9b2ff` | `#b3bcff` / `#7c6cf0` | The daily cost bars and the first plan segment |
@@ -212,7 +212,6 @@ The lowest value is 4.7:1, in both themes, at 1440 and at 375 px. Disabled butto
 | White on the bright violet, at its brightest | 5.9 | 4.9 |
 | White on the primary button, rest and hover | 7.7, 6.4 | 5.7, 4.7 |
 | Secondary button label, rest and hover | 15.7, 14.4 | 10.0, 8.8 |
-| Debrief step: current (label on its soft fill), other steps (label on the bar) | 8.6, 8.1 | 8.9, 8.4 |
 | Amber badge label | 8.9 | 8.9 |
 | Canvas at the brightest glow: main, secondary, faintest text | 13.3, 6.3, 4.5 | 11.8, 7.1, 5.2 |
 | Usage deep panel, darkest stop: text, secondary text | 13.8, 9.4 | 12.2, 8.4 |
@@ -266,8 +265,7 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
   pressed, except under reduced motion. A focused button shows the focus outline with a soft glow around it. The
   recommended-round panel uses the same primary and secondary buttons as the rest of the app.
 - Section headings are 22 px bold on a 2 px rule that starts in the brand ink and fades through `--border-strong`
-  to nothing on the right, so the page reads as chapters. The verdict
-  word and the large counts use the 48 px `text-mega` size; on a phone the verdict word and the round title fall
+  to nothing on the right, so the page reads as chapters. The large counts use the 48 px `text-mega` size; on a phone the round title falls
   back to the 32 px display size.
 - The shell header is translucent glass: the card colour at 80% over a 24 px blur, sticky at the top, with a 1 px
   gradient hairline (transparent, indigo, violet, transparent) on its bottom edge. The brand mark sits on a tile
@@ -280,8 +278,7 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
   steps so a long list never makes the last row wait. Then meters fill: progress pips, score meters and the cache
   meter grow from their left edge in 500 ms, in 45 ms steps; the daily cost bars grow from the bottom in 550 ms,
   in 18 ms steps. The large numbers count up once from zero in 700 to 1100 ms with an ease-out: the progress
-  counts, the debrief scores and the total cost. A later change to a number shows the new value at once.
-- **The next gap's ring** flares once, 1.6 s, as the debrief opens, then stays at a soft level.
+  counts and the total cost; the debrief has no count-up. A later change to a number shows the new value at once.
 - **The plan needle** moves with the clock. When the phase changes, the current segment's fill slides to the next
   segment in 200 ms.
 - **Motion that answers an action**: buttons ease colour and shadow in 150 ms and move down 1 px while pressed; cards rise on
@@ -395,18 +392,19 @@ moment to read the plan before the clock runs. A real round has the same moment.
 1. **End interview** asks for confirmation with today's text. Time up does the same without a click.
 2. While the debrief runs, the page shows the four stages with plain words for each, and the round's plan
    against actual time, so the wait already teaches something.
-3. When the score is ready, the top of the debrief shows **three steps**: read the score, work the gaps with the
-   coach, save the study notes. Each step shows its state ("2 of 4 gaps taught", "Notes saved").
+3. When the score is ready, the top of the debrief shows the call, the scores and one **NEXT** card that names the
+   single action to take: the current gap, then the study notes, then the step after the round. A line under it
+   shows progress ("Gaps: 2 of 4 done · 1 with the coach").
 
 ### Coach and study notes
 
-- The coach chat stays on the right. Each gap card has **Teach me this**. Once the coach has a record for a gap, the
-  card shows a badge: "Sent to the coach", "Started by the coach", "Taught" or "Core idea only, topic session
-  later", the button reads "Ask again", and the step counter reads "n of m worked with the coach". The chat shows a
-  divider line, "Now on: <gap>", where each gap begins.
-- **Draft study notes** sits in the third step, at the top, and in its section at the end. The proposal view keeps
-  every behaviour: grouped by file, a tick box per change, blocked changes disabled with the reason, a diff per
-  file, **Save selected**, the result list, and **Draft again** on a stale draft.
+- The coach chat stays on the right. Each gap has one main button: **Teach me this**, **Continue in chat**,
+  **Practise this gap** or **Finish the lesson**, by the gap's state (not started, with the coach, done, for later).
+  A ⋯ menu holds **Restart lesson** and **Practise this gap**. The chat shows a divider line, "Now on: <gap>",
+  where each gap begins, and **Continue in chat** scrolls the chat to it.
+- **Draft study notes** sits in its own section after the gaps, with the hint "Draft once the gaps are done. You can
+  draft any time." The proposal view keeps every behaviour: grouped by file, a tick box per change, blocked changes
+  disabled with the reason, a diff per file, **Save selected**, the result list, and **Draft again** on a stale draft.
 
 ### Resume or discard from home
 
@@ -488,29 +486,27 @@ moment to read the plan before the clock runs. A real round has the same moment.
 
 ### Debrief
 
-- **Header.** Back, title, track and mode, date, round time, and the status. The date line hides on a phone.
-- **Three steps** under the header: Read the score, Work the gaps, Save study notes, each a jump link. They sit on one
-  row as separate items joined by a thin connector. Each has a small numbered circle, a bold title and a status line.
-  The first open step is marked by a 1 px brand border and a soft brand fill, with a solid brand circle. Finished steps
-  carry a green tick. On a phone only the step titles show and the connectors hide.
-- **Verdict.** One mesh panel. The call sits at the top in 48 px rounded type, white, with a glowing status bar on the
-  left edge in the colour of the call (green for a pass, amber for "Close, not yet", red for "Not yet"). The senior
-  call ("Senior bar"), the confidence and the tracker mark sit beside it, and one plain sentence under the call says
-  what it means (see "Verdict words"). Under it come the summary and a "Work the gaps" primary button that jumps to
-  the gaps. Last, one dark glass tile per dimension (a large score, its word and a four-segment meter) over the glow,
-  each a jump link to the evidence that lifts on hover.
-- **Gaps** follow at once, most serious first. The first gap the coach has no record for is the next action: a
-  raised card tinted with the soft accent and ringed in an indigo-violet-teal gradient, with an amber "Start here"
-  badge, a larger title and a large "Teach me this" button. The other gaps are
-  compact hairline cards. Strengths and the practice task sit below.
-- **Study notes**, **time** (the plan against what happened, with key moments), **usage of this round** and the
-  **step by step** and **evidence** blocks follow as raised panels. In **step by step**, each step is its own raised
-  card: the step's frame sits in a sunken well like paper laid on the card, with the pins at their places; the title
-  carries a tinted-glass pill with the coverage ring and "5 of 6 on the checklist"; "What held" and "What's missing"
-  are headings in the status colour with a tinted mark (a tick, a minus); his notes from the round sit in a sunken
-  fill. Each dimension header carries its score as a
-  tinted tile.
-- **Scenarios** (LLD), **What the judge saw**, **Reference answer** keep their content in raised panels.
+- **Header.** Back, title, track and mode, date and round time. The date line hides on a phone. A status chip shows
+  only while the debrief runs or when it failed.
+- **Verdict.** Compact, with no panel: a small eyebrow, the call in 22 px bold type, and a 4 px bar on the left edge
+  in the colour of the call (green for a pass or "Ready", amber for "Close, not yet" or "Not yet", red for a hard
+  "Not yet"). The confidence, and for an interview round the stretch-level call, sit beside the call as small
+  muted text. One or two muted lines under it give the reasons or the meaning. The call is the second loudest thing
+  on the page.
+- **Score strip.** One row of equal cells with a hairline between them (three per row on a phone): the dimension name
+  in small muted text, the score at 20 px with tabular figures and a muted "/4", and a thin four-segment meter. A
+  score below 3 is in the warning colour, a score of 3 or more in the success colour. The strip is one target that
+  opens the Evidence tab.
+- **NEXT.** One soft brand card with the label "NEXT", the action in one line and the only filled primary button on
+  the page. A muted progress line under it has a thin segmented bar, one segment per gap.
+- **Gaps.** The current gap is a raised card with a state badge, the only coloured badge in the list, and an outline
+  button. Every other gap is a quiet row between hairlines, with no card, a regular-weight title, muted minutes and
+  a small state dot or a tick for done. Section headings (Gaps to work on, Study notes, Summary) share one style.
+- **Details.** Underline tabs: Evidence (with a By step or By score toggle), Time, What the judge saw, and
+  Reference. In **By step**, each step is its own raised card: the step's frame sits in a sunken well like paper
+  laid on the card, with the pins at their places; the title carries a tinted-glass pill with the coverage ring and
+  "5 of 6 on the checklist"; "What held" and "What's missing" are headings in the status colour with a tinted mark
+  (a tick, a minus); his notes from the round sit in a sunken fill.
 - **Coach.** On a wide screen the coach sits beside the scorecard. Below the md breakpoint it sits under it, so
   the score stays reachable on a phone.
 
