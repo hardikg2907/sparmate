@@ -1,4 +1,5 @@
 import type { BootstrapResponse, ClientMsg, CreateSessionRequest, CustomProblemJobStatus, ServerMsg } from "../shared/protocol";
+import type { DsaResponse } from "../shared/dsa";
 import type { Mode, Track } from "../shared/phases";
 import type { ProblemSummary, PublicSession, SessionHistoryItem, Settings } from "../shared/types";
 
@@ -141,6 +142,8 @@ export const api = {
       throw err;
     }
   },
+  dsa: () => request<DsaResponse>("GET", "/api/dsa"),
+  refreshDsa: () => request<DsaResponse>("POST", "/api/dsa/refresh"),
   usage: () => request<UsageSummaryResponse>("GET", "/api/usage"),
   sessionUsage: (id: string) => request<SessionUsageResponse>("GET", `/api/sessions/${enc(id)}/usage`),
 };

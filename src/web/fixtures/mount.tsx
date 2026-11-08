@@ -4,7 +4,8 @@ import { AppProviders } from "../components/AppProviders";
 import { HistoryView } from "../pages/History";
 import { LibraryView } from "../pages/Library";
 import { LibraryNewView } from "../pages/LibraryNew";
-import { DsaView, GymView } from "../pages/Placeholders";
+import { DsaView } from "../pages/Dsa";
+import { GymView } from "../pages/Placeholders";
 import { ProgressView } from "../pages/Progress";
 import { SettingsView } from "../pages/Settings";
 import { TodayView } from "../pages/Today";
@@ -15,6 +16,7 @@ import type { Mode } from "../../shared/phases";
 import type { PublicSession } from "../../shared/types";
 import { FakeServer } from "./fakeServer";
 import { fixtureAllHistory, fixtureBootstrap, fixtureHistory, fixtureOpenRounds, fixtureProblems, fixtureSettings } from "./home";
+import { fixtureDsa } from "./dsa";
 import { useFixtureStudyData } from "./studyData";
 import { fixtureProposal } from "./proposal";
 import { fixtureUsage } from "./usage";
@@ -75,6 +77,7 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
               testMode={params.get("testmode") !== "0"}
               username={params.get("username")}
               plan={params.get("plan")}
+              dsaState={params.get("state")}
             />
           </div>
         </AppProviders>
@@ -194,6 +197,7 @@ function FixturePage({
   testMode,
   username,
   plan,
+  dsaState,
 }: {
   name: string;
   theme: Theme;
@@ -203,6 +207,7 @@ function FixturePage({
   testMode: boolean;
   username: string | null;
   plan: string | null;
+  dsaState: string | null;
 }) {
   const [settings, setSettings] = useState(() => {
     const base = fixtureSettings(theme);
@@ -210,19 +215,21 @@ function FixturePage({
     return {
       ...base,
       ...(username ? { leetcodeUsername: username } : {}),
+      ...(name === "dsa" && dsaState !== "none" && !username ? { leetcodeUsername: "example_user" } : {}),
       ...(days?.length === 7 ? { weeklyPlan: days as typeof base.weeklyPlan } : {}),
     };
   });
   const everything = noUnfinished ? fixtureHistory : name === "home" ? [...fixtureOpenRounds, ...fixtureHistory] : fixtureAllHistory;
+  const dsa = fixtureDsa(dsaState ?? "ok", now);
   const data = useFixtureStudyData(fixtureProblems, everything, preparing ? "custom:interview" : null);
   const ctx: PageContext = { settings, testMode, setup: [] };
 
   if (name === "library") return <LibraryView data={data} ctx={ctx} />;
   if (name === "library-new") return <LibraryNewView data={data} ctx={ctx} />;
-  if (name === "progress") return <ProgressView data={data} ctx={ctx} now={now} />;
+  if (name === "progress") return <ProgressView data={data} ctx={ctx} now={now} dsa={dsaState ? dsa.response : null} />;
   if (name === "history") return <HistoryView data={data} ctx={ctx} />;
   if (name === "gym") return <GymView ctx={ctx} />;
-  if (name === "dsa") return <DsaView ctx={ctx} />;
+  if (name === "dsa") return <DsaView ctx={ctx} data={dsa} now={now} />;
   if (name === "settings") {
     return (
       <SettingsView
@@ -236,5 +243,5 @@ function FixturePage({
       />
     );
   }
-  return <TodayView data={data} ctx={ctx} now={now} />;
+  return <TodayView data={data} ctx={ctx} now={now} dsa={dsaState ? dsa.response : null} />;
 }

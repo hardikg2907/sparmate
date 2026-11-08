@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { DsaResponse } from "../../shared/dsa";
 import type { Mode } from "../../shared/phases";
 import { BAR_SCORE, focusFigure, focusSkill, gapForSkill, skillRows, stepRows, weekStats, type FocusSkill, type SkillRow } from "../../shared/progress";
 import { redoQueue, type RedoEntry } from "../../shared/today";
@@ -9,6 +10,8 @@ import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Button, Card, Segmented, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
+import { mediumsTip } from "../lib/dsaText";
+import { useDsa } from "../lib/useDsa";
 import { useNow } from "../lib/useNow";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
 import { Link } from "../router";
@@ -19,7 +22,7 @@ function dueLabel(entry: RedoEntry): string {
   return shortDay(parseDay(entry.dueOn));
 }
 
-export function ProgressView({ data, ctx, now: fixedNow }: { data: StudyData; ctx: PageContext; now?: Date }) {
+export function ProgressView({ data, ctx, now: fixedNow, dsa = null }: { data: StudyData; ctx: PageContext; now?: Date; dsa?: DsaResponse | null }) {
   const liveNow = useNow();
   const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
@@ -36,7 +39,7 @@ export function ProgressView({ data, ctx, now: fixedNow }: { data: StudyData; ct
   return (
     <PageShell testMode={ctx.testMode}>
       <div className="reveal-children space-y-6">
-        <PageHeader title="Progress" aside={<WeekStats stats={stats} />} />
+        <PageHeader title="Progress" aside={<WeekStats stats={stats} dsa={dsa} username={ctx.settings.leetcodeUsername} />} />
         {data.startError ? (
           <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
             {data.startError}
@@ -86,18 +89,20 @@ export function ProgressView({ data, ctx, now: fixedNow }: { data: StudyData; ct
 
 export function ProgressPage({ ctx }: { ctx: PageContext }) {
   const data = useStudyData();
+  const dsa = useDsa(ctx.settings.leetcodeUsername !== undefined, ctx.settings.leetcodeUsername);
   useEffect(() => {
     document.title = "Progress · Sparmate";
   }, []);
-  return <ProgressView data={data} ctx={ctx} />;
+  return <ProgressView data={data} ctx={ctx} dsa={dsa.response} />;
 }
 
-function WeekStats({ stats }: { stats: ReturnType<typeof weekStats> }) {
+function WeekStats({ stats, dsa, username }: { stats: ReturnType<typeof weekStats>; dsa: DsaResponse | null; username: string | undefined }) {
+  const read = dsa !== null && (dsa.status === "ok" || dsa.status === "stale");
   const items: { label: string; value: string; note?: string }[] = [
     { label: "Rounds", value: `${stats.rounds.done}`, note: `of ${stats.rounds.planned}` },
     { label: "Redos", value: `${stats.redos.done}`, note: `of ${stats.redos.planned}` },
     { label: "Drills", value: "—", note: "Coming with the Gym" },
-    { label: "DSA mediums", value: "—", note: "Coming with DSA" },
+    { label: "DSA mediums", value: read ? `${dsa.week.mediums}` : "—", note: read ? `of ${dsa.weeklyGoal}` : mediumsTip(username, dsa) },
   ];
   return (
     <div className="flex flex-wrap items-end gap-x-7 gap-y-3">
@@ -107,7 +112,7 @@ function WeekStats({ stats }: { stats: ReturnType<typeof weekStats> }) {
           <div key={item.label}>
             <dt className="flex items-center gap-1 text-meta text-faint">
               {item.label}
-              {item.value === "—" ? <InfoTip label={`About ${item.label}`}>{item.note ?? ""}</InfoTip> : null}
+              {item.value === "—" && item.note ? <InfoTip label={`About ${item.label}`}>{item.note ?? ""}</InfoTip> : null}
             </dt>
             <dd className="mt-0.5 text-lead font-bold">
               {item.value}

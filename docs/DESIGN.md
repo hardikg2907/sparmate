@@ -471,7 +471,12 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 
 ### Gym and DSA
 
-- Placeholders with the final header, a mesh panel with the empty-state text and a ghost of the side card.
+- Gym is a placeholder. DSA uses the Progress layout: a mesh hero (amber "Weekly goal" chip, "Mediums this week", a 112 px
+  count with "of N", the one primary "Open LeetCode" button and a dark tile with the Monday-first day strip) beside a 400 px
+  raised card "This pass". The strip's cells are 28 px: a solve fills the cell and shows its count, a DSA day in the plan has an
+  outline, today has a white ring. The card holds "Not touched yet" as quiet chips, or three bars when every common topic has
+  a solve. Lifetime totals never appear on the page; the side panel ends with one quiet line about them. The page never makes a
+  readiness call. Notices (no username, not found, error) are one raised card with one primary action.
 
 ### Room
 

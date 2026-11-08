@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { DsaStatus } from "../../shared/dsa";
 import type { Effort, ModelId, Settings } from "../../shared/types";
-import { DAY_KINDS, DEFAULT_WEEKLY_PLAN, DSA_GOAL_MAX, DSA_GOAL_MIN, LEETCODE_USERNAME_PATTERN, WEEKDAYS, type DayKind } from "../../shared/week";
+import { DAY_KINDS, DEFAULT_WEEKLY_PLAN, DSA_GOAL_MAX, DSA_GOAL_MIN, LEETCODE_USERNAME_PATTERN, WEEKDAYS, isPastOrToday, localDay, type DayKind } from "../../shared/week";
 import { CalendarIcon, CheckIcon, ClockIcon, CodeIcon, FolderIcon, MicIcon, MinusIcon, NetworkIcon, PlusIcon, SpinnerIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
 import { Select } from "../components/Select";
@@ -9,6 +10,7 @@ import { DEFAULT_SETTINGS } from "../lib/contract";
 import { DEFAULT_VOICE_SETTINGS, getVoiceSettings, saveVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 import type { Theme } from "../theme";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { useDsa } from "../lib/useDsa";
 import { guardNavigation, navigate } from "../router";
 import type { PageContext } from "./context";
 
@@ -54,6 +56,8 @@ interface SettingsViewProps {
   /** Throws an Error with a plain message when saving fails. */
   onSave: (settings: Settings) => Promise<void>;
   onApplyTheme: (theme: Theme) => void;
+  /** What the last read of the saved LeetCode profile found, when it is known. */
+  dsaStatus?: DsaStatus | null;
 }
 
 const sameDraft = (a: Settings, b: Settings) => JSON.stringify(a) === JSON.stringify(b);
@@ -64,7 +68,7 @@ function usernameProblem(value: string): string | null {
 }
 
 /** Everything is edited in a draft and written once, by Save changes. */
-export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyTheme }: SettingsViewProps) {
+export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyTheme, dsaStatus = null }: SettingsViewProps) {
   const [saved, setSaved] = useState<Settings>(settings);
   const [draft, setDraft] = useState<Settings>(settings);
   const [savedVoice, setSavedVoice] = useState<VoiceSettings>(getVoiceSettings);
@@ -76,6 +80,7 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
   const sections = useRef<Map<string, HTMLElement>>(new Map());
 
   const nameProblem = usernameProblem(username);
+  const dateProblem = draft.dsaCountFrom !== undefined && !isPastOrToday(draft.dsaCountFrom) ? "Pick a day that is not in the future." : null;
   const next: Settings = { ...draft, leetcodeUsername: username === "" ? undefined : username };
   if (next.leetcodeUsername === undefined) delete next.leetcodeUsername;
   const dirty = !sameDraft(next, saved) || JSON.stringify(voice) !== JSON.stringify(savedVoice);
@@ -103,7 +108,7 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
   };
 
   const save = async () => {
-    if (nameProblem) return;
+    if (nameProblem || dateProblem) return;
     setStatus("saving");
     setError(null);
     try {
@@ -163,7 +168,7 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
               <Button variant="ghost" onClick={reset}>
                 Reset to defaults
               </Button>
-              <Button variant="default" size="lg" busy={status === "saving"} disabled={!dirty || nameProblem !== null} onClick={() => void save()}>
+              <Button variant="default" size="lg" busy={status === "saving"} disabled={!dirty || nameProblem !== null || dateProblem !== null} onClick={() => void save()}>
                 Save changes
               </Button>
             </div>
@@ -242,7 +247,27 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
                     <p id="settings-leetcode-error" className="text-meta text-destructive">
                       {nameProblem}
                     </p>
+                  ) : username !== "" && username === settings.leetcodeUsername && (dsaStatus === "ok" || dsaStatus === "stale") ? (
+                    <p className="text-meta text-muted-foreground">Profile found</p>
+                  ) : username !== "" && username === settings.leetcodeUsername && dsaStatus === "not_found" ? (
+                    <p className="text-meta text-warning">No public LeetCode profile has this name</p>
                   ) : null}
+                </div>
+              </Field>
+              <Field label="Count solves from" hint="Earlier solves never show on the DSA page">
+                <div className="space-y-1.5">
+                  <Input
+                    id="settings-count-from"
+                    type="date"
+                    aria-label="Count solves from"
+                    aria-invalid={dateProblem !== null}
+                    className="max-w-[200px]"
+                    max={localDay(new Date())}
+                    value={draft.dsaCountFrom ?? ""}
+                    onChange={(event) => edit({ dsaCountFrom: event.target.value === "" ? undefined : event.target.value })}
+                  />
+                  {dateProblem ? <p className="text-meta text-destructive">{dateProblem}</p> : null}
+                  {!dateProblem && draft.dsaCountFrom === undefined && username !== "" ? <p className="text-meta text-faint">Starts on the day you save</p> : null}
                 </div>
               </Field>
               <Field label="Weekly goal">
@@ -421,7 +446,10 @@ export function SettingsPage({
   useEffect(() => {
     document.title = "Settings · Sparmate";
   }, []);
-  return <SettingsView settings={ctx.settings} studyRoot={studyRoot} testMode={ctx.testMode} onSave={onSave} onApplyTheme={onApplyTheme} />;
+  const dsa = useDsa(ctx.settings.leetcodeUsername !== undefined, ctx.settings.leetcodeUsername);
+  return (
+    <SettingsView settings={ctx.settings} studyRoot={studyRoot} testMode={ctx.testMode} onSave={onSave} onApplyTheme={onApplyTheme} dsaStatus={dsa.response?.status ?? null} />
+  );
 }
 
 function Section({

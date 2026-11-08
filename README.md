@@ -18,6 +18,7 @@
 - **Study-note drafts you approve.** The app drafts edits to your notes. You pick what to keep. Nothing is written before you click Save.
 - **Voice in and out.** Speak your answers and hear the interviewer's replies.
 - **A weekly plan.** Today picks the session for the day from your plan: a redo, a new problem, a DSA day or rest.
+- **DSA progress.** The DSA page counts your LeetCode solves from a day you choose, against your weekly goal. It reads your public profile through LeetCode's unofficial GraphQL endpoint, so it can change, and it needs no login.
 - **Progress.** One focus skill each week, your scores per skill, and the redo queue.
 - **A usage page.** See tokens and cost for each round, role and model.
 

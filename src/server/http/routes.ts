@@ -10,6 +10,9 @@ import type { KokoroManager } from "../tts/kokoro";
 import { TtsRequestSchema } from "../tts/schema";
 import type { UsageLedger } from "../engine/usage-ledger";
 import type { SetupStatus } from "../setup/checks";
+import type { LeetcodeService } from "../leetcode/service";
+import { withDefaultCountFrom } from "../../shared/dsa";
+import { localDay } from "../../shared/week";
 
 export interface RouteDeps {
   config: ServerConfig;
@@ -21,6 +24,7 @@ export interface RouteDeps {
   log: Logger;
   usageLedger?: UsageLedger;
   setupStatus?: SetupStatus;
+  leetcode?: LeetcodeService;
 }
 
 function notFound(reply: FastifyReply) {
@@ -136,7 +140,18 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.put("/api/settings", async (req, reply) => {
     const parsed = SettingsSchema.safeParse(req.body);
     if (!parsed.success) return badRequest(reply, "Those settings are not valid.");
-    return settings.save(parsed.data);
+    return settings.save(withDefaultCountFrom(parsed.data, localDay(new Date())));
+  });
+
+  app.get("/api/dsa", async (_req, reply) => {
+    if (!deps.leetcode) return reply.code(503).send({ error: "LeetCode progress is not available." });
+    return deps.leetcode.get();
+  });
+
+  // A POST, so the CSRF check applies. The service still enforces its minimum wait between reads.
+  app.post("/api/dsa/refresh", async (_req, reply) => {
+    if (!deps.leetcode) return reply.code(503).send({ error: "LeetCode progress is not available." });
+    return deps.leetcode.get({ force: true });
   });
 
   app.get("/api/tts/status", async () => {

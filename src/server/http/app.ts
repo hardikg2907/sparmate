@@ -12,6 +12,7 @@ import type { SessionStore } from "../engine/store";
 import type { KokoroManager } from "../tts/kokoro";
 import type { UsageLedger } from "../engine/usage-ledger";
 import type { SetupStatus } from "../setup/checks";
+import type { LeetcodeService } from "../leetcode/service";
 import { registerRoutes } from "./routes";
 import { registerSecurity } from "./security";
 import { registerSocket } from "./socket";
@@ -26,6 +27,7 @@ export interface AppDeps {
   log: Logger;
   usageLedger?: UsageLedger;
   setupStatus?: SetupStatus;
+  leetcode?: LeetcodeService;
 }
 
 // The largest browser message is a board PNG; the scene and JSON framing ride on top of it.

@@ -1,0 +1,11 @@
+{
+  "data": {
+    "question": {
+      "difficulty": "Medium",
+      "topicTags": [
+        { "name": "Array", "slug": "array" },
+        { "name": "Sorting", "slug": "sorting" }
+      ]
+    }
+  }
+}

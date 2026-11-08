@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { DsaResponse } from "../../shared/dsa";
 import { BASE_MINUTES, phasePlan, type Mode } from "../../shared/phases";
 import { REDO_AFTER_DAYS, clockUsedMs, largestOverrun, selectToday, type RedoEntry, type TodayHero, type UnfinishedRound } from "../../shared/today";
 import type { ProblemSummary, SessionHistoryItem, Settings } from "../../shared/types";
@@ -14,6 +15,7 @@ import { Alert, Button, Card, Skeleton, cn } from "../components/ui";
 import { dayMonth, longDate, parseDay, shortDay, weekday, wholeMinutes } from "../lib/dates";
 import { MODE_LABEL, formatDate } from "../lib/format";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
+import { useDsa } from "../lib/useDsa";
 import { useNow } from "../lib/useNow";
 import { redoCardTitle } from "../lib/redoLabel";
 import { READINESS_LABEL, VERDICT_LABEL, attemptBadge } from "../lib/verdict";
@@ -29,7 +31,7 @@ function minutesFor(track: ProblemSummary["track"], durations: Settings["duratio
   return durations[track] ?? BASE_MINUTES[track];
 }
 
-export function TodayView({ data, ctx, now: fixedNow }: { data: StudyData; ctx: PageContext; now?: Date }) {
+export function TodayView({ data, ctx, now: fixedNow, dsa = null }: { data: StudyData; ctx: PageContext; now?: Date; dsa?: DsaResponse | null }) {
   const liveNow = useNow();
   const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
@@ -73,7 +75,7 @@ export function TodayView({ data, ctx, now: fixedNow }: { data: StudyData; ctx: 
           <TodaySkeleton />
         ) : pick ? (
           <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_372px]">
-            <Hero hero={pick.hero} data={data} ctx={ctx} now={now} onSeePlan={() => setPlanOpen(true)} onDiscard={askDiscard} />
+            <Hero hero={pick.hero} data={data} ctx={ctx} now={now} dsa={dsa} onSeePlan={() => setPlanOpen(true)} onDiscard={askDiscard} />
             <div className="flex flex-col gap-4">
               <UnfinishedCard rounds={pick.unfinished} data={data} onDiscard={askDiscard} now={now} />
               <MoreRedos redos={pick.moreRedos} heroIsRedo={pick.hero.kind === "problem" && pick.hero.reason === "redo"} />
@@ -111,10 +113,12 @@ export function TodayView({ data, ctx, now: fixedNow }: { data: StudyData; ctx: 
 
 export function TodayPage({ ctx }: { ctx: PageContext }) {
   const data = useStudyData();
+  const dsaDay = ctx.settings.weeklyPlan[planIndex(new Date())] === "dsa";
+  const dsa = useDsa(dsaDay && ctx.settings.leetcodeUsername !== undefined, ctx.settings.leetcodeUsername);
   useEffect(() => {
     document.title = "Today · Sparmate";
   }, []);
-  return <TodayView data={data} ctx={ctx} />;
+  return <TodayView data={data} ctx={ctx} dsa={dsa.response} />;
 }
 
 /** A quiet row of the week: today is marked, and a day with a finished round shows its label in green. */
@@ -188,6 +192,7 @@ function Hero({
   data,
   ctx,
   now,
+  dsa,
   onSeePlan,
   onDiscard,
 }: {
@@ -195,6 +200,7 @@ function Hero({
   data: StudyData;
   ctx: PageContext;
   now: Date;
+  dsa: DsaResponse | null;
   onSeePlan: () => void;
   onDiscard: (item: SessionHistoryItem) => void;
 }) {
@@ -320,6 +326,11 @@ function Hero({
           Solve on LeetCode
         </h2>
         <p className={why}>Pick a problem on LeetCode and solve it under a timer. Your goal is {ctx.settings.dsaWeeklyGoal} a week.</p>
+        {dsa && (dsa.status === "ok" || dsa.status === "stale") ? (
+          <p className="mt-2 text-ui font-semibold">
+            {dsa.week.mediums} of {dsa.weeklyGoal} mediums this week
+          </p>
+        ) : null}
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Button asChild size="lg" variant="default">
             <a href={LEETCODE_URL} target="_blank" rel="noopener noreferrer">

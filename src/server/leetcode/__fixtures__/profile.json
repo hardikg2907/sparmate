@@ -1,0 +1,14 @@
+{
+  "data": {
+    "matchedUser": {
+      "submitStatsGlobal": {
+        "acSubmissionNum": [
+          { "difficulty": "All", "count": 45 },
+          { "difficulty": "Easy", "count": 12 },
+          { "difficulty": "Medium", "count": 22 },
+          { "difficulty": "Hard", "count": 11 }
+        ]
+      }
+    }
+  }
+}

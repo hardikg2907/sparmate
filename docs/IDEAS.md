@@ -10,7 +10,6 @@ Ideas we have discussed but not built. Each entry says what the idea is and why 
   - A drill takes its prompt and its answer key from one section of a problem brief. A grader compares the answer with that section and returns Pass or Not yet, plus the single most important fix.
   - Drills use only problems the candidate has already played, plus custom problems, so a drill never spoils a full round.
   - The candidate can also open any drill without a gap. Due drills come first.
-- **LeetCode progress.** The candidate enters a LeetCode username. The app reads LeetCode's public GraphQL endpoint, which needs no login: solved counts by difficulty, solved counts per topic tag and recent accepted submissions. The DSA page, which exists as a placeholder, shows problems solved this week against the weekly goal from Settings, mediums solved, and the weakest topics. The username is already stored in Settings. These counts measure activity, not skill, so the panel never shows a readiness call. The endpoint is unofficial and can change, so a failed read shows the last good numbers with their date. The app never asks for or stores a LeetCode login cookie.
 
 ## Parked
 
