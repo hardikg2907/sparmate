@@ -29,7 +29,7 @@ export const fixtureGym: GymSummary = {
       10,
       "2026-11-07",
       0,
-      'Write one line each for writes, reads, storage, hot set and code space. End each line with "which means".',
+      'Pick only the numbers that decide something and write one line for each. End each line with "which means", then the decision it forces.',
     ),
     row(
       "a1b2c3d4e5f60002",

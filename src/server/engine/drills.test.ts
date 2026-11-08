@@ -186,7 +186,7 @@ describe("summary", () => {
       ["Capacity math", true],
       ["Pick a deep dive", true],
     ]);
-    expect(summary.queue[0]?.task).toContain("Write one line each for");
+    expect(summary.queue[0]?.task).toContain("only the numbers that decide something");
     expect(summary.queue[0]?.passes).toBe(0);
   });
 
