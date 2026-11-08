@@ -46,7 +46,7 @@ export interface DrillDeps {
   now?: () => Date;
 }
 
-/** Rounds older than this many days at the moment they are first seen queue no drills. */
+/** On the first build only, debriefs older than this many days queue no drills. */
 export const BACKFILL_DAYS = 14;
 
 /** A round counts as played once it has ended, because until then its hidden facts are still in use. */
@@ -59,11 +59,18 @@ export function drillItemId(sessionId: string, gapTitle: string): string {
 
 /**
  * Queues one drill for every scorecard gap that has one, the day after its debrief. Rounds already seen are skipped,
- * and so is a gap that already has an open drill on the same problem. Returns whether anything was added.
+ * and so is a gap that already has an open drill on the same problem. Returns whether a drill was added; the caller also saves a newly set `backfilledOn`.
  */
 export function queueGapDrills(draft: DrillState, history: readonly SessionHistoryItem[], problems: ReadonlyMap<string, Problem>, today: string): boolean {
   let added = false;
-  const oldest = addDays(today, -BACKFILL_DAYS);
+  // Only the first build looks back a limited time, so rounds from before the Gym existed do not flood it. After that
+  // every round debriefed since the first build queues, however long the candidate stayed away. A file from before the
+  // marker existed counts as built already; it takes its marker from its oldest drill.
+  const firstBuild = draft.backfilledOn === undefined && draft.items.length === 0 && draft.attempts.length === 0;
+  const oldest = firstBuild ? addDays(today, -BACKFILL_DAYS) : (draft.backfilledOn ?? draft.items.map((i) => i.createdOn).sort()[0] ?? today);
+  if (draft.backfilledOn === undefined) {
+    draft.backfilledOn = firstBuild ? today : oldest;
+  }
   const known = new Set(draft.items.map((i) => i.id));
   for (const round of history) {
     if (round.status !== "debriefed" || !round.gaps?.length) continue;
@@ -140,7 +147,11 @@ export class DrillService {
   private async sync(problems: ReadonlyMap<string, Problem>): Promise<DrillState> {
     const history = this.deps.history();
     const today = this.today();
-    await this.deps.store.update((draft) => ({ save: queueGapDrills(draft, history, problems, today), value: null }));
+    await this.deps.store.update((draft) => {
+      const marked = draft.backfilledOn;
+      const added = queueGapDrills(draft, history, problems, today);
+      return { save: added || draft.backfilledOn !== marked, value: null };
+    });
     return this.deps.store.snapshot();
   }
 

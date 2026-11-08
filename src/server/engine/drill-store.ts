@@ -30,6 +30,8 @@ const AttemptSchema = z.strictObject({
 
 export const DrillStateSchema = z.strictObject({
   version: z.literal(1),
+  /** The day the schedule was first built from the rounds that already existed. Files saved before it existed load without it. */
+  backfilledOn: DaySchema.optional(),
   items: z.array(ItemSchema).max(MAX_ITEMS),
   attempts: z.array(AttemptSchema).max(MAX_ATTEMPTS),
 });

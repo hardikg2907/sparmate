@@ -33,6 +33,18 @@ describe("DrillStore", () => {
     expect(store.snapshot()).toEqual(emptyState());
   });
 
+  it("loads a file saved before the marker existed, and one with the marker", async () => {
+    await writeFile(path, JSON.stringify({ version: 1, items: [item], attempts: [] }));
+    const old = new DrillStore(path, memoryLogger());
+    await old.load();
+    expect(old.snapshot().backfilledOn).toBeUndefined();
+    expect(old.snapshot().items).toHaveLength(1);
+    await writeFile(path, JSON.stringify({ version: 1, backfilledOn: "2026-11-01", items: [], attempts: [] }));
+    const marked = new DrillStore(path, memoryLogger());
+    await marked.load();
+    expect(marked.snapshot().backfilledOn).toBe("2026-11-01");
+  });
+
   it("loads a valid file", async () => {
     await writeFile(path, JSON.stringify({ version: 1, items: [item], attempts: [] }));
     const store = new DrillStore(path, memoryLogger());

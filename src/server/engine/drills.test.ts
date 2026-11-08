@@ -89,6 +89,40 @@ describe("queueGapDrills", () => {
     expect(next.items[0]?.dueOn).toBe("2026-11-01");
   });
 
+  it("looks back 14 days on the first build only: a candidate away for 20 days still gets every new debrief", async () => {
+    await stack.deps.problems.reload();
+    const draft = emptyState();
+    // First build on 2026-10-01 with nothing played yet.
+    expect(queueGapDrills(draft, [], problems(), "2026-10-01")).toBe(false);
+    expect(draft.backfilledOn).toBe("2026-10-01");
+    // A debrief on 2026-10-30 is seen only on 2026-11-19, which is 20 days later.
+    const fresh = round({ endedAt: new Date(2026, 9, 30, 9, 45).toISOString() });
+    expect(queueGapDrills(draft, [fresh], problems(), "2026-11-19")).toBe(true);
+    expect(draft.items.map((i) => i.dueOn)).toEqual(["2026-11-19", "2026-11-19"]);
+    expect(draft.items.every((i) => i.createdOn === "2026-10-31")).toBe(true);
+  });
+
+  it("does not queue a round that ended before the first build and fell outside its window", async () => {
+    await stack.deps.problems.reload();
+    const draft = emptyState();
+    queueGapDrills(draft, [round({ endedAt: new Date(2026, 8, 1).toISOString() })], problems(), "2026-11-10");
+    expect(draft.items).toEqual([]);
+    expect(queueGapDrills(draft, [round({ endedAt: new Date(2026, 8, 1).toISOString() })], problems(), "2026-11-20")).toBe(false);
+    expect(draft.items).toEqual([]);
+  });
+
+  it("loads a file saved before the marker: it counts as built, and takes its marker from its oldest drill", async () => {
+    await stack.deps.problems.reload();
+    const draft = emptyState();
+    queueGapDrills(draft, history, problems(), "2026-10-30");
+    delete draft.backfilledOn;
+    const before = draft.items.length;
+    const older = round({ id: "20260901-0900-c2-url-shortener-oldd", endedAt: new Date(2026, 8, 1).toISOString() });
+    expect(queueGapDrills(draft, [...history, older], problems(), "2026-11-20")).toBe(false);
+    expect(draft.backfilledOn).toBe("2026-10-31");
+    expect(draft.items).toHaveLength(before);
+  });
+
   it("never back-fills a drill with a due day before the day it is queued", async () => {
     await stack.deps.problems.reload();
     const draft = emptyState();

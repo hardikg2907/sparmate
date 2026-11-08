@@ -21,6 +21,11 @@ export function dueText(row: Pick<GymDrillRow, "dueOn">, today: string): string 
   return status.tone === "later" && status.label === row.dueOn ? shortDay(parseDay(row.dueOn)) : status.label;
 }
 
+/** The value under a "Due" label, which must not repeat the word: "Today", "Overdue", "Tomorrow" or the date. */
+export function dueValue(row: Pick<GymDrillRow, "dueOn">, today: string): string {
+  return row.dueOn === today ? "Today" : dueText(row, today);
+}
+
 /** The day an overdue drill fell due, for small text beside "Overdue". Null when it is not overdue. */
 export function overdueSince(row: Pick<GymDrillRow, "dueOn">, today: string): string | null {
   const status = dueStatus(row.dueOn, today);
@@ -114,7 +119,7 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
           label="Due"
           value={
             <>
-              <span>{dueText(row, today)}</span>
+              <span>{dueValue(row, today)}</span>
               {overdueSince(row, today) ? <small className="text-meta font-medium text-hero-muted">{overdueSince(row, today)}</small> : null}
             </>
           }
