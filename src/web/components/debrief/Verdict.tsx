@@ -49,24 +49,29 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
 
 /**
  * The scores as one strip of equal cells: name, score out of 4 and a four-segment meter. Scores below the bar are in
- * the warning colour, the rest in the success colour. The whole strip opens the evidence tab.
+ * the warning colour, the rest in the success colour. Each cell opens the evidence for its own dimension.
  */
-export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEvidence: () => void }) {
+export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEvidence: (dimensionId: string) => void }) {
   const target = levelNames(scorecard.verdict).target;
-  const caption = `Scores run from 1 to 4. A 3 meets the ${target} bar. Select to read the evidence.`;
+  const caption = `Scores run from 1 to 4. A 3 meets the ${target} bar. Select a score to read its evidence.`;
   return (
     <Tooltip content={caption} side="top">
-      <button
-        type="button"
-        onClick={onEvidence}
-        aria-label={`Scores by dimension. ${caption}`}
-        className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border text-left transition-colors hover:bg-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:grid-flow-col sm:auto-cols-fr sm:grid-cols-none"
+      <div
+        role="group"
+        aria-label="Scores by dimension"
+        className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-flow-col sm:auto-cols-fr sm:grid-cols-none"
       >
         {scorecard.dimensions.map((dimension) => {
           const tone = dimension.score < 3 ? "warn" : "good";
           return (
-            <span key={dimension.id} className="flex min-w-0 flex-col gap-1 bg-card px-3 py-2.5">
-              <span className="line-clamp-2 min-h-[2lh] text-meta leading-snug text-muted-foreground" title={dimension.name}>
+            <button
+              key={dimension.id}
+              type="button"
+              onClick={() => onEvidence(dimension.id)}
+              aria-label={`${dimension.name}, ${dimension.score} of 4`}
+              className="flex min-w-0 flex-col gap-1 bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            >
+              <span className="truncate text-meta text-muted-foreground" title={dimension.name}>
                 {dimension.name}
               </span>
               <span className="flex items-baseline gap-0.5">
@@ -78,10 +83,10 @@ export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEv
                   <span key={step} className={cn("h-1 flex-1 rounded-full", step <= dimension.score ? TONE_FILL[tone] : "bg-muted")} />
                 ))}
               </span>
-            </span>
+            </button>
           );
         })}
-      </button>
+      </div>
     </Tooltip>
   );
 }

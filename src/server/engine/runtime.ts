@@ -1629,7 +1629,8 @@ export class SessionRuntime {
     const gaps = this.session.scorecard?.gaps ?? [];
     const title = gapForTeachMessage(gaps, text);
     if (title === null) return;
-    if (this.session.gapProgress[title] === undefined) this.recordGap(title, "started", "candidate");
+    // Asking again reopens a gap that was done or left for later, so the page makes it the current one at once.
+    this.recordGap(title, "started", "candidate");
     this.announceGap(title);
   }
 

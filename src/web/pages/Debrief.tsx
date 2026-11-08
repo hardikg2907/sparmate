@@ -4,7 +4,7 @@ import type { PublicSession, Scorecard } from "../../shared/types";
 import { ChatPanel } from "../components/ChatPanel";
 import { ChatResizeHandle, useChatWidth } from "../components/ChatWidth";
 import { DebriefFailed, DebriefProgress } from "../components/debrief/Progress";
-import { Details, type DetailTab } from "../components/debrief/Details";
+import { Details, type DetailTab, type EvidenceView } from "../components/debrief/Details";
 import { GapsSection } from "../components/debrief/Gaps";
 import { GapProgressLine, NextStep } from "../components/debrief/NextStep";
 import { StudyNotes } from "../components/debrief/StudyNotes";
@@ -189,6 +189,7 @@ function ScorecardBody({
 }) {
   const { state, actions } = ctl;
   const [tab, setTab] = useState<DetailTab>("evidence");
+  const [view, setView] = useState<EvidenceView>("step");
   const [practising, setPractising] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -226,17 +227,20 @@ function ScorecardBody({
     else if (next.kind === "try_interview") tryInterview();
     else if (next.kind === "practise_gap") practise(next.gap);
   };
-  const openEvidence = () => {
+  const openEvidence = (dimensionId: string) => {
     setTab("evidence");
-    requestAnimationFrame(() => jumpTo("details"));
+    setView("score");
+    // The tab content mounts on the next render, so the target is looked up one frame later.
+    requestAnimationFrame(() => requestAnimationFrame(() => jumpTo(`dim-${dimensionId}`)));
   };
+  const canSend = session.status === "debriefed" && state.connection === "open";
 
   return (
     <>
       <VerdictCard scorecard={scorecard} />
       <ScoreRow scorecard={scorecard} onEvidence={openEvidence} />
       <div className="space-y-2">
-        <NextStep next={next} busy={practising !== null || starting} onAct={act} />
+        <NextStep next={next} busy={practising !== null || starting} canSend={canSend} onAct={act} />
         <GapProgressLine counts={counts} states={gaps.map((gap) => gapState(marks.get(gap.title)))} />
       </div>
       {startError ? (
@@ -252,6 +256,7 @@ function ScorecardBody({
         onTeach={teach}
         onContinue={(gap) => showGapInChat(gap.title)}
         practise={{ busy: practising, onStart: practise }}
+        canSend={canSend}
       />
       <StudyNotes
         notes={state.notes}
@@ -264,6 +269,8 @@ function ScorecardBody({
       <Details
         tab={tab}
         onTab={setTab}
+        view={view}
+        onView={setView}
         session={session}
         scorecard={scorecard}
         board={state.board?.elements ?? null}

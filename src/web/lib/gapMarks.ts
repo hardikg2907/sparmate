@@ -28,7 +28,8 @@ export type GapState = "not_started" | "with_coach" | "done" | "later";
 
 export function gapState(mark: GapMark | undefined): GapState {
   if (mark === undefined) return "not_started";
-  if (mark === "sent") return "with_coach";
+  // A "sent" mark comes from a round saved before records existed and never gets a later one, so it must not hold the page.
+  if (mark === "sent") return "done";
   if (mark.state === "taught") return "done";
   if (mark.state === "core_only") return "later";
   return "with_coach";
@@ -42,8 +43,9 @@ export const GAP_STATE_LABEL: Record<GapState, string> = {
 };
 
 /** The badge for a gap that has started; a gap that has not started shows none. */
-export function gapBadge(state: GapState): { label: string; tone: Tone } | null {
+export function gapBadge(state: GapState, mark?: GapMark): { label: string; tone: Tone } | null {
   if (state === "not_started") return null;
+  if (mark === "sent") return { label: "Sent to the coach", tone: "good" };
   return { label: GAP_STATE_LABEL[state], tone: state === "with_coach" ? "accent" : state === "done" ? "good" : "warn" };
 }
 
@@ -91,4 +93,9 @@ export function gapsComplete(gaps: readonly Gap[], marks: ReadonlyMap<string, Ga
 
 export function progressText({ total, done, withCoach }: GapCounts): string {
   return `Gaps: ${done} of ${total} done${withCoach > 0 ? ` · ${withCoach} with the coach` : ""}`;
+}
+
+/** A severity badge only helps when it tells gaps apart. */
+export function severitiesDiffer(gaps: readonly { severity: string }[]): boolean {
+  return new Set(gaps.map((gap) => gap.severity)).size > 1;
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CodeEditor } from "../../code/CodeEditor";
 import { phasesFor, type Track } from "../../../shared/phases";
+import { lintText } from "../../lib/lintLabel";
 import { StepAnswers } from "../StepAnswers";
 import type { CodeState } from "../../session/types";
 import type { Theme } from "../../theme";
@@ -79,9 +80,7 @@ export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers
             <summary className="w-fit cursor-pointer rounded">Writing checks ({lint.length})</summary>
             <ul className="mt-1.5 list-inside list-disc space-y-0.5">
               {lint.map((issue, index) => (
-                <li key={index}>
-                  {issue.field}: {issue.issue}
-                </li>
+                <li key={index}>{lintText(issue)}</li>
               ))}
             </ul>
           </details>

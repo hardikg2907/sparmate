@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Scorecard } from "../../../shared/types";
 import { SEVERITY_LABEL, SEVERITY_ORDER } from "../../lib/format";
-import { gapBadge, gapState, type GapMark, type GapState } from "../../lib/gapMarks";
+import { gapBadge, gapState, severitiesDiffer, type GapMark, type GapState } from "../../lib/gapMarks";
 import { CheckIcon, ChevronDownIcon, MoreIcon } from "../icons";
 import { Badge, Button, Card, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, SectionTitle, Tooltip, cn } from "../ui";
 
@@ -23,6 +23,8 @@ interface GapActions {
   /** Scrolls the coach chat to where the gap begins. */
   onContinue: (gap: Gap) => void;
   practise: PractiseGap;
+  /** False while the coach cannot receive a message, so every action that sends one is off. */
+  canSend: boolean;
 }
 
 const PRACTISE_HINT = "A 20-minute guided round on this problem, aimed at this gap";
@@ -55,7 +57,11 @@ function GapMenu({ gap, state, actions }: { gap: Gap; state: GapState; actions: 
         </DropdownMenuTrigger>
       </Tooltip>
       <DropdownMenuContent>
-        {restart ? <DropdownMenuItem onSelect={() => actions.onTeach(gap)}>Restart lesson</DropdownMenuItem> : null}
+        {restart ? (
+          <DropdownMenuItem disabled={!actions.canSend} onSelect={() => actions.onTeach(gap)}>
+            Restart lesson
+          </DropdownMenuItem>
+        ) : null}
         {showPractise ? (
           <DropdownMenuItem disabled={practise.busy !== null} onSelect={() => practise.onStart(gap)} className="flex-col items-start gap-0">
             <span>Practise this gap</span>
@@ -92,7 +98,7 @@ function PrimaryAction({ gap, state, actions, size }: { gap: Gap; state: GapStat
         ? ["Finish the lesson", () => void actions.onTeach(gap)]
         : ["Teach me this", () => void actions.onTeach(gap)];
   return (
-    <Button size={size} variant="outline" onClick={run}>
+    <Button size={size} variant="outline" disabled={state !== "with_coach" && !actions.canSend} onClick={run}>
       {label}
     </Button>
   );
@@ -120,8 +126,8 @@ function GapBody({ gap, state, actions }: { gap: Gap; state: GapState; actions: 
   );
 }
 
-function GapHeading({ gap, state, severity }: { gap: Gap; state: GapState; severity: boolean }) {
-  const badge = gapBadge(state);
+function GapHeading({ gap, state, mark, severity }: { gap: Gap; state: GapState; mark: GapMark | undefined; severity: boolean }) {
+  const badge = gapBadge(state, mark);
   return (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
       {badge ? (
@@ -137,39 +143,39 @@ function GapHeading({ gap, state, severity }: { gap: Gap; state: GapState; sever
   );
 }
 
-function CurrentGap({ gap, state, severity, actions }: { gap: Gap; state: GapState; severity: boolean; actions: GapActions }) {
+function CurrentGap({ gap, state, mark, severity, actions }: { gap: Gap; state: GapState; mark: GapMark | undefined; severity: boolean; actions: GapActions }) {
   return (
     <Card variant="raised" className="border-primary/40 p-4">
-      <GapHeading gap={gap} state={state} severity={severity} />
+      <GapHeading gap={gap} state={state} mark={mark} severity={severity} />
       <GapBody gap={gap} state={state} actions={actions} />
     </Card>
   );
 }
 
-function GapRow({ gap, state, severity, actions }: { gap: Gap; state: GapState; severity: boolean; actions: GapActions }) {
+function GapRow({ gap, index, state, mark, severity, actions }: { gap: Gap; index: number; state: GapState; mark: GapMark | undefined; severity: boolean; actions: GapActions }) {
   const [open, setOpen] = useState(false);
-  const panel = `gap-${gap.title.replace(/\W+/g, "-")}`;
+  const panel = `gap-panel-${index}`;
   return (
     <div className="px-1 py-1">
       <button
         type="button"
         aria-expanded={open}
-        aria-controls={panel}
+        aria-controls={open ? panel : undefined}
         onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center gap-2.5 rounded py-1 text-left text-ui"
       >
         <StateMark state={state} />
         {severity ? <Badge>{SEVERITY_LABEL[gap.severity]}</Badge> : null}
         <span className="min-w-0 flex-1 text-foreground">{gap.title}</span>
-        <span className="sr-only">{`, ${gapBadge(state)?.label ?? "not started"}`}</span>
+        <span className="sr-only">{`, ${gapBadge(state, mark)?.label ?? "not started"}`}</span>
         <span className="text-meta text-muted-foreground">{gap.teachMinutes} min</span>
         <ChevronDownIcon size={14} className={cn("shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
       </button>
       {open ? (
         <div id={panel} className="pb-2">
-          {gapBadge(state) ? (
+          {gapBadge(state, mark) ? (
             <div className="mt-1">
-              <GapHeadingBadge state={state} />
+              <GapHeadingBadge state={state} mark={mark} />
             </div>
           ) : null}
           <GapBody gap={gap} state={state} actions={actions} />
@@ -179,8 +185,8 @@ function GapRow({ gap, state, severity, actions }: { gap: Gap; state: GapState; 
   );
 }
 
-function GapHeadingBadge({ state }: { state: GapState }) {
-  const badge = gapBadge(state);
+function GapHeadingBadge({ state, mark }: { state: GapState; mark: GapMark | undefined }) {
+  const badge = gapBadge(state, mark);
   if (!badge) return null;
   return (
     <Badge>
@@ -197,6 +203,7 @@ export function GapsSection({
   onTeach,
   onContinue,
   practise,
+  canSend,
 }: {
   scorecard: Scorecard;
   marks: ReadonlyMap<string, GapMark>;
@@ -204,12 +211,13 @@ export function GapsSection({
   onTeach: (gap: Gap) => boolean;
   onContinue: (gap: Gap) => void;
   practise: PractiseGap;
+  canSend: boolean;
 }) {
   const gaps = sortedGaps(scorecard);
-  const others = gaps.filter((gap) => gap !== current);
-  const actions: GapActions = { onTeach, onContinue, practise };
-  // A severity badge only helps when it tells gaps apart.
-  const severity = new Set(gaps.map((gap) => gap.severity)).size > 1;
+  const actions: GapActions = { onTeach, onContinue, practise, canSend };
+  // Two gaps can share a title, so rows are keyed by their place in the sorted list.
+  const others = gaps.map((gap, index) => ({ gap, index })).filter(({ gap }) => gap !== current);
+  const severity = severitiesDiffer(gaps);
   return (
     <section id="gaps" aria-labelledby="gaps-heading" className="scroll-mt-4">
       <SectionTitle id="gaps-heading" aside={gaps.length > 1 ? "Most serious first" : undefined}>
@@ -217,11 +225,11 @@ export function GapsSection({
       </SectionTitle>
       {gaps.length > 0 ? (
         <div className="space-y-3">
-          {current ? <CurrentGap gap={current} state={gapState(marks.get(current.title))} severity={severity} actions={actions} /> : null}
+          {current ? <CurrentGap gap={current} state={gapState(marks.get(current.title))} mark={marks.get(current.title)} severity={severity} actions={actions} /> : null}
           {others.length > 0 ? (
             <div className="divide-y divide-border border-y border-border">
-              {others.map((gap) => (
-                <GapRow key={gap.title} gap={gap} state={gapState(marks.get(gap.title))} severity={severity} actions={actions} />
+              {others.map(({ gap, index }) => (
+                <GapRow key={index} gap={gap} index={index} state={gapState(marks.get(gap.title))} mark={marks.get(gap.title)} severity={severity} actions={actions} />
               ))}
             </div>
           ) : null}

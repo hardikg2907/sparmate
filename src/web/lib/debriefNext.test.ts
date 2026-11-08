@@ -51,4 +51,15 @@ describe("nextAction", () => {
   it("puts a gap ahead of the notes even when notes are saved", () => {
     expect(nextAction(input({ notesSaved: true })).kind).toBe("start_gap");
   });
+
+  it("moves on to the notes when the only marks are legacy sent marks", () => {
+    const marks = new Map<string, "sent">(gaps.map((g) => [g.title, "sent"]));
+    expect(nextAction(input({ marks })).kind).toBe("draft_notes");
+    expect(nextAction(input({ marks, notesSaved: true })).kind).toBe("try_interview");
+  });
+
+  it("sends a guided round that is not yet ready and has no gaps home once notes are saved", () => {
+    expect(nextAction(input({ gaps: [], marks: new Map(), readiness: "not_yet" })).kind).toBe("draft_notes");
+    expect(nextAction(input({ gaps: [], marks: new Map(), readiness: "not_yet", notesSaved: true })).kind).toBe("home");
+  });
 });

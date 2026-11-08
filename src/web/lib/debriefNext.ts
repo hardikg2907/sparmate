@@ -1,6 +1,6 @@
 import type { Mode } from "../../shared/phases";
 import type { Readiness, Scorecard } from "../../shared/types";
-import { currentGap, gapState, type GapMark } from "./gapMarks";
+import { currentGap, gapState, gapsComplete, type GapMark } from "./gapMarks";
 
 type Gap = Scorecard["gaps"][number];
 
@@ -28,7 +28,7 @@ export interface NextInput {
  * gap after "not yet", and home otherwise.
  */
 export function nextAction({ gaps, marks, notesSaved, mode, readiness }: NextInput): NextAction {
-  const gap = currentGap(gaps, marks);
+  const gap = gapsComplete(gaps, marks) ? undefined : currentGap(gaps, marks);
   if (gap) {
     return gapState(marks.get(gap.title)) === "with_coach"
       ? { kind: "answer_coach", gap, label: `Answer the coach: ${gap.title}`, button: "Go to chat" }

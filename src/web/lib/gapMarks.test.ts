@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { teachMessage } from "../../shared/gaps";
 import type { GapProgress } from "../../shared/types";
-import { currentGap, gapBadge, gapCounts, gapMarks, gapState, gapsComplete, progressText } from "./gapMarks";
+import { currentGap, gapBadge, gapCounts, gapMarks, gapState, gapsComplete, progressText, severitiesDiffer } from "./gapMarks";
 
 const gaps = [{ title: "Hot keys" }, { title: "Retries" }, { title: "Backpressure" }];
 const rec = (by: GapProgress["by"], state: GapProgress["state"]): GapProgress => ({ by, state, at: "2026-11-01T10:00:00.000Z" });
@@ -34,7 +34,7 @@ describe("gapState", () => {
     expect(gapState(undefined)).toBe("not_started");
     expect(gapState(rec("coach", "started"))).toBe("with_coach");
     expect(gapState(rec("candidate", "started"))).toBe("with_coach");
-    expect(gapState("sent")).toBe("with_coach");
+    expect(gapState("sent")).toBe("done");
     expect(gapState(rec("coach", "taught"))).toBe("done");
     expect(gapState(rec("candidate", "taught"))).toBe("done");
     expect(gapState(rec("coach", "core_only"))).toBe("later");
@@ -50,6 +50,10 @@ describe("gapBadge", () => {
     expect(gapBadge("with_coach")).toEqual({ label: "With the coach", tone: "accent" });
     expect(gapBadge("done")).toEqual({ label: "Done", tone: "good" });
     expect(gapBadge("later")).toEqual({ label: "Core idea done, rest later", tone: "warn" });
+  });
+
+  it("words the legacy sent mark as sent, not as done", () => {
+    expect(gapBadge(gapState("sent"), "sent")).toEqual({ label: "Sent to the coach", tone: "good" });
   });
 });
 
@@ -73,12 +77,27 @@ describe("currentGap", () => {
     expect(currentGap(gaps, marks)?.title).toBe("Backpressure");
   });
 
-  it("takes the first in severity order when the records carry no time", () => {
-    const marks = new Map<string, "sent">([
-      ["Retries", "sent"],
-      ["Backpressure", "sent"],
-    ]);
+  it("takes the first in severity order when no record time parses", () => {
+    const marks = gapMarks(gaps, { Retries: at("not a time"), Backpressure: at("") }, []);
     expect(currentGap(gaps, marks)?.title).toBe("Retries");
+  });
+
+  it("prefers a record with a valid time over one whose time does not parse", () => {
+    const marks = gapMarks(gaps, { "Hot keys": at("not a time"), Backpressure: at("2026-11-01T10:05:00.000Z") }, []);
+    expect(currentGap(gaps, marks)?.title).toBe("Backpressure");
+  });
+
+  it("does not hold on a legacy sent mark", () => {
+    const marks = new Map<string, "sent">([["Hot keys", "sent"]]);
+    expect(currentGap(gaps, marks)?.title).toBe("Retries");
+  });
+
+  it("returns the first gap when two gaps share a title", () => {
+    const twins = [
+      { title: "Same", id: 1 },
+      { title: "Same", id: 2 },
+    ];
+    expect(currentGap(twins, new Map())?.id).toBe(1);
   });
 
   it("falls back to the first gap not started when a later gap is done or for later", () => {
@@ -107,6 +126,14 @@ describe("gapsComplete and gapCounts", () => {
 
   it("is complete when the round has no gaps", () => {
     expect(gapsComplete([], new Map())).toBe(true);
+  });
+});
+
+describe("severitiesDiffer", () => {
+  it("is true only when the gaps differ in severity", () => {
+    expect(severitiesDiffer([{ severity: "high" }, { severity: "low" }])).toBe(true);
+    expect(severitiesDiffer([{ severity: "high" }, { severity: "high" }])).toBe(false);
+    expect(severitiesDiffer([])).toBe(false);
   });
 });
 

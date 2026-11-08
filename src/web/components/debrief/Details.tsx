@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { PublicSession, Scorecard } from "../../../shared/types";
 import { MARK_LABEL, MARK_TONE } from "../../lib/format";
 import type { CodeState } from "../../session/types";
@@ -12,11 +11,13 @@ import { Steps, stepsWithContent } from "./Steps";
 import { TimingSection } from "./Timing";
 
 export type DetailTab = "evidence" | "time" | "judge" | "reference";
-type EvidenceView = "step" | "score";
+export type EvidenceView = "step" | "score";
 
 interface DetailsProps {
   tab: DetailTab;
   onTab: (tab: DetailTab) => void;
+  view: EvidenceView;
+  onView: (view: EvidenceView) => void;
   session: PublicSession;
   scorecard: Scorecard;
   board: readonly Record<string, unknown>[] | null;
@@ -27,8 +28,7 @@ interface DetailsProps {
 }
 
 /** The detail behind the verdict, one tab at a time: evidence, time, the record the judge read, and the reference answer. */
-export function Details({ tab, onTab, session, scorecard, board, graphText, code, theme, boardImageUrl }: DetailsProps) {
-  const [view, setView] = useState<EvidenceView>("step");
+export function Details({ tab, onTab, view, onView, session, scorecard, board, graphText, code, theme, boardImageUrl }: DetailsProps) {
   const lld = session.track === "lld";
   const hasTime = (scorecard.phaseTiming?.length ?? 0) > 0 || scorecard.timeline.length > 0;
   const hasReference = (session.reference?.sections.length ?? 0) > 0;
@@ -54,7 +54,7 @@ export function Details({ tab, onTab, session, scorecard, board, graphText, code
               <Segmented
                 label="Group the evidence"
                 value={view}
-                onChange={setView}
+                onChange={onView}
                 size="sm"
                 options={[
                   { value: "step", label: "By step" },

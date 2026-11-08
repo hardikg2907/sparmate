@@ -5,7 +5,7 @@ import { Button, Card, cn } from "../ui";
 import { Link } from "../../router";
 
 /** One card that always names one action, so the page never asks the reader to choose what comes next. */
-export function NextStep({ next, busy, onAct }: { next: NextAction; busy: boolean; onAct: () => void }) {
+export function NextStep({ next, busy, canSend, onAct }: { next: NextAction; busy: boolean; canSend: boolean; onAct: () => void }) {
   const working = busy && (next.kind === "practise_gap" || next.kind === "try_interview");
   return (
     <Card variant="flat" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-primary/40 bg-primary-soft px-4 py-3 text-primary-soft-foreground">
@@ -16,7 +16,7 @@ export function NextStep({ next, busy, onAct }: { next: NextAction; busy: boolea
           <Link href="/">{next.button}</Link>
         </Button>
       ) : (
-        <Button variant="default" busy={working} disabled={busy} onClick={onAct}>
+        <Button variant="default" busy={working} disabled={busy || (next.kind === "start_gap" && !canSend)} onClick={onAct}>
           {next.button}
         </Button>
       )}
