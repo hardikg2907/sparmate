@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Mode } from "../../shared/phases";
-import { BAR_SCORE, focusSkill, gapForSkill, skillRows, weekStats, type FocusSkill, type SkillRow } from "../../shared/progress";
+import { BAR_SCORE, focusFigure, focusSkill, gapForSkill, skillRows, stepRows, weekStats, type FocusSkill, type SkillRow } from "../../shared/progress";
 import { redoQueue, type RedoEntry } from "../../shared/today";
 import { PlayFilledIcon, TargetIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
@@ -9,6 +9,7 @@ import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Button, Card, Segmented, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
+import { useNow } from "../lib/useNow";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
 import { Link } from "../router";
 import type { PageContext } from "./context";
@@ -18,7 +19,9 @@ function dueLabel(entry: RedoEntry): string {
   return shortDay(parseDay(entry.dueOn));
 }
 
-export function ProgressView({ data, ctx, now = new Date() }: { data: StudyData; ctx: PageContext; now?: Date }) {
+export function ProgressView({ data, ctx, now: fixedNow }: { data: StudyData; ctx: PageContext; now?: Date }) {
+  const liveNow = useNow();
+  const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
   const [queueOpen, setQueueOpen] = useState(false);
   const [skillMode, setSkillMode] = useState<Mode | null>(null);
@@ -119,13 +122,16 @@ function WeekStats({ stats }: { stats: ReturnType<typeof weekStats> }) {
 
 function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: ReturnType<typeof gapForSkill>; data: StudyData }) {
   const shell = "mesh on-mesh rounded-3xl p-6 sm:p-10";
+  const chip = (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber px-3 py-1 text-ui font-bold text-amber-foreground">
+      <TargetIcon size={14} />
+      Focus this week
+    </span>
+  );
   if (!focus) {
     return (
       <section aria-labelledby="focus-title" className={shell}>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber px-3 py-1 text-ui font-bold text-amber-foreground">
-          <TargetIcon size={14} />
-          Focus this week
-        </span>
+        {chip}
         <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold tracking-[-0.02em]">
           Your focus appears after a scored round
         </h2>
@@ -139,13 +145,10 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
     );
   }
   const key = gap ? startKey(gap.item.problemId, "guided", gap.gap) : null;
-  const overPlan = focus.minutesOver !== null && focus.minutesOver > 0 ? focus.minutesOver : null;
+  const figure = focusFigure(focus.timing);
   return (
     <section aria-labelledby="focus-title" className={shell}>
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber px-3 py-1 text-ui font-bold text-amber-foreground">
-        <TargetIcon size={14} />
-        Focus this week
-      </span>
+      {chip}
       <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[56px] sm:leading-[60px]">
         {focus.name}
       </h2>
@@ -156,17 +159,24 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
           </dd>
           <dt className="mt-1 text-ui text-muted-foreground">Your lowest skill</dt>
         </div>
-        <div>
-          <dd className="text-[40px] font-bold leading-[44px]">
-            {focus.minutesOver ?? focus.roundsCounted}{" "}
-            <small className="text-lead font-semibold text-muted-foreground">{focus.minutesOver !== null ? "min" : focus.roundsCounted === 1 ? "round" : "rounds"}</small>
-          </dd>
-          <dt className="mt-1 text-ui text-muted-foreground">
-            {overPlan !== null ? "Over the plan in your last scored round" : `Scored ${MODE_LABEL[focus.mode].toLowerCase()} rounds counted`}
-          </dt>
-        </div>
+        {figure ? (
+          <div>
+            <dd className="text-[40px] font-bold leading-[44px]" aria-label={figure.text}>
+              {figure.value} <small className="text-lead font-semibold text-muted-foreground">{figure.unit}</small>
+            </dd>
+            <dt className="mt-1 text-ui text-muted-foreground">{figure.caption}</dt>
+            {figure.note ? <p className="text-ui text-warning">{figure.note}</p> : null}
+          </div>
+        ) : null}
       </dl>
-      {focus.timing ? <StepChart timing={focus.timing} /> : null}
+      {focus.timing && focus.timingRound ? (
+        <>
+          <StepChart timing={focus.timing} />
+          <p className="mt-3 text-meta text-muted-foreground">
+            From {focus.timingRound.title}, {shortDay(focus.timingRound.createdAt)}
+          </p>
+        </>
+      ) : null}
       <div className="mt-8 flex flex-wrap items-center gap-4">
         {gap && key ? (
           <>
@@ -192,61 +202,55 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
   );
 }
 
-/** One bar per step, planned against used. Both rows share one scale, and a dashed line marks where the plan ends. */
+/** One row per step: its name, a plan bar above a used bar on one shared scale, and the minutes as text. */
 function StepChart({ timing }: { timing: NonNullable<FocusSkill["timing"]> }) {
-  const planned = timing.reduce((s, r) => s + r.plannedMinutes, 0);
-  const used = timing.reduce((s, r) => s + r.actualMinutes, 0);
-  const scale = Math.max(planned, used, 1);
-  const pct = (minutes: number) => `${(minutes / scale) * 100}%`;
-  const summary = timing.map((r) => `${r.label}: planned ${Math.round(r.plannedMinutes)} minutes, used ${Math.round(r.actualMinutes * 10) / 10}`).join(". ");
-  const bar = (kind: "planned" | "used") => (
-    <div className="flex h-[26px] gap-0.5" aria-hidden="true">
-      {timing.map((row) => {
-        const minutes = kind === "planned" ? row.plannedMinutes : row.actualMinutes;
-        const over = kind === "used" && row.actualMinutes > row.plannedMinutes * 1.5 && row.actualMinutes - row.plannedMinutes >= 3;
-        return (
-          <i
-            key={row.phase}
-            title={`${row.label}, ${Math.round(minutes * 10) / 10} min`}
-            style={{ width: pct(minutes) }}
-            className={cn(
-              "flex min-w-0 items-center overflow-hidden whitespace-nowrap rounded-[5px] px-2 text-meta font-bold not-italic",
-              over ? "bg-linear-to-r from-[#f2b755] to-[#d99a2b] text-[#3d2900]" : "bg-[rgb(185_173_255/0.35)] text-foreground",
-            )}
-          >
-            {minutes / scale > 0.09 ? Math.round(minutes) : ""}
-          </i>
-        );
-      })}
-    </div>
-  );
+  const rows = stepRows(timing);
+  const scale = Math.max(1, ...rows.map((r) => Math.max(r.planned, r.used)));
+  const width = (minutes: number) => `${(minutes / scale) * 100}%`;
   return (
-    <figure className="mt-7 rounded-2xl p-5 mesh-tile" aria-label="Planned and used minutes for each step of your last scored round">
-      <figcaption className="sr-only">{summary}</figcaption>
-      <div className="relative grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3.5 gap-y-2.5">
-        <span className="text-ui text-muted-foreground">Planned</span>
-        {bar("planned")}
-        <span className="text-ui text-muted-foreground">Used</span>
-        {bar("used")}
-        <span aria-hidden="true" />
-        <div className="relative h-4 text-meta text-muted-foreground" aria-hidden="true">
-          <span className="absolute left-0">0</span>
-          <span
-            className={cn("absolute whitespace-nowrap", planned / scale > 0.8 ? "right-0" : "-translate-x-1/2")}
-            style={planned / scale > 0.8 ? undefined : { left: pct(planned) }}
-          >
-            Plan ends, {Math.round(planned)} min
-          </span>
-        </div>
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-0 -top-2 border-l-2 border-dashed border-white/50"
-          style={{ left: `calc(4.5rem + 0.875rem + (100% - 4.5rem - 0.875rem) * ${planned / scale})`, bottom: "1.5rem" }}
-        />
+    <figure className="mesh-tile mt-7 rounded-2xl p-4 sm:p-5" aria-label="Planned and used minutes for each step of the round">
+      <div className="mb-3 flex gap-5 text-meta text-muted-foreground" aria-hidden="true">
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-5 rounded-full bg-white/30" />
+          Plan
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-5 rounded-full bg-primary" />
+          Used
+        </span>
       </div>
+      <ul className="space-y-2.5">
+        {rows.map((row) => (
+          <li
+            key={row.phase}
+            className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_minmax(0,6.5rem)] items-center gap-x-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,8rem)]"
+          >
+            <span className={cn("truncate text-ui", row.reached ? "text-foreground" : "text-muted-foreground")}>{row.label}</span>
+            <span className="block space-y-1" aria-hidden="true">
+              <span className="block h-1.5 rounded-full bg-white/30" style={{ width: width(row.planned) }} />
+              {row.used > 0 ? <span className={cn("block h-1.5 rounded-full", row.over > 0 ? "bg-warning-fill" : "bg-primary")} style={{ width: width(row.used) }} /> : null}
+            </span>
+            <span className="text-right text-ui tabular-nums">
+              {row.reached ? (
+                <>
+                  <span className={row.over > 0 ? "font-semibold text-warning" : "text-foreground"}>{round1(row.used)}</span>
+                  <span className="text-muted-foreground"> of {row.planned} min</span>
+                  {row.over > 0 ? <span className="block text-meta font-semibold text-warning">+{row.over} min</span> : null}
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  Not reached<span className="sr-only">, plan {row.planned} minutes</span>
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
     </figure>
   );
 }
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 function SkillsCard({ rows, rounds, mode, onMode }: { rows: SkillRow[]; rounds: number; mode: Mode; onMode: (mode: Mode) => void }) {
   return (

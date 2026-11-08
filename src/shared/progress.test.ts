@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { focusSkill, gapForSkill, skillRows, weekStats } from "./progress";
+import { focusFigure, focusSkill, gapForSkill, skillRows, stepRows, weekStats } from "./progress";
 import type { Mode } from "./phases";
 import type { SessionHistoryItem } from "./types";
 
@@ -56,18 +56,18 @@ describe("focusSkill", () => {
     expect(focusSkill([scored("a", 5, { depth: 1 }, { status: "failed" })])).toBeNull();
   });
 
-  it("carries the step timing of the newest counted round that has it, and the minutes over plan", () => {
+  it("carries the step timing of the newest counted round that has it, and names that round", () => {
     const timing = [
       { phase: "requirements", label: "Requirements", plannedMinutes: 5, actualMinutes: 7.4 },
       { phase: "capacity", label: "Capacity math", plannedMinutes: 4, actualMinutes: 3 },
     ];
     const focus = focusSkill([scored("new", 7, { driving: 1 }), scored("with", 5, { driving: 2 }, { phaseTiming: timing })]);
     expect(focus?.timing).toEqual(timing);
-    expect(focus?.minutesOver).toBe(2);
+    expect(focus?.timingRound).toEqual({ title: "with", createdAt: iso(5) });
   });
 
   it("has no timing for rounds saved without it", () => {
-    expect(focusSkill([scored("a", 5, { driving: 1 })])).toMatchObject({ timing: null, minutesOver: null });
+    expect(focusSkill([scored("a", 5, { driving: 1 })])).toMatchObject({ timing: null, timingRound: null });
   });
 });
 
@@ -153,5 +153,60 @@ describe("weekStats", () => {
   it("does not count a gap round, nor let one make a later round a redo", () => {
     const history = [scored("gap", 9, {}, { problemId: "url", focus: true }), scored("real", 11, {}, { problemId: "url" })];
     expect(weekStats(history, plan, now)).toEqual({ rounds: { done: 1, planned: 3 }, redos: { done: 0, planned: 1 } });
+  });
+});
+
+const row = (phase: string, planned: number, actual: number) => ({ phase, label: phase, plannedMinutes: planned, actualMinutes: actual });
+
+describe("focusFigure", () => {
+  it("shows no number without timing, and never a zero", () => {
+    expect(focusFigure(undefined)).toBeNull();
+    expect(focusFigure(null)).toBeNull();
+    expect(focusFigure([])).toBeNull();
+    expect(focusFigure([row("a", 5, 0), row("b", 5, 0)])).toBeNull();
+  });
+
+  it("says where a round that ended early stopped, and how many steps were never reached", () => {
+    const timing = [row("a", 5, 6), row("b", 10, 4), row("c", 10, 0), row("d", 10, 0), row("e", 10, 0)];
+    expect(focusFigure(timing)).toMatchObject({ value: "10", unit: "of 45 min", note: "3 steps never reached", text: "Ended at 10 of 45 min. 3 steps never reached" });
+    expect(focusFigure([row("a", 5, 6), row("b", 10, 4), row("c", 10, 0)])?.note).toBe("1 step never reached");
+  });
+
+  it("uses the mockup wording when the steps that ran went over their plan", () => {
+    const timing = [row("a", 5, 20), row("b", 4, 21.8), row("c", 7, 12.2), row("d", 10, 0)];
+    expect(focusFigure(timing)).toMatchObject({ value: "54", unit: "min", caption: "on the first 3 steps, plan 16", note: null });
+  });
+
+  it("says all steps when every step ran over", () => {
+    expect(focusFigure([row("a", 5, 9), row("b", 5, 9)])?.caption).toBe("on all 2 steps, plan 10");
+  });
+
+  it("shows a plain figure for a round on plan", () => {
+    expect(focusFigure([row("a", 5, 5), row("b", 5, 4.5)])).toMatchObject({ value: "9.5", caption: "used, plan 10" });
+  });
+
+  it("always pairs the value with words from the same case", () => {
+    const cases = [
+      [row("a", 5, 6), row("b", 10, 0)],
+      [row("a", 5, 20), row("b", 10, 0)],
+      [row("a", 5, 5), row("b", 10, 10)],
+    ];
+    for (const timing of cases) {
+      const figure = focusFigure(timing)!;
+      expect(Number(figure.value)).toBeGreaterThan(0);
+      expect(figure.text).toContain(figure.value);
+      expect(figure.text.startsWith("Ended at")).toBe(figure.note !== null);
+    }
+  });
+});
+
+describe("stepRows", () => {
+  it("marks a step with no time as not reached, and flags only clear overruns", () => {
+    const rows = stepRows([row("a", 5, 5.5), row("b", 4, 21.8), row("c", 5, 0)]);
+    expect(rows.map((r) => [r.reached, r.over])).toEqual([
+      [true, 0],
+      [true, 17.8],
+      [false, 0],
+    ]);
   });
 });
