@@ -66,7 +66,7 @@ export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEv
           const tone = dimension.score < 3 ? "warn" : "good";
           return (
             <span key={dimension.id} className="flex min-w-0 flex-col gap-1 bg-card px-3 py-2.5">
-              <span className="truncate text-meta text-muted-foreground" title={dimension.name}>
+              <span className="line-clamp-2 min-h-[2lh] text-meta leading-snug text-muted-foreground" title={dimension.name}>
                 {dimension.name}
               </span>
               <span className="flex items-baseline gap-0.5">

@@ -56,7 +56,7 @@ export function StudyNotes({ notes, saved, enabled, onDraft, onApply }: StudyNot
           <p className="max-w-xl text-body leading-relaxed text-muted-foreground">
             Draft updates to your tracker, review questions and notes from this round and the coach chat. Nothing is written until you read the changes and save.
           </p>
-          <Button onClick={onDraft} disabled={!enabled}>
+          <Button variant="outline" onClick={onDraft} disabled={!enabled}>
             Draft study notes
           </Button>
         </Card>
