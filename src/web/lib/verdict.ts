@@ -26,7 +26,10 @@ export function verdictSentence(verdict: Verdict): string {
 }
 
 /** The debrief's headline for a guided round, in place of a hire verdict. */
-export const READINESS_TITLE: Record<Readiness["call"], string> = { ready: "Ready for interview mode", not_yet: "Not yet ready for interview mode" };
+export const READINESS_TITLE: Record<Readiness["call"], string> = { ready: "Ready", not_yet: "Not yet" };
+
+/** The same call as one phrase, for places that show it without the "Ready for interview mode?" question above it. */
+export const READINESS_SUMMARY: Record<Readiness["call"], string> = { ready: "Ready for interview mode", not_yet: "Not yet ready for interview mode" };
 
 export const READINESS_LABEL: Record<Readiness["call"], string> = { ready: "Ready", not_yet: "Not yet" };
 

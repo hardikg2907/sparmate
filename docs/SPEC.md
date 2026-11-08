@@ -943,7 +943,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 
 **Debrief `/session/:id`** (status `debriefing`, `debriefed`, `failed`)
 - While `debriefing`: a progress list from `debrief.progress`.
-- The call at the target level and the call at the stretch level, each named with the round's own level names, shown as plain labels ("Strong pass", "Pass", "Close, not yet", "Not yet") with a one-line plain meaning under the target level call, then confidence and summary. A guided round with a readiness call shows no hire verdict: the headline reads "Ready for interview mode" or "Not yet ready for interview mode", with the reasons listed under it (section 5.7). A guided round saved before the call existed shows its verdict as above.
+- The call at the target level and the call at the stretch level, each named with the round's own level names, shown as plain labels ("Strong pass", "Pass", "Close, not yet", "Not yet") with a one-line plain meaning under the target level call, then confidence and summary. A guided round with a readiness call shows no hire verdict: the headline asks "Ready for interview mode?" and answers "Ready" or "Not yet", with the reasons listed under it (section 5.7). A guided round saved before the call existed shows its verdict as above.
 - Dimension table: name, score 1–4 as a short bar with the word (1 Missing, 2 Below bar, 3 At bar,
   4 Senior signal), evidence quotes with time and a check mark or a "not found in transcript" warning from
   `quoteChecks`, and "what a 4 looks like" behind a disclosure.

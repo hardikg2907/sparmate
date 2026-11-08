@@ -86,10 +86,10 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
         Verdict
       </h2>
       <Card variant="mesh" className="overflow-hidden">
-        <div className="relative grid gap-x-12 gap-y-5 px-6 pb-4 pt-8 sm:px-9 md:grid-cols-[auto_1fr] md:items-center">
+        <div className="relative grid gap-x-12 gap-y-5 px-6 pb-4 pt-8 sm:px-9 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <span aria-hidden="true" className={cn("absolute inset-y-6 left-0 w-1.5 rounded-r-full", TONE_FILL[tone], BAND_GLOW[tone])} />
           <div>
-            <p className="text-ui font-semibold text-muted-foreground">{readiness ? "Guided round" : `At the ${levels.target} bar`}</p>
+            <p className="text-ui font-semibold text-muted-foreground">{readiness ? "Ready for interview mode?" : `At the ${levels.target} bar`}</p>
             <p className="font-display text-display font-extrabold tracking-[-0.02em] text-foreground sm:text-mega">
               {readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}
             </p>
