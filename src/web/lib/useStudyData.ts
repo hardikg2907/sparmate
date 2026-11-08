@@ -31,6 +31,11 @@ export function startKey(problemId: string, mode: Mode, focus?: GapFocus): strin
   return `${problemId}:${focus ? "gap" : mode}`;
 }
 
+/** A 409 on "end" means the round already ended somewhere else, so the page it leads to is the right place to go. */
+export function endedElsewhere(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409;
+}
+
 function messageOf(error: unknown, fallback: string): string {
   return error instanceof ApiError && error.message ? error.message : fallback;
 }
@@ -92,6 +97,10 @@ export function useStudyData(): StudyData {
       await api.endSession(sessionId);
       navigate(`/session/${sessionId}`);
     } catch (failure) {
+      if (endedElsewhere(failure)) {
+        navigate(`/session/${sessionId}`);
+        return;
+      }
       setActionError(messageOf(failure, "The round could not be ended."));
       setWorking(null);
     }
