@@ -6,7 +6,7 @@
   Solo practice for system design and machine-coding interviews, against an AI interviewer, with a judge and a coach.
 </p>
 
-![The Sparmate home page](docs/screens/home-dark.png)
+![The Today page](docs/screens/home-dark.png)
 
 ## What it does
 
@@ -17,11 +17,13 @@
 - **A coach.** The coach teaches the gaps the judge found, using your study folder's rules.
 - **Study-note drafts you approve.** The app drafts edits to your notes. You pick what to keep. Nothing is written before you click Save.
 - **Voice in and out.** Speak your answers and hear the interviewer's replies.
+- **A weekly plan.** Today picks the session for the day from your plan: a redo, a new problem, a DSA day or rest.
+- **Progress.** One focus skill each week, your scores per skill, and the redo queue.
 - **A usage page.** See tokens and cost for each round, role and model.
 
-| Home                                                     | Debrief                                          |
-| -------------------------------------------------------- | ------------------------------------------------ |
-| ![Home page in light theme](docs/screens/home-light.png) | ![The judge's debrief](docs/screens/debrief.png) |
+| Today                                                     | Debrief                                          |
+| --------------------------------------------------------- | ------------------------------------------------ |
+| ![Today page in light theme](docs/screens/home-light.png) | ![The judge's debrief](docs/screens/debrief.png) |
 
 | HLD room                                                   | LLD room                                                               |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -80,7 +82,7 @@ npm start
 
 `npm run setup` installs the packages, checks for a C++ compiler, signs you in to Claude and offers to install the Kokoro voice. You can run it again at any time. It skips what is already done.
 
-Open `http://127.0.0.1:4747`. If something is still missing, the home page shows what it is and the command that fixes it.
+Open `http://127.0.0.1:4747`. If something is still missing, Today shows what it is and the command that fixes it.
 
 The first start creates your study folder from `study-kit/` when it is missing or empty. By default it is `~/sparmate-study`. `npm start` builds the web page and then starts the server. Stop it with Ctrl+C.
 
@@ -146,7 +148,7 @@ The rest of the file is free text. You can list stacks you know well, for exampl
 
 ## A round, step by step
 
-1. **Pick a problem** on the home page. "Up next" alternates HLD and LLD problems. It marks problems that are due for a cold redo.
+1. **Start the day's session.** Today picks it from your weekly plan, and a due redo of the day's track comes first. Or pick any problem in the Library.
 2. **Choose a mode.** Interview mode is the real round. HLD gets 45 minutes, and LLD gets 120 (you can change both in Settings). There is no help on the clock. The interviewer adds the extension 10 minutes (HLD) or 15 minutes (LLD) before the end. In guided mode you ask the guide to check a step or give a hint.
 3. **Work through the steps.** The step bar shows where you are. Click a step to move there.
    - **HLD:** draw on the whiteboard with the component palette and talk in the chat, typed or spoken. Each step has its own frame, and the frame comes into view when the step changes. "What the interviewer sees" shows how your diagram reads as text, so you can fix an unlabelled box or a loose arrow.
@@ -222,7 +224,7 @@ To add a problem:
 
    Pass a file path to check one brief. The script checks the frontmatter, the required sections, the tracker bullet and the length.
 
-**Practise any question.** The home page can also turn a pasted interview question into a custom problem. An agent uses web search to ground real numbers and architectures, and a second pass checks the claims against sources. A setup card shows the sources, the checks and any corrections before you start. Custom problems are stored in your data folder, not in `content/`.
+**Practise any question.** The Library can also turn a pasted interview question into a custom problem. An agent uses web search to ground real numbers and architectures, and a second pass checks the claims against sources. A setup card shows the sources, the checks and any corrections before you start. Custom problems are stored in your data folder, not in `content/`.
 
 ## Development
 
