@@ -11,13 +11,13 @@ export function roundTimeMs(clock: ClockFields, nowMs: number): number {
   return Math.max(0, end - started - clock.pausedMs - currentPause);
 }
 
-export type CheckpointKind = "phase_end" | "extension" | "five_minutes" | "time_up";
+export type CheckpointKind = "phase_end" | "phase_over" | "extension" | "five_minutes" | "time_up";
 
 export interface Checkpoint {
   id: string;
   kind: CheckpointKind;
   atMs: number;
-  /** For phase_end: the phase whose planned window closes at atMs. */
+  /** For phase_end and phase_over: the phase the checkpoint is about. */
   phase?: string;
 }
 
@@ -35,7 +35,8 @@ export function phaseWindows(plan: readonly { id: string; minutes: number }[]): 
 
 /**
  * Every checkpoint of a round. Guided rounds keep only the phase nudges: they count up, have no end and no
- * extension. The last phase's end is left out because time-up (or nothing, in guided mode) covers it.
+ * extension. The last phase's end is left out because time-up (or nothing, in guided mode) covers it. The guided
+ * offer to move on depends on where the candidate is, so `phaseOverCheckpoint` builds it when a step is entered.
  */
 export function planCheckpoints(track: Track, mode: Mode, durationMs: number, plan: readonly { id: string; minutes: number }[]): Checkpoint[] {
   const out: Checkpoint[] = [];
@@ -50,6 +51,43 @@ export function planCheckpoints(track: Track, mode: Mode, durationMs: number, pl
     out.push({ id: "time_up", kind: "time_up", atMs: durationMs });
   }
   return out.sort((a, b) => a.atMs - b.atMs);
+}
+
+/** Round time he has spent in `phase` across every visit; the open visit counts up to `nowMs`. */
+export function timeInPhase(history: readonly { phase: string; at: number }[], firstPhase: string | undefined, phase: string, nowMs: number): number {
+  const sorted = [...history].sort((a, b) => a.at - b.at);
+  let total = 0;
+  let current = firstPhase ?? phase;
+  let since = 0;
+  for (const h of sorted) {
+    if (h.at <= 0) {
+      current = h.phase;
+      continue;
+    }
+    const at = Math.min(h.at, nowMs);
+    if (current === phase) total += Math.max(0, at - since);
+    current = h.phase;
+    since = Math.max(since, at);
+  }
+  if (current === phase) total += Math.max(0, nowMs - since);
+  return total;
+}
+
+/**
+ * The guided offer to move on from `phase`: it falls when his total time in the step reaches twice the step's plan.
+ * The last step has no next step to offer, so it gets none. Round time stops while paused, so a pause never counts.
+ */
+export function phaseOverCheckpoint(
+  plan: readonly { id: string; minutes: number }[],
+  history: readonly { phase: string; at: number }[],
+  phase: string,
+  nowMs: number,
+): Checkpoint | null {
+  const index = plan.findIndex((p) => p.id === phase);
+  const step = plan[index];
+  if (!step || index === plan.length - 1) return null;
+  const left = Math.max(0, 2 * step.minutes * MINUTE - timeInPhase(history, plan[0]?.id, phase, nowMs));
+  return { id: `phase_over:${phase}`, kind: "phase_over", atMs: nowMs + left, phase };
 }
 
 /** Pure: which checkpoints are due now, and when the next one falls. */
@@ -77,7 +115,12 @@ export interface SchedulerOptions {
 export class CheckpointScheduler {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly opts: SchedulerOptions) {}
+  constructor(private opts: SchedulerOptions) {}
+
+  /** Swaps the list the scheduler reads, for rounds whose checkpoints depend on where the candidate is. */
+  setCheckpoints(checkpoints: readonly Checkpoint[]): void {
+    this.opts = { ...this.opts, checkpoints };
+  }
 
   reschedule(): void {
     this.stop();

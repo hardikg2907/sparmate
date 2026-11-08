@@ -88,6 +88,13 @@ describe("clock turn", () => {
     expect(text.endsWith("\n</clock>")).toBe(true);
   });
 
+  it("asks for one short offer to move on, and never for silence, at twice a step's plan", () => {
+    const text = clockTurn({ ...time, phaseId: "requirements", plannedStartMs: 0, plannedEndMs: 5 * MIN }, null, "phase_over", "hld");
+    expect(text).toContain("offers to move on");
+    expect(text).toContain("never silent");
+    expect(text).not.toContain("<silent/>");
+  });
+
   it("names the right brief section for the extension", () => {
     expect(clockTurn(time, null, "extension", "hld")).toContain("Curveballs");
     expect(clockTurn(time, null, "extension", "lld")).toContain("Extensions");

@@ -157,6 +157,8 @@ export function clockInstruction(kind: CheckpointKind, track: Track): string {
   switch (kind) {
     case "phase_end":
       return `The planned time for this phase is over and the candidate is still in it. ${SILENT_LINE}`;
+    case "phase_over":
+      return "The candidate has spent about twice the planned time on this step. Reply with one short line that offers to move on to the next step, and leave the choice to the candidate. Raise no new gap and give no feedback. This turn is never silent.";
     case "extension": {
       const section = track === "hld" ? "Curveballs" : "Extensions";
       return `This is the extension point. Deliver the extension now in one short message, choosing one item from the brief's ${section} section that the candidate has not already handled.`;

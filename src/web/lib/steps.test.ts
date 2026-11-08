@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublicStepCheck } from "../../shared/types";
-import { checkedAgo, coverText, isUnchecked, ringView, whereText } from "./steps";
+import { isUnchecked, ringView } from "./steps";
 
 const step = (over: Partial<PublicStepCheck>): PublicStepCheck => ({
   status: "done",
@@ -35,27 +35,5 @@ describe("ringView", () => {
     expect(ringView(step({ covered: 2, partial: 1, total: 5 }))).toMatchObject({ fill: 0.5, label: "50%", tone: "progress" });
     expect(ringView(step({ covered: 4, total: 5 })).tone).toBe("done");
     expect(ringView(step({ covered: 2, partial: 1, total: 5 })).spoken).toBe("2 of 5 checklist items covered, 1 partly");
-  });
-});
-
-describe("whereText", () => {
-  const item = { id: "a", label: "x", question: false, detail: null } as const;
-  it("says where an item was covered", () => {
-    expect(whereText({ ...item, state: "covered", source: "chat", at: 252_000 })).toBe("Said at 04:12");
-    expect(whereText({ ...item, state: "covered", source: "board", at: null })).toBe("On the board");
-    expect(whereText({ ...item, state: "partial", source: "board", at: null, detail: "no TTL" })).toBe("Partly, on the board: no TTL");
-    expect(whereText({ ...item, state: "missing", source: null, at: null })).toBe("Not yet");
-  });
-
-  it("counts how long ago the step was checked", () => {
-    expect(checkedAgo(10_000, 22_000)).toBe("12 s ago");
-    expect(checkedAgo(0, 185_000)).toBe("3 min ago");
-  });
-});
-
-describe("coverText", () => {
-  it("words the size of an unchecked step", () => {
-    expect(coverText(1)).toBe("1 thing to cover.");
-    expect(coverText(11)).toBe("11 things to cover.");
   });
 });

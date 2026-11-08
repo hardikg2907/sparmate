@@ -42,10 +42,10 @@ const SORT_OPTIONS = (Object.keys(SORT_OPTION_LABELS) as SortOption[]).map((key)
   value: key,
   label: SORT_OPTION_LABELS[key],
 }));
-import { MARK_LABEL, MODE_LABEL, TRACK_LABEL, TRACK_TITLE, VERDICT_TONE, daysSince, formatDate, formatDateTime, type Tone } from "../lib/format";
+import { MARK_LABEL, MODE_LABEL, TRACK_LABEL, TRACK_TITLE, daysSince, formatDate, formatDateTime, type Tone } from "../lib/format";
 import { useCountUp } from "../hooks/useCountUp";
 import { pauseText } from "../lib/pause";
-import { VERDICT_LABEL } from "../lib/verdict";
+import { attemptBadge } from "../lib/verdict";
 import { Link, navigate } from "../router";
 
 const CUSTOM_MIN = 10;
@@ -773,11 +773,7 @@ function FullWidthProblemList({
                               Last tried {formatDate(problem.lastAttempt.date)}
                             </Link>
                           </Tooltip>
-                          {problem.lastAttempt.verdict ? (
-                            <Badge tone={VERDICT_TONE[problem.lastAttempt.verdict]} title="Result at your target level">
-                              {VERDICT_LABEL[problem.lastAttempt.verdict]}
-                            </Badge>
-                          ) : null}
+                          <AttemptBadge attempt={problem.lastAttempt} />
                         </>
                       ) : (
                         <span className="text-faint">Not tried yet</span>
@@ -1304,6 +1300,7 @@ function HistorySection({
               <tbody className="divide-y divide-border">
                 {shown.map((item) => {
                   const status = STATUS_LABEL[item.status];
+                  const attempt = attemptBadge(item);
                   const open = item.status === "live" || item.status === "paused" ? "Resume" : item.status === "debriefed" ? "Open debrief" : "Open";
                   const label = `${item.title}, ${formatDateTime(item.createdAt)}`;
                   const discardButton = (
@@ -1329,7 +1326,7 @@ function HistorySection({
                       <td className="px-4 py-2.5 text-muted-foreground">{MODE_LABEL[item.mode]}</td>
                       <td className="px-4 py-2.5">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          {item.verdict ? <Badge tone={VERDICT_TONE[item.verdict]}>{VERDICT_LABEL[item.verdict]}</Badge> : <Badge tone={status.tone}>{status.label}</Badge>}
+                          {attempt ? <Badge tone={attempt.tone}>{attempt.label}</Badge> : <Badge tone={status.tone}>{status.label}</Badge>}
                           {item.status === "debriefed" ? <Badge tone={item.notesSaved ? "good" : "neutral"}>{item.notesSaved ? "Notes saved" : "Notes not saved"}</Badge> : null}
                         </div>
                       </td>
@@ -1443,5 +1440,15 @@ export function HomePage({ fakeAgent, onOpenSettings, durations, setup }: { fake
       onStart={(problemId, mode) => void begin(`${problemId}:${mode}`, { problemId, mode })}
       onStartCustom={(prompt, track, mode) => void begin(`custom:${mode}`, { customPrompt: prompt, customTrack: track, mode })}
     />
+  );
+}
+
+function AttemptBadge({ attempt }: { attempt: NonNullable<ProblemSummary["lastAttempt"]> }) {
+  const badge = attemptBadge(attempt);
+  if (!badge) return null;
+  return (
+    <Badge tone={badge.tone} title={attempt.mode === "guided" && attempt.readiness ? "Readiness for interview mode" : "Result at your target level"}>
+      {badge.label}
+    </Badge>
   );
 }

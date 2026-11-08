@@ -1,10 +1,7 @@
 import { phasesFor, type Track } from "../../shared/phases";
-import type { PublicStepCheck } from "../../shared/types";
 import { formatClock, formatMinutes } from "../lib/format";
 import type { PlanPhase } from "../lib/plan";
-import { ringView } from "../lib/steps";
-import { ChecklistItems } from "./ChecklistItems";
-import { StepRing } from "./StepRing";
+import { CheckIcon } from "./icons";
 import { Tooltip, cn } from "./ui";
 
 const MIN = 60_000;
@@ -18,34 +15,21 @@ function goalsOf(track: Track): Map<string, string> {
   return new Map(phasesFor(track).map((p) => [p.id, p.goal]));
 }
 
-// The checklist can run to a dozen items, so the tip scrolls inside the room left on screen.
-const STEP_TIP_SURFACE =
-  "surface-float max-h-[min(24rem,var(--radix-tooltip-content-available-height))] w-80 max-w-[calc(100vw-1rem)] items-start overflow-y-auto border border-border bg-popover font-normal text-popover-foreground";
-
-/** The step's label and goal, then its checklist when the round shares one. Looking costs nothing: only a click moves the rail. */
-function StepTip({ label, goal, step }: { label: string; goal: string | undefined; step: PublicStepCheck | undefined }) {
-  if (!step)
-    return (
-      <>
-        <span className="font-semibold">{label}.</span> {goal}.
-      </>
-    );
+/** A small round mark: filled with a tick once the guide passed the step, an empty outline before that. */
+function PassedMark({ passed }: { passed: boolean }) {
   return (
-    <span className="block">
-      <span className="block text-ui text-muted-foreground">
-        <span className="font-semibold text-foreground">{label}.</span> {goal}.
-      </span>
-      <span className="mt-1.5 block border-t border-border pt-1">
-        <ChecklistItems step={step} />
-        {step.status === "checking" ? <span className="block px-1 pt-1 text-meta text-muted-foreground">Checking…</span> : null}
-      </span>
+    <span
+      aria-hidden={passed ? undefined : "true"}
+      className={cn("hidden size-4 shrink-0 place-items-center rounded-full @[5rem]:inline-grid", passed ? "bg-success-fill text-background" : "border border-border")}
+    >
+      {passed ? <CheckIcon size={10} /> : null}
+      {passed ? <span className="sr-only">Passed</span> : null}
     </span>
   );
 }
 
 /**
- * The round's plan drawn to scale, with the time spent in each phase, a needle for "now", and a ring per step for
- * how much of its checklist he has covered. Widths follow planned minutes, so a three-minute phase looks short and
+ * The round's plan drawn to scale, with the time spent in each phase, a needle for "now", and a passed mark per step in a guided round. Widths follow planned minutes, so a three-minute phase looks short and
  * a fifteen-minute one looks long.
  */
 export function PlanTrack({
@@ -54,7 +38,7 @@ export function PlanTrack({
   currentPhase,
   spent,
   roundMs,
-  steps,
+  passed,
   onSelect,
   disabled,
 }: {
@@ -64,7 +48,8 @@ export function PlanTrack({
   /** Milliseconds spent per phase id. */
   spent: Record<string, number>;
   roundMs: number;
-  steps?: Readonly<Record<string, PublicStepCheck>>;
+  /** Step ids the guide passed. Given in a live guided round. */
+  passed?: ReadonlySet<string>;
   onSelect: (phaseId: string) => void;
   disabled?: boolean;
 }) {
@@ -93,9 +78,12 @@ export function PlanTrack({
           return (
             <li key={phase.id} style={{ flexGrow: phase.minutes, flexBasis: 0 }} className="@container min-w-0">
               <Tooltip
-                content={<StepTip label={phase.label} goal={goals.get(phase.id)} step={steps?.[phase.id]} />}
+                content={
+                  <>
+                    <span className="font-semibold">{phase.label}.</span> {goals.get(phase.id)}.
+                  </>
+                }
                 side="top"
-                className={steps?.[phase.id] ? STEP_TIP_SURFACE : undefined}
               >
                 <button
                   type="button"
@@ -106,7 +94,7 @@ export function PlanTrack({
                   data-current={current || undefined}
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
-                    {steps ? <StepRing view={ringView(steps[phase.id])} size={16} className="hidden @[5rem]:inline-grid" /> : null}
+                    {passed ? <PassedMark passed={passed.has(phase.id)} /> : null}
                     <span className={cn("truncate text-ui font-semibold", current ? "text-primary-soft-foreground" : visited ? "text-foreground" : "text-muted-foreground")}>
                       {phase.label}
                     </span>

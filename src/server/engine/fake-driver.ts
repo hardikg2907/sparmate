@@ -132,6 +132,7 @@ class FakeConversation implements Conversation {
           return `Let's add something. ${firstItem(section)}`;
         }
         if (cp === "time_up") return "We're out of time, so let's stop here. Thank you.";
+        if (cp === "phase_over") return "You are well past the plan for this step. Would you like to move on to the next one?";
         return "<silent/>";
       }
       case "request": {
@@ -142,7 +143,25 @@ class FakeConversation implements Conversation {
           await callTool(this.setup, "note_hint", { level, topic: `${label}: the main constraint` });
           return `Hint ${level}: think about which number in ${label.toLowerCase()} changes the design the most.`;
         }
-        if (turn.meta.request === "feedback") await this.pinOnCheck();
+        if (turn.meta.request === "stuck") {
+          return `A model answer for ${label.toLowerCase()}: state the one number that changes the design, then the decision it forces. Now say it again in your own words.`;
+        }
+        if (turn.meta.request === "feedback") {
+          await this.pinOnCheck();
+          // The first check of a step names a gap and the second passes, so a round exercises both verdicts and the sticky pass.
+          const phase = facts.session?.().phase;
+          if (phase) {
+            const held = facts.session?.().stepVerdicts?.[phase];
+            if (held?.verdict === "not_yet") {
+              await callTool(this.setup, "step_verdict", { phase, verdict: "pass" });
+              return `On ${label.toLowerCase()}: the latency target is stated now, so this step passes.`;
+            }
+            if (!held) {
+              await callTool(this.setup, "step_verdict", { phase, verdict: "not_yet", gap: "What latency does the read path need to meet?" });
+              return `On ${label.toLowerCase()}: the requirements you named hold up. One thing is missing: the latency target.`;
+            }
+          }
+        }
         return `On ${label.toLowerCase()}: the requirements you named hold up. What is missing is a number for the read load. The single most important fix is to state the latency target.`;
       }
       case "candidate":

@@ -13,7 +13,7 @@ import { Steps } from "../components/debrief/Steps";
 import { StudyNotes } from "../components/debrief/StudyNotes";
 import { TimingRows, TimingSection } from "../components/debrief/Timing";
 import { VerdictCard, jumpTo } from "../components/debrief/Verdict";
-import { VERDICT_LABEL } from "../lib/verdict";
+import { READINESS_SUMMARY, VERDICT_LABEL } from "../lib/verdict";
 import { RoundUsageCard } from "../components/debrief/RoundUsageCard";
 import { ArrowLeftIcon, CheckIcon, WarnIcon } from "../components/icons";
 import { ConnectionBanner, MessageBanners } from "../components/Notices";
@@ -162,7 +162,7 @@ function StepsBar({ session, scorecard, notes, marks }: { session: PublicSession
           ? "Draft ready to review"
           : "Not drafted yet";
   const steps: { id: string; title: string; detail: string; state: StepState }[] = [
-    { id: "verdict", title: "Read the score", detail: VERDICT_LABEL[scorecard.verdict.sde2], state: "done" },
+    { id: "verdict", title: "Read the score", detail: scorecard.readiness ? READINESS_SUMMARY[scorecard.readiness.call] : VERDICT_LABEL[scorecard.verdict.sde2], state: "done" },
     { id: "gaps", title: "Work the gaps", detail: gapCount === 0 ? "No gaps listed" : workedText(marks.size, gapCount), state: gapsDone ? "done" : "next" },
     { id: "notes", title: "Save study notes", detail: notesText, state: notesDone ? "done" : gapsDone ? "next" : "todo" },
   ];

@@ -107,6 +107,7 @@ export interface SessionActions {
   discard(): void;
   guidedFeedback(): void;
   guidedHint(): void;
+  guidedStuck(): void;
   onBoardChange(elements: readonly Record<string, unknown>[], version: number): void;
   onBoardActivity(listener: () => void): () => void;
   refreshGraph(): void;

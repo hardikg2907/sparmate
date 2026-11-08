@@ -33,38 +33,12 @@ const checked: Session["stepChecks"] = {
 const input = (mode: Session["mode"], status: Session["status"], stepChecks: Session["stepChecks"] = checked): Input => ({ mode, status, checklist, stepChecks });
 
 describe("publicSteps in a guided round", () => {
-  it("sends no label and no count of covered items for a step with no finished check", () => {
-    const steps = publicSteps(input("guided", "live", {}));
-    expect(steps.requirements).toEqual({ status: "idle", checkedAt: null, usedImage: false, items: [], covered: 0, partial: 0, total: 4 });
-    expect(steps.capacity?.total).toBe(2);
-    expect(JSON.stringify(steps)).not.toContain("50 ms");
-    expect(JSON.stringify(steps)).not.toContain("redirect be");
-  });
-
-  it("holds the labels back while a first check is still running", () => {
-    const running: Session["stepChecks"] = { requirements: { status: "checking", checkedAt: null, usedImage: false, items: {} } };
-    const step = publicSteps(input("guided", "live", running)).requirements;
-    expect(step).toMatchObject({ status: "checking", items: [], total: 4 });
-  });
-
-  it("keeps covered labels and swaps in the question for partial and missing items", () => {
-    const step = publicSteps(input("guided", "paused")).requirements;
-    expect(step?.items.map((i) => [i.label, i.question, i.state])).toEqual([
-      ["Create a short link", false, "covered"],
-      ["How fast must a redirect be?", true, "partial"],
-      ["Links expire", false, "missing"],
-      ["What if a link is no longer wanted?", true, "missing"],
-    ]);
-    expect(step).toMatchObject({ covered: 1, partial: 1, total: 4 });
-    expect(step?.items[1]?.detail).toBe("no percentile");
-  });
-
-  it("shows the requirement itself in a step the check left idle once it has a check time", () => {
-    const step = publicSteps(input("guided", "live", { capacity: { status: "done", checkedAt: 5, usedImage: false, items: {} } })).capacity;
-    expect(step?.items.map((i) => [i.label, i.question])).toEqual([
-      ["Writes", false],
-      ["Reads", false],
-    ]);
+  it("sends no checklist, no label and no count while the round runs", () => {
+    for (const status of ["live", "paused", "ended"] as const) {
+      const steps = publicSteps(input("guided", status));
+      expect(steps).toEqual({});
+      expect(JSON.stringify(steps)).not.toContain("50 ms");
+    }
   });
 
   it("shows an unchecked step's items again once the round is over", () => {
@@ -85,6 +59,46 @@ describe("publicSteps outside a guided round", () => {
     const step = publicSteps(input("interview", "debriefed")).requirements;
     expect(step?.items.map((i) => i.label)).toEqual(["Create a short link", "Redirect adds under 50 ms at p99", "Links expire", "Delete a link"]);
     expect(step?.items.every((i) => !i.question)).toBe(true);
+  });
+});
+
+describe("the browser's copy of a guided session", () => {
+  const guided = (extra: Partial<Session> = {}): Session =>
+    ({
+      ...input("guided", "live"),
+      transcript: [],
+      hints: [],
+      board: { version: 0, graphText: "", updatedAt: null },
+      track: "hld",
+      durationMs: 45 * 60_000,
+      startedAt: "",
+      pausedMs: 0,
+      pauseStartedAt: null,
+      sdk: {},
+      pins: [],
+      ...extra,
+    }) as unknown as Session;
+
+  it("sends the step verdicts and only the count of assists in a live round", () => {
+    const view = toPublicSession(
+      guided({ stepVerdicts: { requirements: { verdict: "not_yet", gap: "What is the latency target?", at: 1000 } }, assists: [{ at: 2000, phase: "capacity" }] }),
+      undefined,
+    );
+    expect(view.stepVerdicts).toEqual({ requirements: { verdict: "not_yet", gap: "What is the latency target?", at: 1000 } });
+    expect(view.assistCount).toBe(1);
+    expect("assists" in view).toBe(false);
+    expect(view.steps).toEqual({});
+  });
+
+  it("keeps the checklist for the debrief", () => {
+    const view = toPublicSession(guided({ status: "debriefed" }), undefined);
+    expect(view.steps.requirements?.covered).toBe(1);
+  });
+
+  it("loads a guided session saved without the new fields", () => {
+    const view = toPublicSession(guided(), undefined);
+    expect(view.stepVerdicts).toBeUndefined();
+    expect(view.assistCount).toBe(0);
   });
 });
 

@@ -32,6 +32,7 @@ function session(overrides: Partial<PublicSession> = {}): PublicSession {
     stepNotesVersion: 0,
     stepSummaries: {},
     steps: {},
+    assistCount: 0,
     pins: [],
     focus: null,
     gapProgress: {},

@@ -32,6 +32,19 @@ function bullets(entries: [string, TrackerBullet][]) {
   return new Map(entries);
 }
 
+describe("last attempt", () => {
+  it("carries the readiness call of a guided attempt, and null when there is none", () => {
+    const attempt = (readiness?: "ready" | "not_yet" | null): SessionSummary => ({
+      ...session("c2-url", "hld", "2026-10-28T10:00:00.000Z"),
+      mode: "guided",
+      ...(readiness === undefined ? {} : { readiness }),
+    });
+    const last = (h: SessionSummary) => buildProblemSummaries(problems, { bullets: new Map(), lastLogTrack: null }, [h], "2026-10-29").find((p) => p.id === "c2-url")?.lastAttempt;
+    expect(last(attempt("ready"))).toMatchObject({ mode: "guided", readiness: "ready" });
+    expect(last(attempt())?.readiness).toBeNull();
+  });
+});
+
 describe("recommendation", () => {
   const marks = bullets([
     ["b3-lot", { lineIndex: 230, mark: "[~]", suffix: "→ notes/b3-parking-lot.md · 2026-10-25" }],

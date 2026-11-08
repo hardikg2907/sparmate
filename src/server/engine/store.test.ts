@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
 import { memoryLogger } from "./log";
-import { SessionStore } from "./store";
+import { SessionStore, summarize } from "./store";
 
 const ID = "20261030-0900-c2-url-shortener-abcd";
 const OTHER = "20261030-0901-c2-url-shortener-wxyz";
@@ -201,6 +201,22 @@ describe("fields added later", () => {
     expect(loaded?.focus).toBeNull();
     expect(loaded?.studyNotes).toBeNull();
     expect(loaded?.stepSummaries).toEqual({});
+  });
+
+  it("loads a guided session saved without verdicts, assists or a readiness call, and summarises it by verdict", async () => {
+    const old = session({ mode: "guided", status: "debriefed" });
+    expect(old.stepVerdicts).toBeUndefined();
+    await mkdir(join(dir, ID), { recursive: true });
+    await writeFile(join(dir, ID, "session.json"), JSON.stringify(old));
+    const loaded = await store.load(ID);
+    expect(loaded?.stepVerdicts).toBeUndefined();
+    expect(loaded?.assists).toBeUndefined();
+    expect(summarize(loaded!).readiness).toBeNull();
+  });
+
+  it("puts a guided round's readiness call in its history summary", () => {
+    const card = { verdict: { sde2: "no_hire" }, readiness: { call: "not_yet", reasons: ["API was assisted."] } } as unknown as Session["scorecard"];
+    expect(summarize(session({ mode: "guided", status: "debriefed", scorecard: card })).readiness).toBe("not_yet");
   });
 
   it("loads a session saved before gap progress existed with no records, and keeps saved ones", async () => {
