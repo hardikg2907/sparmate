@@ -28,8 +28,10 @@ export function StudyNotes({ notes, saved, enabled, onDraft, onApply }: StudyNot
     }
   }, [notes.result, notes.proposal]);
   return (
-    <section id="notes" aria-labelledby="notes-heading" className="scroll-mt-14">
-      <SectionTitle id="notes-heading">Study notes</SectionTitle>
+    <section id="notes" aria-labelledby="notes-heading" className="scroll-mt-4">
+      <SectionTitle id="notes-heading" aside="Draft once the gaps are done. You can draft any time.">
+        Study notes
+      </SectionTitle>
       {drafting ? (
         <Card variant="raised" className="p-5">
           <Spinner label="Drafting study notes. This can take a minute." />
@@ -54,7 +56,7 @@ export function StudyNotes({ notes, saved, enabled, onDraft, onApply }: StudyNot
           <p className="max-w-xl text-body leading-relaxed text-muted-foreground">
             Draft updates to your tracker, review questions and notes from this round and the coach chat. Nothing is written until you read the changes and save.
           </p>
-          <Button variant="default" onClick={onDraft} disabled={!enabled}>
+          <Button onClick={onDraft} disabled={!enabled}>
             Draft study notes
           </Button>
         </Card>
@@ -95,7 +97,7 @@ function ProposalView({ proposal, notes, enabled, onDraft, onApply }: { proposal
           role="alert"
           icon={<WarnIcon size={16} />}
           actions={
-            <Button size="sm" variant="default" onClick={onDraft} disabled={!enabled}>
+            <Button size="sm" onClick={onDraft} disabled={!enabled}>
               Draft again
             </Button>
           }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { BoardPin, PublicStepCheck, Scorecard, StepSummary } from "../../../shared/types";
 import { phasesFor, type Track } from "../../../shared/phases";
 import { evidenceStepFor } from "../../../shared/stepFrames";
@@ -8,7 +8,7 @@ import { elementBounds, findStepFrame } from "../../board/stepFrames";
 import { ringView } from "../../lib/steps";
 import { CheckIcon, MinusIcon } from "../icons";
 import { StepRing } from "../StepRing";
-import { Card, SectionTitle, cn } from "../ui";
+import { Card, cn } from "../ui";
 import { EvidenceItem } from "./Dimensions";
 
 type Raw = Record<string, unknown>;
@@ -26,6 +26,21 @@ interface StepsProps {
   summaries?: Readonly<Record<string, StepSummary>>;
 }
 
+/** The steps that the judge read, or that hold coverage, pins or notes; the others have nothing to show. */
+export function stepsWithContent({ scorecard, track, steps = {}, pins = [], notes = {}, summaries = {} }: Omit<StepsProps, "elements">) {
+  const judged = new Set((scorecard.steps ?? []).map((s) => s.phase));
+  return phasesFor(track).filter((p) => {
+    const step = steps[p.id];
+    return (
+      judged.has(p.id) ||
+      (step?.covered ?? 0) + (step?.partial ?? 0) > 0 ||
+      pins.some((pin) => pin.phase === p.id) ||
+      (notes[p.id] ?? "").trim() !== "" ||
+      (summaries[p.id]?.proposed.length ?? 0) + (summaries[p.id]?.agreed.length ?? 0) > 0
+    );
+  });
+}
+
 /**
  * Each step as the judge read it, beside the frame that held his answer: what held, with his own quoted words,
  * what is missing, and the pins the guide and the judge attached to his drawing.
@@ -36,16 +51,7 @@ export function Steps({ scorecard, track, steps = {}, pins = [], elements = null
   const stepChecks = new Map<string, boolean>();
   for (const check of scorecard.stepQuoteChecks ?? []) stepChecks.set(`${check.phase}:${check.index}`, check.verified);
 
-  const shown = phasesFor(track).filter((p) => {
-    const step = steps[p.id];
-    return (
-      judged.has(p.id) ||
-      (step?.covered ?? 0) + (step?.partial ?? 0) > 0 ||
-      pins.some((pin) => pin.phase === p.id) ||
-      (notes[p.id] ?? "").trim() !== "" ||
-      (summaries[p.id]?.proposed.length ?? 0) + (summaries[p.id]?.agreed.length ?? 0) > 0
-    );
-  });
+  const shown = stepsWithContent({ scorecard, track, steps, pins, notes, summaries });
   if (shown.length === 0) return null;
 
   // Pins are numbered once across the board, in step order, so a number means the same pin everywhere.
@@ -54,12 +60,9 @@ export function Steps({ scorecard, track, steps = {}, pins = [], elements = null
   const numberOf = new Map(numbered.map((pin, i) => [pin.id, i + 1]));
 
   return (
-    <section id="steps" aria-labelledby="steps-heading" className="scroll-mt-16">
-      <SectionTitle id="steps-heading" aside="Each step's frame, what held and what is missing">
-        Step by step
-      </SectionTitle>
+    <section id="steps" aria-label="Evidence by step">
       <div className="space-y-4">
-        {shown.map((phase, index) => {
+        {shown.map((phase) => {
           const judgedStep = judged.get(phase.id);
           const step = steps[phase.id];
           const held = (judgedStep?.took ?? []).map((t, i) => ({ t, i })).filter(({ t }) => t.evidence.polarity === "plus");
@@ -71,7 +74,7 @@ export function Steps({ scorecard, track, steps = {}, pins = [], elements = null
           const stepPins = numbered.filter((pin) => pin.phase === phase.id);
           const ring = ringView(step);
           return (
-            <Card key={phase.id} variant="raised" className="reveal p-5" style={{ "--i": index } as CSSProperties}>
+            <Card key={phase.id} variant="raised" className="p-5">
               <div className={cn("grid gap-5", thumbStep ? "md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]" : "")}>
                 {thumbStep && elements ? <FrameThumb elements={elements} step={thumbStep} pins={stepPins} numberOf={numberOf} label={phase.label} /> : null}
                 <div className="min-w-0">

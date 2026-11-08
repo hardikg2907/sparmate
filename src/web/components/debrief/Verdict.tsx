@@ -1,21 +1,8 @@
-import type { CSSProperties } from "react";
-import type { Tone } from "../../lib/format";
-import { useCountUp } from "../../hooks/useCountUp";
 import { DEFAULT_TARGET } from "../../../shared/target";
 import type { Scorecard } from "../../../shared/types";
-import { MARK_LABEL, MARK_TONE, SCORE_TONE, SCORE_WORD, VERDICT_TONE } from "../../lib/format";
+import { VERDICT_TONE } from "../../lib/format";
 import { READINESS_TITLE, VERDICT_EXPLANATION, VERDICT_LABEL } from "../../lib/verdict";
-import { Markdown } from "../Markdown";
-import { ChevronDownIcon } from "../icons";
-import { Badge, Button, Card, TONE_FILL, TONE_TEXT, cn } from "../ui";
-
-const stagger = (index: number) => ({ "--i": index }) as CSSProperties;
-
-const BAND_GLOW: Partial<Record<Tone, string>> = {
-  good: "shadow-[0_0_18px_var(--success-fill)]",
-  warn: "shadow-[0_0_18px_var(--warning-fill)]",
-  bad: "shadow-[0_0_18px_var(--destructive-fill)]",
-};
+import { TONE_FILL, TONE_TEXT, Tooltip, cn } from "../ui";
 
 export function jumpTo(id: string): void {
   const target = document.getElementById(id);
@@ -23,140 +10,78 @@ export function jumpTo(id: string): void {
   target.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
 
-export function ScoreMeter({ score, wide, stretch }: { score: number; wide?: boolean; stretch?: boolean }) {
-  const tone = SCORE_TONE[score] ?? "neutral";
-  return (
-    <span className={cn("flex gap-1", stretch && "w-full")} role="img" aria-label={`Score ${score} of 4`}>
-      {[1, 2, 3, 4].map((step) => (
-        <span
-          key={step}
-          style={{ "--j": step - 1, "--fill-at": "400ms" } as CSSProperties}
-          className={cn(
-            "h-2 rounded-full transition-colors duration-150",
-            stretch ? "flex-1" : wide ? "w-7" : "w-5",
-            step <= score ? cn("fill-x bg-linear-to-b from-white/25 to-transparent", TONE_FILL[tone]) : "bg-muted ring-1 ring-inset ring-border",
-          )}
-        />
-      ))}
-    </span>
-  );
-}
-
-/**
- * The whole result on one screen. The call at the target level bar sits on a band tinted by that call, so the outcome reads
- * before any word does; the scores run under it as one strip, and the way on to the gaps is the next button.
- */
-/** One dimension in the score strip: a jump link to its evidence, whose score counts up when the debrief opens. */
-function ScoreCell({ dimension }: { dimension: Scorecard["dimensions"][number] }) {
-  const tone = SCORE_TONE[dimension.score] ?? "neutral";
-  const score = useCountUp(dimension.score, { delay: 350, duration: 700 });
-  return (
-    <button
-      type="button"
-      onClick={() => jumpTo(`dim-${dimension.id}`)}
-      className="mesh-tile lift-row flex h-full w-full flex-col gap-2 rounded-2xl px-4 py-3.5 text-left hover:bg-accent"
-    >
-      <span className="truncate text-ui font-semibold text-foreground">{dimension.name}</span>
-      <span className="flex items-baseline gap-2">
-        <span className={cn("text-title font-bold tabular-nums", TONE_TEXT[tone])}>{score}</span>
-        <span className="text-meta font-semibold text-muted-foreground">of 4, {(SCORE_WORD[dimension.score] ?? "").toLowerCase()}</span>
-      </span>
-      <ScoreMeter score={dimension.score} stretch />
-    </button>
-  );
-}
-
 /** The level names the round was judged at; a card saved without them was judged at the defaults. */
 export function levelNames(verdict: Scorecard["verdict"]): { target: string; stretch: string } {
   return { target: verdict.targetLevel ?? DEFAULT_TARGET.level, stretch: verdict.stretchLevel ?? DEFAULT_TARGET.stretch };
 }
 
-const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-
+/**
+ * The call in three lines. A guided round with a readiness call answers "Ready for interview mode?"; an interview
+ * round, or a guided round saved before the call existed, names the call at the target level.
+ */
 export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
-  const { verdict, trackerMark, trackerMarkReason } = scorecard;
-  // A guided round gets a readiness call from the server's fixed rule; one saved before that shows its verdict as before.
+  const { verdict } = scorecard;
   const readiness = scorecard.readiness;
   const tone = readiness ? (readiness.call === "ready" ? "good" : "warn") : VERDICT_TONE[verdict.sde2];
   const levels = levelNames(verdict);
-  const gapCount = scorecard.gaps.length;
+  const confidence = `${verdict.confidence} confidence`;
   return (
-    <section id="verdict" aria-labelledby="verdict-heading" className="scroll-mt-16">
+    <section id="verdict" aria-labelledby="verdict-heading" className="relative pl-4">
       <h2 id="verdict-heading" className="sr-only">
         Verdict
       </h2>
-      <Card variant="mesh" className="overflow-hidden">
-        <div className="relative grid gap-x-12 gap-y-5 px-6 pb-4 pt-8 sm:px-9 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-          <span aria-hidden="true" className={cn("absolute inset-y-6 left-0 w-1.5 rounded-r-full", TONE_FILL[tone], BAND_GLOW[tone])} />
-          <div>
-            <p className="text-ui font-semibold text-muted-foreground">{readiness ? "Ready for interview mode?" : `At the ${levels.target} bar`}</p>
-            <p className="font-display text-display font-extrabold tracking-[-0.02em] text-foreground sm:text-mega">
-              {readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}
-            </p>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-ui sm:grid-cols-3 md:justify-self-end">
-            {readiness ? null : (
-              <div>
-                <dt className="text-muted-foreground">{capitalize(levels.stretch)} bar</dt>
-                <dd className={cn("text-lead font-bold", TONE_TEXT[VERDICT_TONE[verdict.senior]])}>{VERDICT_LABEL[verdict.senior]}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-muted-foreground">Confidence</dt>
-              <dd className="text-lead font-bold capitalize text-foreground">{verdict.confidence}</dd>
-            </div>
-            <div className="col-span-2 sm:col-span-1">
-              <dt className="mb-0.5 text-muted-foreground">Tracker mark</dt>
-              <dd>
-                <Badge mono tone={MARK_TONE[trackerMark]} className="bg-card" title={MARK_LABEL[trackerMark]}>
-                  {trackerMark} {MARK_LABEL[trackerMark].toLowerCase()}
-                </Badge>
-              </dd>
-            </div>
-          </dl>
-          {readiness ? (
-            readiness.reasons.length > 0 ? (
-              <ul className="list-disc space-y-1 pl-5 text-body text-foreground md:col-span-2">
-                {readiness.reasons.map((reason) => (
-                  <li key={reason}>{reason}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-body text-foreground md:col-span-2">Every step passed on your own, inside the planned time. Interview mode is the next test.</p>
-            )
-          ) : (
-            <p className="text-body text-foreground md:col-span-2">{VERDICT_EXPLANATION[verdict.sde2]}</p>
-          )}
-        </div>
-
-        <div className="reveal space-y-3 px-6 pb-4 pt-2 sm:px-9" style={stagger(1)}>
-          <Markdown text={verdict.summary} className="max-w-[68ch] text-body text-foreground" />
-          {trackerMarkReason ? (
-            <p className="max-w-[68ch] text-ui text-muted-foreground">
-              <span className="font-semibold text-foreground">Why {trackerMark}:</span> {trackerMarkReason}
-            </p>
-          ) : null}
-          {gapCount > 0 ? (
-            <div className="pt-1">
-              <Button variant="default" onClick={() => jumpTo("gaps")}>
-                Work the {gapCount} {gapCount === 1 ? "gap" : "gaps"}
-                <ChevronDownIcon size={14} />
-              </Button>
-            </div>
-          ) : null}
-        </div>
-
-        <p className="px-6 pb-3 pt-4 text-meta text-faint sm:px-9">Scores run from 1 to 4. A 3 meets the {levels.target} bar. Select a score to read its evidence.</p>
-        <nav aria-label="Scores by dimension" className="px-4 pb-4 sm:px-5 sm:pb-5">
-          <ul className={cn("grid grid-cols-2 gap-3", scorecard.dimensions.length % 4 === 0 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
-            {scorecard.dimensions.map((dimension, index) => (
-              <li key={dimension.id} className="reveal" style={stagger(2 + index)}>
-                <ScoreCell dimension={dimension} />
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </Card>
+      <span aria-hidden="true" className={cn("absolute inset-y-0.5 left-0 w-1 rounded-full", TONE_FILL[tone])} />
+      <p className="text-ui font-semibold text-muted-foreground">{readiness ? "Ready for interview mode?" : `At the ${levels.target} bar`}</p>
+      <p className="flex flex-wrap items-baseline gap-x-3">
+        <span className="text-title font-bold tracking-[-0.01em] text-foreground">{readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}</span>
+        <span className="text-meta text-muted-foreground">{readiness ? confidence : `${levels.stretch}: ${VERDICT_LABEL[verdict.senior]} · ${confidence}`}</span>
+      </p>
+      <p className="mt-0.5 text-ui text-muted-foreground">
+        {readiness
+          ? readiness.reasons.length > 0
+            ? readiness.reasons.join(" · ")
+            : "Every step passed on your own, inside the planned time. Interview mode is the next test."
+          : VERDICT_EXPLANATION[verdict.sde2]}
+      </p>
     </section>
+  );
+}
+
+/**
+ * The scores as one strip of equal cells: name, score out of 4 and a four-segment meter. Scores below the bar are in
+ * the warning colour, the rest in the success colour. The whole strip opens the evidence tab.
+ */
+export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEvidence: () => void }) {
+  const target = levelNames(scorecard.verdict).target;
+  const caption = `Scores run from 1 to 4. A 3 meets the ${target} bar. Select to read the evidence.`;
+  return (
+    <Tooltip content={caption} side="top">
+      <button
+        type="button"
+        onClick={onEvidence}
+        aria-label={`Scores by dimension. ${caption}`}
+        className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border text-left transition-colors hover:bg-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:grid-flow-col sm:auto-cols-fr sm:grid-cols-none"
+      >
+        {scorecard.dimensions.map((dimension) => {
+          const tone = dimension.score < 3 ? "warn" : "good";
+          return (
+            <span key={dimension.id} className="flex min-w-0 flex-col gap-1 bg-card px-3 py-2.5">
+              <span className="truncate text-meta text-muted-foreground" title={dimension.name}>
+                {dimension.name}
+              </span>
+              <span className="flex items-baseline gap-0.5">
+                <span className={cn("text-[20px] font-semibold leading-6 tabular-nums", TONE_TEXT[tone])}>{dimension.score}</span>
+                <span className="text-meta text-muted-foreground">/4</span>
+              </span>
+              <span aria-hidden="true" className="flex gap-0.5">
+                {[1, 2, 3, 4].map((step) => (
+                  <span key={step} className={cn("h-1 flex-1 rounded-full", step <= dimension.score ? TONE_FILL[tone] : "bg-muted")} />
+                ))}
+              </span>
+            </span>
+          );
+        })}
+      </button>
+    </Tooltip>
   );
 }

@@ -242,7 +242,7 @@ export function ChatPanel({ heading, speaker, items, agent, onSend, inputLabel, 
 function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string; showTime: boolean }) {
   if (item.role === "system") {
     return (
-      <li className={cn("flex items-center gap-3 px-1 text-meta text-faint", ENTER)}>
+      <li className={cn("flex items-center gap-3 px-1 text-meta text-faint", ENTER)} data-gap-divider={item.kind === "gap" ? item.text : undefined}>
         <span className="chat-rule-l h-px flex-1" aria-hidden="true" />
         <span className="max-w-[80%] text-center">{item.text}</span>
         <span className="chat-rule-r h-px flex-1" aria-hidden="true" />

@@ -1,16 +1,19 @@
 import type { Scorecard } from "../../../shared/types";
 import { CheckIcon, CrossIcon } from "../icons";
-import { Card, Badge, SectionTitle } from "../ui";
+import { Card, Badge } from "../ui";
 
 export function ScenarioTable({ scorecard }: { scorecard: Scorecard }) {
   const scenarios = scorecard.lldScenarios;
   if (scenarios.length === 0) return null;
   const passed = scenarios.filter((scenario) => scenario.pass).length;
   return (
-    <section id="scenarios" aria-labelledby="scenarios-heading" className="scroll-mt-14">
-      <SectionTitle id="scenarios-heading" aside={`${passed} of ${scenarios.length} pass`}>
-        Demo scenarios
-      </SectionTitle>
+    <section id="scenarios" aria-labelledby="scenarios-heading">
+      <h3 id="scenarios-heading" className="mb-2 text-body font-semibold text-foreground">
+        Demo scenarios{" "}
+        <span className="text-ui font-normal text-muted-foreground">
+          {passed} of {scenarios.length} pass
+        </span>
+      </h3>
       <Card variant="raised" className="overflow-hidden">
         <table className="w-full border-collapse text-left">
           <thead className="bg-muted text-ui font-semibold text-muted-foreground">
