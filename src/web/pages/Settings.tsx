@@ -11,7 +11,7 @@ import { DEFAULT_VOICE_SETTINGS, getVoiceSettings, saveVoiceSettings, type Voice
 import type { Theme } from "../theme";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useDsa } from "../lib/useDsa";
-import { guardNavigation, navigate } from "../router";
+import { guardNavigation, navigate, useHash } from "../router";
 import type { PageContext } from "./context";
 
 // Typed as records so a model or effort added to the settings schema is a compile error until it has a label.
@@ -149,6 +149,12 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
     setActive(id);
     sections.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+  // A link such as /settings#models opens the page on that section.
+  const hash = useHash();
+  useEffect(() => {
+    const id = hash.slice(1);
+    if (SECTIONS.some((section) => section.id === id)) goTo(id);
+  }, [hash]);
   const register = (id: string) => (el: HTMLElement | null) => {
     if (el) sections.current.set(id, el);
     else sections.current.delete(id);

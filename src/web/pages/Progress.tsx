@@ -1,21 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DsaResponse } from "../../shared/dsa";
+import type { GymSummary } from "../../shared/drills";
 import type { Mode } from "../../shared/phases";
 import { BAR_SCORE, focusFigure, focusSkill, gapForSkill, skillRows, stepRows, weekStats, type FocusSkill, type SkillRow } from "../../shared/progress";
 import { redoQueue, type RedoEntry } from "../../shared/today";
+import { weekStart } from "../../shared/week";
 import { PlayFilledIcon, TargetIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
 import { SidePanel } from "../components/SidePanel";
 import { InfoTip, TrackChip } from "../components/study";
-import { Alert, Button, Card, Segmented, Skeleton, cn } from "../components/ui";
+import { Alert, Button, Card, Segmented, SectionTitle, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
 import { mediumsTip } from "../lib/dsaText";
-import { useDsa } from "../lib/useDsa";
+import { useDsa, type DsaData } from "../lib/useDsa";
 import { useGym } from "../lib/useGym";
 import { useNow } from "../lib/useNow";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
-import { Link } from "../router";
+import { Link, useHash } from "../router";
+import { DsaSection } from "./Dsa";
+import { HistorySection } from "./History";
 import type { PageContext } from "./context";
 
 function dueLabel(entry: RedoEntry): string {
@@ -23,24 +27,91 @@ function dueLabel(entry: RedoEntry): string {
   return shortDay(parseDay(entry.dueOn));
 }
 
-export function ProgressView({
-  data,
-  ctx,
-  now: fixedNow,
-  dsa = null,
-  drillWeek = null,
-}: {
-  data: StudyData;
-  ctx: PageContext;
-  now?: Date;
-  dsa?: DsaResponse | null;
-  drillWeek?: { passed: number; attempted: number } | null;
-}) {
+const SECTIONS = [
+  { id: "week", label: "This week" },
+  { id: "skills", label: "Skills" },
+  { id: "dsa", label: "DSA" },
+  { id: "history", label: "History" },
+] as const;
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function jumpTo(id: string): void {
+  document.getElementById(id)?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+}
+
+/** The page's own scroller, which is what moves under the bar. The window never scrolls. */
+function scrollerOf(element: Element | null): HTMLElement | null {
+  return element?.closest<HTMLElement>(".page-canvas") ?? null;
+}
+
+function SubNav() {
+  const nav = useRef<HTMLElement>(null);
+  const [active, setActive] = useState<SectionId>("week");
+
+  // The section nearest the top of the viewport, below the bars, is the one the nav marks.
+  useEffect(() => {
+    const root = scrollerOf(nav.current);
+    if (!root || typeof IntersectionObserver !== "function") return;
+    const visible = new Map<string, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visible.set(entry.target.id, entry.boundingClientRect.top);
+          else visible.delete(entry.target.id);
+        }
+        const top = [...visible.entries()].sort((x, y) => x[1] - y[1])[0];
+        if (top) setActive(top[0] as SectionId);
+      },
+      { root, rootMargin: "-130px 0px -55% 0px" },
+    );
+    for (const { id } of SECTIONS) {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <nav
+      ref={nav}
+      aria-label="Sections of this page"
+      className="progress-subnav sticky top-[var(--header-h)] z-10 -mx-4 border-b border-border/70 bg-sunken/90 px-4 sm:-mx-8 sm:px-8"
+    >
+      <ul className="no-scrollbar flex gap-1 overflow-x-auto py-2">
+        {SECTIONS.map(({ id, label }) => (
+          <li key={id}>
+            <a
+              href={`#${id}`}
+              aria-current={active === id ? "true" : undefined}
+              onClick={(event) => {
+                event.preventDefault();
+                setActive(id);
+                history.replaceState(null, "", `${location.pathname}${location.search}#${id}`);
+                jumpTo(id);
+              }}
+              className={cn(
+                "flex h-8 items-center whitespace-nowrap rounded-md px-3 text-ui font-medium transition-colors",
+                active === id ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { data: StudyData; ctx: PageContext; now?: Date; dsa: DsaData; gym?: GymSummary | null }) {
   const liveNow = useNow();
   const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
   const [queueOpen, setQueueOpen] = useState(false);
   const [skillMode, setSkillMode] = useState<Mode | null>(null);
+  const hash = useHash();
 
   const focus = useMemo(() => (history ? focusSkill(history) : null), [history]);
   const queue = useMemo(() => (problems && history ? redoQueue(problems, history) : []), [problems, history]);
@@ -48,11 +119,21 @@ export function ProgressView({
   const mode = skillMode ?? focus?.mode ?? "interview";
   const rows = useMemo(() => skillRows(history ?? [], mode), [history, mode]);
   const gap = focus && history ? gapForSkill(history, focus) : null;
+  const loaded = history !== null;
+
+  // A link such as /progress#dsa lands on its section. It runs again once the lists load, because the sections above grow then.
+  useEffect(() => {
+    if (hash.length > 1) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [hash, loaded]);
+
+  const week = weekStart(now);
+  const weekEnd = new Date(week.getFullYear(), week.getMonth(), week.getDate() + 6);
 
   return (
     <PageShell testMode={ctx.testMode}>
       <div className="reveal-children space-y-6">
-        <PageHeader title="Progress" aside={<WeekStats stats={stats} dsa={dsa} username={ctx.settings.leetcodeUsername} drills={drillWeek} />} />
+        <PageHeader title="Progress" />
+        <SubNav />
         {data.startError ? (
           <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
             {data.startError}
@@ -63,21 +144,40 @@ export function ProgressView({
             {error}
           </Alert>
         ) : null}
-        {history === null && !error ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_440px]" role="status">
-            <span className="sr-only">Loading progress…</span>
-            <Skeleton className="h-96 rounded-3xl" />
-            <Skeleton className="h-96 rounded-xl" />
-          </div>
-        ) : (
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
-            <FocusCard focus={focus} gap={gap} data={data} />
-            <div className="flex flex-col gap-4">
-              <SkillsCard rows={rows.rows} rounds={rows.rounds} mode={mode} onMode={setSkillMode} />
-              <RedosCard queue={queue} onSeeAll={() => setQueueOpen(true)} />
+        <section id="week" aria-labelledby="week-title" className="scroll-mt-[calc(var(--header-h)+4rem)]">
+          <SectionTitle id="week-title" aside={`${shortDay(week)} to ${shortDay(weekEnd)}`}>
+            This week
+          </SectionTitle>
+          {history === null && !error ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]" role="status">
+              <span className="sr-only">Loading progress…</span>
+              <Skeleton className="h-96 rounded-xl" />
+              <Skeleton className="h-96 rounded-xl" />
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <FocusCard focus={focus} gap={gap} data={data} />
+              <div className="flex flex-col gap-4">
+                <WeekStats stats={stats} dsa={dsa.response} username={ctx.settings.leetcodeUsername} drills={gym?.week ?? null} />
+                <RedosCard queue={queue} onSeeAll={() => setQueueOpen(true)} />
+              </div>
+            </div>
+          )}
+        </section>
+        <section id="skills" aria-labelledby="skills-title" className="scroll-mt-[calc(var(--header-h)+4rem)] pt-8">
+          <SectionTitle id="skills-title">Skills</SectionTitle>
+          {history === null && !error ? (
+            <Skeleton className="h-72 rounded-xl" role="status" />
+          ) : (
+            <SkillsCard rows={rows.rows} rounds={rows.rounds} mode={mode} onMode={setSkillMode} />
+          )}
+        </section>
+        <div className="pt-8">
+          <DsaSection ctx={ctx} data={dsa} now={fixedNow} />
+        </div>
+        <div className="pt-8">
+          <HistorySection data={data} />
+        </div>
       </div>
       {queueOpen ? (
         <SidePanel title="Next redos" kicker={`${queue.length} in the queue`} onClose={() => setQueueOpen(false)}>
@@ -107,7 +207,7 @@ export function ProgressPage({ ctx }: { ctx: PageContext }) {
   useEffect(() => {
     document.title = "Progress · Sparmate";
   }, []);
-  return <ProgressView data={data} ctx={ctx} dsa={dsa.response} drillWeek={gym?.week ?? null} />;
+  return <ProgressView data={data} ctx={ctx} dsa={dsa} gym={gym} />;
 }
 
 function WeekStats({
@@ -129,28 +229,25 @@ function WeekStats({
     { label: "DSA mediums", value: read ? `${dsa.week.mediums}` : "—", note: read ? `of ${dsa.weeklyGoal}` : mediumsTip(username, dsa) },
   ];
   return (
-    <div className="flex flex-wrap items-end gap-x-7 gap-y-3">
-      <span className="pb-0.5 text-ui text-muted-foreground">This week</span>
-      <dl className="flex gap-7">
-        {items.map((item) => (
-          <div key={item.label}>
-            <dt className="flex items-center gap-1 text-meta text-faint">
-              {item.label}
-              {item.value === "—" && item.note ? <InfoTip label={`About ${item.label}`}>{item.note ?? ""}</InfoTip> : null}
-            </dt>
-            <dd className="mt-0.5 text-lead font-bold">
-              {item.value}
-              {item.value !== "—" ? <small className="ml-1 text-ui font-medium text-faint">{item.note}</small> : null}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <dl aria-label="This week in numbers" className="grid grid-cols-2 gap-4">
+      {items.map((item) => (
+        <Card key={item.label} variant="raised" className="px-4 py-3.5">
+          <dt className="flex items-center gap-1 text-meta text-muted-foreground">
+            {item.label}
+            {item.value === "—" && item.note ? <InfoTip label={`About ${item.label}`}>{item.note}</InfoTip> : null}
+          </dt>
+          <dd className="mt-1 text-title font-bold tabular-nums">
+            {item.value}
+            {item.value !== "—" ? <small className="ml-1.5 text-ui font-medium text-faint">{item.note}</small> : null}
+          </dd>
+        </Card>
+      ))}
+    </dl>
   );
 }
 
 function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: ReturnType<typeof gapForSkill>; data: StudyData }) {
-  const shell = "mesh on-mesh rounded-3xl p-6 sm:p-10";
+  const shell = "surface-raised rounded-xl bg-raised p-6 sm:p-8";
   const chip = (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-amber px-3 py-1 text-ui font-bold text-amber-foreground">
       <TargetIcon size={14} />
@@ -178,19 +275,19 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
   return (
     <section aria-labelledby="focus-title" className={shell}>
       {chip}
-      <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[56px] sm:leading-[60px]">
+      <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[44px] sm:leading-[48px]">
         {focus.name}
       </h2>
       <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
         <div>
-          <dd className="text-[40px] font-bold leading-[44px]">
+          <dd className="text-[36px] font-bold leading-[40px]">
             {focus.score} <small className="text-lead font-semibold text-muted-foreground">of 4</small>
           </dd>
           <dt className="mt-1 text-ui text-muted-foreground">Your lowest skill</dt>
         </div>
         {figure ? (
           <div>
-            <dd className="text-[40px] font-bold leading-[44px]" aria-label={figure.text}>
+            <dd className="text-[36px] font-bold leading-[40px]" aria-label={figure.text}>
               {figure.value} <small className="text-lead font-semibold text-muted-foreground">{figure.unit}</small>
             </dd>
             <dt className="mt-1 text-ui text-muted-foreground">{figure.caption}</dt>
@@ -237,10 +334,10 @@ function StepChart({ timing }: { timing: NonNullable<FocusSkill["timing"]> }) {
   const scale = Math.max(1, ...rows.map((r) => Math.max(r.planned, r.used)));
   const width = (minutes: number) => `${(minutes / scale) * 100}%`;
   return (
-    <figure className="mesh-tile mt-7 rounded-2xl p-4 sm:p-5" aria-label="Planned and used minutes for each step of the round">
+    <figure className="mt-7 rounded-2xl bg-sunken p-4 ring-1 ring-inset ring-border sm:p-5" aria-label="Planned and used minutes for each step of the round">
       <div className="mb-3 flex gap-5 text-meta text-muted-foreground" aria-hidden="true">
         <span className="flex items-center gap-1.5">
-          <span className="h-1.5 w-5 rounded-full bg-white/30" />
+          <span className="h-1.5 w-5 rounded-full bg-border-strong" />
           Plan
         </span>
         <span className="flex items-center gap-1.5">
@@ -256,7 +353,7 @@ function StepChart({ timing }: { timing: NonNullable<FocusSkill["timing"]> }) {
           >
             <span className={cn("truncate text-ui", row.reached ? "text-foreground" : "text-muted-foreground")}>{row.label}</span>
             <span className="block space-y-1" aria-hidden="true">
-              <span className="block h-1.5 rounded-full bg-white/30" style={{ width: width(row.planned) }} />
+              <span className="block h-1.5 rounded-full bg-border-strong" style={{ width: width(row.planned) }} />
               {row.used > 0 ? <span className={cn("block h-1.5 rounded-full", row.over > 0 ? "bg-warning-fill" : "bg-primary")} style={{ width: width(row.used) }} /> : null}
             </span>
             <span className="text-right text-ui tabular-nums">

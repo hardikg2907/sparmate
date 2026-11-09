@@ -239,3 +239,38 @@ export const PlayFilledIcon = (p: IconProps) => (
     <path d="M7 4.5v15l12-7.5z" fill="currentColor" />
   </Svg>
 );
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </Svg>
+);
+export const HomeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 11.5 12 5l8 6.5" />
+    <path d="M6 10.5V19h12v-8.5" />
+  </Svg>
+);
+export const TrendIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m4 16 5-5 4 4 7-8" />
+    <path d="M15 7h5v5" />
+  </Svg>
+);
+export const KeyboardIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="6" width="18" height="12" rx="2" />
+    <path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" />
+  </Svg>
+);
+export const FlaskIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
+  </Svg>
+);
+export const EnterIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 5v7a3 3 0 0 1-3 3H5" />
+    <path d="m9 11-4 4 4 4" />
+  </Svg>
+);

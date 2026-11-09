@@ -4,18 +4,15 @@ import type { Settings } from "../shared/types";
 import { ApiError, api, getBootstrap } from "./backend";
 import { AppProviders } from "./components/AppProviders";
 import { Button, Spinner } from "./components/ui";
-import { HistoryPage } from "./pages/History";
-import { LibraryPage } from "./pages/Library";
 import { LibraryNewPage } from "./pages/LibraryNew";
-import { DsaPage } from "./pages/Dsa";
 import { DrillPage } from "./pages/DrillPage";
-import { GymPage } from "./pages/Gym";
+import { PracticePage } from "./pages/Practice";
 import { ProgressPage } from "./pages/Progress";
 import { SettingsPage } from "./pages/Settings";
 import { TodayPage } from "./pages/Today";
 import type { PageContext } from "./pages/context";
 import { UsagePage } from "./pages/UsagePage";
-import { Link, useRoute } from "./router";
+import { Link, legacyTarget, navigate, useRoute } from "./router";
 import { testHooksEnabled } from "./session/testHooks";
 import { applyTheme, type Theme } from "./theme";
 
@@ -72,6 +69,12 @@ function Shell() {
     if (boot.phase === "ready") applyTheme(boot.settings.theme);
   }, [boot]);
 
+  // An address from before the pages were merged is replaced by the page that took over, so a bookmark keeps working.
+  useEffect(() => {
+    const target = legacyTarget(location.pathname);
+    if (target) navigate(target, { replace: true, force: true, instant: true });
+  }, [route]);
+
   // Pages other than a session have nothing to chat with, but scripted checks still need the hook object.
   useEffect(() => {
     if (!testHooksEnabled() || route.name === "session") return;
@@ -112,21 +115,25 @@ function Shell() {
     setBoot({ phase: "ready", bootstrap, settings: next });
   };
 
-  // Keyed by page, so each page mounts fresh. Reading pages stagger their own sections in; the room only fades,
-  // because the whiteboard measures its position when it mounts and a moving page would offset every pointer event.
+  // Keyed by page, so each page mounts fresh, except Rounds and Drills, which are one page. Reading pages stagger
+  // their own sections in; the room only fades, because the whiteboard measures its position when it mounts and a
+  // moving page would offset every pointer event.
   const pageKey =
-    route.name === "session" ? `session:${route.id}` : route.name === "drill" ? `drill:${route.target.drill}:${route.target.problemId}:${route.target.drillId ?? ""}` : route.name;
+    route.name === "session"
+      ? `session:${route.id}`
+      : route.name === "drill"
+        ? `drill:${route.target.drill}:${route.target.problemId}:${route.target.drillId ?? ""}`
+        : route.name === "practice-drills"
+          ? "practice"
+          : route.name;
   const enter = route.name === "session" ? "fade-in " : "";
   return (
     <>
       <div key={pageKey} className={`${enter}h-full min-h-0`}>
         {route.name === "home" ? <TodayPage ctx={ctx} /> : null}
-        {route.name === "library" ? <LibraryPage ctx={ctx} /> : null}
+        {route.name === "practice" || route.name === "practice-drills" ? <PracticePage tab={route.name === "practice" ? "rounds" : "drills"} ctx={ctx} /> : null}
         {route.name === "library-new" ? <LibraryNewPage ctx={ctx} /> : null}
-        {route.name === "gym" ? <GymPage ctx={ctx} /> : null}
-        {route.name === "dsa" ? <DsaPage ctx={ctx} /> : null}
         {route.name === "progress" ? <ProgressPage ctx={ctx} /> : null}
-        {route.name === "history" ? <HistoryPage ctx={ctx} /> : null}
         {route.name === "settings" ? <SettingsPage ctx={ctx} studyRoot={bootstrap.studyRoot} onSave={save} onApplyTheme={applyTheme} /> : null}
         {route.name === "usage" ? <UsagePage /> : null}
         {route.name === "session" ? (

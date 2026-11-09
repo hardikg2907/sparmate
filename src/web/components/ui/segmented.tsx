@@ -15,7 +15,7 @@ export function Segmented<T extends string>({
 }: {
   label: string;
   value: T;
-  options: { value: T; label: string; title?: string; count?: number; icon?: ReactNode }[];
+  options: { value: T; label: string; title?: string; count?: number; icon?: ReactNode; badge?: ReactNode }[];
   onChange: (value: T) => void;
   name?: string;
   disabled?: boolean;
@@ -45,6 +45,7 @@ export function Segmented<T extends string>({
           {option.icon}
           {option.label}
           {option.count === undefined ? null : <span className="text-meta font-semibold text-faint">{option.count}</span>}
+          {option.badge}
         </RadioGroupPrimitive.Item>
       ))}
     </RadioGroupPrimitive.Root>

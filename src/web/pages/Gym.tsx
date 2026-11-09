@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { DRILL_INFO, dueStatus, DRILL_TYPES, PASSES_TO_CLOSE, PASS_INTERVAL_DAYS, type DrillType, type GymDrillRow, type GymSummary } from "../../shared/drills";
 import { DrillIcon, DumbbellIcon } from "../components/DrillIcon";
 import { ArrowLeftIcon, ChevronRightIcon, ListIcon, PlayFilledIcon, WarnIcon } from "../components/icons";
-import { PageHeader, PageShell } from "../components/PageShell";
 import { SidePanel } from "../components/SidePanel";
 import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Button, Card, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
-import { useGym, type GymData } from "../lib/useGym";
+import type { GymData } from "../lib/useGym";
 import { Link, drillPath } from "../router";
-import type { PageContext } from "./context";
 
 export const HOW_A_GAP_CLOSES = `Three passes in a row close the gap. After a pass the next drill comes ${PASS_INTERVAL_DAYS[0]} days later, then ${PASS_INTERVAL_DAYS[1]}. A Not yet starts again tomorrow.`;
 /** How many drills the "Also due" card lists before it says how many more wait. */
@@ -47,39 +45,29 @@ export function Pips({ filled, onMesh }: { filled: number; onMesh?: boolean }) {
   );
 }
 
-export function GymView({ data, ctx }: { data: GymData; ctx: PageContext }) {
+/** The Drills side of the Practice page: the next drill, the others due, and every drill kind to start freely. */
+export function DrillsPanel({ data }: { data: GymData }) {
   const { gym, error } = data;
   const [allOpen, setAllOpen] = useState(false);
 
   return (
-    <PageShell testMode={ctx.testMode}>
-      <div className="reveal-children space-y-6">
-        <PageHeader title="Gym" aside={<span className="text-ui text-muted-foreground">10 to 15 minutes on one skill</span>} />
-        {error ? (
-          <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />} title="The drills could not be loaded" actions={<Button onClick={data.reload}>Try again</Button>}>
-            {error}
-          </Alert>
-        ) : null}
-        {!gym && !error ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]" role="status">
-            <span className="sr-only">Loading drills…</span>
-            <Skeleton className="h-96 rounded-3xl" />
-            <Skeleton className="h-72 rounded-xl" />
-          </div>
-        ) : null}
-        {gym ? <GymBody gym={gym} onAll={() => setAllOpen(true)} /> : null}
-      </div>
+    <div className="space-y-6">
+      {error ? (
+        <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />} title="The drills could not be loaded" actions={<Button onClick={data.reload}>Try again</Button>}>
+          {error}
+        </Alert>
+      ) : null}
+      {!gym && !error ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]" role="status">
+          <span className="sr-only">Loading drills…</span>
+          <Skeleton className="h-96 rounded-xl" />
+          <Skeleton className="h-72 rounded-xl" />
+        </div>
+      ) : null}
+      {gym ? <GymBody gym={gym} onAll={() => setAllOpen(true)} /> : null}
       {allOpen && gym ? <AllDrillsPanel gym={gym} onClose={() => setAllOpen(false)} /> : null}
-    </PageShell>
+    </div>
   );
-}
-
-export function GymPage({ ctx }: { ctx: PageContext }) {
-  const data = useGym();
-  useEffect(() => {
-    document.title = "Gym · Sparmate";
-  }, []);
-  return <GymView data={data} ctx={ctx} />;
 }
 
 function GymBody({ gym, onAll }: { gym: GymSummary; onAll: () => void }) {
@@ -95,9 +83,9 @@ function GymBody({ gym, onAll }: { gym: GymSummary; onAll: () => void }) {
   );
 }
 
-const SHELL = "mesh on-mesh rounded-3xl p-6 sm:p-11";
+const SHELL = "surface-raised rounded-xl bg-raised p-6 sm:p-9";
 const PILL = "inline-flex items-center gap-1.5 rounded-full bg-amber px-3 py-1 text-ui font-bold text-amber-foreground";
-const TITLE = "mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[64px] sm:leading-[68px]";
+const TITLE = "mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[44px] sm:leading-[48px]";
 
 function Hero({ row, today }: { row: GymDrillRow; today: string }) {
   return (
@@ -112,15 +100,15 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
       <p className="mt-3 text-body text-muted-foreground sm:text-lead">
         On <b className="font-semibold text-foreground">{row.problemTitle}</b>
       </p>
-      <p className="mt-1 max-w-[62ch] truncate text-ui text-hero-muted">Gap: {row.gapTitle}</p>
-      <dl className="mesh-tile mt-7 grid w-full auto-cols-fr grid-flow-col divide-x divide-border rounded-xl sm:inline-grid sm:w-auto sm:auto-cols-auto">
+      <p className="mt-1 max-w-[62ch] truncate text-ui text-muted-foreground">Gap: {row.gapTitle}</p>
+      <dl className="mt-7 grid w-full auto-cols-fr grid-flow-col divide-x divide-border rounded-xl bg-sunken ring-1 ring-inset ring-border sm:inline-grid sm:w-auto sm:auto-cols-auto">
         <Fact label="Length" value={`${row.minutes} min`} />
         <Fact
           label="Due"
           value={
             <>
               <span>{dueValue(row, today)}</span>
-              {overdueSince(row, today) ? <small className="text-meta font-medium text-hero-muted">{overdueSince(row, today)}</small> : null}
+              {overdueSince(row, today) ? <small className="text-meta font-medium text-muted-foreground">{overdueSince(row, today)}</small> : null}
             </>
           }
         />
@@ -136,14 +124,14 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
               <span className="whitespace-nowrap">
                 {row.passes} of {PASSES_TO_CLOSE}
               </span>
-              <Pips filled={row.passes} onMesh />
+              <Pips filled={row.passes} />
             </>
           }
         />
       </dl>
       {row.task ? (
         <p className="mt-5 flex max-w-[62ch] gap-2.5 text-body sm:text-lead">
-          <ListIcon size={18} className="mt-1 text-hero-muted" />
+          <ListIcon size={18} className="mt-1 text-muted-foreground" />
           <span>{row.task}</span>
         </p>
       ) : null}
@@ -203,7 +191,7 @@ function NothingYet() {
       </p>
       <div className="mt-6">
         <Button asChild size="lg" variant="default">
-          <Link href="/library">Open the library</Link>
+          <Link href="/practice">Open the library</Link>
         </Button>
       </div>
     </Card>

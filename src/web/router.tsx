@@ -137,20 +137,26 @@ export function guardNavigation(next: NavigationGuard | null): void {
   guard = next;
 }
 
-export function navigate(to: string, options: { replace?: boolean; force?: boolean } = {}): void {
+/**
+ * `instant` swaps the address with no cross-fade and no scroll to the top, for a switch inside one page
+ * (the Rounds and Drills views), where the page stays mounted.
+ */
+export function navigate(to: string, options: { replace?: boolean; force?: boolean; instant?: boolean } = {}): void {
   if (locked) return;
   if (guard && !options.force) {
     guard(to, () => navigate(to, { ...options, force: true }));
     return;
   }
   const url = withKeptParams(to);
-  crossFade(() => {
+  const apply = () => {
     if (options.replace) history.replaceState(null, "", url);
     else history.pushState(null, "", url);
     current = url.split("#")[0] ?? url;
     notify();
-    window.scrollTo(0, 0);
-  });
+    if (!options.instant) window.scrollTo(0, 0);
+  };
+  if (options.instant) apply();
+  else crossFade(apply);
 }
 
 export function useRoute(): Route {

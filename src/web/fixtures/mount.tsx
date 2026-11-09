@@ -1,11 +1,13 @@
 import { StrictMode, useState } from "react";
 import type { Root } from "react-dom/client";
 import { AppProviders } from "../components/AppProviders";
-import { HistoryView } from "../pages/History";
-import { LibraryView } from "../pages/Library";
+import { PaletteSourceContext } from "../components/CommandPalette";
+import type { DsaData } from "../lib/useDsa";
+import type { GymData } from "../lib/useGym";
+import type { StudyData } from "../lib/useStudyData";
+import type { Settings } from "../../shared/types";
 import { LibraryNewView } from "../pages/LibraryNew";
-import { DsaView } from "../pages/Dsa";
-import { GymView } from "../pages/Gym";
+import { PracticeView } from "../pages/Practice";
 import { ProgressView } from "../pages/Progress";
 import { SettingsView } from "../pages/Settings";
 import { TodayView } from "../pages/Today";
@@ -27,13 +29,13 @@ import { hldDebrief, hldRoom, lldDebrief, lldRoom } from "./rooms";
 export const PAGE_FIXTURES = ["home", "library", "library-new", "progress", "history", "settings", "gym", "dsa"] as const;
 const FIXTURE_PATH: Record<string, string> = {
   home: "/",
-  library: "/library",
+  library: "/practice",
   "library-new": "/library/new",
   progress: "/progress",
-  history: "/history",
+  history: "/progress#history",
   settings: "/settings",
-  gym: "/gym",
-  dsa: "/dsa",
+  gym: "/practice/drills",
+  dsa: "/progress#dsa",
 };
 export const FIXTURES = ["home", "room-hld", "room-lld", "debrief-hld", "debrief-lld", "usage"] as const;
 
@@ -62,7 +64,8 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
 
   if ((PAGE_FIXTURES as readonly string[]).includes(name)) {
     // The main bar marks the page from the address, and a fixture keeps the address it was opened with.
-    history.replaceState(null, "", `${FIXTURE_PATH[name] ?? "/"}${location.search}`);
+    const [path = "/", anchor] = (FIXTURE_PATH[name] ?? "/").split("#");
+    history.replaceState(null, "", `${path}${location.search}${anchor ? `#${anchor}` : ""}`);
     const day = params.get("now");
     const now = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? new Date(`${day}T10:00:00`) : new Date();
     root.render(
@@ -216,7 +219,7 @@ function FixturePage({
     return {
       ...base,
       ...(username ? { leetcodeUsername: username } : {}),
-      ...(name === "dsa" && dsaState !== "none" && !username ? { leetcodeUsername: "example_user" } : {}),
+      ...((name === "dsa" || name === "progress" || name === "history") && dsaState !== "none" && !username ? { leetcodeUsername: "example_user" } : {}),
       ...(days?.length === 7 ? { weeklyPlan: days as typeof base.weeklyPlan } : {}),
     };
   });
@@ -225,12 +228,44 @@ function FixturePage({
   const data = useFixtureStudyData(fixtureProblems, everything, preparing ? "custom:interview" : null);
   const ctx: PageContext = { settings, testMode, setup: [] };
 
-  if (name === "library") return <LibraryView data={data} ctx={ctx} />;
+  const gym = { gym: fixtureGym, error: null, reload: () => undefined };
+  const palette = {
+    load: async () => ({ now, plan: settings.weeklyPlan, problems: fixtureProblems, history: [...fixtureOpenRounds, ...fixtureAllHistory] }),
+  };
+  return (
+    <PaletteSourceContext.Provider value={palette}>
+      <FixtureBody name={name} data={data} ctx={ctx} now={now} dsa={dsa} gym={gym} settings={settings} testMode={testMode} onSettings={setSettings} dsaRead={Boolean(dsaState)} />
+    </PaletteSourceContext.Provider>
+  );
+}
+
+function FixtureBody({
+  name,
+  data,
+  ctx,
+  now,
+  dsa,
+  gym,
+  settings,
+  testMode,
+  onSettings,
+  dsaRead,
+}: {
+  name: string;
+  data: StudyData;
+  ctx: PageContext;
+  now: Date;
+  dsa: DsaData;
+  gym: GymData;
+  settings: Settings;
+  testMode: boolean;
+  onSettings: (next: Settings) => void;
+  dsaRead: boolean;
+}) {
+  if (name === "library") return <PracticeView tab="rounds" study={data} gym={gym} ctx={ctx} />;
   if (name === "library-new") return <LibraryNewView data={data} ctx={ctx} />;
-  if (name === "progress") return <ProgressView data={data} ctx={ctx} now={now} dsa={dsaState ? dsa.response : null} drillWeek={fixtureGym.week} />;
-  if (name === "history") return <HistoryView data={data} ctx={ctx} />;
-  if (name === "gym") return <GymView data={{ gym: fixtureGym, error: null, reload: () => undefined }} ctx={ctx} />;
-  if (name === "dsa") return <DsaView ctx={ctx} data={dsa} now={now} />;
+  if (name === "progress" || name === "history" || name === "dsa") return <ProgressView data={data} ctx={ctx} now={now} dsa={dsa} gym={fixtureGym} />;
+  if (name === "gym") return <PracticeView tab="drills" study={data} gym={gym} ctx={ctx} />;
   if (name === "settings") {
     return (
       <SettingsView
@@ -238,11 +273,11 @@ function FixturePage({
         studyRoot={fixtureBootstrap.studyRoot}
         testMode={testMode}
         onSave={async (next) => {
-          setSettings(next);
+          onSettings(next);
         }}
         onApplyTheme={applyTheme}
       />
     );
   }
-  return <TodayView data={data} ctx={ctx} now={now} dsa={dsaState ? dsa.response : null} />;
+  return <TodayView data={data} ctx={ctx} now={now} dsa={dsaRead ? dsa.response : null} />;
 }
