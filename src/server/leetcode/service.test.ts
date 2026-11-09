@@ -67,7 +67,7 @@ describe("status", () => {
       ["graph", 1],
       ["heap-priority-queue", 1],
     ]);
-    expect(res.week).toEqual({ solved: 3, mediums: 1, perDay: [1, 1, 1, 0, 0, 0, 0] });
+    expect(res.week).toEqual({ solved: 3, mediums: 1, perDay: [1, 1, 1, 0, 0, 0, 0], mediumsPerDay: expect.any(Array) });
     expect(res.recent.map((r) => r.slug)).toEqual(["trapping-rain-water", "merge-intervals", "two-sum"]);
     expect(res.lifetimeSolved).toBe(100);
     expect(res.fetchedAt).toBe(new Date(clock).toISOString());

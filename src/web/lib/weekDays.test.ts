@@ -60,6 +60,12 @@ describe("weekDays", () => {
     expect(states([], dsaWith({ day: 10, difficulty: "Medium" }))[1]).toBe("done");
   });
 
+  it("reads the week's medium count, not the recent list, so it agrees with the ring", () => {
+    const base = emptyDsa("u", "ok", 3);
+    const dsa: DsaResponse = { ...base, recent: [], week: { ...base.week, mediumsPerDay: [0, 2, 0, 0, 0, 0, 0] } };
+    expect(states([], dsa)[1]).toBe("done");
+  });
+
   it("ignores DSA solves when the data is not usable", () => {
     const failed = { ...dsaWith({ day: 10, difficulty: "Medium" }), status: "error" as const };
     expect(states([], failed)[1]).toBe("planned");

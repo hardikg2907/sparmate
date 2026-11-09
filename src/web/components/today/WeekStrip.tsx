@@ -6,7 +6,14 @@ import { cn } from "../ui";
 
 export const KIND_LABEL: Record<DayKind, string> = { hld: "HLD", lld: "LLD", dsa: "DSA", redo: "Redo", rest: "Rest" };
 
-const STATE_TEXT: Record<DayState, string> = { done: "done", missed: "missed", today: "today", planned: "planned", rest: "rest day" };
+const STATE_TEXT: Record<Exclude<DayState, "today">, string> = { done: "done", missed: "missed", planned: "planned", rest: "rest day" };
+
+/** What the cell says to a screen reader, since the tick and the dash are drawn only. */
+function stateText(day: WeekDay): string {
+  if (day.state === "today") return day.done ? "today, done" : "today";
+  if (day.state === "planned" && day.kind === "dsa" && day.past) return "not confirmed";
+  return STATE_TEXT[day.state];
+}
 
 const CELL: Record<DayState, string> = {
   done: "border-border bg-primary-soft text-primary-soft-foreground",
@@ -77,7 +84,7 @@ export function WeekStrip({ days }: { days: readonly WeekDay[] }) {
             <span className={cn("block text-lead font-bold", day.state === "missed" && "line-through decoration-1")}>{KIND_LABEL[day.kind]}</span>
           </span>
           <Mark day={day} />
-          <span className="sr-only">{STATE_TEXT[day.state]}</span>
+          <span className="sr-only">{stateText(day)}</span>
         </li>
       ))}
     </ol>

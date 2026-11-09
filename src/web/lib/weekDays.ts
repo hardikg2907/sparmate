@@ -13,6 +13,8 @@ export interface WeekDay {
   kind: DayKind;
   state: DayState;
   isToday: boolean;
+  /** Before today. A past DSA day that is not done is still unconfirmed, not missed. */
+  past: boolean;
   /** The day's work is finished. Today keeps the state "today" and sets this when its round is done. */
   done: boolean;
 }
@@ -36,15 +38,15 @@ function isRedo(h: SessionHistoryItem, history: readonly SessionHistoryItem[]): 
   return history.some((o) => isAttempt(o) && o.status === "debriefed" && o.problemId === h.problemId && o.id !== h.id && o.createdAt < h.createdAt);
 }
 
-/** DSA can only be confirmed from the account's recent solves, so no data means no answer. */
-function solvedMedium(dsa: DsaResponse | null, day: string): boolean {
+/** The week's own medium count per day, the same one the weekly ring adds up, so no data means no answer. */
+function solvedMedium(dsa: DsaResponse | null, index: number): boolean {
   if (!dsa || (dsa.status !== "ok" && dsa.status !== "stale")) return false;
-  return dsa.recent.some((s) => s.difficulty === "Medium" && localDay(new Date(s.solvedAt)) === day);
+  return (dsa.week.mediumsPerDay[index] ?? 0) > 0;
 }
 
-function dayDone(kind: DayKind, day: string, history: readonly SessionHistoryItem[], dsa: DsaResponse | null): boolean {
+function dayDone(kind: DayKind, index: number, day: string, history: readonly SessionHistoryItem[], dsa: DsaResponse | null): boolean {
   if (kind === "rest") return false;
-  if (kind === "dsa") return solvedMedium(dsa, day);
+  if (kind === "dsa") return solvedMedium(dsa, index);
   const ended = history.filter((h) => finished(h) && endedDay(h) === day);
   if (kind === "redo") return ended.some((h) => isRedo(h, history));
   return ended.some((h) => h.track === kind);
@@ -63,7 +65,7 @@ export function weekDays(plan: readonly DayKind[], history: readonly SessionHist
     const kind = plan[index] ?? "rest";
     const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
     const day = localDay(date);
-    const done = dayDone(kind, day, history, dsa);
+    const done = dayDone(kind, index, day, history, dsa);
     const isToday = index === today;
     const past = index < today;
     let state: DayState;
@@ -77,7 +79,7 @@ export function weekDays(plan: readonly DayKind[], history: readonly SessionHist
       known += 1;
       if (done) doneCount += 1;
     }
-    return { index, name, day, kind, state, isToday, done };
+    return { index, name, day, kind, state, isToday, past, done };
   });
   return { days, known, done: doneCount };
 }

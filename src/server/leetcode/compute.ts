@@ -47,7 +47,7 @@ export function mergeLedger(existing: readonly LedgerEntry[], incoming: readonly
  * Problems solved since local Monday 00:00. A problem solved twice in the week counts once, on the day of its first
  * solve, because a re-run is not new practice.
  */
-export function computeWeek(entries: readonly LedgerEntry[], cache: ProblemCache, now: Date): { solved: number; mediums: number; perDay: number[] } {
+export function computeWeek(entries: readonly LedgerEntry[], cache: ProblemCache, now: Date): { solved: number; mediums: number; perDay: number[]; mediumsPerDay: number[] } {
   const start = weekStart(now);
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
   const first = new Map<string, number>();
@@ -58,13 +58,17 @@ export function computeWeek(entries: readonly LedgerEntry[], cache: ProblemCache
     if (seen === undefined || entry.timestamp < seen) first.set(entry.slug, entry.timestamp);
   }
   const perDay = [0, 0, 0, 0, 0, 0, 0];
+  const mediumsPerDay = [0, 0, 0, 0, 0, 0, 0];
   let mediums = 0;
   for (const [slug, timestamp] of first) {
     const day = planIndex(new Date(timestamp * 1000));
     perDay[day] = (perDay[day] ?? 0) + 1;
-    if (infoOf(cache, slug)?.difficulty === "Medium") mediums += 1;
+    if (infoOf(cache, slug)?.difficulty === "Medium") {
+      mediums += 1;
+      mediumsPerDay[day] = (mediumsPerDay[day] ?? 0) + 1;
+    }
   }
-  return { solved: first.size, mediums, perDay };
+  return { solved: first.size, mediums, perDay, mediumsPerDay };
 }
 
 /** Distinct problems in the ledger, counted by difficulty and by topic. */

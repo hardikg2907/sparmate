@@ -40,6 +40,8 @@ export interface DsaResponse {
     mediums: number;
     /** Solved problems per local day, Monday first. */
     perDay: number[];
+    /** Mediums per local day, Monday first, counted on the day each problem was first solved this week. */
+    mediumsPerDay: number[];
   };
   /** Up to 10 distinct problems, newest first. */
   recent: DsaSolve[];
@@ -99,7 +101,7 @@ export function emptyDsa(username: string | null, status: DsaStatus, weeklyGoal:
     countFrom,
     pass: { solved: 0, easy: 0, medium: 0, hard: 0, unread: 0 },
     topics: [],
-    week: { solved: 0, mediums: 0, perDay: [0, 0, 0, 0, 0, 0, 0] },
+    week: { solved: 0, mediums: 0, perDay: [0, 0, 0, 0, 0, 0, 0], mediumsPerDay: [0, 0, 0, 0, 0, 0, 0] },
     recent: [],
     lifetimeSolved: null,
     weeklyGoal,

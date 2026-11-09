@@ -677,6 +677,9 @@ None of the packages uses `eval` or loads anything from the network.
 One line: the default theme in `DEFAULT_SETTINGS` (`src/shared/types.ts`) is `dark`, so a new install opens dark. A
 `settings.json` that already holds a theme keeps it. The gap badges and the step count read `Session.gapProgress`.
 
+The DSA response carries `week.mediumsPerDay` (Monday first), the mediums counted on the day each problem was first
+solved this week. The week strip reads it, so a DSA day agrees with the weekly ring.
+
 ---
 
 ## 9. How the revamp is checked
