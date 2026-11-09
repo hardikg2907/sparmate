@@ -355,8 +355,8 @@ The old addresses `/library`, `/gym`, `/dsa` and `/history` are replaced in plac
 
 1. Today shows **one session**, chosen from the weekly plan, with the other unfinished rounds and redos beside it.
 2. He presses the one filled button ("Start guided round" or "Start interview round"). "See the plan" opens a side
-   panel with the mode switch, the step plan with its minutes and last time's minutes, and the last try. In the Library
-   he selects a row and starts from the detail panel.
+   panel with the mode switch, the step plan with its minutes and last time's minutes, and the last try. On Practice, in
+   Rounds, he selects a row and starts from the detail panel.
 3. The button shows a spinner while the server creates the session, then the room opens.
 
 The plan panel is the moment to read the plan before the clock runs. The room shows the same plan.
