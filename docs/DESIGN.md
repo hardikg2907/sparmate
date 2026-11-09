@@ -290,6 +290,7 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
   counts and the total cost; the debrief has no count-up. A later change to a number shows the new value at once.
 - **A drill result** answers the submit: the "Pass" mark settles in (scale 1.06 to 1, 200 ms), and on "Not yet" the
   one-fix line slides in 8 px (200 ms). Both wait for the page's own sequence to arrive.
+- **The week strip's tick** fills from the bottom in 300 ms when today's round finishes. Earlier days show their tick at once.
 - **The plan needle** moves with the clock. When the phase changes, the current segment's fill slides to the next
   segment in 200 ms.
 - **Motion that answers an action**: buttons ease colour and shadow in 150 ms and move down 1 px while pressed; cards rise on
@@ -353,7 +354,7 @@ The old addresses `/library`, `/gym`, `/dsa` and `/history` are replaced in plac
 
 ### Start a round
 
-1. Today shows **one session**, chosen from the weekly plan, with the other unfinished rounds and redos beside it.
+1. Today shows **one session**, chosen from the weekly plan, with the other unfinished rounds, redos, due drills and the DSA goal beside it.
 2. He presses the one filled button ("Start guided round" or "Start interview round"). "See the plan" opens a side
    panel with the mode switch, the step plan with its minutes and last time's minutes, and the last try. On Practice, in
    Rounds, he selects a row and starts from the detail panel.
@@ -455,11 +456,37 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 
 ### Today
 
-- **Header.** The date as a kicker, the day's title, and a quiet week strip with today marked.
-- **Hero.** A mesh panel: an amber chip ("Redo due", "New problem" or "Unfinished") and a track pill, the title at 64 px in
-  the rounded face, one sentence why, a facts tile (Mode, Round, Debrief), at most one amber warning line, then the filled
-  primary button, "See the plan" and a quiet link to the Library.
-- **Side.** An Unfinished card with a clock bar, and a link card for the other redos.
+Today is one page for the whole day, and with data it fills the first screen at 1440 by 900.
+
+- **Day header.** The date as a kicker, the day's title, and on the right "2 of 3 planned days done this week". Only
+  days whose outcome is known are counted.
+- **Week strip.** Seven cells under the header, Monday first. Each shows the day name, the plan type (HLD, LLD, DSA,
+  Redo or Rest) and a state mark. *Done* is filled with a tick. *Missed* is hollow, muted and dashed, with the type
+  struck through. *Today* has the brand fill and a ring. *Planned* is a plain outlined cell, and *Rest* is quiet. An
+  HLD, LLD or Redo day is done when a round of that kind ended that day. A DSA day is done only when the DSA numbers
+  show a medium solved that day, and otherwise stays planned, because missing data is never a missed day. A past
+  day of a round kind with no finished round is missed. On a phone the strip scrolls sideways inside its own row,
+  with today centred.
+- **Hero.** The only mesh panel, about 300 px tall. One row of chips: an amber chip ("Redo due", "New problem" or
+  "Unfinished"), the track pill, then Mode, Round and Debrief as label-and-value pills. Under it the title at 40 px with
+  tight tracking in the rounded face, one sentence why, at most one amber warning line, then the filled primary
+  button, "See the plan" and a quiet link to the Library. On a phone the primary button sticks to the bottom of the
+  screen.
+- **Plan preview.** A raised card under the hero: the round's steps drawn to scale, each with its minutes, and its
+  name when the step is wide enough.
+- **Also today.** A right column of raised cards. *Unfinished round* has the name, the pause date, a clock bar,
+  **Finish**, **End and debrief** (or **Discard**) and "N more unfinished rounds". *Drills due* shows the count and
+  total minutes, up to three rows (the gap and the drill with its minutes) each with **Start**, and "Open Practice". It
+  is hidden when nothing is due. *DSA this week* shows a ring ("2 of 3 mediums"), "1 more by Sunday" and "Open
+  LeetCode". Without a username it asks for one and links to Settings. A link card lists the other redos.
+- **Focus band.** "This week's focus: <skill>", the skill's average over the newest scored rounds, a sparkline of its
+  last five scores and "See progress". The skill is the same one the Progress page shows.
+- **First run.** With no round played, the hero is a four-step checklist: set the weekly plan, add the LeetCode
+  username, play the first round, read its debrief. A finished step is ticked, the first open step is lit and has
+  one action. The right column shows quiet dashed outlines of the cards that fill in later, and the week strip shows
+  no missed days.
+- **Rest day.** A calm hero, "Rest day. Nothing is due.", with "Pick a problem anyway" and, when drills exist, "Do one
+  drill anyway". Below it a "Next up" card names the next planned day. The strip still shows the week.
 - **Plan panel.** A panel from the right: mode switch, the plan bar drawn to scale, a table of step, plan and last time,
   and a last-try tile.
 
@@ -616,8 +643,11 @@ Scripts and tests depend on these, so the revamp keeps them exactly.
   (`scripts/e2e/layout-check.mjs`).
 - `window.__irBoard` and `window.__irShell` with `?testhooks=1`, and the `__fixtureLog` in fixture mode.
 - Fixture names: `home` (Today), `library` (Practice, Rounds), `library-new`, `progress`, `history` and `dsa` (Progress,
-  opened at that section), `settings`, `gym` (Practice, Drills), the room and debrief fixtures, and `usage`. URL parameters: `fixture`, `theme`, `mode`, `status`, `error`, `reason`, `offline`, `timeup`,
-  `stale`, `preparing`, `now` (a date, for Today and Progress), `unfinished=0`, `username`, `plan`, `testmode=0`.
+  opened at that section), `settings`, `gym` (Practice, Drills), the room and debrief fixtures, and `usage`. URL
+  parameters: `fixture`, `theme`, `mode`, `status`, `error`, `reason`, `offline`, `timeup`, `stale`, `preparing`, `now`
+  (a date, for Today and Progress), `unfinished=0`, `username`, `plan`, `testmode=0`, and for Today `today=first` (no
+  rounds yet, no drills) and `today=rest` (today's slot of the plan becomes rest). On Today a `username` or a `state`
+  (the DSA states) shows the DSA numbers.
 
 ---
 
