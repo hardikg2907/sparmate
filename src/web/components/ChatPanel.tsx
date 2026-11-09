@@ -14,6 +14,30 @@ import { Button, Badge, Tooltip, cn } from "./ui";
 // Runs once when a message mounts. Streaming updates keep the same element, so they do not replay it.
 const ENTER = "animate-in fade-in-0 slide-in-from-bottom-1 duration-200";
 
+const SPEECH_NOTE_KEY = "sparmate-speech-note-dismissed";
+
+function readDismissed(): boolean {
+  try {
+    return localStorage.getItem(SPEECH_NOTE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** The speech-pack note is asked once per browser: "Not now" keeps it away on later visits. */
+function useSpeechNoteDismissed(): [boolean, () => void] {
+  const [dismissed, setDismissed] = useState(readDismissed);
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(SPEECH_NOTE_KEY, "1");
+    } catch {
+      // The note then returns on the next visit, which is harmless.
+    }
+  };
+  return [dismissed, dismiss];
+}
+
 interface ChatPanelProps {
   heading: string;
   /** Name shown on the other side's messages. */
@@ -29,9 +53,28 @@ interface ChatPanelProps {
   tools?: ReactNode;
   showTimes?: boolean;
   headerExtra?: ReactNode;
+  /** A row between the header and the conversation. It sits in the flow, so it never adds a scroller of its own. */
+  topSlot?: ReactNode;
+  /** Shown under the conversation while the other side's opening message is the only one. */
+  afterOpening?: ReactNode;
 }
 
-export function ChatPanel({ heading, speaker, items, agent, onSend, inputLabel, placeholder, disabled, empty, tools, showTimes, headerExtra }: ChatPanelProps) {
+export function ChatPanel({
+  heading,
+  speaker,
+  items,
+  agent,
+  onSend,
+  inputLabel,
+  placeholder,
+  disabled,
+  empty,
+  tools,
+  showTimes,
+  headerExtra,
+  topSlot,
+  afterOpening,
+}: ChatPanelProps) {
   const panelRef = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -184,6 +227,8 @@ export function ChatPanel({ heading, speaker, items, agent, onSend, inputLabel, 
         {headerExtra}
       </header>
 
+      {topSlot}
+
       <div className="relative min-h-0 flex-1">
         <div
           ref={scroller}
@@ -206,6 +251,7 @@ export function ChatPanel({ heading, speaker, items, agent, onSend, inputLabel, 
             </ul>
           )}
           {busy ? <Typing speaker={speaker} early={streaming} /> : null}
+          {afterOpening && items.length === 1 && items[0]?.role === "interviewer" ? <div className="mt-4">{afterOpening}</div> : null}
         </div>
         <div className="sr-only" role="status" aria-live="polite">
           {announcement}
@@ -372,9 +418,31 @@ function Composer({
   };
 
   const nearLimit = draft.length > CHAT_MAX_CHARS * 0.9;
+  const [noteDismissed, dismissNote] = useSpeechNoteDismissed();
+  const showSpeechNote = voiceInput.availability.status === "downloadable" && (!noteDismissed || voiceInput.isInstalling);
 
   return (
     <footer className="composer-foot shrink-0 border-t border-border px-3 pb-2 pt-3">
+      {showSpeechNote ? (
+        <div className="speech-note mb-2 flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-meta" role="note">
+          <span className="min-w-0 font-semibold text-primary-soft-foreground">Voice input needs the speech pack.</span>
+          <span className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              className="rounded-sm font-semibold text-primary-text hover:underline disabled:opacity-60"
+              onClick={() => void voiceInput.installModel()}
+              disabled={voiceInput.isInstalling || disabled}
+            >
+              {voiceInput.isInstalling ? "Downloading…" : "Install"}
+            </button>
+            {voiceInput.isInstalling ? null : (
+              <button type="button" className="rounded-sm text-muted-foreground hover:text-foreground hover:underline" onClick={dismissNote}>
+                Not now
+              </button>
+            )}
+          </span>
+        </div>
+      ) : null}
       {tools ? <div className="mb-2 flex flex-wrap items-center gap-2">{tools}</div> : null}
       <form
         onSubmit={(event) => {
@@ -402,20 +470,6 @@ function Composer({
           className="min-h-[2.75rem] w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-body text-foreground placeholder:text-faint focus:outline-none disabled:cursor-not-allowed"
         />
         <div className="flex items-center gap-1.5 px-1.5 pb-1.5">
-          {voiceInput.availability.status === "downloadable" ? (
-            <Tooltip content="Download the language pack for on-device speech recognition" side="top">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => void voiceInput.installModel()}
-                disabled={voiceInput.isInstalling || disabled}
-                className="text-primary-text"
-              >
-                {voiceInput.isInstalling ? "Downloading…" : "Install speech pack"}
-              </Button>
-            </Tooltip>
-          ) : null}
           <Tooltip content={voiceInput.isListening ? "Turn the microphone off" : "Turn the microphone on"} shortcut={["Ctrl", "M"]} side="top">
             <Button
               type="button"

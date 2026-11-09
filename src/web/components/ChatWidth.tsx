@@ -84,7 +84,7 @@ export function ChatResizeHandle({ width, onChange }: { width: number; onChange:
       onPointerUp={stop}
       onPointerCancel={stop}
       onKeyDown={onKeyDown}
-      className="group relative z-10 -mx-1 w-2 shrink-0 cursor-col-resize touch-none"
+      className="group relative z-10 -mx-1 w-2 shrink-0 cursor-col-resize touch-none max-md:hidden"
     >
       <span className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${active ? "bg-primary" : "bg-border group-hover:bg-input"}`} />
     </div>
