@@ -26,14 +26,13 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
   const levels = levelNames(verdict);
   const confidence = `${verdict.confidence} confidence`;
   return (
-    <section id="verdict" aria-labelledby="verdict-heading" className="relative pl-4">
+    <section id="verdict" aria-labelledby="verdict-heading">
       <h2 id="verdict-heading" className="sr-only">
         Verdict
       </h2>
-      <span aria-hidden="true" className={cn("absolute inset-y-0.5 left-0 w-1 rounded-full", TONE_FILL[tone])} />
       <p className="text-ui font-semibold text-muted-foreground">{readiness ? "Ready for interview mode?" : `At the ${levels.target} bar`}</p>
       <p className="flex flex-wrap items-baseline gap-x-3">
-        <span className="text-title font-bold tracking-[-0.01em] text-foreground">{readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}</span>
+        <span className={cn("text-title font-bold", TONE_TEXT[tone])}>{readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}</span>
         <span className="text-meta text-muted-foreground">{readiness ? confidence : `${levels.stretch}: ${VERDICT_LABEL[verdict.senior]} · ${confidence}`}</span>
       </p>
       <p className="mt-0.5 text-ui text-muted-foreground">

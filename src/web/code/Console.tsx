@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import type { CompileDiagnostic, RunResult } from "../../shared/types";
-import { SpinnerIcon } from "../components/icons";
+import { SpinnerIcon, WarnIcon } from "../components/icons";
 import { Badge, Button, Disclosure, Tooltip, TONE_FILL, TONE_TEXT } from "../components/ui";
 import { cn } from "../lib/utils";
 import type { Tone } from "../lib/format";
@@ -34,7 +34,12 @@ function statusTone(lastRun: RunResult | null, running: boolean): Tone {
 }
 
 function Note({ warn, children }: { warn?: boolean; children: ReactNode }) {
-  return <p className={cn("mt-1.5 rounded-sm border-l-2 bg-muted px-2 py-1 text-ui text-muted-foreground", warn ? "border-warning-fill" : "border-border")}>{children}</p>;
+  return (
+    <p className={cn("mt-1.5 flex items-start gap-1.5 rounded-md border border-border bg-muted px-2 py-1 text-ui", warn ? "font-semibold text-warning" : "text-muted-foreground")}>
+      {warn ? <WarnIcon size={14} className="mt-0.5 shrink-0" /> : null}
+      <span className="min-w-0">{children}</span>
+    </p>
+  );
 }
 
 function DiagnosticRow({ diagnostic, onJumpTo }: { diagnostic: CompileDiagnostic; onJumpTo?: (line: number, column: number) => void }) {
@@ -69,8 +74,11 @@ function DiagnosticRow({ diagnostic, onJumpTo }: { diagnostic: CompileDiagnostic
 function OutputBlock({ label, text, stream }: { label: string; text: string; stream: "stdout" | "stderr" }) {
   return (
     <div className={cn("ir-stream mt-2 first:mt-0", `ir-stream--${stream}`)}>
-      <div className="mb-0.5 font-mono text-meta font-semibold text-muted-foreground">{label}</div>
-      <pre className={cn("ir-out", PRE, stream === "stderr" && "border-l-2 border-destructive-fill")}>{text}</pre>
+      <div className={cn("mb-0.5 flex items-center gap-1 font-mono text-meta font-semibold", stream === "stderr" ? "text-destructive" : "text-muted-foreground")}>
+        {stream === "stderr" ? <WarnIcon size={12} className="shrink-0" /> : null}
+        {label}
+      </div>
+      <pre className={cn("ir-out", PRE, stream === "stderr" && "border border-border")}>{text}</pre>
       {outputWasCut(text) && <Note>Output was cut. Only the start of {label} is shown.</Note>}
     </div>
   );

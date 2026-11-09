@@ -30,7 +30,7 @@ export function SidePanel({ kicker, title, onClose, children, footer }: { kicker
           <div className="flex shrink-0 items-start justify-between gap-4 px-8 pb-2 pt-7">
             <div className="min-w-0">
               {kicker ? <p className="truncate text-ui text-muted-foreground">{kicker}</p> : null}
-              <DialogPrimitive.Title className="text-title font-bold tracking-[-0.01em] text-foreground">{title}</DialogPrimitive.Title>
+              <DialogPrimitive.Title className="text-title font-bold text-foreground">{title}</DialogPrimitive.Title>
             </div>
             <DialogPrimitive.Close
               aria-label="Close"

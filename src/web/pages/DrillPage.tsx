@@ -8,6 +8,7 @@ import { ArrowLeftIcon, CheckIcon, WarnIcon } from "../components/icons";
 import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Button, Card, Skeleton, Spinner, Textarea, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
+import { testHooksEnabled } from "../session/testHooks";
 import { countdownText, useCountdown } from "../lib/useCountdown";
 import { Link, drillPath, guardNavigation, navigate } from "../router";
 import { HOW_A_GAP_CLOSES, Pips } from "./Gym";
@@ -186,7 +187,7 @@ function PromptView({ prompt }: { prompt: DrillPrompt }) {
           <TrackChip track={prompt.problem.track} />
           <span className="text-ui text-muted-foreground">{prompt.minutes} min</span>
         </div>
-        <h1 id="drill-heading" className="mt-3 text-display font-bold tracking-[-0.015em]">
+        <h1 id="drill-heading" className="mt-3 text-display font-bold">
           {prompt.title}
         </h1>
         <p className="mt-1 text-lead text-muted-foreground">
@@ -266,6 +267,7 @@ function AnswerView({
 function ResultView({ prompt, result }: { prompt: DrillPrompt; result: DrillResult }) {
   const pass = result.verdict === "pass";
   const next = result.next;
+  const motion = !testHooksEnabled();
   return (
     <div className="reveal-children space-y-6">
       <section aria-labelledby="result-title" className="mesh on-mesh rounded-3xl p-6 sm:p-11">
@@ -273,14 +275,14 @@ function ResultView({ prompt, result }: { prompt: DrillPrompt; result: DrillResu
           {pass ? <CheckIcon size={14} /> : null}
           {prompt.title}
         </span>
-        <h1 id="result-title" className="mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[64px] sm:leading-[68px]">
+        <h1 id="result-title" className={cn("mt-5 w-fit origin-left font-display text-display font-extrabold sm:text-[64px] sm:leading-[68px]", pass && motion && "drill-settle")}>
           {pass ? "Pass" : "Not yet"}
         </h1>
         <p className="mt-3 text-body text-muted-foreground sm:text-lead">
           On <b className="font-semibold text-foreground">{prompt.problem.title}</b>
         </p>
         <ScheduleFacts result={result} />
-        <div className="mt-6 max-w-[62ch]">
+        <div className={cn("mt-6 max-w-[62ch]", !pass && motion && "drill-slide-in")}>
           <h2 className="text-meta font-semibold uppercase tracking-wide text-hero-muted">{pass ? "Sharpen next" : "The one fix"}</h2>
           <p className="mt-1.5 text-lead">{result.fix}</p>
         </div>
@@ -304,11 +306,11 @@ function ResultView({ prompt, result }: { prompt: DrillPrompt; result: DrillResu
       <div className="grid gap-6 md:grid-cols-2">
         <Card variant="raised" className="p-6">
           <h2 className="text-meta font-semibold uppercase tracking-wide text-muted-foreground">Your line</h2>
-          <blockquote className="mt-3 border-l-2 border-border-strong pl-4 text-lead">{result.yourLine || "You left the answer empty."}</blockquote>
+          <blockquote className="mt-3 rounded-lg border border-border bg-sunken px-4 py-3 text-lead">{result.yourLine || "You left the answer empty."}</blockquote>
         </Card>
         <Card variant="raised" className="p-6">
           <h2 className="text-meta font-semibold uppercase tracking-wide text-muted-foreground">What a pass sounds like</h2>
-          <blockquote className="mt-3 border-l-2 border-success-fill pl-4 text-lead">{result.passSounds}</blockquote>
+          <blockquote className="mt-3 rounded-lg border border-border bg-sunken px-4 py-3 text-lead">{result.passSounds}</blockquote>
         </Card>
       </div>
     </div>
