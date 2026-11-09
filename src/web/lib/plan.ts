@@ -26,6 +26,19 @@ export function behindPlanMs(plan: readonly PlanPhase[], currentPhase: string, r
   return Math.max(0, roundMs - window.endMs);
 }
 
+/** What the top bar says about pace: how far past the plan, or on it. */
+export type PlanDelta = { kind: "behind"; ms: number } | { kind: "on" };
+
+/**
+ * The pace chip's content, or null when the round has no time plan to be behind: an empty plan, a phase the plan
+ * does not list, or a round that is not timed. Less than a second past the planned end still counts as on plan.
+ */
+export function planDelta(plan: readonly PlanPhase[], currentPhase: string, roundMs: number, timed = true): PlanDelta | null {
+  if (!timed || !plan.some((p) => p.id === currentPhase)) return null;
+  const ms = behindPlanMs(plan, currentPhase, roundMs);
+  return ms >= 1000 ? { kind: "behind", ms } : { kind: "on" };
+}
+
 /** The phase the plan says the candidate should be in at this round time, or the last one once past the plan. */
 export function plannedPhaseAt(plan: readonly PlanPhase[], roundMs: number): string | null {
   const windows = planWindows(plan);

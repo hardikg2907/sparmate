@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_RAIL_SHARE, behindPlanMs, planWindows, plannedPhaseAt, railPosition, railWeights } from "./plan";
+import { MIN_RAIL_SHARE, behindPlanMs, planDelta, planWindows, plannedPhaseAt, railPosition, railWeights } from "./plan";
 
 const MIN = 60_000;
 const PLAN = [
@@ -86,5 +86,29 @@ describe("rail layout", () => {
     ];
     expect(railWeights(even)).toEqual([10, 10]);
     expect(railPosition(even, 5 * MIN)).toBeCloseTo(0.25);
+  });
+});
+
+describe("planDelta", () => {
+  it("is on plan inside the current phase's window", () => {
+    expect(planDelta(PLAN, "entities", 7 * MIN)).toEqual({ kind: "on" });
+  });
+
+  it("reports the time past the current phase's planned end", () => {
+    expect(planDelta(PLAN, "requirements", 7 * MIN + 13_000)).toEqual({ kind: "behind", ms: 2 * MIN + 13_000 });
+  });
+
+  it("treats under a second past the end as on plan", () => {
+    expect(planDelta(PLAN, "requirements", 5 * MIN + 999)).toEqual({ kind: "on" });
+  });
+
+  it("is on plan for a candidate who moved ahead", () => {
+    expect(planDelta(PLAN, "api", 7 * MIN)).toEqual({ kind: "on" });
+  });
+
+  it("has nothing to say without a plan, an unknown phase or an untimed round", () => {
+    expect(planDelta([], "api", 99 * MIN)).toBeNull();
+    expect(planDelta(PLAN, "deep_dives", 99 * MIN)).toBeNull();
+    expect(planDelta(PLAN, "requirements", 99 * MIN, false)).toBeNull();
   });
 });
