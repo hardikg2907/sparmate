@@ -83,7 +83,7 @@ function OpenLeetcode({ variant = "default", size = "lg" }: { variant?: "default
 function Notice({ title, children, actions }: { title: string; children: ReactNode; actions: ReactNode }) {
   return (
     <Card variant="raised" className="max-w-3xl p-8 sm:p-10">
-      <h2 className="font-display text-title font-extrabold tracking-[-0.01em]">{title}</h2>
+      <h2 className="font-display text-title font-extrabold">{title}</h2>
       <p className="mt-2 max-w-[52ch] text-body text-muted-foreground">{children}</p>
       <div className="mt-6 flex flex-wrap items-center gap-3">{actions}</div>
     </Card>

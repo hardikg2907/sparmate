@@ -74,11 +74,7 @@ function SubNav() {
   }, []);
 
   return (
-    <nav
-      ref={nav}
-      aria-label="Sections of this page"
-      className="progress-subnav sticky top-[var(--header-h)] z-10 -mx-4 border-b border-border/70 bg-sunken/90 px-4 sm:-mx-8 sm:px-8"
-    >
+    <nav ref={nav} aria-label="Sections of this page" className="progress-subnav sticky top-[var(--header-h)] z-10 border-b border-border/70 bg-sunken/80 backdrop-blur-xl">
       <ul className="no-scrollbar flex gap-1 overflow-x-auto py-2">
         {SECTIONS.map(({ id, label }) => (
           <li key={id}>
@@ -258,7 +254,7 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
     return (
       <section aria-labelledby="focus-title" className={shell}>
         {chip}
-        <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold tracking-[-0.02em]">
+        <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold">
           Your focus appears after a scored round
         </h2>
         <p className="mt-3 max-w-[52ch] text-body text-muted-foreground">Finish a round and read its debrief. The lowest skill across your latest rounds shows up here.</p>
@@ -275,7 +271,7 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
   return (
     <section aria-labelledby="focus-title" className={shell}>
       {chip}
-      <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[44px] sm:leading-[48px]">
+      <h2 id="focus-title" className="mt-5 font-display text-display font-extrabold sm:text-[44px] sm:leading-[48px]">
         {focus.name}
       </h2>
       <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
@@ -349,7 +345,7 @@ function StepChart({ timing }: { timing: NonNullable<FocusSkill["timing"]> }) {
         {rows.map((row) => (
           <li
             key={row.phase}
-            className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_minmax(0,6.5rem)] items-center gap-x-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,8rem)]"
+            className="grid grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)_minmax(0,6rem)] items-center gap-x-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,8rem)]"
           >
             <span className={cn("truncate text-ui", row.reached ? "text-foreground" : "text-muted-foreground")}>{row.label}</span>
             <span className="block space-y-1" aria-hidden="true">
@@ -383,7 +379,7 @@ function SkillsCard({ rows, rounds, mode, onMode }: { rows: SkillRow[]; rounds: 
     <Card variant="raised" className="p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lead font-semibold">
-          Skills
+          Latest score per skill
           <InfoTip label="About the scores">
             <span className="block">
               Scores run from 1 to 4: {SCORE_WORD[1]?.toLowerCase()}, {SCORE_WORD[2]?.toLowerCase()}, {SCORE_WORD[3]?.toLowerCase()}, {SCORE_WORD[4]?.toLowerCase()}. The dashed

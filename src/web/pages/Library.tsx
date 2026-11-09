@@ -211,7 +211,7 @@ function Detail({ problem, history, data, ctx }: { problem: ProblemSummary; hist
         <Badge className="px-2.5 py-1 capitalize">{problem.difficulty}</Badge>
         {problem.custom ? <Badge className="px-2.5 py-1">Your question</Badge> : null}
       </div>
-      <h2 className="mt-4 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[36px] sm:leading-[42px]">{problem.title}</h2>
+      <h2 className="mt-4 font-display text-display font-extrabold sm:text-[36px] sm:leading-[42px]">{problem.title}</h2>
       {problem.summary ? (
         <figure className="mt-5 rounded-xl bg-sunken p-4 ring-1 ring-inset ring-border">
           <figcaption className="text-meta text-muted-foreground">The interviewer opens with</figcaption>

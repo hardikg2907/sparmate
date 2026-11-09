@@ -132,7 +132,7 @@ export function CommandPalette() {
         hideClose
         data-palette=""
         aria-describedby={undefined}
-        className="top-[14%] max-w-[640px] translate-y-0 gap-0 overflow-hidden p-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:duration-100 data-[state=open]:zoom-in-[0.98] data-[state=open]:duration-[140ms] data-[state=open]:slide-in-from-bottom-0 motion-reduce:data-[state=closed]:zoom-out-100 motion-reduce:data-[state=open]:zoom-in-100 max-sm:bottom-0 max-sm:left-0 max-sm:top-auto max-sm:max-h-[80dvh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:rounded-b-none max-sm:data-[state=closed]:zoom-out-100 max-sm:data-[state=open]:zoom-in-100"
+        className="top-[14%] max-h-[min(34rem,calc(86dvh-1rem))] max-w-[640px] translate-y-0 gap-0 overflow-hidden p-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:duration-100 data-[state=open]:zoom-in-[0.98] data-[state=open]:duration-[140ms] data-[state=open]:slide-in-from-bottom-0 motion-reduce:data-[state=closed]:zoom-out-100 motion-reduce:data-[state=open]:zoom-in-100 max-sm:bottom-0 max-sm:left-0 max-sm:top-auto max-sm:max-h-[80dvh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:rounded-b-none max-sm:data-[state=closed]:zoom-out-100 max-sm:data-[state=open]:zoom-in-100"
       >
         <DialogTitle className="sr-only">Jump to</DialogTitle>
         <DialogDescription className="sr-only">Search rounds, problems, pages and settings. Use the arrow keys to move and Enter to open.</DialogDescription>

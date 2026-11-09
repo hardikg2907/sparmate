@@ -85,7 +85,7 @@ function GymBody({ gym, onAll }: { gym: GymSummary; onAll: () => void }) {
 
 const SHELL = "surface-raised rounded-xl bg-raised p-6 sm:p-9";
 const PILL = "inline-flex items-center gap-1.5 rounded-full bg-amber px-3 py-1 text-ui font-bold text-amber-foreground";
-const TITLE = "mt-5 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[44px] sm:leading-[48px]";
+const TITLE = "mt-5 font-display text-display font-extrabold sm:text-[44px] sm:leading-[48px]";
 
 function Hero({ row, today }: { row: GymDrillRow; today: string }) {
   return (
@@ -184,7 +184,7 @@ function NothingDue({ gym, onAll }: { gym: GymSummary; onAll: () => void }) {
 function NothingYet() {
   return (
     <Card variant="raised" className="max-w-3xl p-8 sm:p-10">
-      <h2 className="font-display text-title font-extrabold tracking-[-0.01em]">Drills start after your first round</h2>
+      <h2 className="font-display text-title font-extrabold">Drills start after your first round</h2>
       <p className="mt-2 max-w-[52ch] text-body text-muted-foreground">
         A drill trains one gap from a round you played, so it never gives away a problem you have not met. Finish a round and read its debrief, and your first drill appears the
         next day.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { GymSummary } from "../../shared/drills";
 import { ApiError, api } from "../backend";
 
@@ -23,8 +23,12 @@ export function useGym(): GymData {
   return { gym, error, reload: load };
 }
 
+/** A fixed count for pages rendered from static data, which have no server to ask. */
+export const DueDrillCountContext = createContext<number | null>(null);
+
 /** The due-drill count for the main bar. Zero until it is known, so the bar never shows a count it is unsure of. */
 export function useDueDrillCount(): number {
+  const fixed = useContext(DueDrillCountContext);
   const { gym } = useGym();
-  return gym?.dueCount ?? 0;
+  return fixed ?? gym?.dueCount ?? 0;
 }

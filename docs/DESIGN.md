@@ -30,7 +30,7 @@ His own notes show where rounds go wrong. The design should help with these firs
 | Screen | His job | What "done" looks like |
 |---|---|---|
 | Today | "Tell me what to do today and let me start it without thinking." | One obvious session from his weekly plan, and a paused round he can finish or throw away. |
-| Library | "Let me choose a problem and see it before I start." | A list to scan, a detail panel, one Start button. |
+| Practice | "Let me choose what to practise next." | Rounds: a list to scan, a detail panel, one Start button. Drills: the next drill and the others due. |
 | Progress | "Show me my weakest skill and what to do about it." | One focus skill with one chart and one action, skills over time, the next redos. |
 | History | "Let me find an old round, open its debrief or delete it." | A calm table of every round, unfinished ones marked. |
 | Settings | "Let me set the plan and the tools once." | Sections with one Save button. |
@@ -94,7 +94,7 @@ Everything else stays disciplined, and the reading pages (home, debrief, usage) 
 level, not by outline**. The page canvas is sunken and lit by soft light from three corners: brand indigo at the
 top left, violet at the top right and a cool teal at the bottom. In dark it is a near-black plum (`#0c0a17`). Content
 sits on it in raised panels that are lit from above. The thing to do next gets a **mesh panel**: the recommended round on
-home and the NEXT card on the debrief. Three tones blend as layered radial gradients, not as stripes: a
+home and the NEXT card on the debrief. Practice and Progress carry no mesh panel: their focus and detail panels are raised. Three tones blend as layered radial gradients, not as stripes: a
 near-black corner at the top right, a bright saturated tone through the middle (brand indigo, with violet at the left)
 and a pale lilac glow that rises from the bottom. White text sits only on the dark and bright tones. Whatever sits
 over the glow (the score cells, the plan) sits on a dark glass tile, so white keeps its contrast. The usage page keeps
@@ -275,9 +275,10 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
 - Section headings are 22 px bold on a 2 px rule that starts in the brand ink and fades through `--border-strong`
   to nothing on the right, so the page reads as chapters. The large counts use the 48 px `text-mega` size; on a phone the round title falls
   back to the 32 px display size.
-- The shell header is translucent glass: the card colour at 80% over a 24 px blur, sticky at the top, with a 1 px
-  gradient hairline (transparent, indigo, violet, transparent) on its bottom edge. The brand mark sits on a tile
-  filled with a gradient from `--brand-top` to `--brand-bottom`.
+- The shell header is sticky and flat while the page is at the top. Once content scrolls under it, the card colour at 80%
+  over a 24 px blur and a 1 px bottom border fade in (150 ms, opacity only). The brand mark sits on a tile filled with a
+  gradient from `--brand-top` to `--brand-bottom`. In test mode a full-width amber strip under the bar says "Test mode:
+  the model is faked". On a phone a bottom tab bar (Today, Practice, Progress, Jump) takes the tabs, with the same glass.
 
 ### Motion
 
@@ -295,6 +296,8 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
   hover in 180 ms; dialogs fade and scale in from 95% with a 260 ms ease-out over a blurred, dimmed page, and fade
   out in 150 ms; menus, select lists, popovers and tooltips grow from their trigger; toasts slide in at the bottom
   left.
+- **The jump palette** (⌘K, or Ctrl+K) opens with a fade and a scale from 98% in 140 ms and closes in 100 ms. Under
+  reduced motion it only fades. On a phone it rises from the bottom as a sheet.
 - **Route changes cross-fade** with the View Transitions API: the old page fades out in 160 ms, the new one fades
   in over 260 ms. Browsers without the API swap pages at once. The room only fades in when it opens, because the
   board measures its position when it mounts.
@@ -320,7 +323,8 @@ The primitives live in `src/web/components/ui/` and follow shadcn/ui: Radix-base
 menu, select, tabs, tooltip, popover, scroll area, switch, checkbox and collapsible, plus button, badge, card,
 alert, banner, empty state, skeleton, separator, input, textarea, keycap and a segmented control. Cards take a `variant` (`flat`, `raised`, `sunken`, `hero`, `mesh`). The `useCountUp` hook runs the count-up of large numbers. Toasts come from
 Sonner. The Escape that closes a layer never reaches the room's "stop speaking" shortcut. Pressing `?` outside a
-text field, the board or the editor lists every keyboard shortcut.
+text field, the board or the editor lists every keyboard shortcut. ⌘K (Ctrl+K elsewhere) opens the jump palette on every
+page that has the main bar.
 
 ---
 
@@ -335,13 +339,17 @@ text field, the board or the editor lists every keyboard shortcut.
   ├─ Unfinished card ──(End and debrief)──► Debrief
   ├─ Unfinished card ──(Discard)──► confirm ──► Today
   ├─ See the plan ──► plan panel ──(Start)──► Room
-  ├─ Library row ──(Start)──► Room
-  ├─ History row ──(Open)──► Room or Debrief
+  ├─ Practice, Rounds row ──(Start)──► Room
+  ├─ Practice, Drills ──(Start drill)──► Drill
+  ├─ Progress, History row ──(Open)──► Room or Debrief
+  ├─ Jump palette ──► any round, problem, page or settings section
   └─ Settings page
 ```
 
-The main bar (Today, Library, Gym, DSA, Progress, History, and Usage and Settings icons) shows on the reading pages.
-Rooms and debriefs are full screen without it.
+The main bar (Today, Practice, Progress, the Jump box and one Menu) shows on the reading pages. Practice holds Rounds and
+Drills; Progress holds This week, Skills, DSA and History as sections. Rooms and debriefs are full screen without it.
+The old addresses `/library`, `/gym`, `/dsa` and `/history` are replaced in place by `/practice`, `/practice/drills`,
+`/progress#dsa` and `/progress#history`.
 
 ### Start a round
 
@@ -433,8 +441,14 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 
 ### Main bar and page frame
 
-- **Bar.** "Sparmate" on a filled brand tile, six links with a 2 px underline on the current page, and icons for Usage,
-  Settings and shortcuts. The links scroll inside the bar on a phone. Test mode stays as a warn pill.
+- **Bar.** "Sparmate" on a filled brand tile, three tabs (Today, Practice, Progress) with a 2 px underline on the
+  current page, a "Jump to…" box with its shortcut, and a Menu button. Practice carries the due-drill count as a small
+  amber badge. The Menu lists Settings, Usage and Keyboard shortcuts; when the server runs with the fake agent it also
+  shows "Test mode is on" (the mode is set when the server starts, so the Menu has no switch). On a phone the bar keeps
+  the logo and the Menu, and a bottom tab bar holds Today, Practice, Progress and Jump.
+- **Jump palette.** A dialog with a search field and groups in this order: Continue (open rounds, with "Paused, 43 of 120
+  min"), Start (today's recommended round), Problems (with track and difficulty), Pages, Settings. Arrow keys move, Enter
+  opens, Esc closes. A row matches when the query is a substring of it, or when each query word starts a word of it.
 - **Frame.** A centred column about 1160 px wide. Heroes are mesh panels with one filled button. Side cards are raised
   panels. Detail goes behind a side panel, a popover or an info tip, never in an accordion. A fact never shares a line
   with dots: each has its own label and value.
@@ -449,45 +463,44 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 - **Plan panel.** A panel from the right: mode switch, the plan bar drawn to scale, a table of step, plan and last time,
   and a last-try tile.
 
-### Library
+### Practice
 
-- **Switches.** Track (HLD, LLD, My questions, each with a count) and filter (Fresh first, Redo due, All).
-- **List.** One raised panel with groups. A row has a mark, title, difficulty and a two-line result, and no button.
-- **Detail.** A sticky raised panel: chips, title, the interviewer's opening line, a facts tile, the mode switch with an
-  info tip, one filled Start button and a caption.
-- **Practise any question** opens its own page with the same fields and limits as before.
+- **Switch.** A segmented control, Rounds and Drills. Drills carries "N due" in an amber pill. `/practice` opens Rounds and
+  `/practice/drills` opens Drills. "Practise any question" sits in the page header and opens its own page with the same
+  fields and limits as before.
+- **Rounds.** Track (HLD, LLD, My questions, each with a count) and filter (Fresh first, Redo due, All). One raised list
+  with groups; a row has a mark, title, difficulty and a two-line result, and no button. The detail is a sticky raised
+  panel: chips, title, the interviewer's opening line, a facts tile, the mode switch with an info tip, one filled Start
+  button and a caption. `/practice#<problem id>` opens the list on that problem.
+- **Drills.** A raised panel holds the next drill: an amber "Next drill" pill, the drill name, the problem, a tile of three
+  facts (length, due, passes in a row with three pips and an info tip) and one line for the task, then the one primary
+  button. A raised "Also due" card lists three more with a drill glyph, the problem and the due day in amber. "All drills"
+  opens the side panel. A first run with no drills shows "Drills start after your first round".
 
 ### Progress
 
-- **Focus card.** A mesh panel with the lowest skill, its score, one supporting number, a planned-against-used chart with
-  one bar per step, and one action.
+- **Sub-nav.** A sticky row under the bar: This week, Skills, DSA, History. It marks the section nearest the top as the
+  page scrolls, and a click scrolls to the section and sets `#week`, `#skills`, `#dsa` or `#history`.
+- **This week.** The focus card is a raised panel with the amber "Focus this week" pill as its only accent: the lowest
+  skill, its score, one supporting number, a planned-against-used chart with one bar per step, and one action. Beside it
+  are four counters (rounds, redos, drills, DSA mediums) and the next two redos, with a side panel for the full queue.
 - **Skills.** A Guided and Interview switch, a 1 to 4 track per skill with a dashed line at the target bar, a dot per
   round and the latest number.
-- **Next redos.** The next two, and a side panel with the full queue.
-
-### History
-
-- One raised panel with a header row and an actions column. The table scrolls sideways on a phone. An unfinished round
-  carries a warn chip and a Finish button.
+- **DSA.** A raised panel with the amber "Weekly goal" chip, "Mediums this week", a large count with "of N", the one
+  primary "Open LeetCode" button and a tile with the Monday-first day strip, beside a 400 px raised card "This pass". The
+  strip's cells are 28 px: a solve fills the cell and shows its count, a DSA day in the plan has an outline, today has a
+  ring. The card holds "Not touched yet" as quiet chips, or three bars when every common topic has a solve. Lifetime
+  totals never appear; the page never makes a readiness call. Notices (no username, not found, error) are one raised card
+  with one primary action.
+- **History.** One raised panel with a header row and an actions column. The table scrolls sideways on a phone. An
+  unfinished round carries a warn chip and a Finish button.
+- **Empty states.** Each section has its own: the focus card says the focus appears after a scored round, Skills says no
+  scored round yet, DSA shows its notice, History says finished rounds appear there.
 
 ### Settings
 
 - A left nav on desktop and a scrolling row of buttons on a phone. Raised sections hold label and control pairs, with a
   hairline between pairs. One filled "Save changes" button sits at the top right.
-
-### Gym
-
-- A mesh hero holds the next drill: an amber "Next drill" pill, the drill name at display size, the problem, a tile of three facts (length, due, passes in a row with three pips and an info tip) and one line for the task, then the one primary button. A raised "Also due" card lists three more with a drill glyph, the problem and the due day in amber. "All drills" opens the side panel. The due count is a small amber chip on the Gym link.
-- The drill screen is full screen with a slim bar: Back to the Gym, the drill name and a soft countdown that turns amber and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (Pass or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like". Each quote sits in a quiet sunken block with a 1 px hairline all round. On a pass, the "Pass" mark settles in (scale 1.06 to 1, 200 ms); on "Not yet", the one-fix line slides in (8 px, 200 ms). Reduced motion and `?testhooks=1` show the final state at once. In the console, a warning or an error shows a small status icon and a coloured label, never a coloured edge.
-
-### DSA
-
-- DSA uses the Progress layout: a mesh hero (amber "Weekly goal" chip, "Mediums this week", a 112 px
-  count with "of N", the one primary "Open LeetCode" button and a dark tile with the Monday-first day strip) beside a 400 px
-  raised card "This pass". The strip's cells are 28 px: a solve fills the cell and shows its count, a DSA day in the plan has an
-  outline, today has a white ring. The card holds "Not touched yet" as quiet chips, or three bars when every common topic has
-  a solve. Lifetime totals never appear on the page; the side panel ends with one quiet line about them. The page never makes a
-  readiness call. Notices (no username, not found, error) are one raised card with one primary action.
 
 ### Room
 
@@ -593,8 +606,8 @@ Scripts and tests depend on these, so the revamp keeps them exactly.
 - The room root keeps `flex h-full`, the room never scrolls as a whole, and no scroller sits inside another
   (`scripts/e2e/layout-check.mjs`).
 - `window.__irBoard` and `window.__irShell` with `?testhooks=1`, and the `__fixtureLog` in fixture mode.
-- Fixture names: `home` (Today), `library`, `library-new`, `progress`, `history`, `settings`, `gym`, `dsa`, the room and debrief
-  fixtures, and `usage`. URL parameters: `fixture`, `theme`, `mode`, `status`, `error`, `reason`, `offline`, `timeup`,
+- Fixture names: `home` (Today), `library` (Practice, Rounds), `library-new`, `progress`, `history` and `dsa` (Progress,
+  opened at that section), `settings`, `gym` (Practice, Drills), the room and debrief fixtures, and `usage`. URL parameters: `fixture`, `theme`, `mode`, `status`, `error`, `reason`, `offline`, `timeup`,
   `stale`, `preparing`, `now` (a date, for Today and Progress), `unfinished=0`, `username`, `plan`, `testmode=0`.
 
 ---

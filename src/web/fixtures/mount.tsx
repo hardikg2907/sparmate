@@ -3,7 +3,7 @@ import type { Root } from "react-dom/client";
 import { AppProviders } from "../components/AppProviders";
 import { PaletteSourceContext } from "../components/CommandPalette";
 import type { DsaData } from "../lib/useDsa";
-import type { GymData } from "../lib/useGym";
+import { DueDrillCountContext, type GymData } from "../lib/useGym";
 import type { StudyData } from "../lib/useStudyData";
 import type { Settings } from "../../shared/types";
 import { LibraryNewView } from "../pages/LibraryNew";
@@ -230,11 +230,13 @@ function FixturePage({
 
   const gym = { gym: fixtureGym, error: null, reload: () => undefined };
   const palette = {
-    load: async () => ({ now, plan: settings.weeklyPlan, problems: fixtureProblems, history: [...fixtureOpenRounds, ...fixtureAllHistory] }),
+    load: async () => ({ now, plan: settings.weeklyPlan, problems: fixtureProblems, history: fixtureAllHistory }),
   };
   return (
     <PaletteSourceContext.Provider value={palette}>
-      <FixtureBody name={name} data={data} ctx={ctx} now={now} dsa={dsa} gym={gym} settings={settings} testMode={testMode} onSettings={setSettings} dsaRead={Boolean(dsaState)} />
+      <DueDrillCountContext.Provider value={fixtureGym.dueCount}>
+        <FixtureBody name={name} data={data} ctx={ctx} now={now} dsa={dsa} gym={gym} settings={settings} testMode={testMode} onSettings={setSettings} dsaRead={Boolean(dsaState)} />
+      </DueDrillCountContext.Provider>
     </PaletteSourceContext.Provider>
   );
 }
