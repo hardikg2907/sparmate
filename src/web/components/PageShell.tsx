@@ -1,11 +1,11 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { AppHeader, BottomTabs } from "./AppHeader";
 import { cn } from "./ui";
 
-/** The frame of every reading page: the main bar, then a centred column that scrolls with the page, and the tab bar on a phone. `--header-h` is the bar's height, so a sticky element can sit just below it. */
+/** The frame of every reading page: the main bar, then a centred column that scrolls with the page, and the tab bar on a phone. The bar sets `--header-h` on the scroller from its measured height, so a sticky element can sit just below it. */
 export function PageShell({ testMode, children, className }: { testMode?: boolean; children: ReactNode; className?: string }) {
   return (
-    <div className="page-canvas flex h-full min-h-0 flex-col overflow-y-auto" style={{ "--header-h": testMode ? "4.25rem" : "3.5rem" } as CSSProperties}>
+    <div className="page-canvas flex h-full min-h-0 flex-col overflow-y-auto">
       <AppHeader testMode={testMode} />
       <main tabIndex={-1} className={cn("mx-auto w-full max-w-[1224px] flex-1 px-4 pb-24 pt-8 sm:px-8 sm:pb-16", className)}>
         {children}

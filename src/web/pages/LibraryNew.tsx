@@ -332,9 +332,9 @@ export function LibraryNewView({ data, ctx }: { data: StudyData; ctx: PageContex
   return (
     <PageShell testMode={ctx.testMode}>
       <div className="reveal-children space-y-6">
-        <Link href="/library" className="inline-flex items-center gap-1.5 text-ui text-muted-foreground hover:text-foreground">
+        <Link href="/practice" className="inline-flex items-center gap-1.5 text-ui text-muted-foreground hover:text-foreground">
           <ArrowLeftIcon size={14} />
-          Library
+          Practice
         </Link>
         <PageHeader title="Practise any question" />
         <p className="-mt-2 max-w-[60ch] text-body text-muted-foreground">

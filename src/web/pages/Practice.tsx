@@ -59,7 +59,13 @@ export function PracticeView({ tab: routeTab, study, gym, ctx }: { tab: Practice
           />
           {tab === "drills" ? <span className="text-ui text-muted-foreground">10 to 15 minutes on one skill</span> : null}
         </div>
-        {tab === "rounds" ? <RoundsPanel data={study} ctx={ctx} /> : <DrillsPanel data={gym} />}
+        {/* Both stay mounted, so a choice of track, filter or problem survives a visit to the other view. */}
+        <div hidden={tab !== "rounds"}>
+          <RoundsPanel data={study} ctx={ctx} />
+        </div>
+        <div hidden={tab !== "drills"}>
+          <DrillsPanel data={gym} />
+        </div>
       </div>
     </PageShell>
   );

@@ -191,7 +191,7 @@ function NothingYet() {
       </p>
       <div className="mt-6">
         <Button asChild size="lg" variant="default">
-          <Link href="/practice">Open the library</Link>
+          <Link href="/practice">Pick a round in Practice</Link>
         </Button>
       </div>
     </Card>

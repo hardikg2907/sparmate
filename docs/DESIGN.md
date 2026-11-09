@@ -502,6 +502,12 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 - A left nav on desktop and a scrolling row of buttons on a phone. Raised sections hold label and control pairs, with a
   hairline between pairs. One filled "Save changes" button sits at the top right.
 
+### Drill screen
+
+- The drill screen is full screen with a slim bar: Back to Practice, the drill name and a soft countdown that turns amber
+  and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (Pass
+  or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like".
+
 ### Room
 
 - **Surfaces.** The room uses the reading pages' finish without their ambient motion. Behind the chrome lies the

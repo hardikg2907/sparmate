@@ -274,3 +274,8 @@ export const EnterIcon = (p: IconProps) => (
     <path d="m9 11-4 4 4 4" />
   </Svg>
 );
+export const MenuIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </Svg>
+);

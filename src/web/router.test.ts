@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, beforeEach, vi } from "vitest";
-import { drillPath, guardNavigation, legacyTarget, navigate, parseRoute, subscribeToRoute } from "./router";
+import { drillPath, guardNavigation, hashSnapshot, legacyTarget, navigate, parseRoute, subscribeToRoute } from "./router";
 
 describe("parseRoute", () => {
   it.each([
@@ -86,6 +86,24 @@ describe("navigation guard", () => {
     vi.stubGlobal("location", { search: "?testhooks=1", pathname: "/practice" });
     navigate("/progress#skills");
     expect(pushed).toEqual(["/progress?testhooks=1#skills"]);
+  });
+
+  it("makes a new hash snapshot for a link to the address already shown", () => {
+    const loc = { search: "", pathname: "/practice", hash: "#A" };
+    vi.stubGlobal("location", loc);
+    vi.stubGlobal("history", {
+      pushState: (_s: unknown, _t: string, url: string) => {
+        loc.hash = url.includes("#") ? `#${url.split("#")[1]}` : "";
+      },
+      replaceState: () => {},
+    });
+    navigate("/practice#A");
+    const first = hashSnapshot();
+    expect(first.hash).toBe("#A");
+    expect(hashSnapshot()).toBe(first);
+    navigate("/practice#A");
+    expect(hashSnapshot()).not.toBe(first);
+    expect(hashSnapshot().hash).toBe("#A");
   });
 
   it("hands the move to the guard, which can let it through", () => {

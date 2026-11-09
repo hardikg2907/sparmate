@@ -50,27 +50,28 @@ function SubNav() {
   const nav = useRef<HTMLElement>(null);
   const [active, setActive] = useState<SectionId>("week");
 
-  // The section nearest the top of the viewport, below the bars, is the one the nav marks.
+  // The last section that has reached the bottom of the sub-nav is the one marked. A short last section never gets that
+  // far, so the end of the scroll marks it. The offset comes from the sub-nav's real position, which includes the bar.
   useEffect(() => {
     const root = scrollerOf(nav.current);
-    if (!root || typeof IntersectionObserver !== "function") return;
-    const visible = new Map<string, number>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) visible.set(entry.target.id, entry.boundingClientRect.top);
-          else visible.delete(entry.target.id);
-        }
-        const top = [...visible.entries()].sort((x, y) => x[1] - y[1])[0];
-        if (top) setActive(top[0] as SectionId);
-      },
-      { root, rootMargin: "-130px 0px -55% 0px" },
-    );
-    for (const { id } of SECTIONS) {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
+    if (!root) return;
+    const update = () => {
+      const line = (nav.current?.getBoundingClientRect().bottom ?? 0) + 24;
+      const atEnd = root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
+      let found: SectionId = SECTIONS[0].id;
+      for (const { id } of SECTIONS) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= line) found = id;
+      }
+      setActive(atEnd && root.scrollTop > 0 ? "history" : found);
+    };
+    update();
+    root.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      root.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
   }, []);
 
   return (
@@ -107,7 +108,8 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { da
   const { problems, history, error } = data;
   const [queueOpen, setQueueOpen] = useState(false);
   const [skillMode, setSkillMode] = useState<Mode | null>(null);
-  const hash = useHash();
+  const hashNav = useHash();
+  const scrolledFor = useRef<unknown>(null);
 
   const focus = useMemo(() => (history ? focusSkill(history) : null), [history]);
   const queue = useMemo(() => (problems && history ? redoQueue(problems, history) : []), [problems, history]);
@@ -115,12 +117,15 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { da
   const mode = skillMode ?? focus?.mode ?? "interview";
   const rows = useMemo(() => skillRows(history ?? [], mode), [history, mode]);
   const gap = focus && history ? gapForSkill(history, focus) : null;
-  const loaded = history !== null;
+  const settled = history !== null && !dsa.loading;
 
-  // A link such as /progress#dsa lands on its section. It runs again once the lists load, because the sections above grow then.
+  // A link such as /progress#dsa lands on its section. It scrolls again once every section has loaded, because the
+  // sections above the target grow when their data arrives.
   useEffect(() => {
-    if (hash.length > 1) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
-  }, [hash, loaded]);
+    if (hashNav.hash.length <= 1 || scrolledFor.current === hashNav) return;
+    document.getElementById(hashNav.hash.slice(1))?.scrollIntoView({ block: "start" });
+    if (settled) scrolledFor.current = hashNav;
+  }, [hashNav, settled]);
 
   const week = weekStart(now);
   const weekEnd = new Date(week.getFullYear(), week.getMonth(), week.getDate() + 6);

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDueDrillCount } from "../lib/useGym";
 import { Link, useRoute, type PageName } from "../router";
 import { CommandPalette, PALETTE_KEYS, openPalette } from "./CommandPalette";
-import { BarChartIcon, ChevronDownIcon, FlaskIcon, HomeIcon, KeyboardIcon, ListIcon, SearchIcon, SlidersIcon, TrendIcon } from "./icons";
+import { BarChartIcon, ChevronDownIcon, FlaskIcon, HomeIcon, KeyboardIcon, ListIcon, MenuIcon, SearchIcon, SlidersIcon, TrendIcon } from "./icons";
 import { Logo } from "./Logo";
 import { openShortcuts } from "./ShortcutsDialog";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Kbd, cn } from "./ui";
@@ -45,6 +45,19 @@ export function AppHeader({ testMode }: { testMode?: boolean }) {
     update();
     scroller.addEventListener("scroll", update, { passive: true });
     return () => scroller.removeEventListener("scroll", update);
+  }, []);
+
+  // The bar is taller in test mode and the strip can wrap, so its real height is published for the elements that sit below it.
+  useLayoutEffect(() => {
+    const bar = root.current;
+    const scroller = bar?.closest<HTMLElement>(".page-canvas");
+    if (!bar || !scroller) return;
+    const publish = () => scroller.style.setProperty("--header-h", `${bar.offsetHeight}px`);
+    publish();
+    if (typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(bar);
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -100,7 +113,7 @@ export function AppHeader({ testMode }: { testMode?: boolean }) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="gap-1.5 px-2.5">
-                <SlidersIcon size={16} />
+                <MenuIcon size={16} />
                 Menu
                 <ChevronDownIcon size={14} />
               </Button>

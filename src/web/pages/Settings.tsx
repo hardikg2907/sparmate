@@ -150,11 +150,11 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
     sections.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   // A link such as /settings#models opens the page on that section.
-  const hash = useHash();
+  const hashNav = useHash();
   useEffect(() => {
-    const id = hash.slice(1);
+    const id = hashNav.hash.slice(1);
     if (SECTIONS.some((section) => section.id === id)) goTo(id);
-  }, [hash]);
+  }, [hashNav]);
   const register = (id: string) => (el: HTMLElement | null) => {
     if (el) sections.current.set(id, el);
     else sections.current.delete(id);

@@ -59,16 +59,20 @@ export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }
   const [filter, setFilter] = useState<LibraryFilter>("fresh");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const panel = useRef<HTMLElement>(null);
-  const hash = useHash();
+  const hashNav = useHash();
+  const applied = useRef<unknown>(null);
 
-  // A link such as /practice#<problem id> opens the list on that problem, in its own track.
+  // A link such as /practice#<problem id> opens the list on that problem, in its own track. Each link applies once,
+  // so a later reload of the list does not undo what the user chose since.
   useEffect(() => {
-    const target = hash.length > 1 && problems ? problems.find((p) => p.id === hash.slice(1)) : undefined;
+    if (applied.current === hashNav || !problems) return;
+    const target = hashNav.hash.length > 1 ? problems.find((p) => p.id === hashNav.hash.slice(1)) : undefined;
+    applied.current = hashNav;
     if (!target) return;
     setTab(target.custom ? "custom" : ((["hld", "lld"] as const).find((t) => inTab(target, t)) ?? "hld"));
     setFilter("all");
     setSelectedId(target.id);
-  }, [hash, problems]);
+  }, [hashNav, problems]);
 
   const counts = useMemo(() => tabCounts(problems ?? []), [problems]);
   const groups = useMemo(() => libraryGroups(problems ?? [], tab, filter), [problems, tab, filter]);

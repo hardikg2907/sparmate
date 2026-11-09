@@ -97,7 +97,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
             title="This drill is not available"
             actions={
               <Button asChild>
-                <Link href="/gym">Back to the Gym</Link>
+                <Link href="/practice/drills">Back to Practice</Link>
               </Button>
             }
           >
@@ -147,9 +147,9 @@ function TopBar({ prompt, startedAt }: { prompt: DrillPrompt | null; startedAt: 
     <header className="header-hairline sticky top-0 z-20 shrink-0 border-b border-border/70 bg-card/90 shadow-xs backdrop-blur-xl supports-[backdrop-filter]:bg-card/80">
       <div className="mx-auto flex h-14 max-w-[1224px] items-center gap-4 px-4 sm:px-8">
         <Button asChild variant="ghost" size="sm">
-          <Link href="/gym">
+          <Link href="/practice/drills">
             <ArrowLeftIcon size={14} />
-            Gym
+            Practice
           </Link>
         </Button>
         {prompt ? (
@@ -293,12 +293,12 @@ function ResultView({ prompt, result }: { prompt: DrillPrompt; result: DrillResu
                 <Link href={drillPath(next)}>Next drill</Link>
               </Button>
               <Button asChild size="lg" variant="ghost">
-                <Link href="/gym">Back to the Gym</Link>
+                <Link href="/practice/drills">Back to Practice</Link>
               </Button>
             </>
           ) : (
-            <Button size="lg" variant="default" onClick={() => navigate("/gym")}>
-              Back to the Gym
+            <Button size="lg" variant="default" onClick={() => navigate("/practice/drills")}>
+              Back to Practice
             </Button>
           )}
         </div>

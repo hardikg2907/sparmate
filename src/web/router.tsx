@@ -63,7 +63,23 @@ let locked = false;
 /** The address the page on screen belongs to, so a guarded Back can put it back. */
 let current: string | null = null;
 
+/**
+ * One object per navigation, even to the address already shown, so a page that follows an anchor can tell a repeated
+ * link from no link at all.
+ */
+export interface HashNav {
+  hash: string;
+}
+let hashNav: HashNav | null = null;
+const NO_HASH: HashNav = { hash: "" };
+
+export function hashSnapshot(): HashNav {
+  hashNav ??= { hash: location.hash };
+  return hashNav;
+}
+
 function notify(): void {
+  hashNav = { hash: location.hash };
   for (const listener of [...listeners]) listener();
 }
 
@@ -168,13 +184,9 @@ export function useRoute(): Route {
   return useMemo(() => parseRoute(pathname), [pathname]);
 }
 
-/** The section anchor of the address, so a page can follow a link to one of its own sections. */
-export function useHash(): string {
-  return useSyncExternalStore(
-    subscribeToRoute,
-    () => location.hash,
-    () => "",
-  );
+/** The section anchor of the address. The object changes on every navigation, so an effect keyed on it runs again for a repeated link. */
+export function useHash(): HashNav {
+  return useSyncExternalStore(subscribeToRoute, hashSnapshot, () => NO_HASH);
 }
 
 export function Link({ href, onClick, target, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
