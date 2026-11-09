@@ -322,7 +322,7 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
   const extension = item.kind === "extension";
   return (
     <li className={cn("flex flex-col", ENTER, !extension && "pr-2")} aria-busy={item.state === "streaming" ? true : undefined}>
-      <div className={cn("flex flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 pl-4 attention")}>
+      <div className={cn("flex flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 attention")}>
         <div className="mb-1 flex items-center gap-2 text-meta text-muted-foreground">
           <span aria-hidden="true" className="chat-avatar size-2 rounded-full" />
           <span className="font-semibold text-foreground">{speaker}</span>
@@ -424,7 +424,7 @@ function Composer({
   return (
     <footer className="composer-foot shrink-0 border-t border-border px-3 pb-2 pt-3">
       {showSpeechNote ? (
-        <div className="speech-note mb-2 flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-meta" role="note">
+        <div className="speech-note mb-2 flex max-md:hidden items-center justify-between gap-2 rounded-md px-3 py-1.5 text-meta" role="note">
           <span className="min-w-0 font-semibold text-primary-soft-foreground">Voice input needs the speech pack.</span>
           <span className="flex shrink-0 items-center gap-3">
             <button

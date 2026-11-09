@@ -18,7 +18,7 @@ import { Timer } from "../components/Timer";
 import { Banner, Button, Badge, EmptyState, Tooltip, cn, toast } from "../components/ui";
 import { phasesFor } from "../../shared/phases";
 import { evidenceStepFor } from "../../shared/stepFrames";
-import { planDelta, type PlanDelta } from "../lib/plan";
+import { isTimedRound, planDelta, type PlanDelta } from "../lib/plan";
 import { revealFor } from "../lib/reveal";
 import { phaseSpentMs } from "../lib/timing";
 import { useRoundMs } from "../hooks/useClock";
@@ -254,7 +254,14 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                         </div>
                       </div>
                       <div className="room-console h-56 shrink-0 overflow-hidden [&>*]:h-full">
-                        <Console lastRun={state.code.lastRun} running={state.code.running} onRun={actions.runCode} onJumpTo={jumpTo} disabled={!connected || ended} />
+                        <Console
+                          lastRun={state.code.lastRun}
+                          running={state.code.running}
+                          onRun={actions.runCode}
+                          onJumpTo={jumpTo}
+                          disabled={!connected || ended}
+                          showRun={false}
+                        />
                       </div>
                     </>
                   ) : (
@@ -272,7 +279,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
-          className="room-side flex min-h-0 shrink-0 flex-col overflow-hidden max-md:h-[46%] max-md:w-full md:w-(--chat-w)"
+          className="room-side flex min-h-0 shrink-0 flex-col overflow-hidden max-md:h-[58%] max-md:w-full md:w-(--chat-w)"
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}
         >
@@ -419,7 +426,7 @@ function RoomHeader({
   const paused = session.status === "paused";
   const guided = session.mode === "guided";
   const spent = phaseSpentMs(session.phaseHistory, session.phasePlan[0]?.id, session.phase, roundMs);
-  const delta = frozen ? null : planDelta(session.phasePlan, session.phase, roundMs, !session.focus);
+  const delta = frozen ? null : planDelta(session.phasePlan, session.phase, roundMs, isTimedRound(session));
   const passed = new Set(
     Object.entries(session.stepVerdicts ?? {})
       .filter(([, v]) => v.verdict === "pass")
@@ -562,7 +569,7 @@ function BoardViews({
           type="button"
           className="seg__item"
           data-active={(view === "step" && !graphOpen) || undefined}
-          aria-pressed={view === "step"}
+          aria-pressed={view === "step" && !graphOpen}
           disabled={!canShowStep}
           onClick={onStep}
         >
@@ -570,7 +577,7 @@ function BoardViews({
         </button>
       </Tooltip>
       <Tooltip content="Zoom out to every step's frame">
-        <button type="button" className="seg__item" data-active={(view === "board" && !graphOpen) || undefined} aria-pressed={view === "board"} onClick={onWhole}>
+        <button type="button" className="seg__item" data-active={(view === "board" && !graphOpen) || undefined} aria-pressed={view === "board" && !graphOpen} onClick={onWhole}>
           Whole board
         </button>
       </Tooltip>

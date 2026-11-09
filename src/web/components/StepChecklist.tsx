@@ -35,7 +35,7 @@ function ItemList({ items }: { items: readonly PublicStepItem[] }) {
 export function StepChecklist({ step }: { step: PublicStepCheck | undefined }) {
   if (!step || step.total === 0) return null;
   return (
-    <Collapsible className="step-checklist group/checklist shrink-0 border-b border-border px-3 py-2">
+    <Collapsible className="step-checklist group/checklist shrink-0 max-md:hidden border-b border-border px-3 py-2">
       <CollapsibleTrigger className="step-checklist__row flex h-8 w-full items-center justify-between rounded-md px-3 text-ui font-semibold">
         <span>Checklist</span>
         <span className="flex items-center gap-1.5 font-mono text-meta tabular-nums text-muted-foreground">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_RAIL_SHARE, behindPlanMs, planDelta, planWindows, plannedPhaseAt, railPosition, railWeights } from "./plan";
+import { MIN_RAIL_SHARE, behindPlanMs, isTimedRound, planDelta, planWindows, plannedPhaseAt, railPosition, railWeights } from "./plan";
 
 const MIN = 60_000;
 const PLAN = [
@@ -110,5 +110,20 @@ describe("planDelta", () => {
     expect(planDelta([], "api", 99 * MIN)).toBeNull();
     expect(planDelta(PLAN, "deep_dives", 99 * MIN)).toBeNull();
     expect(planDelta(PLAN, "requirements", 99 * MIN, false)).toBeNull();
+  });
+});
+
+describe("isTimedRound", () => {
+  it("holds an interview round to its plan", () => {
+    expect(isTimedRound({ mode: "interview", focus: null })).toBe(true);
+  });
+
+  it("does not hold a guided round to its plan", () => {
+    expect(isTimedRound({ mode: "guided", focus: null })).toBe(false);
+    expect(planDelta(PLAN, "requirements", 99 * MIN, isTimedRound({ mode: "guided", focus: null }))).toBeNull();
+  });
+
+  it("does not hold a gap-practice round to its plan", () => {
+    expect(isTimedRound({ mode: "interview", focus: { title: "t", goodLooksLike: "g" } })).toBe(false);
   });
 });

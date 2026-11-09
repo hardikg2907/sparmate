@@ -1137,11 +1137,7 @@ body {
   background: var(--card);
   box-shadow: inset 1px 0 0 var(--border);
 }
-/* The code pane's own strips: the attempt path above the editor and the console below it. */
-.room-strip {
-  background: linear-gradient(180deg, var(--raised-top), var(--raised-bottom));
-  box-shadow: inset 0 -1px 0 var(--border);
-}
+/* The console below the editor. */
 .room-console {
   background: linear-gradient(180deg, var(--raised-top), var(--card) 40%);
   box-shadow:
@@ -1586,11 +1582,6 @@ body {
 .step-checklist__row {
   background: var(--muted);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-strong) 50%, transparent);
-}
-
-/* The work bar owns Run in a machine-coding round, so the console's own copy stays out of sight. */
-.room-console .ir-console__run {
-  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

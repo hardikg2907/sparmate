@@ -39,6 +39,11 @@ export function planDelta(plan: readonly PlanPhase[], currentPhase: string, roun
   return ms >= 1000 ? { kind: "behind", ms } : { kind: "on" };
 }
 
+/** Only an interview round is held to its plan; a guided or gap-practice round has no pace to be behind. */
+export function isTimedRound(round: { mode: "interview" | "guided"; focus: unknown }): boolean {
+  return round.mode === "interview" && !round.focus;
+}
+
 /** The phase the plan says the candidate should be in at this round time, or the last one once past the plan. */
 export function plannedPhaseAt(plan: readonly PlanPhase[], roundMs: number): string | null {
   const windows = planWindows(plan);

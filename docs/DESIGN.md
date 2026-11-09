@@ -386,8 +386,8 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
 - **Plan track.** One row inside the top bar, between the mode chip and the pace chip. Segments are drawn to scale by
   planned minutes (a short step keeps a floor width so it still shows a name). Finished segments are solid; the
   current segment is lit and fills with the time spent in it, with its name and "6:13 / 13" above it; later segments
-  show a short, truncated name. Time past the plan shows as a striped warn fill. A thin accent needle marks "now"
-  on the plan's scale. Each segment is a button: a click (or Enter) moves to that phase and brings the step's frame
+  show a short, truncated name. Time past the plan shows as a striped warn fill. A small accent tick under the track marks "now"
+  on the plan's scale, clear of every label. Each segment is a button: a click (or Enter) moves to that phase and brings the step's frame
   into view (the Code tab for an LLD step that is answered in code). The frame also comes into view when the
   interviewer or guide moves the rail. A guided round marks each passed step with a tick. On a phone only the
   current segment shows.
@@ -399,8 +399,9 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
   the question to ask rather than its answer. It is not a scroller. The server holds the checklist back for the whole
   of a live round, in every mode, so the row appears only once the round is over; the debrief shows the full list.
 - **Pace chip.** Next to the clock: "2:10 behind plan" in the warn colour once the clock passes the planned end of
-  the current phase (the sum of the minutes of every phase up to and including it), else a quiet "On plan". A round
-  with no time plan shows no chip. When it first turns to behind it lights once with a single ring.
+  the current phase (the sum of the minutes of every phase up to and including it), else a quiet "On plan". Only an
+  interview round is held to its plan: a guided round and a gap-practice round show no chip, and neither does a
+  round with no time plan. When it first turns to behind it lights once with a single ring.
 - **Goal line.** The work bar says what the current phase must produce, from his own method, on one line.
 - **Timer.** Mono digits. Neutral when on plan, warn under 5 minutes, bad at 0. Guided mode counts up.
 - **End interview** is a quiet text button in the bad tone. A click, Enter or Space opens the confirm dialog. Holding
@@ -411,7 +412,7 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
 ### Pause, auto-pause and resume
 
 - Any pause covers the work area and the chat with a dimmed, blurred layer: one large **Resume** button that takes
-  focus, and "You paused at 17:37. The clock is stopped." with the round time at the pause. The top bar stays clear,
+  focus, and "You paused at 17:37, into the round. The clock is stopped." with the round time at the pause. The top bar stays clear,
   with Resume there as well. A model error shows **Retry** and its reason on a small card instead. The chat box is
   disabled.
 - The board and the editor stay mounted under the cover, so nothing reloads on resume.
@@ -559,16 +560,16 @@ Today is one page for the whole day, and with data it fills the first screen at 
   the middle, the pace chip, the timer, Pause, End interview and the menu. The timer sits in a shallow sunken well;
   on plan its mono digits shade from the text colour into the brand ink. Under five minutes and at zero it takes
   the tinted warn and bad fills instead. The behind-plan chip is tinted warn glass with a glowing dot. On a phone
-  the bar wraps into rows and the mode chip goes.
+  the bar wraps into rows and the mode chip goes; the chat column gets most of the height, and the checklist row and the speech note stay hidden.
 - **Plan track** in one 20 px row of segments, with a 16 px label line above it for the current step. Finished
   segments are solid soft brand; the current one has a brand hairline and a fill that grows with the time spent
   (indigo to violet, with a soft glow); later ones are flat grey with a short label. Time past the plan stays
-  striped warn. The needle is an indigo-to-violet line with a soft glow.
+  striped warn. The needle is a short indigo-to-violet tick under the track with a soft glow.
 - **Work bar** is a 36 px translucent strip with an inner top highlight and a hairline under it. On the left is the
   goal line. On the right is a segmented switch: in an HLD round "This step", "Whole board" and "Interviewer's
   view" (which turns soft accent while the panel is open and carries a warn count); in an LLD round "Code" and
   "Class diagram", with the Run button beside them on the Code tab and the board switch beside them on the diagram
-  tab. The console below the editor has no Run of its own.
+  tab. The console below the editor shows no Run of its own.
 - **Board.** A fresh board starts with one empty frame per step (HLD: Requirements, Core entities, API, High-level design,
   Deep dives; LLD: Entities and States), and opens on the current step's frame. Pins are numbered circles over the
   canvas: a brand gradient for a guide's note, outlined green or red for what the judge marked held or a gap, each

@@ -48,7 +48,7 @@ export function PlanTrack({
   const currentIndex = plan.findIndex((p) => p.id === currentPhase);
 
   return (
-    <nav aria-label="Interview phases" className="plan-track relative min-w-0 flex-1 pt-[18px]">
+    <nav aria-label="Interview phases" className="plan-track relative min-w-0 flex-1 pb-[7px] pt-[18px]">
       <ol className="flex h-5 gap-0.5">
         {plan.map((phase, index) => {
           const plannedMs = phase.minutes * MIN;
@@ -114,7 +114,7 @@ export function PlanTrack({
         })}
       </ol>
       <span
-        className="plan-needle pointer-events-none absolute top-[14px] h-[26px] w-0.5 -translate-x-1/2 rounded-full bg-primary max-md:hidden"
+        className="plan-needle pointer-events-none absolute top-[39px] h-[6px] w-[3px] -translate-x-1/2 rounded-full bg-primary max-md:hidden"
         style={{ left: `${needle * 100}%` }}
         aria-hidden="true"
       />
