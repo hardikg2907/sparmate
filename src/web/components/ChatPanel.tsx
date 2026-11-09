@@ -494,7 +494,7 @@ function Composer({
           </Tooltip>
         </div>
       </form>
-      <p className="mt-1.5 flex justify-between px-1 text-meta text-faint">
+      <p className="mt-1.5 flex justify-between px-1 text-meta text-faint max-md:hidden">
         {voiceInput.isListening ? (
           <span className="flex items-center gap-1.5 font-medium text-primary">
             <span className="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true" />
