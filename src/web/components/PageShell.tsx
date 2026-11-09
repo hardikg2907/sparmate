@@ -20,7 +20,7 @@ export function PageHeader({ kicker, title, aside }: { kicker?: ReactNode; title
     <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
       <div>
         {kicker ? <p className="text-ui text-muted-foreground">{kicker}</p> : null}
-        <h1 className="text-display font-bold tracking-[-0.015em] text-foreground">{title}</h1>
+        <h1 className="text-display font-bold text-foreground">{title}</h1>
       </div>
       {aside}
     </div>

@@ -32,7 +32,7 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
       </h2>
       <p className="text-ui font-semibold text-muted-foreground">{readiness ? "Ready for interview mode?" : `At the ${levels.target} bar`}</p>
       <p className="flex flex-wrap items-baseline gap-x-3">
-        <span className={cn("text-title font-bold tracking-[-0.02em]", TONE_TEXT[tone])}>{readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}</span>
+        <span className={cn("text-title font-bold", TONE_TEXT[tone])}>{readiness ? READINESS_TITLE[readiness.call] : VERDICT_LABEL[verdict.sde2]}</span>
         <span className="text-meta text-muted-foreground">{readiness ? confidence : `${levels.stretch}: ${VERDICT_LABEL[verdict.senior]} · ${confidence}`}</span>
       </p>
       <p className="mt-0.5 text-ui text-muted-foreground">

@@ -50,7 +50,7 @@ export function DialogFooter({ className, ...rest }: HTMLAttributes<HTMLDivEleme
 }
 
 export function DialogTitle({ className, ...rest }: ComponentProps<typeof DialogPrimitive.Title>) {
-  return <DialogPrimitive.Title className={cn("text-title font-bold tracking-[-0.01em] text-foreground", className)} {...rest} />;
+  return <DialogPrimitive.Title className={cn("text-title font-bold text-foreground", className)} {...rest} />;
 }
 
 export function DialogDescription({ className, ...rest }: ComponentProps<typeof DialogPrimitive.Description>) {

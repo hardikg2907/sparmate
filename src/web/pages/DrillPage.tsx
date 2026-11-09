@@ -187,7 +187,7 @@ function PromptView({ prompt }: { prompt: DrillPrompt }) {
           <TrackChip track={prompt.problem.track} />
           <span className="text-ui text-muted-foreground">{prompt.minutes} min</span>
         </div>
-        <h1 id="drill-heading" className="mt-3 text-display font-bold tracking-[-0.015em]">
+        <h1 id="drill-heading" className="mt-3 text-display font-bold">
           {prompt.title}
         </h1>
         <p className="mt-1 text-lead text-muted-foreground">
@@ -275,10 +275,7 @@ function ResultView({ prompt, result }: { prompt: DrillPrompt; result: DrillResu
           {pass ? <CheckIcon size={14} /> : null}
           {prompt.title}
         </span>
-        <h1
-          id="result-title"
-          className={cn("mt-5 w-fit origin-left font-display text-display font-extrabold tracking-[-0.02em] sm:text-[64px] sm:leading-[68px]", pass && motion && "drill-settle")}
-        >
+        <h1 id="result-title" className={cn("mt-5 w-fit origin-left font-display text-display font-extrabold sm:text-[64px] sm:leading-[68px]", pass && motion && "drill-settle")}>
           {pass ? "Pass" : "Not yet"}
         </h1>
         <p className="mt-3 text-body text-muted-foreground sm:text-lead">
