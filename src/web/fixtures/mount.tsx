@@ -11,6 +11,7 @@ import { PracticeView } from "../pages/Practice";
 import { ProgressView } from "../pages/Progress";
 import { SettingsView } from "../pages/Settings";
 import { TodayView } from "../pages/Today";
+import { planIndex } from "../../shared/week";
 import type { PageContext } from "../pages/context";
 import { lockNavigation } from "../router";
 import { applyTheme, type Theme } from "../theme";
@@ -82,6 +83,7 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
               username={params.get("username")}
               plan={params.get("plan")}
               dsaState={params.get("state")}
+              todayState={params.get("today")}
             />
           </div>
         </AppProviders>
@@ -202,6 +204,7 @@ function FixturePage({
   username,
   plan,
   dsaState,
+  todayState,
 }: {
   name: string;
   theme: Theme;
@@ -212,6 +215,7 @@ function FixturePage({
   username: string | null;
   plan: string | null;
   dsaState: string | null;
+  todayState: string | null;
 }) {
   const [settings, setSettings] = useState(() => {
     const base = fixtureSettings(theme);
@@ -219,14 +223,19 @@ function FixturePage({
     return {
       ...base,
       ...(username ? { leetcodeUsername: username } : {}),
-      ...((name === "dsa" || name === "progress" || name === "history") && dsaState !== "none" && !username ? { leetcodeUsername: "example_user" } : {}),
+      ...((name === "dsa" || name === "progress" || name === "history" || (name === "home" && dsaState)) && dsaState !== "none" && !username
+        ? { leetcodeUsername: "example_user" }
+        : {}),
       ...(days?.length === 7 ? { weeklyPlan: days as typeof base.weeklyPlan } : {}),
     };
   });
-  const everything = noUnfinished ? fixtureHistory : name === "home" ? [...fixtureOpenRounds, ...fixtureHistory] : fixtureAllHistory;
+  const firstRun = name === "home" && todayState === "first";
+  const everything = firstRun ? [] : noUnfinished ? fixtureHistory : name === "home" ? [...fixtureOpenRounds, ...fixtureHistory] : fixtureAllHistory;
   const dsa = fixtureDsa(dsaState ?? "ok", now);
   const data = useFixtureStudyData(fixtureProblems, everything, preparing ? "custom:interview" : null);
-  const ctx: PageContext = { settings, testMode, setup: [] };
+  // A rest day is today's slot of the plan set to rest, so one fixture shows the calm page on any weekday.
+  const weeklyPlan = name === "home" && todayState === "rest" ? settings.weeklyPlan.map((kind, i) => (i === planIndex(now) ? ("rest" as const) : kind)) : settings.weeklyPlan;
+  const ctx: PageContext = { settings: { ...settings, weeklyPlan }, testMode, setup: [] };
 
   const gym = { gym: fixtureGym, error: null, reload: () => undefined };
   const palette = {
@@ -235,7 +244,7 @@ function FixturePage({
   return (
     <PaletteSourceContext.Provider value={palette}>
       <DueDrillCountContext.Provider value={fixtureGym.dueCount}>
-        <FixtureBody name={name} data={data} ctx={ctx} now={now} dsa={dsa} gym={gym} settings={settings} testMode={testMode} onSettings={setSettings} dsaRead={Boolean(dsaState)} />
+        <FixtureBody name={name} data={data} ctx={ctx} now={now} dsa={dsa} gym={gym} settings={settings} testMode={testMode} onSettings={setSettings} firstRun={firstRun} />
       </DueDrillCountContext.Provider>
     </PaletteSourceContext.Provider>
   );
@@ -251,7 +260,7 @@ function FixtureBody({
   settings,
   testMode,
   onSettings,
-  dsaRead,
+  firstRun,
 }: {
   name: string;
   data: StudyData;
@@ -262,7 +271,7 @@ function FixtureBody({
   settings: Settings;
   testMode: boolean;
   onSettings: (next: Settings) => void;
-  dsaRead: boolean;
+  firstRun: boolean;
 }) {
   if (name === "library") return <PracticeView tab="rounds" study={data} gym={gym} ctx={ctx} />;
   if (name === "library-new") return <LibraryNewView data={data} ctx={ctx} />;
@@ -281,5 +290,5 @@ function FixtureBody({
       />
     );
   }
-  return <TodayView data={data} ctx={ctx} now={now} dsa={dsaRead ? dsa.response : null} />;
+  return <TodayView data={data} ctx={ctx} now={now} dsa={ctx.settings.leetcodeUsername ? dsa.response : null} gym={firstRun ? null : gym.gym} />;
 }

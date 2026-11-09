@@ -50,18 +50,34 @@ describe("computeWeek", () => {
   it("moves to the new week after Sunday midnight", () => {
     const entries = [solve("a", at(2026, 11, 8, 23, 59)), solve("b", at(2026, 11, 9, 0, 1))];
     const monday = new Date(2026, 10, 9, 8, 0);
-    expect(computeWeek(entries, cache, monday)).toEqual({ solved: 1, mediums: 0, perDay: [1, 0, 0, 0, 0, 0, 0] });
+    expect(computeWeek(entries, cache, monday)).toEqual({ solved: 1, mediums: 0, perDay: [1, 0, 0, 0, 0, 0, 0], mediumsPerDay: [0, 0, 0, 0, 0, 0, 0] });
   });
 
   it("counts mediums from the saved problem details and skips unknown ones", () => {
     const entries = [solve("a", at(2026, 11, 3)), solve("b", at(2026, 11, 3)), solve("c", at(2026, 11, 4)), solve("d", at(2026, 11, 5)), solve("unknown", at(2026, 11, 5))];
     const week = computeWeek(entries, cache, sunday);
-    expect(week).toEqual({ solved: 5, mediums: 2, perDay: [0, 2, 1, 2, 0, 0, 0] });
+    expect(week).toEqual({ solved: 5, mediums: 2, perDay: [0, 2, 1, 2, 0, 0, 0], mediumsPerDay: [0, 1, 1, 0, 0, 0, 0] });
   });
 
   it("counts a problem solved twice in the week once", () => {
     const week = computeWeek([solve("a", at(2026, 11, 3)), solve("a", at(2026, 11, 6))], cache, sunday);
-    expect(week).toEqual({ solved: 1, mediums: 1, perDay: [0, 1, 0, 0, 0, 0, 0] });
+    expect(week).toEqual({ solved: 1, mediums: 1, perDay: [0, 1, 0, 0, 0, 0, 0], mediumsPerDay: [0, 1, 0, 0, 0, 0, 0] });
+  });
+
+  it("puts a medium on the day of its first solve, so a later resubmit does not move it", () => {
+    const week = computeWeek([solve("a", at(2026, 11, 6)), solve("a", at(2026, 11, 3))], cache, sunday);
+    expect(week.mediumsPerDay).toEqual([0, 1, 0, 0, 0, 0, 0]);
+  });
+
+  it("keeps every medium of the week by day, past the ten rows the recent list shows", () => {
+    const many: Record<string, typeof MEDIUM> = {};
+    const entries = Array.from({ length: 12 }, (_, i) => {
+      many[`m${i}`] = MEDIUM;
+      return solve(`m${i}`, at(2026, 11, 3 + (i < 11 ? 0 : 2), 8, i));
+    });
+    const week = computeWeek(entries, many, sunday);
+    expect(week.mediumsPerDay).toEqual([0, 11, 0, 1, 0, 0, 0]);
+    expect(week.mediums).toBe(12);
   });
 });
 

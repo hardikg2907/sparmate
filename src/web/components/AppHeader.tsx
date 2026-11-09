@@ -164,9 +164,22 @@ export function BottomTabs() {
   const route = useRoute();
   const page = currentPage(route);
   const dueDrills = useDueDrillCount();
+  const root = useRef<HTMLElement>(null);
+  // A page's own fixed bottom bar must sit above this one, so the bar's real height (zero when hidden) is published.
+  useLayoutEffect(() => {
+    const bar = root.current;
+    const scroller = bar?.closest<HTMLElement>(".page-canvas");
+    if (!bar || !scroller) return;
+    const publish = () => scroller.style.setProperty("--tabbar-h", `${bar.offsetHeight}px`);
+    publish();
+    if (typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
   const item = "relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-meta font-medium transition-colors";
   return (
-    <nav aria-label="Main" className="bottom-tabs fixed inset-x-0 bottom-0 z-30 flex border-t border-border/70 bg-card/90 backdrop-blur-xl sm:hidden">
+    <nav ref={root} aria-label="Main" className="bottom-tabs fixed inset-x-0 bottom-0 z-30 flex border-t border-border/70 bg-card/90 backdrop-blur-xl sm:hidden">
       {TABS.map((tab) => {
         const current = page !== null && tab.pages.includes(page);
         return (

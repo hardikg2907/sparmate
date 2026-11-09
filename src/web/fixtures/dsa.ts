@@ -24,9 +24,11 @@ function base(now: Date): DsaResponse {
   const start = weekStart(now);
   const inWeek = solves.filter((solve) => new Date(solve.solvedAt) >= start);
   const perDay = [0, 0, 0, 0, 0, 0, 0];
+  const mediumsPerDay = [0, 0, 0, 0, 0, 0, 0];
   for (const solve of inWeek) {
     const index = planIndex(new Date(solve.solvedAt));
     perDay[index] = (perDay[index] ?? 0) + 1;
+    if (solve.difficulty === "Medium") mediumsPerDay[index] = (mediumsPerDay[index] ?? 0) + 1;
   }
   return {
     username: "example_user",
@@ -42,7 +44,7 @@ function base(now: Date): DsaResponse {
       { name: "Heap", slug: "heap-priority-queue", solved: 1 },
       { name: "Sorting", slug: "sorting", solved: 1 },
     ],
-    week: { solved: inWeek.length, mediums: inWeek.filter((solve) => solve.difficulty === "Medium").length, perDay },
+    week: { solved: inWeek.length, mediums: inWeek.filter((solve) => solve.difficulty === "Medium").length, perDay, mediumsPerDay },
     recent: solves,
     lifetimeSolved: 96,
     weeklyGoal: 3,
@@ -64,7 +66,13 @@ export function fixtureDsa(state: string, now: Date): DsaData {
       topics: COMMON_TOPICS.map((t, i) => ({ name: t.name, slug: t.slug, solved: counts[i] ?? 1 })),
     };
   } else if (state === "fresh") {
-    response = { ...ok, pass: { solved: 0, easy: 0, medium: 0, hard: 0, unread: 0 }, topics: [], week: { solved: 0, mediums: 0, perDay: [0, 0, 0, 0, 0, 0, 0] }, recent: [] };
+    response = {
+      ...ok,
+      pass: { solved: 0, easy: 0, medium: 0, hard: 0, unread: 0 },
+      topics: [],
+      week: { solved: 0, mediums: 0, perDay: [0, 0, 0, 0, 0, 0, 0], mediumsPerDay: [0, 0, 0, 0, 0, 0, 0] },
+      recent: [],
+    };
   } else if (state === "stale") {
     response = {
       ...ok,

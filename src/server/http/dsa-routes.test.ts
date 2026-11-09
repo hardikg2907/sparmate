@@ -59,6 +59,7 @@ describe("GET /api/dsa", () => {
     expect(body.recent).toHaveLength(2);
     expect(body.topics).toEqual([{ name: "Array", slug: "array", solved: 2 }]);
     expect(body.week.perDay).toHaveLength(7);
+    expect(body.week.mediumsPerDay).toHaveLength(7);
     expect(typeof body.fetchedAt).toBe("string");
   });
 
