@@ -1480,15 +1480,23 @@ body {
   clip-path: inset(0);
 }
 
-/* Today page: on a phone the hero's main button stays at the bottom of the screen. */
+/* Today page: on a phone the hero's main button stays at the bottom of the screen, over a soft fade of the page. */
 @media (max-width: 639px) {
   .today-start {
     position: fixed;
-    inset-inline: 16px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    inset-inline: 0;
+    bottom: 0;
     z-index: 30;
+    padding: 28px 16px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--background) 55%, transparent);
+    pointer-events: none;
   }
   .today-start > * {
     width: 100%;
+    pointer-events: auto;
+  }
+  /* A transform on an ancestor would make the fixed bar follow the page's entry movement, so this block only fades. */
+  .reveal-children > .today-grid {
+    animation-name: ir-fade-in;
   }
 }

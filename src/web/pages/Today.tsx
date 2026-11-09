@@ -118,7 +118,7 @@ export function TodayView({
         {!pick && !error ? (
           <TodaySkeleton />
         ) : pick ? (
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="today-grid grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
             <div className="space-y-6">
               {firstRun ? (
                 <FirstRunHero pick={pick.hero} data={data} ctx={ctx} />
@@ -132,6 +132,7 @@ export function TodayView({
                 />
               ) : null}
               {!firstRun && hero?.kind === "rest" && next ? <NextUp days={next.days} kind={next.kind} now={now} /> : null}
+              <FocusBand focus={focus} trend={trend} />
             </div>
             <aside aria-label="Also today" className="flex flex-col gap-4">
               {firstRun ? (
@@ -157,8 +158,6 @@ export function TodayView({
             </aside>
           </div>
         ) : null}
-
-        {pick ? <FocusBand focus={focus} trend={trend} /> : null}
       </div>
 
       {planOpen && pick?.hero.kind === "problem" ? (
@@ -223,7 +222,7 @@ function NextUp({ days, kind, now }: { days: number; kind: DayKind; now: Date })
       <h2 className="text-body font-semibold">
         Next up: {weekday(date)}, {KIND_LABEL[kind]}
       </h2>
-      <p className="text-ui text-muted-foreground">{WEEKDAYS[planIndex(date)]} is the next day with a plan.</p>
+      <p className="text-ui text-muted-foreground">{days === 1 ? "Tomorrow" : `In ${days} days`}</p>
     </Card>
   );
 }
@@ -427,9 +426,11 @@ function Hero({
           <span className="mesh-tile inline-flex items-center rounded-full px-3 py-1 text-ui font-bold">Rest</span>
         </div>
         <h2 id="hero-title" className={HERO_TITLE}>
-          Rest day. Nothing is due.
+          Rest day.
         </h2>
-        <p className={HERO_WHY}>No round is planned today. Rest is part of the plan.</p>
+        <p className={HERO_WHY}>
+          No round is planned today. {due.length > 0 ? `${due.length} ${due.length === 1 ? "drill is" : "drills are"} due if you want a short one.` : "Nothing is due."}
+        </p>
         <div className={HERO_ACTIONS}>
           <Button asChild size="lg" variant="secondary">
             <Link href="/library">Pick a problem anyway</Link>

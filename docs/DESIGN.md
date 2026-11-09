@@ -473,20 +473,23 @@ Today is one page for the whole day, and with data it fills the first screen at 
   button, "See the plan" and a quiet link to the Library. On a phone the primary button sticks to the bottom of the
   screen.
 - **Plan preview.** A raised card under the hero: the round's steps drawn to scale, each with its minutes, and its
-  name when the step is wide enough.
+  name under the bar when the step is wide enough. Short steps are named in a wrapping legend row below the bar, each
+  with a swatch in its colour, its name and its minutes.
 - **Also today.** A right column of raised cards. *Unfinished round* has the name, the pause date, a clock bar,
   **Finish**, **End and debrief** (or **Discard**) and "N more unfinished rounds". *Drills due* shows the count and
   total minutes, up to three rows (the gap and the drill with its minutes) each with **Start**, and "Open Practice". It
   is hidden when nothing is due. *DSA this week* shows a ring ("2 of 3 mediums"), "1 more by Sunday" and "Open
   LeetCode". Without a username it asks for one and links to Settings. A link card lists the other redos.
-- **Focus band.** "This week's focus: <skill>", the skill's average over the newest scored rounds, a sparkline of its
-  last five scores and "See progress". The skill is the same one the Progress page shows.
+- **Focus band.** In the left column under the plan preview. "This week's focus: <skill>", the skill's average over
+  the newest scored rounds, a sparkline of its last five scores and "See progress". The skill is the same one the
+  Progress page shows.
 - **First run.** With no round played, the hero is a four-step checklist: set the weekly plan, add the LeetCode
   username, play the first round, read its debrief. A finished step is ticked, the first open step is lit and has
   one action. The right column shows quiet dashed outlines of the cards that fill in later, and the week strip shows
   no missed days.
-- **Rest day.** A calm hero, "Rest day. Nothing is due.", with "Pick a problem anyway" and, when drills exist, "Do one
-  drill anyway". Below it a "Next up" card names the next planned day. The strip still shows the week.
+- **Rest day.** A calm hero, "Rest day.", with "No round is planned today." and then either "Nothing is due." or "N drills
+  are due if you want a short one.". It offers "Pick a problem anyway" and, when drills are due, "Do one drill
+  anyway". Below it a "Next up" card names the next planned day and how far away it is. The strip still shows the week.
 - **Plan panel.** A panel from the right: mode switch, the plan bar drawn to scale, a table of step, plan and last time,
   and a last-try tile.
 
