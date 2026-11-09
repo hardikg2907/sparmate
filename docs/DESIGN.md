@@ -412,7 +412,7 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
 ### Pause, auto-pause and resume
 
 - Any pause covers the work area and the chat with a dimmed, blurred layer: one large **Resume** button that takes
-  focus, and "You paused at 17:37, into the round. The clock is stopped." with the round time at the pause. The top bar stays clear,
+  focus, and "You paused 17:37 into the round. The clock is stopped." with the round time at the pause. The top bar stays clear,
   with Resume there as well. A model error shows **Retry** and its reason on a small card instead. The chat box is
   disabled.
 - The board and the editor stay mounted under the cover, so nothing reloads on resume.

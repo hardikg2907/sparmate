@@ -684,7 +684,7 @@ function PausedAt({ session, offsetMs }: { session: PublicSession; offsetMs: num
   const away = session.pauseReason === "away" || session.pauseReason === "restart";
   return (
     <p className="text-body font-medium text-foreground">
-      {away ? `${pauseText(session.pauseReason)} ` : null}You paused at <span className="font-mono tabular-nums">{formatClock(roundMs)}</span>. The clock is stopped.
+      {away ? `${pauseText(session.pauseReason)} ` : null}You paused <span className="font-mono tabular-nums">{formatClock(roundMs)}</span> into the round. The clock is stopped.
     </p>
   );
 }
