@@ -98,7 +98,7 @@ home and the NEXT card on the debrief. Three tones blend as layered radial gradi
 near-black corner at the top right, a bright saturated tone through the middle (brand indigo, with violet at the left)
 and a pale lilac glow that rises from the bottom. White text sits only on the dark and bright tones. Whatever sits
 over the glow (the score cells, the plan) sits on a dark glass tile, so white keeps its contrast. The usage page keeps
-the older deep panel for its cost and chart. A hairline card is for repeated rows and for secondary blocks only. A plain text link inside a mesh panel sits on the same dark glass tile, because it usually lands on the glow.
+the older deep panel for its cost and chart. A hairline card is for repeated rows and for secondary blocks only. A text link inside a mesh panel (`.mesh-link`) sits on the same dark glass tile as a pill, because it usually lands on the glow.
 
 Controls stay flat and quiet. A primary button is a plain brand fill with a 1 px lighter edge along the top and one
 small shadow, and it moves 1 px when pressed. Only the
@@ -126,7 +126,7 @@ The scale is a minor third (1.2) on a 15 px base, because chat and debrief text 
 `font-display` is for the big heading in the mesh panel: the recommended round's title. It is `ui-rounded` (the system's rounded face, no download, so the CSP is unchanged) and falls
 back to Atkinson at weight 800.
 
-`text-title`, `text-display` and `text-mega` carry a letter spacing of -0.02em by default; the smaller sizes keep the font's own spacing. Labels are sentence case. There are no uppercase tracked labels. Prose lines stay under about 70 characters.
+`text-title`, `text-display` and `text-mega` carry a letter spacing of -0.02em; the smaller sizes keep the font's own spacing. A few headings on pages set a value of their own (-0.01em to -0.03em). Labels are sentence case. There are no uppercase tracked labels. Prose lines stay under about 70 characters.
 
 ### Colour tokens
 
@@ -192,7 +192,7 @@ accent are extensions of that set.
 | `--chart-1` to `--chart-5` | | | Usage charts |
 
 Inside a mesh panel (`.on-mesh`) every text and status token takes its dark-theme value in either theme, because the
-panel is dark in both: white text, lilac secondary text, and the bright status colours. A `Badge` or a score on a tile
+panel is dark in both: white text, lilac secondary text, and the bright status colours (the warning text is a lighter amber, `#fad38e`, so it keeps AA on the glow). A `Badge` or a score on a tile
 therefore reads the same in light and in dark.
 
 The plain status token is the text and icon colour; `-soft` is the tinted fill it sits on; `-fill` is a solid bar,
@@ -206,14 +206,16 @@ Every status text on its soft fill is above 6:1. Control outlines are 3.4:1 and 
 
 Text on a gradient is measured against its darkest and its lightest point:
 
-Every text over a mesh panel, a step tab and an enabled primary or secondary button was measured on rendered pixels:
-the text was hidden, the background under each word was read, and the worst point was compared with the text colour.
-The lowest value is 4.7:1, in both themes, at 1440 and at 375 px. Disabled buttons are exempt. On the home hero, the title is at least 5.7:1, the body text 4.8:1, the warning line 6.8:1 and the "Pick another problem" link 12.3:1, in both themes at 1440 and at 375 px.
+Text over the mesh panels was measured on rendered pixels: the text was hidden, the background under each word was
+read, and the worst point was compared with the text colour. On the home hero the lowest value is 4.8:1 in dark and
+5.1:1 in light, at 1440 and at 375 px, for every word and every enabled button. On the DSA hero it is 5.0:1 and
+5.6:1. Disabled buttons are exempt.
 
 | Where | Light | Dark |
 |---|---|---|
-| Mesh panel, lowest text over the mesh and its tiles (measured) | 4.9 | 4.7 |
-| Home hero title, body text, warning line (measured, lowest of 1440 and 375 px) | 6.5, 5.5, 6.8 | 5.7, 4.8, 7.1 |
+| Home hero, lowest text over the mesh and its tiles (measured) | 5.1 | 4.8 |
+| DSA hero, lowest text over the mesh and its tiles (measured) | 5.6 | 5.0 |
+| Home hero title, body text, warning line (measured, lowest of 1440 and 375 px) | 6.5, 5.5, 5.1 | 5.7, 4.8, 7.1 |
 | Home hero link "Pick another problem" on its dark tile (measured, lowest) | 12.3 | 14.3 |
 | White on the bright violet, at its brightest | 5.9 | 4.9 |
 | White on the primary button, rest and hover | 7.7, 6.4 | 5.7, 4.7 |
@@ -285,6 +287,8 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
   meter grow from their left edge in 500 ms, in 45 ms steps; the daily cost bars grow from the bottom in 550 ms,
   in 18 ms steps. The large numbers count up once from zero in 700 to 1100 ms with an ease-out: the progress
   counts and the total cost; the debrief has no count-up. A later change to a number shows the new value at once.
+- **A drill result** answers the submit: the "Pass" mark settles in (scale 1.06 to 1, 200 ms), and on "Not yet" the
+  one-fix line slides in 8 px (200 ms). Both wait for the page's own sequence to arrive.
 - **The plan needle** moves with the clock. When the phase changes, the current segment's fill slides to the next
   segment in 200 ms.
 - **Motion that answers an action**: buttons ease colour and shadow in 150 ms and move down 1 px while pressed; cards rise on
