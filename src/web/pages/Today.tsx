@@ -437,7 +437,7 @@ function Hero({
           {first ? (
             <Link
               href={drillPath({ drill: first.drill, problemId: first.problemId, drillId: first.id })}
-              className="ml-auto text-ui text-muted-foreground underline decoration-white/30 underline-offset-4 hover:text-foreground"
+              className="mesh-link ml-auto text-ui text-muted-foreground underline decoration-white/30 underline-offset-4 hover:text-foreground"
             >
               Do one drill anyway
             </Link>
