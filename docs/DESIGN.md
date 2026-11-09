@@ -396,9 +396,8 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
   the elements they are about; hover or focus shows the note.
 - **Step checklist.** When the round sends the checklist for the current step, the chat column opens with one row,
   "Checklist  0 of 2". It opens in place to list each item and what is covered, with a missing requirement shown as
-  the question to ask rather than its answer. It is not a scroller. A round that holds the list back (every live
-  interview round, and a guided step that nobody has checked) shows no row. The debrief shows the full list in every
-  mode.
+  the question to ask rather than its answer. It is not a scroller. The server holds the checklist back for the whole
+  of a live round, in every mode, so the row appears only once the round is over; the debrief shows the full list.
 - **Pace chip.** Next to the clock: "2:10 behind plan" in the warn colour once the clock passes the planned end of
   the current phase (the sum of the minutes of every phase up to and including it), else a quiet "On plan". A round
   with no time plan shows no chip. When it first turns to behind it lights once with a single ring.
@@ -589,7 +588,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   "listening" and carries a soft halo in its colour. The interviewer's messages are plain text under a name line
   with a small indigo-to-violet dot, like a transcript. His own messages are bubbles in a light brand gradient with
   an inner highlight and a faint brand shadow. System events are small centred lines between two rules that fade
-  out to the sides. The extension is a distinct raised "New requirement" card with a gradient bar on its left edge.
+  out to the sides. The extension is a distinct raised card with a "New requirement" badge.
   Under the opening message of an LLD round a quiet card, "What this step needs", repeats the phase goal and lists
   that phase's checklist items when the round sends them. "Check this step", "Hint" and "I'm stuck" are small pills
   just above the composer. A one-time note above them, "Voice input needs the speech pack." with Install and Not

@@ -462,6 +462,14 @@ function RoomHeader({
             onSelect={onSelectPhase}
             disabled={frozen}
           />
+          {guided ? (
+            <span className="shrink-0 text-meta text-muted-foreground max-lg:hidden" aria-live="polite" title={`${passed.size} of ${session.phasePlan.length} steps passed`}>
+              <span className="font-semibold tabular-nums text-foreground">
+                {passed.size}/{session.phasePlan.length}
+              </span>{" "}
+              passed
+            </span>
+          ) : null}
           {delta ? <DeltaChip delta={delta} /> : null}
         </div>
         <div className="max-md:order-3">
