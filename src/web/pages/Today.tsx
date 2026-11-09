@@ -279,7 +279,7 @@ function Hero({
           <Button size="lg" variant="secondary" onClick={onSeePlan}>
             See the plan
           </Button>
-          <Link href="/library" className="ml-auto text-ui text-muted-foreground underline decoration-white/30 underline-offset-4 hover:text-foreground">
+          <Link href="/library" className="mesh-link ml-auto text-ui text-muted-foreground underline decoration-white/30 underline-offset-4 hover:text-foreground">
             Pick another problem
           </Link>
         </div>

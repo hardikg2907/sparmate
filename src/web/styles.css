@@ -280,7 +280,7 @@
   --success: #6fd69c;
   --success-soft: #16301f;
   --success-fill: #3fae6f;
-  --warning: #f2b755;
+  --warning: #fad38e;
   --warning-soft: #372a10;
   --warning-fill: #d99a2b;
   --destructive: #ff9a91;
@@ -687,16 +687,16 @@ body {
       inset 0 1px 0 rgb(255 255 255 / 0.14),
       var(--mesh-shadow);
   }
-  /* A plain text link in a mesh panel usually lands on the pale glow, so it gets the same dark tile behind it. */
-  .mesh a.underline {
-    background-color: var(--mesh-tile);
-    border-radius: 9999px;
-    padding: 0.125rem 0.625rem;
-  }
   /* Anything that sits over the pale glow sits on a dark tile, so white text keeps its contrast there. */
   .mesh-tile {
     background-color: var(--mesh-tile);
     box-shadow: inset 0 0 0 1px var(--mesh-tile-ring);
+  }
+  /* A text link in a mesh panel usually lands on the pale glow, so it sits on the same tile as a pill. */
+  .mesh-link {
+    background-color: var(--mesh-tile);
+    box-shadow: inset 0 0 0 1px var(--mesh-tile-ring);
+    @apply rounded-full px-2.5 py-0.5;
   }
 
   /* Large counts shade from the text colour into the brand ink. Both ends keep AA on the panel behind them. */
@@ -901,13 +901,13 @@ body {
 .page-enter {
   animation: ir-rise 0.36s var(--ease-out-quick) backwards;
 }
-/* Sections and rows reveal top to bottom; the cap keeps a long list from making the last row wait. */
 .drill-settle {
   animation: ir-settle 0.2s var(--ease-out-quick) 0.35s backwards;
 }
 .drill-slide-in {
   animation: ir-slide-in 0.2s var(--ease-out-quick) 0.45s backwards;
 }
+/* Sections and rows reveal top to bottom; the cap keeps a long list from making the last row wait. */
 .reveal {
   animation: ir-rise 0.4s var(--ease-out-quick) backwards;
   animation-delay: calc(min(var(--i, 0), 10) * 50ms);
