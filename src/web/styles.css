@@ -1470,3 +1470,25 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Today page: the week strip's tick fills in when a day's work finishes. */
+.day-fill {
+  clip-path: inset(100% 0 0 0);
+  transition: clip-path 300ms var(--ease-out-quick);
+}
+.day-fill[data-on="true"] {
+  clip-path: inset(0);
+}
+
+/* Today page: on a phone the hero's main button stays at the bottom of the screen. */
+@media (max-width: 639px) {
+  .today-start {
+    position: fixed;
+    inset-inline: 16px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 30;
+  }
+  .today-start > * {
+    width: 100%;
+  }
+}
