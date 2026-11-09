@@ -12,6 +12,8 @@ export interface ConsoleProps {
   onRun: () => void;
   onJumpTo?: (line: number, column: number) => void;
   disabled?: boolean;
+  /** False when the page offers Run elsewhere. */
+  showRun?: boolean;
 }
 
 const MAX_DIAGNOSTIC_ROWS = 50;
@@ -135,38 +137,40 @@ function RunSection({ run }: { run: NonNullable<RunResult["run"]> }) {
   );
 }
 
-export function Console({ lastRun, running, onRun, onJumpTo, disabled }: ConsoleProps) {
+export function Console({ lastRun, running, onRun, onJumpTo, disabled, showRun = true }: ConsoleProps) {
   const tone = statusTone(lastRun, running);
   return (
     <section className="ir-console flex h-full min-h-0 w-full flex-col bg-card text-ui text-foreground" aria-label="Console" aria-busy={running}>
       <header className="ir-console__bar flex shrink-0 items-center gap-3 border-b border-border px-3 py-1.5">
         {/* aria-disabled while running keeps keyboard focus on the button; a disabled button drops it. */}
-        <Tooltip content="Compile and run">
-          <Button
-            variant="default"
-            size="sm"
-            className="ir-console__run min-w-21"
-            onClick={() => {
-              if (!running) onRun();
-            }}
-            disabled={disabled}
-            aria-disabled={running || undefined}
-          >
-            {running ? (
-              <>
-                <SpinnerIcon size={12} />
-                Running…
-              </>
-            ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                  <path d="M2.5 1.2v9.6L10.6 6z" fill="currentColor" />
-                </svg>
-                Run
-              </>
-            )}
-          </Button>
-        </Tooltip>
+        {showRun ? (
+          <Tooltip content="Compile and run">
+            <Button
+              variant="default"
+              size="sm"
+              className="ir-console__run min-w-21"
+              onClick={() => {
+                if (!running) onRun();
+              }}
+              disabled={disabled}
+              aria-disabled={running || undefined}
+            >
+              {running ? (
+                <>
+                  <SpinnerIcon size={12} />
+                  Running…
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+                    <path d="M2.5 1.2v9.6L10.6 6z" fill="currentColor" />
+                  </svg>
+                  Run
+                </>
+              )}
+            </Button>
+          </Tooltip>
+        ) : null}
         <div className="flex min-w-0 items-center gap-2">
           <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", TONE_FILL[tone])} />
           <div className={cn("ir-console__status min-w-0 truncate", TONE_TEXT[tone])} role="status" aria-live="polite">

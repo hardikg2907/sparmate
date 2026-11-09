@@ -293,6 +293,9 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
 - **The week strip's tick** fills from the bottom in 300 ms when today's round finishes. Earlier days show their tick at once.
 - **The plan needle** moves with the clock. When the phase changes, the current segment's fill slides to the next
   segment in 200 ms.
+- **The pace chip** glows once, with one soft ring that grows and fades over 1.1 s, when the round first turns behind
+  plan. It does not repeat. **Hold to end** fills the End interview button over 1.2 s while the pointer is down,
+  and eases back in 280 ms on an early release.
 - **Motion that answers an action**: buttons ease colour and shadow in 150 ms and move down 1 px while pressed; cards rise on
   hover in 180 ms; dialogs fade and scale in from 95% with a 260 ms ease-out over a blurred, dimmed page, and fade
   out in 150 ms; menus, select lists, popovers and tooltips grow from their trigger; toasts slide in at the bottom
@@ -304,8 +307,7 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
   board measures its position when it mounts.
 - Loading states are skeletons in the shape of the content, so nothing jumps when the data arrives.
 - **The room is a work surface, so nothing in it moves on its own** except the needle, the typing dots and the
-  spinner. Movement there only answers his own actions or the round's progress: a step chip rises 1 px on hover and
-  presses to 98%; a palette row lights and its swatch grows a little on hover; a step's progress fill grows by scale
+  spinner. Movement there only answers his own actions or the round's progress: a plan segment lights on hover; a palette row lights and its swatch grows a little on hover; a step's progress fill grows by scale
   in 300 ms; a coverage ring redraws in 240 ms after a check; a new message rises in over 200 ms; a pin pops in from
   half size in 180 ms when it appears, and its note fades and scales in over 150 ms.
 - **The debrief's step rings** start empty and fill once, in 900 ms, when each scrolls into view.
@@ -316,7 +318,7 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
 - Nothing moves on its own except the needle, the typing dots, the spinner and the skeleton shimmer. The mesh
   gradient is still.
 - With `prefers-reduced-motion`, nothing moves: no entrance, no fill, no count-up, no hover lift, no button
-  movement and no view transition. Every number shows its final value at once and the needle jumps once a second. The gradients stay. Scripted test runs (`?testhooks=1`) also show final numbers at once.
+  movement, no pace-chip ring and no view transition. The hold-to-end fill steps in four jumps instead of gliding. Every number shows its final value at once and the needle jumps once a second. The gradients stay. Scripted test runs (`?testhooks=1`) also show final numbers at once.
 
 ### Components
 
@@ -366,48 +368,54 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 
 ```
  ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
- │ ← URL Shortener  HLD interview                      27:26 left   1:40 behind   Pause   End   ⋯ │  56 px
- ├───────────────────────────────────────────────────────────────────────────────────────────────┤
- │ ◔ Requirements │ ◑ Core entities │ ◔ API │ ◔ High-level design ▌      │ ○ Deep dives           │  48 px
+ │ ← URL Shortener [HLD guided]  Req│Ent│API│▌High-level design 6:13 / 13│ Deep dives            │
+ │                               27:26 left · 2:10 behind plan   Pause   End interview   ⋯       │  52 px
  ├───────────────────────────────────────────────────────────┬───────────────────────────────────┤
- │ High-level design. Boxes and arrows, then walk one …      │ ╭ ◔ Checklist · High-level design ╮│
- │ [Show this step] [Whole board] [Interviewer's view 2]     │ │ ◐ Walk one redirect      Partly ││
- │ ┌──────┐ ┌ Requirements ┐ ┌ Entities ┐ ┌ API ─────┐       │ │ ○ Walk one create       Not yet ││
- │ │ pal  │ │              │ │          │ │          │       │ ╰ Checked at 17:18 ───────────────╯│
- │ │      │ └──────────────┘ └──────────┘ └──────────┘       │  Interviewer 08:25                │
- │ │      │ ┌ High-level design ──────────┐ ┌ Deep dives ┐   │  Why a 302 and not a 301?         │
- │ │      │ │ [LB] → [Service] → [Redis] ①│ │            │   │                    You 09:00 ┌───┐│
- │ └──────┘ └─────────────────────────────┘ └────────────┘   │                              │...││
+ │ High-level design. Boxes and arrows … [This step|Whole|…] │  Checklist                0 of 2 ▾│  36 px
+ │ ┌──────┐ ┌ Requirements ┐ ┌ Entities ┐ ┌ API ─────┐       │  Interviewer 08:25                │
+ │ │ pal  │ │              │ │          │ │          │       │  Why a 302 and not a 301?         │
+ │ │      │ └──────────────┘ └──────────┘ └──────────┘       │                    You 09:00 ┌───┐│
+ │ │      │ ┌ High-level design ──────────┐ ┌ Deep dives ┐   │                              │...││
+ │ └──────┘ └─────────────────────────────┘ └────────────┘   │  (Check this step) (Hint)         │
  │                                                           │  [ Reply to the interviewer…  ]  ⏎│
  └───────────────────────────────────────────────────────────┴───────────────────────────────────┘
 ```
 
-- **Plan track.** Segments are drawn to scale by planned minutes, as separate raised chips on the page band. Each
-  segment fills with the time actually spent in it and carries a small coverage ring for its checklist. Time past the
-  plan shows as a striped warn extension. A thin accent needle marks "now" on the plan's scale. Each segment is a
-  button: a click (or Enter) moves to that phase and brings the step's frame into view (the Code tab for an LLD step
-  that is answered in code). The frame also comes into view when the interviewer or guide moves the rail. In a
-  guided round, hover or focus on a segment shows the step's checklist beside its goal, so a step can be read
-  without moving the rail; a timed round shows the goal alone.
+The chrome above the work area is two rows, 88 px in all: the top bar and the work bar.
+
+- **Plan track.** One row inside the top bar, between the mode chip and the pace chip. Segments are drawn to scale by
+  planned minutes (a short step keeps a floor width so it still shows a name). Finished segments are solid; the
+  current segment is lit and fills with the time spent in it, with its name and "6:13 / 13" above it; later segments
+  show a short, truncated name. Time past the plan shows as a striped warn fill. A small accent tick under the track marks "now"
+  on the plan's scale, clear of every label. Each segment is a button: a click (or Enter) moves to that phase and brings the step's frame
+  into view (the Code tab for an LLD step that is answered in code). The frame also comes into view when the
+  interviewer or guide moves the rail. A guided round marks each passed step with a tick. On a phone only the
+  current segment shows.
 - **The board is the answer sheet.** One board holds a labelled frame per step, so each step's drawing and notes are
-  its answer. "Show this step" and "Whole board" in the work toolbar move the view. In a guided round, the guide's pins
-  sit on the elements they are about; hover or focus shows the note.
-- **Step checklist.** In a guided round, a raised card at the top of the chat column shows how many things the
-  current step covers. Once the step is checked, it lists each item, where it was covered ("Said at 04:12", "On the
-  board") and what is still missing, with a missing requirement shown as the question to ask rather than its answer, and the step bar shows a
-  coverage ring per step. An interview round shows neither: the list is drawn from the hidden brief, and a real
-  interviewer gives no running score. The debrief shows both in every mode.
-- **Behind-plan signal.** When the clock passes the planned end of the current phase, a warn pill next to the
-  timer says "1:40 behind plan". This is the single most useful number for him, and today it does not exist.
-- **Goal line.** The work toolbar says what the current phase must produce, from his own method.
-- **Timer.** Large mono digits. Neutral when on plan, warn under 5 minutes, bad at 0. Guided mode counts up.
-- **End interview** is the only filled bad-tone button in the bar. **Pause** is quiet. Discard stays in the menu.
+  its answer. "This step" and "Whole board" in the work bar move the view. In a guided round, the guide's pins sit on
+  the elements they are about; hover or focus shows the note.
+- **Step checklist.** When the round sends the checklist for the current step, the chat column opens with one row,
+  "Checklist  0 of 2". It opens in place to list each item and what is covered, with a missing requirement shown as
+  the question to ask rather than its answer. It is not a scroller. The server holds the checklist back for the whole
+  of a live round, in every mode, so the row appears only once the round is over; the debrief shows the full list.
+- **Pace chip.** Next to the clock: "2:10 behind plan" in the warn colour once the clock passes the planned end of
+  the current phase (the sum of the minutes of every phase up to and including it), else a quiet "On plan". Only an
+  interview round is held to its plan: a guided round and a gap-practice round show no chip, and neither does a
+  round with no time plan. When it first turns to behind it lights once with a single ring.
+- **Goal line.** The work bar says what the current phase must produce, from his own method, on one line.
+- **Timer.** Mono digits. Neutral when on plan, warn under 5 minutes, bad at 0. Guided mode counts up.
+- **End interview** is a quiet text button in the bad tone. A click, Enter or Space opens the confirm dialog. Holding
+  the pointer down for 1.2 s ends the round at once: a fill grows across the button, and letting go early eases it
+  back. Under reduced motion the fill steps. Its tooltip says "Click to confirm, or hold to end now". **Pause** is
+  outlined. Discard stays in the menu, and in an LLD round so does "Copy path" for the attempt file.
 
 ### Pause, auto-pause and resume
 
-- Any pause covers the work area and the chat with a calm panel: the reason, the time left, and one large
-  **Resume** button that takes focus. A model error shows **Retry** instead. The chat box is disabled, as today.
-- The board and the editor stay mounted under the panel, so nothing reloads on resume.
+- Any pause covers the work area and the chat with a dimmed, blurred layer: one large **Resume** button that takes
+  focus, and "You paused 17:37 into the round. The clock is stopped." with the round time at the pause. The top bar stays clear,
+  with Resume there as well. A model error shows **Retry** and its reason on a small card instead. The chat box is
+  disabled.
+- The board and the editor stay mounted under the cover, so nothing reloads on resume.
 - The reason texts stay the same as today, so the meaning does not change: "Paused because the room was closed.
   Resume when you're ready." and the others.
 
@@ -544,24 +552,24 @@ Today is one page for the whole day, and with data it fills the first screen at 
 ### Room
 
 - **Surfaces.** The room uses the reading pages' finish without their ambient motion. Behind the chrome lies the
-  sunken canvas with two soft lights from the top corners (indigo left, violet right). On it sit the glass top bar,
-  the step band and the work toolbar; raised, lit cards float on them (the step chips, the checklist, pins and their
+  sunken canvas with two soft lights from the top corners (indigo left, violet right). On it sit the glass top bar
+  and the work bar; raised, lit cards float on them (the checklist, the "What this step needs" card, pins and their
   notes). The board, the editor and the chat column stay plain card surfaces, so the work stays quiet.
-- **Top bar** in one 56 px row of glass (the card colour at 80% over a 24 px blur) with the gradient hairline on its
-  bottom edge: back, the title in lead type, a tinted-glass track and mode chip (accent when guided), the timer, the
-  behind-plan pill, Pause, End interview, and the menu. The timer sits in a shallow sunken well; on plan its mono
-  digits shade from the text colour into the brand ink. Under five minutes and at zero it takes the tinted warn and
-  bad fills instead. The behind-plan pill is tinted warn glass with a glowing dot.
-- **Plan track** in one 48 px row of raised chips, lit from above with a hairline lighter at the top. The current step
-  is lit in a soft brand fill with a gradient edge (indigo, violet, teal) and a brand shadow. Each chip's progress
-  bar fills with a gradient (indigo to violet for the current step, the outline grey for the others) and glows
-  softly; time past the plan stays striped warn. In a guided round each chip carries a coverage ring drawn with an
-  indigo-to-violet stroke, or solid green when the step is done. The needle is an indigo-to-violet line with a soft
-  glow.
-- **Work toolbar** is a translucent card strip with an inner top highlight and a hairline under it. It shows the goal
-  line, the LLD tabs (their underline is the indigo-to-violet gradient), and "Show this step", "Whole board" and "What
-  the interviewer sees" as matching outlined buttons; the last one turns soft accent glass while the panel is open and
-  carries a warn count.
+- **Top bar** in one 52 px row of glass (the card colour at 80% over a 24 px blur) with the gradient hairline on its
+  bottom edge: back, the title in lead type, a tinted-glass mode chip (accent when guided), the plan track filling
+  the middle, the pace chip, the timer, Pause, End interview and the menu. The timer sits in a shallow sunken well;
+  on plan its mono digits shade from the text colour into the brand ink. Under five minutes and at zero it takes
+  the tinted warn and bad fills instead. The behind-plan chip is tinted warn glass with a glowing dot. On a phone
+  the bar wraps into rows and the mode chip goes; the chat column gets most of the height, and the checklist row and the speech note stay hidden.
+- **Plan track** in one 20 px row of segments, with a 16 px label line above it for the current step. Finished
+  segments are solid soft brand; the current one has a brand hairline and a fill that grows with the time spent
+  (indigo to violet, with a soft glow); later ones are flat grey with a short label. Time past the plan stays
+  striped warn. The needle is a short indigo-to-violet tick under the track with a soft glow.
+- **Work bar** is a 36 px translucent strip with an inner top highlight and a hairline under it. On the left is the
+  goal line. On the right is a segmented switch: in an HLD round "This step", "Whole board" and "Interviewer's
+  view" (which turns soft accent while the panel is open and carries a warn count); in an LLD round "Code" and
+  "Class diagram", with the Run button beside them on the Code tab and the board switch beside them on the diagram
+  tab. The console below the editor shows no Run of its own.
 - **Board.** A fresh board starts with one empty frame per step (HLD: Requirements, Core entities, API, High-level design,
   Deep dives; LLD: Entities and States), and opens on the current step's frame. Pins are numbered circles over the
   canvas: a brand gradient for a guide's note, outlined green or red for what the judge marked held or a gap, each
@@ -572,22 +580,25 @@ Today is one page for the whole day, and with data it fills the first screen at 
   swatch grows a little, and a press scales the row to 98%. The swatches use the app tokens; keyboard order is
   unchanged.
 - **Editor and console.** Monaco uses the mono cut of the family, after the font loads, so the cursor stays
-  aligned. The attempt path strip and the console are lit from above like a raised panel. The console keeps Run,
-  the error list, jump-to-line and every note.
-- **Step checklist** above the chat, collapsible, with its own scroll area so the chat keeps its height. It is the
-  room's raised card: a lit fill, a hairline lighter at the top, an inner top highlight and the brand hairline along
-  its top edge. Each item's mark is tinted by its state: green and softly glowing when covered, amber when partly
-  covered, muted when missing.
+  aligned. The console is lit from above like a raised panel. It keeps the error list, jump-to-line and every note;
+  Run lives in the work bar. The attempt file path is not on screen: the menu holds "Copy path".
+- **Step checklist** is one 32 px row at the top of the chat column, "Checklist  0 of 2 ▾", a muted well with a
+  hairline all round. It opens in place, with no scroll area of its own. Each item's mark is tinted by its state:
+  green when covered, amber when partly covered, muted when missing.
 - **Chat.** The header is lit from above and ends in the gradient hairline; its status dot says "thinking" or
   "listening" and carries a soft halo in its colour. The interviewer's messages are plain text under a name line
   with a small indigo-to-violet dot, like a transcript. His own messages are bubbles in a light brand gradient with
   an inner highlight and a faint brand shadow. System events are small centred lines between two rules that fade
-  out to the sides. The extension is a distinct raised "New requirement" card with a gradient bar on its left edge.
-  "Check this step" and "Hint" are outlined buttons. The composer is a lit field that glows in the brand ink when it
-  has focus; Send is the primary gradient button.
-- **Pause panel**, described in section 4. It covers the work with the dialogs' backdrop (dimmed toward the brand ink
-  and blurred) and scales in like a dialog: from 95% over 260 ms, its fill lit from the top. The icon sits on a
-  tinted-glass disc.
+  out to the sides. The extension is a distinct raised card with a "New requirement" badge.
+  Under the opening message of an LLD round a quiet card, "What this step needs", repeats the phase goal and lists
+  that phase's checklist items when the round sends them. "Check this step", "Hint" and "I'm stuck" are small pills
+  just above the composer. A one-time note above them, "Voice input needs the speech pack." with Install and Not
+  now, shows while the speech pack is missing; "Not now" is remembered for that browser. The mic button stays, off,
+  with its reason. The composer is a lit field that glows in the brand ink when it has focus; Send is the primary
+  gradient button.
+- **Pause cover**, described in section 4. It covers the work with the dialogs' backdrop (dimmed toward the brand ink
+  and blurred) and scales in from 95% over 260 ms. It holds a large Resume button and one line of text, with no
+  card, except for an error pause, which keeps a card with a tinted-glass icon disc.
 
 ### Debrief
 

@@ -1034,8 +1034,8 @@ body {
 
 /*
  * Room chrome. The room is a work surface, so it takes the reading pages' finish without their ambient motion: the
- * canvas light shows only through the glass header, the step band and the work toolbar; raised, lit cards float on
- * them (the steps, the checklist, pins and their notes); and only his own actions make anything move.
+ * canvas light shows only through the glass header and the work bar; raised, lit cards float on
+ * them (the checklist, pins and their notes); and only his own actions make anything move.
  */
 .room-canvas {
   background-color: var(--sunken);
@@ -1074,47 +1074,6 @@ body {
     inset 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
-/* Every step has the same transparent edge, so the gradient edge of the current one does not shift its neighbours. */
-.room-step {
-  border: 1.5px solid transparent;
-  border-radius: calc(var(--radius) - 2px);
-  background:
-    linear-gradient(var(--raised-top), var(--raised-bottom)) padding-box,
-    linear-gradient(180deg, var(--edge-top), var(--edge-bottom)) border-box;
-  box-shadow:
-    inset 0 1px 0 var(--highlight),
-    var(--elev-xs);
-  transition:
-    transform 0.18s var(--ease-out-quick),
-    box-shadow 0.18s var(--ease-out-quick),
-    scale 0.15s;
-}
-.room-step:hover:not(:disabled) {
-  transform: translateY(-1px);
-  background:
-    linear-gradient(var(--raised-top), var(--raised-bottom)) padding-box,
-    linear-gradient(180deg, color-mix(in srgb, var(--primary) 30%, transparent), color-mix(in srgb, var(--primary) 15%, var(--edge-bottom))) border-box;
-  box-shadow:
-    inset 0 1px 0 var(--highlight),
-    var(--elev-sm);
-}
-.room-step:active:not(:disabled) {
-  scale: 0.98;
-}
-.room-step[data-current],
-.room-step[data-current]:hover:not(:disabled) {
-  background:
-    linear-gradient(var(--step-current-top), var(--step-current-bottom)) padding-box,
-    linear-gradient(120deg, var(--primary), var(--brand-violet) 55%, var(--brand-teal)) border-box;
-  box-shadow:
-    inset 0 1px 0 var(--highlight),
-    0 1px 2px rgb(16 20 32 / 0.08),
-    0 6px 18px -6px var(--primary-shadow);
-}
-.room-step:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
 /* The fill grows by scale, not width, so a tick of the clock never re-lays out the step bar. */
 .room-progress {
   position: absolute;
@@ -1178,11 +1137,7 @@ body {
   background: var(--card);
   box-shadow: inset 1px 0 0 var(--border);
 }
-/* The code pane's own strips: the attempt path above the editor and the console below it. */
-.room-strip {
-  background: linear-gradient(180deg, var(--raised-top), var(--raised-bottom));
-  box-shadow: inset 0 -1px 0 var(--border);
-}
+/* The console below the editor. */
 .room-console {
   background: linear-gradient(180deg, var(--raised-top), var(--card) 40%);
   box-shadow:
@@ -1215,14 +1170,6 @@ body {
 .chat-extension {
   position: relative;
   overflow: hidden;
-}
-.chat-extension::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: linear-gradient(180deg, var(--primary), var(--brand-violet), var(--brand-teal));
-  pointer-events: none;
 }
 .status-dot {
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
@@ -1453,11 +1400,9 @@ body {
 
 /* The room's rules come after the shared reduced-motion block, so their hover and press movement is turned off here. */
 @media (prefers-reduced-motion: reduce) {
-  .room-step:hover:not(:disabled),
   .ir-palette__item:enabled:hover .ir-swatch {
     transform: none;
   }
-  .room-step:active:not(:disabled),
   .ir-palette__item:enabled:active {
     scale: none;
   }
@@ -1502,5 +1447,149 @@ body {
   /* A transform on an ancestor would make the fixed bar follow the page's entry movement, so this block only fades. */
   .reveal-children > .today-grid {
     animation-name: ir-fade-in;
+  }
+}
+
+/* Room top bar, work bar and chat extras. */
+
+/* The plan track's segments: finished ones are solid, the current one is lit, later ones stay flat. */
+.plan-seg {
+  position: relative;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--muted);
+  color: var(--faint);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-strong) 55%, transparent);
+  transition: background-color 0.15s;
+}
+.plan-seg:hover:not(:disabled) {
+  background: var(--accent);
+}
+.plan-seg[data-done] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  box-shadow: none;
+}
+.plan-seg[data-current] {
+  padding: 0;
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.plan-seg:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* A small segmented switch for the work bar. */
+.seg {
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-strong) 50%, transparent);
+}
+.seg__item {
+  height: 100%;
+  border-radius: 5px;
+  padding: 0 12px;
+  font-size: var(--text-ui);
+  line-height: var(--text-ui--line-height);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+.seg__item:hover:not(:disabled) {
+  color: var(--foreground);
+}
+.seg__item[data-active] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.seg__item:disabled {
+  opacity: 0.55;
+}
+.seg__item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+@media (max-width: 767px) {
+  .seg__item {
+    padding: 0 8px;
+  }
+  /* The mode chip gives way to the title on a phone. */
+  .room-chip {
+    display: none;
+  }
+}
+
+/* Hold to end: the fill grows across the button while the pointer stays down, and eases back when it lets go early. */
+.end-hold__fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: color-mix(in srgb, var(--destructive-fill) 34%, transparent);
+  transition: transform 0.28s var(--ease-out-quick);
+  pointer-events: none;
+}
+.end-hold[data-holding] .end-hold__fill {
+  transform: scaleX(1);
+  transition: transform 1.2s linear;
+}
+
+/* The pace chip lights once, with a single ring that grows and fades, when the round first falls behind. */
+.delta-chip {
+  position: relative;
+}
+.delta-chip[data-pulse]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--warning-fill);
+  pointer-events: none;
+  animation: delta-pulse 1.1s ease-out 1 both;
+}
+@keyframes delta-pulse {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* The pause cover dims and blurs the work area; the top bar above it stays sharp. */
+.pause-cover {
+  background: rgb(12 14 40 / 0.4);
+  backdrop-filter: blur(10px);
+}
+.dark .pause-cover {
+  background: rgb(4 5 12 / 0.6);
+}
+
+.speech-note {
+  background: var(--primary-soft);
+}
+.step-needs {
+  background: linear-gradient(180deg, var(--raised-top), var(--raised-bottom));
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.step-checklist__row {
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-strong) 50%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .end-hold[data-holding] .end-hold__fill {
+    transition-duration: 1.2s !important;
+    transition-timing-function: steps(4, end) !important;
+  }
+  .delta-chip[data-pulse]::after {
+    animation: none;
   }
 }

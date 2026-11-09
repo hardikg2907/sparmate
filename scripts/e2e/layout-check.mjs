@@ -213,6 +213,20 @@ try {
       }
     }
   }
+
+  // On a phone the chat column must keep room for the conversation.
+  for (const name of ["room-hld", "room-lld"]) {
+    await page.setViewport({ width: 390, height: 844 });
+    await page.goto(`${BASE}/?fixture=${name}&theme=dark`, { waitUntil: "networkidle0" });
+    await sleep(350);
+    const logHeight = await page.evaluate(() => document.querySelector('[role="log"]')?.getBoundingClientRect().height ?? 0);
+    if (logHeight < 120) {
+      totalFailures += 1;
+      console.error(`FAIL: ${name} @ 390x844: the message list is ${Math.round(logHeight)}px tall, under 120px`);
+    } else {
+      console.log(`PASS: ${name} @ 390x844: message list ${Math.round(logHeight)}px tall`);
+    }
+  }
 } finally {
   await browser.close();
   server.kill();

@@ -21,7 +21,7 @@ export function Timer({ mode, roundMs, durationMs, status }: { mode: Mode; round
   }, [level]);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center">
       <div
         role="timer"
         aria-live="off"
@@ -31,13 +31,14 @@ export function Timer({ mode, roundMs, durationMs, status }: { mode: Mode; round
           level === "over" && "tint bg-destructive-soft text-destructive",
           level === "low" && "tint bg-warning-soft text-warning",
           level === "ok" && "room-timer text-foreground",
-          paused && "opacity-70",
+          paused && level === "ok" && "text-warning",
         )}
       >
-        <span className={cn("font-mono text-title font-bold tabular-nums", level === "ok" && "text-gradient")}>{formatClock(guided ? roundMs : Math.max(0, remaining))}</span>
-        <span className="text-meta font-semibold text-muted-foreground">{guided ? "elapsed" : level === "over" ? "time up" : "left"}</span>
+        <span className={cn("font-mono text-title font-bold tabular-nums", level === "ok" && !paused && "text-gradient")}>
+          {formatClock(guided ? roundMs : Math.max(0, remaining))}
+        </span>
+        <span className="hidden text-meta font-semibold text-muted-foreground lg:inline">{guided ? "elapsed" : level === "over" ? "time up" : "left"}</span>
       </div>
-      {paused ? <span className="tint rounded-full bg-warning-soft px-2 py-px text-meta font-semibold text-warning">Paused</span> : null}
       <span className="sr-only" role="status">
         {spoken}
       </span>

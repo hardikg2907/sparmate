@@ -15,22 +15,11 @@ function goalsOf(track: Track): Map<string, string> {
   return new Map(phasesFor(track).map((p) => [p.id, p.goal]));
 }
 
-/** A small round mark: filled with a tick once the guide passed the step, an empty outline before that. */
-function PassedMark({ passed }: { passed: boolean }) {
-  return (
-    <span
-      aria-hidden={passed ? undefined : "true"}
-      className={cn("hidden size-4 shrink-0 place-items-center rounded-full @[5rem]:inline-grid", passed ? "bg-success-fill text-background" : "border border-border")}
-    >
-      {passed ? <CheckIcon size={10} /> : null}
-      {passed ? <span className="sr-only">Passed</span> : null}
-    </span>
-  );
-}
-
 /**
- * The round's plan drawn to scale, with the time spent in each phase, a needle for "now", and a passed mark per step in a guided round. Widths follow planned minutes, so a five-minute phase looks short and
- * a twenty-minute one looks long, but no phase is too narrow to name.
+ * The round's plan drawn to scale in one row, with the time spent in each phase and a needle for "now". Widths follow
+ * planned minutes (with a floor so a short phase still shows a name). Finished steps are solid, the current one is lit
+ * and carries its label and clock above it, and the rest show a short label. A guided round marks each passed step.
+ * On a narrow screen only the current step shows.
  */
 export function PlanTrack({
   plan,
@@ -59,72 +48,73 @@ export function PlanTrack({
   const currentIndex = plan.findIndex((p) => p.id === currentPhase);
 
   return (
-    <nav aria-label="Interview phases" className="relative">
-      <ol className="room-steps flex h-12 gap-1">
+    <nav aria-label="Interview phases" className="plan-track relative min-w-0 flex-1 pb-[7px] pt-[18px]">
+      <ol className="flex h-5 gap-0.5">
         {plan.map((phase, index) => {
           const plannedMs = phase.minutes * MIN;
           const spentMs = spent[phase.id] ?? 0;
           const current = phase.id === currentPhase;
-          const visited = !current && (spentMs >= 1000 || index < currentIndex);
+          const done = !current && (spentMs >= 1000 || index < currentIndex);
           const over = spentMs > plannedMs + 1000;
           const fill = Math.min(1, spentMs / plannedMs);
-          const time = current
-            ? `${shortClock(spentMs)} / ${formatMinutes(phase.minutes)}`
-            : over
-              ? `+${shortClock(spentMs - plannedMs)}`
-              : spentMs >= 1000
-                ? shortClock(spentMs)
-                : `${formatMinutes(phase.minutes)} min`;
+          const time = `${shortClock(spentMs)} / ${formatMinutes(phase.minutes)}`;
+          const isPassed = passed?.has(phase.id) ?? false;
           return (
-            <li key={phase.id} style={{ flexGrow: weights[index], flexBasis: 0 }} className="@container min-w-0">
+            <li key={phase.id} style={{ flexGrow: weights[index], flexBasis: 0 }} className={cn("relative min-w-0", !current && "max-md:hidden")}>
               <Tooltip
                 content={
                   <>
                     <span className="font-semibold">{phase.label}.</span> {goals.get(phase.id)}.
                   </>
                 }
-                side="top"
+                side="bottom"
               >
                 <button
                   type="button"
                   onClick={() => onSelect(phase.id)}
                   disabled={disabled}
                   aria-current={current ? "step" : undefined}
-                  className="room-step flex h-full w-full flex-col justify-center gap-1.5 px-2 text-left disabled:cursor-default"
+                  className="plan-seg flex h-full w-full items-center gap-1 px-1.5 text-left disabled:cursor-default"
                   data-current={current || undefined}
+                  data-done={done || undefined}
                 >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    {passed ? <PassedMark passed={passed.has(phase.id)} /> : null}
-                    <span className={cn("truncate text-ui font-semibold", current ? "text-primary-soft-foreground" : visited ? "text-foreground" : "text-muted-foreground")}>
-                      {phase.label}
+                  {current ? (
+                    <span className={cn("relative block h-full w-full", over && "plan-over")} aria-hidden="true">
+                      {over ? null : <span className="room-progress" data-current style={{ transform: `scaleX(${fill})` }} />}
                     </span>
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "ml-auto hidden shrink-0 font-mono text-meta tabular-nums",
-                        current ? "@[8rem]:inline" : "@[9.5rem]:inline",
-                        over ? "font-semibold text-warning" : current ? "text-primary-soft-foreground" : "text-faint",
-                      )}
-                    >
-                      {time}
-                    </span>
-                    <span className="sr-only">
-                      {current ? ", current phase" : ""}
-                      {spentMs >= 1000 ? `, ${formatClock(spentMs)} spent of ${formatMinutes(phase.minutes)} minutes planned` : `, ${formatMinutes(phase.minutes)} minutes planned`}
-                      {over ? ", over plan" : ""}
-                    </span>
-                  </span>
-                  <span className={cn("relative block h-1 overflow-hidden rounded-full", over ? "plan-over" : "bg-muted")} aria-hidden="true">
-                    {!over && fill > 0 ? <span className="room-progress" data-current={current || undefined} style={{ transform: `scaleX(${fill})` }} /> : null}
+                  ) : (
+                    <>
+                      {isPassed ? <CheckIcon size={10} className="shrink-0" /> : null}
+                      <span className="truncate text-meta font-semibold">{phase.label}</span>
+                    </>
+                  )}
+                  <span className="sr-only">
+                    {phase.label}
+                    {current ? ", current phase" : ""}
+                    {isPassed ? ", passed" : ""}
+                    {spentMs >= 1000 ? `, ${formatClock(spentMs)} spent of ${formatMinutes(phase.minutes)} minutes planned` : `, ${formatMinutes(phase.minutes)} minutes planned`}
+                    {over ? ", over plan" : ""}
                   </span>
                 </button>
               </Tooltip>
+              {current ? (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "pointer-events-none absolute bottom-[calc(100%+1px)] flex items-baseline gap-1.5 whitespace-nowrap text-meta leading-none",
+                    index > plan.length / 2 ? "right-0" : "left-0",
+                  )}
+                >
+                  <span className="font-semibold text-primary-text">{phase.label}</span>
+                  <span className={cn("font-mono tabular-nums", over ? "font-semibold text-warning" : "text-muted-foreground")}>{time}</span>
+                </span>
+              ) : null}
             </li>
           );
         })}
       </ol>
       <span
-        className="plan-needle pointer-events-none absolute bottom-0 h-3 w-0.5 -translate-x-1/2 rounded-full bg-primary"
+        className="plan-needle pointer-events-none absolute top-[39px] h-[6px] w-[3px] -translate-x-1/2 rounded-full bg-primary max-md:hidden"
         style={{ left: `${needle * 100}%` }}
         aria-hidden="true"
       />
