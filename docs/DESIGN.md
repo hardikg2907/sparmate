@@ -98,7 +98,7 @@ home and the NEXT card on the debrief. Three tones blend as layered radial gradi
 near-black corner at the top right, a bright saturated tone through the middle (brand indigo, with violet at the left)
 and a pale lilac glow that rises from the bottom. White text sits only on the dark and bright tones. Whatever sits
 over the glow (the score cells, the plan) sits on a dark glass tile, so white keeps its contrast. The usage page keeps
-the older deep panel for its cost and chart. A hairline card is for repeated rows and for secondary blocks only.
+the older deep panel for its cost and chart. A hairline card is for repeated rows and for secondary blocks only. A plain text link inside a mesh panel sits on the same dark glass tile, because it usually lands on the glow.
 
 Controls stay flat and quiet. A primary button is a plain brand fill with a 1 px lighter edge along the top and one
 small shadow, and it moves 1 px when pressed. Only the
@@ -126,7 +126,7 @@ The scale is a minor third (1.2) on a 15 px base, because chat and debrief text 
 `font-display` is for the big heading in the mesh panel: the recommended round's title. It is `ui-rounded` (the system's rounded face, no download, so the CSP is unchanged) and falls
 back to Atkinson at weight 800.
 
-Labels are sentence case. There are no uppercase tracked labels. Prose lines stay under about 70 characters.
+`text-title`, `text-display` and `text-mega` carry a letter spacing of -0.02em by default; the smaller sizes keep the font's own spacing. Labels are sentence case. There are no uppercase tracked labels. Prose lines stay under about 70 characters.
 
 ### Colour tokens
 
@@ -155,9 +155,9 @@ accent are extensions of that set.
 | `--mesh-corner` | `#1a1030` | `#05030c` | The near-black corner, top right |
 | `--mesh-violet` | `#7e4bb8` | `#7a5ad8` | The violet at the left middle |
 | `--mesh-brand` | `#3443c0` | `#3443c0` | The bright tone through the centre |
-| `--mesh-glow-edge` / `-body` | `#ece8ff` / `#a99bf0` | `#b9adff` / `#6f63d8` | The pale glow that rises from the bottom edge |
+| `--mesh-glow-edge` / `-body` | `#ece8ff` / `#a99bf0`, both at 70% | `#b9adff` / `#6f63d8`, both at 70% | The pale glow that rises from the bottom edge |
 | `--mesh-ring` | `#3443c0` at 28% | `#8e9cff` at 18% | The 1 px ring around the panel |
-| `--mesh-shadow` | violet glow, 55% | violet glow, 60% | The soft glow shadow under the panel |
+| `--mesh-shadow` | `0 15px 38px -14px` violet at 28% | `0 15px 40px -14px` violet at 30% | The soft glow shadow under the panel |
 | `--mesh-tile` / `--mesh-tile-ring` | `#1a1030` at 82% / `#ece8ff` at 20% | `#0c0828` at 80% / `#b9adff` at 22% | The dark glass tile over the glow |
 | `--btn-primary` / `-hover` / `-foreground` | `#3443c0` / `#4150d2` / `#ffffff` | `#4c58d8` / `#5a66e6` / `#ffffff` | The primary button's fill |
 | `--btn-secondary-bg` / `-hover` / `-fg` / `-ring` | `#f3f4f8` / `#e8ebf1` / `#181b22` / `#c5cad4` | `#221c45` / `#2c2558` / `#cfc7ff` / `#352c66` | The secondary button; the ring is its 1 px border |
@@ -165,7 +165,7 @@ accent are extensions of that set.
 | `--hero-foreground` / `--hero-muted` | `#ffffff` / `#cdd2ff` | `#f2f3ff` / `#c3c9ff` | Text and secondary text on the deep panel |
 | `--hero-accent` / foreground | `#ffffff` / `#1f2780` | `#8e9cff` / `#0e1230` | The chart bars on the usage page's deep panel |
 | `--bar-top` / `--bar-bottom` | `#ffffff` / `#b9b2ff` | `#b3bcff` / `#7c6cf0` | The daily cost bars and the first plan segment |
-| `--glow-1` / `-2` / `-3` | `#dbe1ff` / `#ecdffe` / `#d6eff3` | indigo 22%, violet 15%, teal 9% | The canvas light, each a large radial gradient that fades out |
+| `--glow-1` / `-2` / `-3` | `#dbe1ff` / `#ecdffe` / `#d6eff3`, each at 70% | indigo 15.4%, violet 10.5%, teal 6.3% | The canvas light, each a large radial gradient that fades out |
 | `--primary-top` / `--primary-bottom` | `#4353cf` / `#2d3aae` | `#a9b3ff` / `#7f8df6` | Accent gradients such as the room's pins |
 | `--brand-top` / `--brand-bottom` | `#5664dc` / `#2f3db0` | `#a9b3ff` / `#7f8df6` | The logo tile |
 | `--brand-violet` / `--brand-teal` | `#7c4ddb` / `#0e8fa0` | `#c08ae6` / `#4cc3d1` | The second and third stops of the room's gradient edges, fills and rings |
@@ -208,11 +208,13 @@ Text on a gradient is measured against its darkest and its lightest point:
 
 Every text over a mesh panel, a step tab and an enabled primary or secondary button was measured on rendered pixels:
 the text was hidden, the background under each word was read, and the worst point was compared with the text colour.
-The lowest value is 4.7:1, in both themes, at 1440 and at 375 px. Disabled buttons are exempt.
+The lowest value is 4.7:1, in both themes, at 1440 and at 375 px. Disabled buttons are exempt. On the home hero, the title is at least 5.7:1, the body text 4.8:1, the warning line 6.8:1 and the "Pick another problem" link 12.3:1, in both themes at 1440 and at 375 px.
 
 | Where | Light | Dark |
 |---|---|---|
 | Mesh panel, lowest text over the mesh and its tiles (measured) | 4.9 | 4.7 |
+| Home hero title, body text, warning line (measured, lowest of 1440 and 375 px) | 6.5, 5.5, 6.8 | 5.7, 4.8, 7.1 |
+| Home hero link "Pick another problem" on its dark tile (measured, lowest) | 12.3 | 14.3 |
 | White on the bright violet, at its brightest | 5.9 | 4.9 |
 | White on the primary button, rest and hover | 7.7, 6.4 | 5.7, 4.7 |
 | Secondary button label, rest and hover | 15.7, 14.4 | 10.0, 8.8 |
@@ -472,7 +474,7 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 ### Gym
 
 - A mesh hero holds the next drill: an amber "Next drill" pill, the drill name at display size, the problem, a tile of three facts (length, due, passes in a row with three pips and an info tip) and one line for the task, then the one primary button. A raised "Also due" card lists three more with a drill glyph, the problem and the due day in amber. "All drills" opens the side panel. The due count is a small amber chip on the Gym link.
-- The drill screen is full screen with a slim bar: Back to the Gym, the drill name and a soft countdown that turns amber and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (Pass or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like".
+- The drill screen is full screen with a slim bar: Back to the Gym, the drill name and a soft countdown that turns amber and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (Pass or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like". Each quote sits in a quiet sunken block with a 1 px hairline all round. On a pass, the "Pass" mark settles in (scale 1.06 to 1, 200 ms); on "Not yet", the one-fix line slides in (8 px, 200 ms). Reduced motion and `?testhooks=1` show the final state at once. In the console, a warning or an error shows a small status icon and a coloured label, never a coloured edge.
 
 ### DSA
 
@@ -535,9 +537,9 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 
 - **Header.** Back, title, track and mode, date and round time. The date line hides on a phone. A status chip shows
   only while the debrief runs or when it failed.
-- **Verdict.** Compact, with no panel: a small eyebrow, the call in 22 px bold type, and a 4 px bar on the left edge
-  in the colour of the call (green for a pass or "Ready", amber for "Close, not yet" or "Not yet", red for a hard
-  "Not yet"). The confidence, and for an interview round the stretch-level call, sit beside the call as small
+- **Verdict.** Compact, with no panel and no edge strip: a small eyebrow and the call in 22 px bold type, in the
+  status colour of the call (green for a pass or "Ready", amber for "Close, not yet", red for "Not yet"). The band
+  behind the debrief header carries the same tone. The confidence, and for an interview round the stretch-level call, sit beside the call as small
   muted text. One or two muted lines under it give the reasons or the meaning. The call is the second loudest thing
   on the page.
 - **Score strip.** One row of equal cells with a hairline between them (three per row on a phone): the dimension name

@@ -77,9 +77,9 @@
    * Light and depth. Every text colour keeps AA against the darkest and the lightest stop of the gradient it sits
    * on, and against the brightest point of the canvas glow.
    */
-  --glow-1: #dbe1ff;
-  --glow-2: #ecdffe;
-  --glow-3: #d6eff3;
+  --glow-1: rgb(219 225 255 / 0.7);
+  --glow-2: rgb(236 223 254 / 0.7);
+  --glow-3: rgb(214 239 243 / 0.7);
   --highlight: rgb(255 255 255 / 0.9);
   --edge-top: rgb(16 20 32 / 0.05);
   --edge-bottom: rgb(16 20 32 / 0.13);
@@ -120,10 +120,10 @@
   --mesh-corner: #1a1030;
   --mesh-violet: #7e4bb8;
   --mesh-brand: #3443c0;
-  --mesh-glow-edge: #ece8ff;
-  --mesh-glow-body: #a99bf0;
+  --mesh-glow-edge: rgb(236 232 255 / 0.7);
+  --mesh-glow-body: rgb(169 155 240 / 0.7);
   --mesh-ring: rgb(52 67 192 / 0.28);
-  --mesh-shadow: 0 28px 70px -26px rgb(52 40 140 / 0.55);
+  --mesh-shadow: 0 15px 38px -14px rgb(52 40 140 / 0.28);
   --mesh-tile: rgb(26 16 48 / 0.82);
   --mesh-tile-ring: rgb(236 232 255 / 0.2);
 
@@ -201,9 +201,9 @@
   --elev-lg: 0 2px 4px rgb(0 0 0 / 0.35), 0 12px 28px rgb(0 0 0 / 0.45), 0 28px 56px rgb(0 0 0 / 0.35);
   --shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.45), 0 24px 56px rgb(0 0 0 / 0.3);
 
-  --glow-1: rgb(110 124 255 / 0.22);
-  --glow-2: rgb(168 85 247 / 0.15);
-  --glow-3: rgb(45 212 191 / 0.09);
+  --glow-1: rgb(110 124 255 / 0.154);
+  --glow-2: rgb(168 85 247 / 0.105);
+  --glow-3: rgb(45 212 191 / 0.063);
   --highlight: rgb(255 255 255 / 0.07);
   --edge-top: rgb(255 255 255 / 0.13);
   --edge-bottom: rgb(255 255 255 / 0.04);
@@ -238,10 +238,10 @@
   --mesh-corner: #05030c;
   --mesh-violet: #7a5ad8;
   --mesh-brand: #3443c0;
-  --mesh-glow-edge: #b9adff;
-  --mesh-glow-body: #6f63d8;
+  --mesh-glow-edge: rgb(185 173 255 / 0.7);
+  --mesh-glow-body: rgb(111 99 216 / 0.7);
   --mesh-ring: rgb(142 156 255 / 0.18);
-  --mesh-shadow: 0 30px 80px -28px rgb(122 90 216 / 0.6);
+  --mesh-shadow: 0 15px 40px -14px rgb(122 90 216 / 0.3);
   --mesh-tile: rgb(12 8 40 / 0.8);
   --mesh-tile-ring: rgb(185 173 255 / 0.22);
 
@@ -311,10 +311,13 @@
   --text-lead--line-height: 26px;
   --text-title: 22px;
   --text-title--line-height: 28px;
+  --text-title--letter-spacing: -0.02em;
   --text-display: 32px;
   --text-display--line-height: 36px;
+  --text-display--letter-spacing: -0.02em;
   --text-mega: 48px;
   --text-mega--line-height: 52px;
+  --text-mega--letter-spacing: -0.02em;
 
   --ease-out-quick: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -684,6 +687,12 @@ body {
       inset 0 1px 0 rgb(255 255 255 / 0.14),
       var(--mesh-shadow);
   }
+  /* A plain text link in a mesh panel usually lands on the pale glow, so it gets the same dark tile behind it. */
+  .mesh a.underline {
+    background-color: var(--mesh-tile);
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+  }
   /* Anything that sits over the pale glow sits on a dark tile, so white text keeps its contrast there. */
   .mesh-tile {
     background-color: var(--mesh-tile);
@@ -805,6 +814,26 @@ body {
     transform: none;
   }
 }
+@keyframes ir-settle {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ir-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes ir-pop-in {
   from {
     opacity: 0;
@@ -873,6 +902,12 @@ body {
   animation: ir-rise 0.36s var(--ease-out-quick) backwards;
 }
 /* Sections and rows reveal top to bottom; the cap keeps a long list from making the last row wait. */
+.drill-settle {
+  animation: ir-settle 0.2s var(--ease-out-quick) 0.35s backwards;
+}
+.drill-slide-in {
+  animation: ir-slide-in 0.2s var(--ease-out-quick) 0.45s backwards;
+}
 .reveal {
   animation: ir-rise 0.4s var(--ease-out-quick) backwards;
   animation-delay: calc(min(var(--i, 0), 10) * 50ms);
