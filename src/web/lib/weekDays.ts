@@ -81,3 +81,13 @@ export function weekDays(plan: readonly DayKind[], history: readonly SessionHist
   });
   return { days, known, done: doneCount };
 }
+
+/** Days from today to the next day of the plan that is not a rest day, counting on into next week. Null when the whole plan rests. */
+export function daysUntilNextPlanned(plan: readonly DayKind[], now: Date): { days: number; kind: DayKind } | null {
+  const today = planIndex(now);
+  for (let step = 1; step <= 7; step += 1) {
+    const kind = plan[(today + step) % 7] ?? "rest";
+    if (kind !== "rest") return { days: step, kind };
+  }
+  return null;
+}

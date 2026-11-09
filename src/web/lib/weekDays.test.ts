@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emptyDsa, type DsaResponse } from "../../shared/dsa";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { DayKind } from "../../shared/week";
-import { weekDays } from "./weekDays";
+import { daysUntilNextPlanned, weekDays } from "./weekDays";
 
 // Thursday 12 November 2026; the week starts Monday 9 November.
 const NOW = new Date(2026, 10, 12, 10, 0);
@@ -98,5 +98,20 @@ describe("weekDays", () => {
     const days = weekDays(PLAN, [], null, sunday).days;
     expect(days[6]).toMatchObject({ state: "today", kind: "rest", day: "2026-11-15" });
     expect(days[0]?.day).toBe("2026-11-09");
+  });
+});
+
+describe("daysUntilNextPlanned", () => {
+  it("finds the next day that is not a rest day", () => {
+    expect(daysUntilNextPlanned(PLAN, NOW)).toEqual({ days: 1, kind: "dsa" });
+  });
+
+  it("wraps past Sunday into the next week", () => {
+    expect(daysUntilNextPlanned(PLAN, new Date(2026, 10, 15))).toEqual({ days: 1, kind: "hld" });
+  });
+
+  it("skips consecutive rest days and gives null for an all-rest plan", () => {
+    expect(daysUntilNextPlanned(["rest", "rest", "rest", "hld", "rest", "rest", "rest"], new Date(2026, 10, 9))).toEqual({ days: 3, kind: "hld" });
+    expect(daysUntilNextPlanned(Array<DayKind>(7).fill("rest"), NOW)).toBeNull();
   });
 });
