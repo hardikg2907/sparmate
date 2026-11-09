@@ -27,10 +27,10 @@ function round(day: number, over: Partial<SessionHistoryItem> = {}): SessionHist
 }
 
 function dsaWith(...solves: { day: number; difficulty: "Easy" | "Medium" }[]): DsaResponse {
-  return {
-    ...emptyDsa("u", "ok", 3),
-    recent: solves.map((s, i) => ({ title: `t${i}`, slug: `t${i}`, difficulty: s.difficulty, solvedAt: new Date(2026, 10, s.day, 9, 0).toISOString() })),
-  };
+  const base = emptyDsa("u", "ok", 3);
+  const mediumsPerDay = [0, 0, 0, 0, 0, 0, 0];
+  for (const s of solves) if (s.difficulty === "Medium") mediumsPerDay[s.day - 9] = (mediumsPerDay[s.day - 9] ?? 0) + 1;
+  return { ...base, week: { ...base.week, mediumsPerDay } };
 }
 
 const states = (h: SessionHistoryItem[], dsa: DsaResponse | null = null) => weekDays(PLAN, h, dsa, NOW).days.map((d) => d.state);
