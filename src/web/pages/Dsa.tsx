@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { topicFocus, type DsaResponse, type DsaSolve } from "../../shared/dsa";
 import { WEEKDAYS, planIndex } from "../../shared/week";
 import { ExternalIcon, TargetIcon } from "../components/icons";
-import { PageHeader, PageShell } from "../components/PageShell";
 import { SidePanel } from "../components/SidePanel";
 import { InfoTip } from "../components/study";
-import { Button, Card, Skeleton, cn } from "../components/ui";
+import { Button, Card, SectionTitle, Skeleton, cn } from "../components/ui";
 import { dayMonth, shortDay } from "../lib/dates";
 import { failureText, waitText } from "../lib/dsaText";
 import { useNow } from "../lib/useNow";
-import { useDsa, type DsaData } from "../lib/useDsa";
+import type { DsaData } from "../lib/useDsa";
 import { Link } from "../router";
 import type { PageContext } from "./context";
 
@@ -84,7 +83,7 @@ function OpenLeetcode({ variant = "default", size = "lg" }: { variant?: "default
 function Notice({ title, children, actions }: { title: string; children: ReactNode; actions: ReactNode }) {
   return (
     <Card variant="raised" className="max-w-3xl p-8 sm:p-10">
-      <h2 className="font-display text-title font-extrabold tracking-[-0.01em]">{title}</h2>
+      <h2 className="font-display text-title font-extrabold">{title}</h2>
       <p className="mt-2 max-w-[52ch] text-body text-muted-foreground">{children}</p>
       <div className="mt-6 flex flex-wrap items-center gap-3">{actions}</div>
     </Card>
@@ -97,7 +96,8 @@ const SETTINGS_BUTTON = (
   </Button>
 );
 
-export function DsaView({ ctx, data, now: fixedNow }: { ctx: PageContext; data: DsaData; now?: Date }) {
+/** The DSA section of the Progress page: the weekly goal, this pass, and a notice when LeetCode cannot be read. */
+export function DsaSection({ ctx, data, now: fixedNow }: { ctx: PageContext; data: DsaData; now?: Date }) {
   const liveNow = useNow();
   const now = fixedNow ?? liveNow;
   const [panelOpen, setPanelOpen] = useState(false);
@@ -117,17 +117,14 @@ export function DsaView({ ctx, data, now: fixedNow }: { ctx: PageContext; data: 
     ) : null;
 
   return (
-    <PageShell testMode={ctx.testMode}>
-      <div className="reveal-children space-y-6">
-        <PageHeader
-          title={
-            <span className="flex items-center gap-2">
-              DSA
-              <InfoTip label="About these numbers">These numbers count the practice you do on LeetCode. They do not say whether you are ready.</InfoTip>
-            </span>
-          }
-          aside={aside}
-        />
+    <section id="dsa" aria-labelledby="dsa-title" className="scroll-mt-[calc(var(--header-h)+4rem)]">
+      <SectionTitle id="dsa-title" aside={aside}>
+        <span className="flex items-center gap-2">
+          DSA
+          <InfoTip label="About these numbers">These numbers count the practice you do on LeetCode. They do not say whether you are ready.</InfoTip>
+        </span>
+      </SectionTitle>
+      <div className="space-y-6">
         {shown && shown.status === "stale" ? <StaleNote res={shown} data={data} now={fixedNow} /> : null}
         {data.loading && named ? (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]" role="status">
@@ -181,16 +178,8 @@ export function DsaView({ ctx, data, now: fixedNow }: { ctx: PageContext; data: 
         )}
       </div>
       {panelOpen && shown ? <PassPanel res={shown} onClose={() => setPanelOpen(false)} /> : null}
-    </PageShell>
+    </section>
   );
-}
-
-export function DsaPage({ ctx }: { ctx: PageContext }) {
-  const data = useDsa(ctx.settings.leetcodeUsername !== undefined, ctx.settings.leetcodeUsername);
-  useEffect(() => {
-    document.title = "DSA · Sparmate";
-  }, []);
-  return <DsaView ctx={ctx} data={data} />;
 }
 
 function StaleNote({ res, data, now }: { res: DsaResponse; data: DsaData; now?: Date }) {
@@ -207,7 +196,7 @@ function StaleNote({ res, data, now }: { res: DsaResponse; data: DsaData; now?: 
 function Hero({ res, ctx, now }: { res: DsaResponse; ctx: PageContext; now: Date }) {
   const today = planIndex(now);
   return (
-    <section aria-labelledby="dsa-hero" className="mesh on-mesh rounded-3xl p-6 sm:p-10">
+    <section aria-labelledby="dsa-hero" className="surface-raised rounded-xl bg-raised p-6 sm:p-8">
       <div className="grid items-end gap-8 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber px-3 py-1 text-ui font-bold text-amber-foreground">
@@ -218,7 +207,7 @@ function Hero({ res, ctx, now }: { res: DsaResponse; ctx: PageContext; now: Date
             Mediums this week
           </h2>
           <p className="mt-1 flex items-baseline gap-3">
-            <span className="font-display text-[88px] font-extrabold leading-none tracking-[-0.03em] tabular-nums sm:text-[112px]">{res.week.mediums}</span>
+            <span className="font-display text-[72px] font-extrabold leading-none tracking-[-0.03em] tabular-nums sm:text-[88px]">{res.week.mediums}</span>
             <span className="text-title font-semibold text-muted-foreground">of {res.weeklyGoal}</span>
           </p>
           <p className="mt-2 text-ui text-muted-foreground">{countLabel(res.week.solved)} this week</p>
@@ -226,7 +215,7 @@ function Hero({ res, ctx, now }: { res: DsaResponse; ctx: PageContext; now: Date
             <OpenLeetcode />
           </div>
         </div>
-        <div className="mesh-tile rounded-2xl p-4">
+        <div className="rounded-2xl bg-sunken p-4 ring-1 ring-inset ring-border">
           <p className="text-meta text-muted-foreground">Problems solved each day</p>
           <ol aria-label="Problems solved each day this week" className="mt-3 grid grid-cols-7 gap-1.5 text-center">
             {WEEKDAYS.map((name, index) => {
@@ -240,9 +229,9 @@ function Hero({ res, ctx, now }: { res: DsaResponse; ctx: PageContext; now: Date
                   <span
                     className={cn(
                       "mx-auto mt-1.5 grid size-7 place-items-center rounded-lg text-meta font-bold tabular-nums",
-                      count > 0 ? "bg-gradient-to-b from-[#b3bcff] to-[#7c6cf0] text-[#0e1230]" : "bg-white/10",
-                      planned && "ring-[1.5px] ring-inset ring-white/60",
-                      index === today && "outline outline-[1.5px] outline-offset-2 outline-white",
+                      count > 0 ? "bg-gradient-to-b from-[#b3bcff] to-[#7c6cf0] text-[#0e1230]" : "bg-muted",
+                      planned && "ring-[1.5px] ring-inset ring-foreground/60",
+                      index === today && "outline outline-[1.5px] outline-offset-2 outline-foreground",
                     )}
                   >
                     {count > 0 ? count : null}
@@ -255,7 +244,7 @@ function Hero({ res, ctx, now }: { res: DsaResponse; ctx: PageContext; now: Date
             })}
           </ol>
           <p className="mt-3 flex items-center gap-2 text-meta text-muted-foreground">
-            <span aria-hidden="true" className="inline-block size-3 rounded-[4px] ring-[1.5px] ring-inset ring-white/60" />
+            <span aria-hidden="true" className="inline-block size-3 rounded-[4px] ring-[1.5px] ring-inset ring-foreground/60" />
             DSA day in your plan
           </p>
         </div>
@@ -269,8 +258,8 @@ function TopicBar({ name, solved, max }: { name: string; solved: number; max: nu
   return (
     <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_1.75rem] items-center gap-x-3.5 py-2.5">
       <span className="truncate text-body font-semibold">{name}</span>
-      <span className="block h-2 overflow-hidden rounded-full bg-white/10" aria-hidden="true">
-        <span className="block h-full rounded-full bg-white/30" style={{ width: `${width}%` }} />
+      <span className="block h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+        <span className="block h-full rounded-full bg-primary/60" style={{ width: `${width}%` }} />
       </span>
       <span className="text-right text-body font-bold tabular-nums">{solved}</span>
     </li>

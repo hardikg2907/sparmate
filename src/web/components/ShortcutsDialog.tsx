@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isMac } from "./CommandPalette";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { KbdGroup } from "./ui/kbd";
 
@@ -9,6 +10,10 @@ const GROUPS: { title: string; items: { keys: string[]; label: string }[] }[] = 
       { keys: ["?"], label: "Show these shortcuts" },
       { keys: ["Esc"], label: "Close a dialog or menu" },
     ],
+  },
+  {
+    title: "Pages with the main bar",
+    items: [{ keys: [isMac ? "⌘" : "Ctrl", "K"], label: "Jump to a round, a problem or a page" }],
   },
   {
     title: "In the room",

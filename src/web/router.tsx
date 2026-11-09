@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEve
 import { flushSync } from "react-dom";
 import { DrillTargetSchema, type DrillTarget } from "../shared/drills";
 
-export type PageName = "home" | "library" | "library-new" | "gym" | "dsa" | "progress" | "history" | "settings" | "usage";
+export type PageName = "home" | "practice" | "practice-drills" | "library-new" | "progress" | "settings" | "usage";
 
 export type Route = { name: PageName } | { name: "session"; id: string } | { name: "drill"; target: DrillTarget } | { name: "not-found" };
 
@@ -16,18 +16,35 @@ export function drillPath(target: DrillTarget): string {
 
 const PAGE_PATHS: Record<string, PageName> = {
   "/": "home",
-  "/library": "library",
+  "/practice": "practice",
+  "/practice/drills": "practice-drills",
   "/library/new": "library-new",
-  "/gym": "gym",
-  "/dsa": "dsa",
   "/progress": "progress",
-  "/history": "history",
   "/settings": "settings",
   "/usage": "usage",
 };
 
+/** Addresses from before the pages were merged. Each one is replaced in place by the page that took over. */
+const LEGACY_PATHS: Record<string, string> = {
+  "/library": "/practice",
+  "/gym": "/practice/drills",
+  "/dsa": "/progress#dsa",
+  "/history": "/progress#history",
+};
+
+function trimmed(pathname: string): string {
+  return pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
+}
+
+/** The current address of an old one, with its section anchor, or null when the address is not an old one. */
+export function legacyTarget(pathname: string): string | null {
+  const path = trimmed(pathname);
+  return Object.hasOwn(LEGACY_PATHS, path) ? (LEGACY_PATHS[path] ?? null) : null;
+}
+
 export function parseRoute(pathname: string): Route {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
+  const legacy = legacyTarget(pathname);
+  const path = legacy ? (legacy.split("#")[0] ?? "/") : trimmed(pathname);
   const page = Object.hasOwn(PAGE_PATHS, path) ? PAGE_PATHS[path] : undefined;
   if (page) return { name: page };
   if (pathname === "") return { name: "home" };
@@ -46,7 +63,23 @@ let locked = false;
 /** The address the page on screen belongs to, so a guarded Back can put it back. */
 let current: string | null = null;
 
+/**
+ * One object per navigation, even to the address already shown, so a page that follows an anchor can tell a repeated
+ * link from no link at all.
+ */
+export interface HashNav {
+  hash: string;
+}
+let hashNav: HashNav | null = null;
+const NO_HASH: HashNav = { hash: "" };
+
+export function hashSnapshot(): HashNav {
+  hashNav ??= { hash: location.hash };
+  return hashNav;
+}
+
 function notify(): void {
+  hashNav = { hash: location.hash };
   for (const listener of [...listeners]) listener();
 }
 
@@ -86,11 +119,13 @@ export function lockNavigation(): void {
 /** Keeps the test-hook flag across in-app links so a scripted run does not lose it between pages. */
 function withKeptParams(to: string): string {
   if (to.includes("?")) return to;
+  const [path = to, ...anchor] = to.split("#");
+  const hash = anchor.length > 0 ? `#${anchor.join("#")}` : "";
   const kept = new URLSearchParams();
   const current = new URLSearchParams(location.search);
   if (current.get("testhooks") === "1") kept.set("testhooks", "1");
   const query = kept.toString();
-  return query ? `${to}?${query}` : to;
+  return `${path}${query ? `?${query}` : ""}${hash}`;
 }
 
 /**
@@ -118,20 +153,26 @@ export function guardNavigation(next: NavigationGuard | null): void {
   guard = next;
 }
 
-export function navigate(to: string, options: { replace?: boolean; force?: boolean } = {}): void {
+/**
+ * `instant` swaps the address with no cross-fade and no scroll to the top, for a switch inside one page
+ * (the Rounds and Drills views), where the page stays mounted.
+ */
+export function navigate(to: string, options: { replace?: boolean; force?: boolean; instant?: boolean } = {}): void {
   if (locked) return;
   if (guard && !options.force) {
     guard(to, () => navigate(to, { ...options, force: true }));
     return;
   }
   const url = withKeptParams(to);
-  crossFade(() => {
+  const apply = () => {
     if (options.replace) history.replaceState(null, "", url);
     else history.pushState(null, "", url);
-    current = url;
+    current = url.split("#")[0] ?? url;
     notify();
-    window.scrollTo(0, 0);
-  });
+    if (!options.instant) window.scrollTo(0, 0);
+  };
+  if (options.instant) apply();
+  else crossFade(apply);
 }
 
 export function useRoute(): Route {
@@ -141,6 +182,11 @@ export function useRoute(): Route {
     () => "/",
   );
   return useMemo(() => parseRoute(pathname), [pathname]);
+}
+
+/** The section anchor of the address. The object changes on every navigation, so an effect keyed on it runs again for a repeated link. */
+export function useHash(): HashNav {
+  return useSyncExternalStore(subscribeToRoute, hashSnapshot, () => NO_HASH);
 }
 
 export function Link({ href, onClick, target, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {

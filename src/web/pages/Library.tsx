@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BASE_MINUTES, type Mode } from "../../shared/phases";
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
-import { ChevronRightIcon, ListIcon, PlayFilledIcon, RedoIcon, WarnIcon } from "../components/icons";
-import { PageHeader, PageShell } from "../components/PageShell";
+import { ChevronRightIcon, PlayFilledIcon, RedoIcon, WarnIcon } from "../components/icons";
 import { GUIDED_HINT, INTERVIEW_HINT, InfoTip, ModeSwitch, TrackChip, TrackIcon } from "../components/study";
 import { Alert, Badge, Button, Card, EmptyState, Segmented, Skeleton, TONE_TEXT, cn } from "../components/ui";
 import { dayMonth } from "../lib/dates";
 import { MODE_LABEL } from "../lib/format";
-import { FILTER_LABEL, STATUS_LABEL, libraryGroups, openRoundFor, problemStatus, tabCounts, type LibraryFilter, type LibraryTab } from "../lib/library";
-import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
+import { FILTER_LABEL, STATUS_LABEL, inTab, libraryGroups, openRoundFor, problemStatus, tabCounts, type LibraryFilter, type LibraryTab } from "../lib/library";
+import { startKey, type StudyData } from "../lib/useStudyData";
 import { attemptBadge } from "../lib/verdict";
 import { modeFor } from "../../shared/today";
-import { Link } from "../router";
+import { Link, useHash } from "../router";
 import type { PageContext } from "./context";
 
 const DEBRIEF_MINUTES = 15;
@@ -53,12 +52,27 @@ function Mark({ problem, open }: { problem: ProblemSummary; open: boolean }) {
   );
 }
 
-export function LibraryView({ data, ctx }: { data: StudyData; ctx: PageContext }) {
+/** The Rounds side of the Practice page: pick a problem, read its detail, start a round. */
+export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }) {
   const { problems, history, error } = data;
   const [tab, setTab] = useState<LibraryTab>("hld");
   const [filter, setFilter] = useState<LibraryFilter>("fresh");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const panel = useRef<HTMLElement>(null);
+  const hashNav = useHash();
+  const applied = useRef<unknown>(null);
+
+  // A link such as /practice#<problem id> opens the list on that problem, in its own track. Each link applies once,
+  // so a later reload of the list does not undo what the user chose since.
+  useEffect(() => {
+    if (applied.current === hashNav || !problems) return;
+    const target = hashNav.hash.length > 1 ? problems.find((p) => p.id === hashNav.hash.slice(1)) : undefined;
+    applied.current = hashNav;
+    if (!target) return;
+    setTab(target.custom ? "custom" : ((["hld", "lld"] as const).find((t) => inTab(target, t)) ?? "hld"));
+    setFilter("all");
+    setSelectedId(target.id);
+  }, [hashNav, problems]);
 
   const counts = useMemo(() => tabCounts(problems ?? []), [problems]);
   const groups = useMemo(() => libraryGroups(problems ?? [], tab, filter), [problems, tab, filter]);
@@ -72,109 +86,88 @@ export function LibraryView({ data, ctx }: { data: StudyData; ctx: PageContext }
   };
 
   return (
-    <PageShell testMode={ctx.testMode}>
-      <div className="reveal-children space-y-6">
-        <PageHeader
-          title="Library"
-          aside={
-            <Button asChild variant="outline">
-              <Link href="/library/new">
-                <ListIcon size={16} />
-                Practise any question
-              </Link>
-            </Button>
-          }
+    <div className="space-y-6">
+      {data.startError ? (
+        <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
+          {data.startError}
+        </Alert>
+      ) : null}
+      {error ? (
+        <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />} title="The problem list could not be loaded" actions={<Button onClick={data.reload}>Try again</Button>}>
+          {error}
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented
+          label="Track"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "hld", label: "HLD", count: counts.hld, icon: <TrackIcon track="hld" /> },
+            { value: "lld", label: "LLD", count: counts.lld, icon: <TrackIcon track="lld" /> },
+            { value: "custom", label: "My questions", count: counts.custom },
+          ]}
         />
-        {data.startError ? (
-          <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
-            {data.startError}
-          </Alert>
-        ) : null}
-        {error ? (
-          <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />} title="The problem list could not be loaded" actions={<Button onClick={data.reload}>Try again</Button>}>
-            {error}
-          </Alert>
-        ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Segmented
-            label="Track"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: "hld", label: "HLD", count: counts.hld, icon: <TrackIcon track="hld" /> },
-              { value: "lld", label: "LLD", count: counts.lld, icon: <TrackIcon track="lld" /> },
-              { value: "custom", label: "My questions", count: counts.custom },
-            ]}
-          />
-          <Segmented
-            label="Show"
-            size="sm"
-            value={filter}
-            onChange={setFilter}
-            options={(Object.keys(FILTER_LABEL) as LibraryFilter[]).map((value) => ({ value, label: FILTER_LABEL[value] }))}
-          />
-        </div>
-
-        {problems === null && !error ? (
-          <ListSkeleton />
-        ) : (
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-            <Card variant="raised" className="p-2">
-              {groups.length === 0 ? (
-                <EmptyState
-                  className="m-2"
-                  title={tab === "custom" ? "No questions of your own yet." : filter === "redo" ? "No redo is due." : "No problems here."}
-                  action={
-                    tab === "custom" ? (
-                      <Button asChild size="sm" variant="outline">
-                        <Link href="/library/new">Practise any question</Link>
-                      </Button>
-                    ) : filter !== "all" ? (
-                      <Button size="sm" variant="outline" onClick={() => setFilter("all")}>
-                        Show all
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              ) : (
-                groups.map((group) => (
-                  <section key={group.id} aria-label={group.label}>
-                    <div className="flex items-center justify-between px-3.5 pb-1.5 pt-3 text-ui font-semibold text-faint">
-                      <h2>{group.label}</h2>
-                      <span aria-label={`${group.problems.length} problems`}>{group.problems.length}</span>
-                    </div>
-                    <ul>
-                      {group.problems.map((problem) => (
-                        <ProblemRow
-                          key={problem.id}
-                          problem={problem}
-                          open={openRoundFor(problem.id, history ?? []) !== undefined}
-                          selected={selected?.id === problem.id}
-                          onSelect={() => select(problem.id)}
-                        />
-                      ))}
-                    </ul>
-                  </section>
-                ))
-              )}
-            </Card>
-            <aside ref={panel} aria-label="Problem details" className="scroll-mt-20 lg:sticky lg:top-20">
-              {selected ? <Detail problem={selected} history={history ?? []} data={data} ctx={ctx} /> : null}
-            </aside>
-          </div>
-        )}
+        <Segmented
+          label="Show"
+          size="sm"
+          value={filter}
+          onChange={setFilter}
+          options={(Object.keys(FILTER_LABEL) as LibraryFilter[]).map((value) => ({ value, label: FILTER_LABEL[value] }))}
+        />
       </div>
-    </PageShell>
-  );
-}
 
-export function LibraryPage({ ctx }: { ctx: PageContext }) {
-  const data = useStudyData();
-  useEffect(() => {
-    document.title = "Library · Sparmate";
-  }, []);
-  return <LibraryView data={data} ctx={ctx} />;
+      {problems === null && !error ? (
+        <ListSkeleton />
+      ) : (
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <Card variant="raised" className="p-2">
+            {groups.length === 0 ? (
+              <EmptyState
+                className="m-2"
+                title={tab === "custom" ? "No questions of your own yet." : filter === "redo" ? "No redo is due." : "No problems here."}
+                action={
+                  tab === "custom" ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/library/new">Practise any question</Link>
+                    </Button>
+                  ) : filter !== "all" ? (
+                    <Button size="sm" variant="outline" onClick={() => setFilter("all")}>
+                      Show all
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              groups.map((group) => (
+                <section key={group.id} aria-label={group.label}>
+                  <div className="flex items-center justify-between px-3.5 pb-1.5 pt-3 text-ui font-semibold text-faint">
+                    <h2>{group.label}</h2>
+                    <span aria-label={`${group.problems.length} problems`}>{group.problems.length}</span>
+                  </div>
+                  <ul>
+                    {group.problems.map((problem) => (
+                      <ProblemRow
+                        key={problem.id}
+                        problem={problem}
+                        open={openRoundFor(problem.id, history ?? []) !== undefined}
+                        selected={selected?.id === problem.id}
+                        onSelect={() => select(problem.id)}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))
+            )}
+          </Card>
+          <aside ref={panel} aria-label="Problem details" className="scroll-mt-[calc(var(--header-h)+1rem)] lg:sticky lg:top-[calc(var(--header-h)+1rem)]">
+            {selected ? <Detail problem={selected} history={history ?? []} data={data} ctx={ctx} /> : null}
+          </aside>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ProblemRow({ problem, open, selected, onSelect }: { problem: ProblemSummary; open: boolean; selected: boolean; onSelect: () => void }) {
@@ -222,7 +215,7 @@ function Detail({ problem, history, data, ctx }: { problem: ProblemSummary; hist
         <Badge className="px-2.5 py-1 capitalize">{problem.difficulty}</Badge>
         {problem.custom ? <Badge className="px-2.5 py-1">Your question</Badge> : null}
       </div>
-      <h2 className="mt-4 font-display text-display font-extrabold tracking-[-0.02em] sm:text-[36px] sm:leading-[42px]">{problem.title}</h2>
+      <h2 className="mt-4 font-display text-display font-extrabold sm:text-[36px] sm:leading-[42px]">{problem.title}</h2>
       {problem.summary ? (
         <figure className="mt-5 rounded-xl bg-sunken p-4 ring-1 ring-inset ring-border">
           <figcaption className="text-meta text-muted-foreground">The interviewer opens with</figcaption>

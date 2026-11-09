@@ -1,16 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { isOpenRound } from "../../shared/today";
 import type { SessionHistoryItem } from "../../shared/types";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { DiscardNote } from "../components/DiscardNote";
 import { WarnIcon } from "../components/icons";
-import { PageHeader, PageShell } from "../components/PageShell";
-import { Alert, Badge, Button, Card, EmptyState, Skeleton, Tooltip } from "../components/ui";
+import { Alert, Badge, Button, Card, EmptyState, SectionTitle, Skeleton, Tooltip } from "../components/ui";
 import { MODE_LABEL, TRACK_LABEL, formatDateTime, type Tone } from "../lib/format";
-import { useStudyData, type StudyData } from "../lib/useStudyData";
+import type { StudyData } from "../lib/useStudyData";
 import { attemptBadge } from "../lib/verdict";
 import { Link } from "../router";
-import type { PageContext } from "./context";
 
 const SHOWN = 15;
 
@@ -31,25 +29,28 @@ function Th({ children }: { children?: ReactNode }) {
   );
 }
 
-export function HistoryView({ data, ctx }: { data: StudyData; ctx: PageContext }) {
+/** The History section of the Progress page: every round, with the action that fits its state. */
+export function HistorySection({ data }: { data: StudyData }) {
   const { history } = data;
   const [all, setAll] = useState(false);
   const [confirm, setConfirm] = useState<SessionHistoryItem | null>(null);
   const shown = history ? (all ? history : history.slice(0, SHOWN)) : [];
 
   return (
-    <PageShell testMode={ctx.testMode}>
-      <div className="reveal-children space-y-6">
-        <PageHeader
-          title="History"
-          aside={
-            history && history.length > 0 ? (
-              <span className="text-ui text-muted-foreground">
-                {history.length} {history.length === 1 ? "round" : "rounds"}
-              </span>
-            ) : undefined
-          }
-        />
+    <section id="history" aria-labelledby="history-title" className="scroll-mt-[calc(var(--header-h)+4rem)]">
+      <SectionTitle
+        id="history-title"
+        aside={
+          history && history.length > 0 ? (
+            <span>
+              {history.length} {history.length === 1 ? "round" : "rounds"}
+            </span>
+          ) : undefined
+        }
+      >
+        History
+      </SectionTitle>
+      <div className="space-y-6">
         {data.actionError ? (
           <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
             {data.actionError}
@@ -172,14 +173,6 @@ export function HistoryView({ data, ctx }: { data: StudyData; ctx: PageContext }
           <DiscardNote track={confirm.track} />
         </ConfirmModal>
       ) : null}
-    </PageShell>
+    </section>
   );
-}
-
-export function HistoryPage({ ctx }: { ctx: PageContext }) {
-  const data = useStudyData();
-  useEffect(() => {
-    document.title = "History · Sparmate";
-  }, []);
-  return <HistoryView data={data} ctx={ctx} />;
 }
