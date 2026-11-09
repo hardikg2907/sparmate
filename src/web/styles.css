@@ -1485,7 +1485,7 @@ body {
   .today-start {
     position: fixed;
     inset-inline: 0;
-    bottom: 0;
+    bottom: var(--tabbar-h, 0px);
     z-index: 30;
     padding: 28px 16px calc(12px + env(safe-area-inset-bottom));
     background: linear-gradient(to top, var(--background) 55%, transparent);
@@ -1494,6 +1494,10 @@ body {
   .today-start > * {
     width: 100%;
     pointer-events: auto;
+  }
+  /* The fixed bar takes no space of its own, so the page leaves room for it at the end. */
+  .today-grid:has(.today-start) {
+    padding-bottom: 88px;
   }
   /* A transform on an ancestor would make the fixed bar follow the page's entry movement, so this block only fades. */
   .reveal-children > .today-grid {

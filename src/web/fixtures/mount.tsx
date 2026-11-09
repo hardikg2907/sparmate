@@ -223,7 +223,9 @@ function FixturePage({
     return {
       ...base,
       ...(username ? { leetcodeUsername: username } : {}),
-      ...((name === "dsa" || name === "progress" || name === "history" || (name === "home" && dsaState)) && dsaState !== "none" && !username ? { leetcodeUsername: "example_user" } : {}),
+      ...((name === "dsa" || name === "progress" || name === "history" || (name === "home" && dsaState)) && dsaState !== "none" && !username
+        ? { leetcodeUsername: "example_user" }
+        : {}),
       ...(days?.length === 7 ? { weeklyPlan: days as typeof base.weeklyPlan } : {}),
     };
   });
