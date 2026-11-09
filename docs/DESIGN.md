@@ -506,7 +506,10 @@ The plan panel is the moment to read the plan before the clock runs. The room sh
 
 - The drill screen is full screen with a slim bar: Back to Practice, the drill name and a soft countdown that turns amber
   and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (Pass
-  or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like".
+  or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like". Each quote
+  sits in a quiet sunken block with a 1 px hairline all round. On a pass, the "Pass" mark settles in (scale 1.06 to 1,
+  200 ms); on "Not yet", the one-fix line slides in (8 px, 200 ms). Reduced motion and `?testhooks=1` show the final state
+  at once. In the console, a warning or an error shows a small status icon and a coloured label, never a coloured edge.
 
 ### Room
 
