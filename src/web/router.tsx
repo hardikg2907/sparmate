@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEve
 import { flushSync } from "react-dom";
 import { DrillTargetSchema, type DrillTarget } from "../shared/drills";
 
-export type PageName = "home" | "library" | "library-new" | "gym" | "dsa" | "progress" | "history" | "settings" | "usage";
+export type PageName = "home" | "practice" | "practice-drills" | "library-new" | "progress" | "settings" | "usage";
 
 export type Route = { name: PageName } | { name: "session"; id: string } | { name: "drill"; target: DrillTarget } | { name: "not-found" };
 
@@ -16,18 +16,35 @@ export function drillPath(target: DrillTarget): string {
 
 const PAGE_PATHS: Record<string, PageName> = {
   "/": "home",
-  "/library": "library",
+  "/practice": "practice",
+  "/practice/drills": "practice-drills",
   "/library/new": "library-new",
-  "/gym": "gym",
-  "/dsa": "dsa",
   "/progress": "progress",
-  "/history": "history",
   "/settings": "settings",
   "/usage": "usage",
 };
 
+/** Addresses from before the pages were merged. Each one is replaced in place by the page that took over. */
+const LEGACY_PATHS: Record<string, string> = {
+  "/library": "/practice",
+  "/gym": "/practice/drills",
+  "/dsa": "/progress#dsa",
+  "/history": "/progress#history",
+};
+
+function trimmed(pathname: string): string {
+  return pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
+}
+
+/** The current address of an old one, with its section anchor, or null when the address is not an old one. */
+export function legacyTarget(pathname: string): string | null {
+  const path = trimmed(pathname);
+  return Object.hasOwn(LEGACY_PATHS, path) ? (LEGACY_PATHS[path] ?? null) : null;
+}
+
 export function parseRoute(pathname: string): Route {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
+  const legacy = legacyTarget(pathname);
+  const path = legacy ? (legacy.split("#")[0] ?? "/") : trimmed(pathname);
   const page = Object.hasOwn(PAGE_PATHS, path) ? PAGE_PATHS[path] : undefined;
   if (page) return { name: page };
   if (pathname === "") return { name: "home" };
@@ -86,11 +103,13 @@ export function lockNavigation(): void {
 /** Keeps the test-hook flag across in-app links so a scripted run does not lose it between pages. */
 function withKeptParams(to: string): string {
   if (to.includes("?")) return to;
+  const [path = to, ...anchor] = to.split("#");
+  const hash = anchor.length > 0 ? `#${anchor.join("#")}` : "";
   const kept = new URLSearchParams();
   const current = new URLSearchParams(location.search);
   if (current.get("testhooks") === "1") kept.set("testhooks", "1");
   const query = kept.toString();
-  return query ? `${to}?${query}` : to;
+  return `${path}${query ? `?${query}` : ""}${hash}`;
 }
 
 /**
@@ -128,7 +147,7 @@ export function navigate(to: string, options: { replace?: boolean; force?: boole
   crossFade(() => {
     if (options.replace) history.replaceState(null, "", url);
     else history.pushState(null, "", url);
-    current = url;
+    current = url.split("#")[0] ?? url;
     notify();
     window.scrollTo(0, 0);
   });
@@ -141,6 +160,15 @@ export function useRoute(): Route {
     () => "/",
   );
   return useMemo(() => parseRoute(pathname), [pathname]);
+}
+
+/** The section anchor of the address, so a page can follow a link to one of its own sections. */
+export function useHash(): string {
+  return useSyncExternalStore(
+    subscribeToRoute,
+    () => location.hash,
+    () => "",
+  );
 }
 
 export function Link({ href, onClick, target, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {

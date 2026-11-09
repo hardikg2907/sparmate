@@ -1,23 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, beforeEach, vi } from "vitest";
-import { drillPath, guardNavigation, navigate, parseRoute, subscribeToRoute } from "./router";
+import { drillPath, guardNavigation, legacyTarget, navigate, parseRoute, subscribeToRoute } from "./router";
 
 describe("parseRoute", () => {
   it.each([
     ["/", "home"],
     ["", "home"],
-    ["/library", "library"],
-    ["/library/", "library"],
+    ["/practice", "practice"],
+    ["/practice/", "practice"],
+    ["/practice/drills", "practice-drills"],
     ["/library/new", "library-new"],
-    ["/gym", "gym"],
-    ["/dsa", "dsa"],
     ["/progress", "progress"],
-    ["/history", "history"],
     ["/settings", "settings"],
     ["/usage", "usage"],
     ["/usage/", "usage"],
   ])("maps %s to %s", (path, name) => {
     expect(parseRoute(path)).toEqual({ name });
+  });
+
+  it.each([
+    ["/library", "/practice", "practice"],
+    ["/library/", "/practice", "practice"],
+    ["/gym", "/practice/drills", "practice-drills"],
+    ["/dsa", "/progress#dsa", "progress"],
+    ["/history/", "/progress#history", "progress"],
+  ])("sends the old address %s to %s", (path, target, name) => {
+    expect(legacyTarget(path)).toBe(target);
+    expect(parseRoute(path)).toEqual({ name });
+  });
+
+  it("has no redirect for current addresses", () => {
+    for (const path of ["/", "/practice", "/practice/drills", "/progress", "/library/new", "/gym/drill/capacity/c2-url-shortener", "/constructor"]) {
+      expect(legacyTarget(path)).toBeNull();
+    }
   });
 
   it("keeps the room address", () => {
@@ -43,6 +58,7 @@ describe("parseRoute", () => {
     expect(parseRoute("/constructor")).toEqual({ name: "not-found" });
     expect(parseRoute("/__proto__")).toEqual({ name: "not-found" });
     expect(parseRoute("/library/other")).toEqual({ name: "not-found" });
+    expect(parseRoute("/practice/other")).toEqual({ name: "not-found" });
     expect(parseRoute("/session/")).toEqual({ name: "not-found" });
   });
 });
@@ -64,6 +80,12 @@ describe("navigation guard", () => {
   it("goes straight there without a guard", () => {
     navigate("/library");
     expect(pushed).toEqual(["/library"]);
+  });
+
+  it("keeps the section anchor and the test-hook flag together", () => {
+    vi.stubGlobal("location", { search: "?testhooks=1", pathname: "/practice" });
+    navigate("/progress#skills");
+    expect(pushed).toEqual(["/progress?testhooks=1#skills"]);
   });
 
   it("hands the move to the guard, which can let it through", () => {
