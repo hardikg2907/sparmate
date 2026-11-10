@@ -2,7 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
 import { HLD_PHASES, LLD_PHASES } from "../../shared/phases";
 import type { StepCheck } from "../../shared/types";
-import { MAX_GAP_CHARS, parseStepVerdict, passCheck, passNeed, passRefusalText, recordStepVerdict, stepStatusLine } from "./step-verdict";
+import {
+  checksCountOnly,
+  countOnly,
+  MAX_GAP_CHARS,
+  notYetCount,
+  openCountText,
+  parseStepVerdict,
+  passCheck,
+  passNeed,
+  passRefusalText,
+  recordStepVerdict,
+  stepStatusLine,
+} from "./step-verdict";
 
 const PHASES = ["requirements", "entities", "api"];
 const parse = (args: unknown) => parseStepVerdict(args, PHASES);
@@ -43,7 +55,7 @@ describe("recordStepVerdict", () => {
   it("stores the call with the round time", () => {
     const s = held();
     expect(recordStepVerdict(s, { phase: "api", verdict: "not_yet", gap: "Which entities?" }, 4_000)).toEqual({ ok: true });
-    expect(s.stepVerdicts).toEqual({ api: { verdict: "not_yet", gap: "Which entities?", at: 4_000 } });
+    expect(s.stepVerdicts).toEqual({ api: { verdict: "not_yet", gap: "Which entities?", at: 4_000, misses: 1 } });
   });
 
   it("lets a pass replace a not_yet and drops the old gap", () => {
@@ -126,5 +138,43 @@ describe("stepStatusLine", () => {
     expect(stepStatusLine(HLD_PHASES, verdicts)).toBe("passed: Core entities, API · not passed yet: Requirements, High-level design, Deep dives");
     const all = Object.fromEntries(HLD_PHASES.map((p) => [p.id, { verdict: "pass" as const, at: 1 }]));
     expect(stepStatusLine(HLD_PHASES, all)).toBe("every step has passed");
+    expect(stepStatusLine(HLD_PHASES, verdicts, ["requirements"])).toBe(
+      "passed: Core entities, API · not passed yet: Requirements, High-level design, Deep dives · checks give only a count: Requirements",
+    );
+  });
+});
+
+describe("repeated checks", () => {
+  it("counts the not_yet calls on a step and starts counting again after a pass", () => {
+    const session: Pick<Session, "stepVerdicts"> = {};
+    const call = (verdict: "pass" | "not_yet") => recordStepVerdict(session, verdict === "pass" ? { phase: "api", verdict } : { phase: "api", verdict, gap: "x" }, 1);
+    call("not_yet");
+    expect(session.stepVerdicts?.api?.misses).toBe(1);
+    expect(countOnly(session.stepVerdicts?.api)).toBe(false);
+    call("not_yet");
+    expect(session.stepVerdicts?.api?.misses).toBe(2);
+    expect(countOnly(session.stepVerdicts?.api)).toBe(true);
+    call("pass");
+    expect(notYetCount(session.stepVerdicts?.api)).toBe(0);
+  });
+
+  it("counts a not_yet saved without a count as one", () => {
+    expect(notYetCount({ verdict: "not_yet", gap: "x", at: 1 })).toBe(1);
+    expect(notYetCount(undefined)).toBe(0);
+  });
+
+  it("says how much is open and never what", () => {
+    expect(openCountText(3)).toBe("3 things are still open. Press Hint for a nudge toward the next one.");
+    expect(openCountText(1)).toBe("One thing is still open. Press Hint for a nudge toward it.");
+    expect(openCountText(null)).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
+    expect(openCountText(0)).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
+  });
+
+  it("never counts a machine-coding build step or an interview round", () => {
+    const twice = { verdict: "not_yet" as const, gap: "x", at: 1, misses: 2 };
+    expect(checksCountOnly({ track: "hld", mode: "guided" }, "requirements", twice)).toBe(true);
+    expect(checksCountOnly({ track: "lld", mode: "guided" }, "entities", twice)).toBe(true);
+    for (const phase of ["skeleton", "thin_slice", "fill_out", "extend"]) expect(checksCountOnly({ track: "lld", mode: "guided" }, phase, twice)).toBe(false);
+    expect(checksCountOnly({ track: "hld", mode: "interview" }, "requirements", twice)).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { PhaseDef } from "../../shared/phases";
+import type { Mode, PhaseDef, Track } from "../../shared/phases";
+import { codeScopeFor } from "../../shared/stepCode";
 import type { ChecklistItem, Session, StepCheck, StepVerdict } from "../../shared/types";
 
 export const MAX_GAP_CHARS = 200;
@@ -41,9 +42,42 @@ export function recordStepVerdict(session: Pick<Session, "stepVerdicts">, input:
   if (held?.verdict === "pass" && input.verdict === "not_yet") {
     return { ok: false, error: "That step already passed. Do not raise it again, in this reply or any later one. Small items go to the debrief." };
   }
-  const entry: StepVerdict = input.verdict === "pass" ? { verdict: "pass", at } : { verdict: "not_yet", gap: input.gap ?? "", at };
+  const entry: StepVerdict = input.verdict === "pass" ? { verdict: "pass", at } : { verdict: "not_yet", gap: input.gap ?? "", at, misses: notYetCount(held) + 1 };
   session.stepVerdicts = { ...session.stepVerdicts, [input.phase]: entry };
   return { ok: true };
+}
+
+/** The "not yet" calls a step has had so far. */
+export function notYetCount(held: StepVerdict | undefined): number {
+  if (!held || held.verdict === "pass") return 0;
+  return held.misses ?? 1;
+}
+
+/** After this many "not yet" checks, a check gives only a count of what is open, so repeated presses cannot list the answer. */
+export const NAMED_CHECKS = 2;
+
+export function countOnly(held: StepVerdict | undefined): boolean {
+  return notYetCount(held) >= NAMED_CHECKS;
+}
+
+/**
+ * Whether checks of a step give only a count of what is open. A machine-coding build step is never counted: its check
+ * names the exact cause of a failing compile or run, which is a fact about his code and not the answer.
+ */
+export function checksCountOnly(round: { track: Track; mode: Mode }, phase: string, held: StepVerdict | undefined): boolean {
+  return round.mode === "guided" && codeScopeFor(round.track, phase) !== "file" && countOnly(held);
+}
+
+/** "3 things are", "one thing is" or "some things are", for a count of open items that may be unknown. */
+export function openCountPhrase(open: number | null): string {
+  if (open === null || open < 1) return "some things are";
+  return open === 1 ? "one thing is" : `${open} things are`;
+}
+
+/** The gap a count-only check stores and shows: how much is open, never what. */
+export function openCountText(open: number | null): string {
+  const phrase = openCountPhrase(open);
+  return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} still open. Press Hint for a nudge toward ${open === 1 ? "it" : "the next one"}.`;
 }
 
 /** The fewest covered checklist items a guided pass needs on this step. */
@@ -85,10 +119,15 @@ export function emptyStepRefusalText(label: string): string {
   return `${label} cannot pass: he has said nothing in this step, drawn nothing in its frame and written no answer for it. Call step_verdict with "not_yet" and ask for his answer to this step. If he gave it while another step was on the rail, ask him to say it again here or to add it to this step's written answer.`;
 }
 
-/** Which steps have a pass and which do not, in rail order, so the guide never has to recall it. */
-export function stepStatusLine(phases: readonly { id: string; label: string }[], verdicts: Session["stepVerdicts"]): string {
+/**
+ * Which steps have a pass and which do not, in rail order, so the guide never has to recall it. `quiet` names the
+ * steps whose checks now give only a count of what is open.
+ */
+export function stepStatusLine(phases: readonly { id: string; label: string }[], verdicts: Session["stepVerdicts"], quiet: readonly string[] = []): string {
   const passed = phases.filter((p) => verdicts?.[p.id]?.verdict === "pass").map((p) => p.label);
   const open = phases.filter((p) => verdicts?.[p.id]?.verdict !== "pass").map((p) => p.label);
   if (open.length === 0) return "every step has passed";
-  return `passed: ${passed.length > 0 ? passed.join(", ") : "none yet"} · not passed yet: ${open.join(", ")}`;
+  const counted = phases.filter((p) => quiet.includes(p.id)).map((p) => p.label);
+  const tail = counted.length > 0 ? ` · checks give only a count: ${counted.join(", ")}` : "";
+  return `passed: ${passed.length > 0 ? passed.join(", ") : "none yet"} · not passed yet: ${open.join(", ")}${tail}`;
 }
