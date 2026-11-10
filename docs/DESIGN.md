@@ -551,7 +551,12 @@ Today is one page for the whole day, and with data it fills the first screen at 
 - The drill screen is full screen with a slim bar: Back to Practice, the drill name and a soft countdown that turns amber
   and counts up in overtime. Two columns hold the prompt cards and one raised answer card. A changed-constraint drill
   shows the accent "Changed constraint" tag beside the problem name, and a "What changed" card with the other material.
-  The result shows the same tag beside the problem. The result is a mesh hero (the
+  The result shows the same tag beside the problem. A dialogue drill (the deep dive and the trade-off) says in a quiet
+  line under the answer box that one or two follow-up questions come before the result. After the opening answer the
+  answer card becomes "Your conversation": a short thread of sunken cards, one for each turn (a small "You" or
+  "Interviewer" label over plain text), then a "Your reply" box, the line "Question 1 of up to 2", "Send reply" as the
+  primary button and a quiet "Start over" below that asks first. The timer keeps running. The result of a dialogue has
+  no revise button and shows a "The conversation" card with the same thread below "Your line". The result is a mesh hero (the
   outcome as the title, the schedule tile, then "Revise your answer" as the primary button when a
   revision is allowed) with cards below: the criteria list, "What went well" beside "What to improve", and "Your line".
   Each criterion is a row with its label, a four-step meter (green at 3 or more, amber below) and "n of 4"; a core

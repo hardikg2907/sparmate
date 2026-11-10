@@ -1,4 +1,4 @@
-import { DRILL_INFO, MAX_VARIANT_ID, drillsForTrack, type DrillPrompt, type DrillType } from "../../shared/drills";
+import { DRILL_INFO, MAX_VARIANT_ID, drillServesTrack, drillsForTrack, type DrillPrompt, type DrillType } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
 
 /** What a drill shows the candidate, and the answer key only the grader reads. */
@@ -10,13 +10,13 @@ export interface DrillContent {
 }
 
 export interface DrillContext {
-  /** The gap's title, used to pick the deep dive that matches it. */
+  /** The gap's title, used to pick the deep dive or trade-off that matches it. */
   gapTitle?: string;
   /** Why the gap matters; it only breaks ties between deep dives. */
   hint?: string;
   /** How many drills of this kind the candidate already tried on the problem, so a free drill moves on to the next topic. */
   rotation?: number;
-  /** A deep dive's title, to rebuild the same topic a saved attempt used. */
+  /** A deep dive's or trade-off's title, to rebuild the same topic a saved attempt used. */
   topic?: string;
   /** The id of a changed-constraint entry of the brief. An id the brief does not have builds the normal drill. */
   variant?: string;
@@ -135,6 +135,91 @@ export function matchDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", 
 export function pickDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", reason = "", rotation = 0): DeepDiveEntry | null {
   if (entries.length === 0) return null;
   return matchDeepDive(entries, gapTitle, reason) ?? entries[Math.abs(rotation) % entries.length] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Trade-offs: the accepted alternatives of a system design brief. Each top-level bullet is one design choice.
+
+export interface TradeoffEntry {
+  title: string;
+  /** The whole bullet with its sub-bullets. It is the answer key and never leaves the server. */
+  text: string;
+}
+
+const MAX_TRADEOFF_SECTION = 40_000;
+const MAX_TRADEOFF_ENTRIES = 30;
+const MAX_TRADEOFF_TEXT = 6000;
+const MAX_TRADEOFF_TITLE = 120;
+
+/** The text after a top-level bullet mark, or null when the line is not one. */
+function topBulletText(line: string): string | null {
+  return line.startsWith("- ") || line.startsWith("* ") ? line.slice(2) : null;
+}
+
+/** Cuts dots, colons and spaces off the end of a bold lead. */
+function trimLead(text: string): string {
+  let end = text.length;
+  while (end > 0 && ". :\t".includes(text[end - 1] ?? "x")) end--;
+  return text.slice(0, end);
+}
+
+/**
+ * The entries of the "Accepted alternatives" section. A top-level bullet that opens with a bold lead is an entry, its
+ * title is the lead without the closing dot, and the indented lines under it belong to it. Brief text is untrusted, so
+ * the parse walks the lines once and every length is capped.
+ */
+export function tradeoffEntries(problem: Problem): TradeoffEntry[] {
+  const entries: TradeoffEntry[] = [];
+  let current: { title: string; lines: string[] } | null = null;
+  const flush = () => {
+    if (current) entries.push({ title: current.title, text: current.lines.join("\n").trim().slice(0, MAX_TRADEOFF_TEXT) });
+    current = null;
+  };
+  for (const line of section(problem, "Accepted alternatives").slice(0, MAX_TRADEOFF_SECTION).split("\n")) {
+    const top = topBulletText(line);
+    if (top === null) {
+      current?.lines.push(line);
+      continue;
+    }
+    flush();
+    if (entries.length >= MAX_TRADEOFF_ENTRIES) break;
+    if (!top.startsWith("**")) continue;
+    const close = top.indexOf("**", 2);
+    if (close < 3) continue;
+    const title = trimLead(top.slice(2, close).replace(/`/g, "").trim()).slice(0, MAX_TRADEOFF_TITLE);
+    if (title !== "") current = { title, lines: [line] };
+  }
+  flush();
+  return entries;
+}
+
+/**
+ * The trade-off that best matches a gap: a stem of the gap's title in an entry's title counts most, then in its text,
+ * then the reason's stems. Null when nothing matches.
+ */
+export function matchTradeoff(entries: readonly TradeoffEntry[], gapTitle = "", reason = ""): TradeoffEntry | null {
+  const fromTitle = stems(gapTitle);
+  const fromReason = stems(reason);
+  let best: TradeoffEntry | null = null;
+  let score = 0;
+  for (const entry of entries) {
+    const title = stems(entry.title);
+    const text = stems(entry.text);
+    let total = 0;
+    for (const s of fromTitle) total += title.has(s) ? 10 : text.has(s) ? 2 : 0;
+    for (const s of fromReason) total += title.has(s) ? 1 : text.has(s) ? 0.5 : 0;
+    if (total > score) {
+      score = total;
+      best = entry;
+    }
+  }
+  return best;
+}
+
+/** The matching trade-off, else the one the rotation points at. Only a free drill wants the rotation. */
+export function pickTradeoff(entries: readonly TradeoffEntry[], gapTitle = "", reason = "", rotation = 0): TradeoffEntry | null {
+  if (entries.length === 0) return null;
+  return matchTradeoff(entries, gapTitle, reason) ?? entries[Math.abs(rotation) % entries.length] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +374,7 @@ const VARIANT_TASK: Record<DrillType, string> = {
   walk: "Walk one request through your design after the change below. Say which boxes change and why.",
   requirements: "The interviewer adds the change below. Say which requirements move and what you ask again, with the numbers you would assume.",
   deep_dive: "Take the change below: say what breaks first, what you would build instead, and what it costs.",
+  tradeoff: "The situation changed as below. Say whether you keep your design choice or change it, and defend that.",
   lld_skeleton: "The requirement below is new. Write the classes that change or are added, with fields and signatures, and say which class stays untouched.",
 };
 
@@ -313,13 +399,16 @@ function walkName(problem: Problem): string {
   return m?.[1]?.replace(/`/g, "").trim() || "request";
 }
 
+const PATTERNS_SECTION = "Patterns that fit";
+
 /** Whether a problem has what the drill needs: a section to prompt from and a key to grade against. */
 export function drillFits(problem: Problem, drill: DrillType): boolean {
-  if (DRILL_INFO[drill].track !== problem.meta.track) return false;
+  if (!drillServesTrack(drill, problem.meta.track)) return false;
   if (drill === "capacity") return section(problem, "Capacity math") !== "" && scaleFacts(problem).length > 0;
   if (drill === "walk") return section(problem, "Reference design") !== "";
   if (drill === "requirements") return section(problem, "Expected requirements") !== "";
   if (drill === "deep_dive") return deepDiveEntries(problem).length > 0;
+  if (drill === "tradeoff") return problem.meta.track === "lld" ? section(problem, PATTERNS_SECTION) !== "" : tradeoffEntries(problem).length > 0;
   return section(problem, "Entities and relationships") !== "";
 }
 
@@ -334,8 +423,9 @@ export function drillsAvailable(problem: Problem): DrillType[] {
 export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext = {}): DrillContent | null {
   const entry = ctx.variant ? variantEntries(problem).find((e) => e.id === ctx.variant) : undefined;
   if (!entry) return buildNormal(problem, drill, ctx);
-  // The deep dive behind a variant follows the change itself, so a saved attempt rebuilds the same key.
-  const base = buildNormal(problem, drill, drill === "deep_dive" ? { gapTitle: entry.title, hint: entry.question } : {});
+  // The deep dive behind a variant follows the change itself, so a saved attempt rebuilds the same key. A trade-off
+  // behind a variant is the candidate's own choice, so its key is the whole section.
+  const base = drill === "tradeoff" ? buildTradeoff(problem, {}, true) : buildNormal(problem, drill, drill === "deep_dive" ? { gapTitle: entry.title, hint: entry.question } : {});
   if (!base) return null;
   const material = base.prompt.material.filter((m) => m.heading !== "The topic");
   return {
@@ -427,6 +517,8 @@ function buildNormal(problem: Problem, drill: DrillType, ctx: DrillContext): Dri
         key: `### ${entry.title}\n${entry.text}`,
       };
     }
+    case "tradeoff":
+      return buildTradeoff(problem, ctx, false);
     default: {
       const facts = bullets(section(problem, "Hidden facts"));
       return {
@@ -440,4 +532,52 @@ function buildNormal(problem: Problem, drill: DrillType, ctx: DrillContext): Dri
       };
     }
   }
+}
+
+/**
+ * The trade-off drill. A system design problem offers one design choice of the brief; a machine coding problem offers
+ * its whole patterns section at once, because a pattern's name would give the answer away. With `whole`, a system
+ * design problem also keys on the whole section, for the variant that changes a constraint.
+ */
+function buildTradeoff(problem: Problem, ctx: DrillContext, whole: boolean): DrillContent | null {
+  if (!drillFits(problem, "tradeoff")) return null;
+  const info = DRILL_INFO.tradeoff;
+  const opening = section(problem, "Opening prompt").replace(/\s*Where would you (like to )?start\?\s*$/i, "");
+  const base = {
+    drill: "tradeoff" as const,
+    title: info.title,
+    minutes: info.minutes,
+    problem: { id: problem.meta.id, title: problem.meta.title, track: problem.meta.track },
+  };
+  const problemBlock = { heading: "The problem", markdown: opening };
+  if (problem.meta.track === "lld") {
+    return {
+      prompt: {
+        ...base,
+        task: "Name the design patterns you would use in this problem and the ones you would leave out, each with the reason from the requirements.",
+        material: [problemBlock],
+        answerHint: "Name each pattern with the reason from the requirements. Say which ones you leave out and why.",
+      },
+      key: section(problem, PATTERNS_SECTION),
+    };
+  }
+  if (whole) {
+    return {
+      prompt: { ...base, task: VARIANT_TASK.tradeoff, material: [problemBlock], answerHint: "Say whether the change moves your choice, and give the reason." },
+      key: section(problem, "Accepted alternatives").slice(0, MAX_TRADEOFF_SECTION),
+    };
+  }
+  const entries = tradeoffEntries(problem);
+  const entry = (ctx.topic ? entries.find((e) => e.title === ctx.topic) : undefined) ?? pickTradeoff(entries, ctx.gapTitle, ctx.hint, ctx.rotation);
+  if (!entry) return null;
+  return {
+    prompt: {
+      ...base,
+      task: `Take "${entry.title}": pick the option you would build for this problem, give the reason from its requirements, and say when the other option wins.`,
+      topic: entry.title,
+      material: [problemBlock, { heading: "The topic", markdown: entry.title }],
+      answerHint: "Take a side and give the reason from this problem's needs. Expect a question that pushes back.",
+    },
+    key: entry.text,
+  };
 }

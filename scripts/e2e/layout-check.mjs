@@ -92,6 +92,7 @@ try {
     { name: "settings", url: (theme) => `/?fixture=settings&theme=${theme}` },
     { name: "gym", url: (theme) => `/?fixture=gym&theme=${theme}` },
     { name: "dsa", url: (theme) => `/?fixture=dsa&theme=${theme}` },
+    { name: "drill dialogue", url: (theme) => `/?fixture=drill-dialogue&theme=${theme}` },
     { name: "room-hld", url: (theme) => `/?fixture=room-hld&theme=${theme}` },
     { name: "room-lld", url: (theme) => `/?fixture=room-lld&theme=${theme}` },
     { name: "debrief-hld", url: (theme) => `/?fixture=debrief-hld&theme=${theme}` },

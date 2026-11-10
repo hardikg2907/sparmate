@@ -112,6 +112,8 @@ export interface FakeFacts {
   pinTargets?: () => PinTarget[];
   /** The grader's input: the drill's answer key and the candidate's answer. */
   drill?: { kind: DrillType; key: string; answer: string };
+  /** The interviewer's input for a dialogue drill: the turns so far and how many questions were asked. */
+  drillFollowUp?: { kind: DrillType; key: string; turns: { role: "candidate" | "grader"; text: string }[]; asked: number };
 }
 
 export interface UsageContext {

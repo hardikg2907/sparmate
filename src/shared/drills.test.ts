@@ -3,6 +3,8 @@ import {
   DRILL_INFO,
   dueStatus,
   DRILL_TYPES,
+  DrillAbandonSchema,
+  DrillReplySchema,
   DrillReviseSchema,
   DrillSubmitSchema,
   DrillTargetSchema,
@@ -14,6 +16,9 @@ import {
   addDays,
   applyOutcome,
   drillForGap,
+  drillSkill,
+  drillServesTrack,
+  MAX_FOLLOW_UPS,
   drillsForTrack,
   firstDueDay,
   isDue,
@@ -24,11 +29,22 @@ import {
 import { DEFAULT_SETTINGS, ScorecardSchema, SettingsSchema } from "./types";
 
 describe("drill catalogue", () => {
-  it("has the five fixed kinds with their lengths", () => {
-    expect(DRILL_TYPES).toEqual(["capacity", "walk", "requirements", "deep_dive", "lld_skeleton"]);
-    expect(DRILL_TYPES.map((d) => DRILL_INFO[d].minutes)).toEqual([10, 10, 10, 15, 15]);
-    expect(drillsForTrack("hld")).toEqual(["capacity", "walk", "requirements", "deep_dive"]);
-    expect(drillsForTrack("lld")).toEqual(["lld_skeleton"]);
+  it("has the six fixed kinds with their lengths", () => {
+    expect(DRILL_TYPES).toEqual(["capacity", "walk", "requirements", "deep_dive", "tradeoff", "lld_skeleton"]);
+    expect(DRILL_TYPES.map((d) => DRILL_INFO[d].minutes)).toEqual([10, 10, 10, 15, 15, 15]);
+  });
+
+  it("lists the kinds of each track, and the trade-off serves both", () => {
+    expect(drillsForTrack("hld")).toEqual(["capacity", "walk", "requirements", "deep_dive", "tradeoff"]);
+    expect(drillsForTrack("lld")).toEqual(["tradeoff", "lld_skeleton"]);
+    expect(DRILL_INFO.tradeoff).toMatchObject({ title: "Defend a trade-off", tracks: ["hld", "lld"], about: "Pick a side of one design choice and hold it under questions." });
+    expect(drillServesTrack("tradeoff", "lld")).toBe(true);
+    expect(drillServesTrack("capacity", "lld")).toBe(false);
+  });
+
+  it("runs the deep dive and the trade-off as a dialogue, and nothing else", () => {
+    expect(DRILL_TYPES.filter((d) => DRILL_INFO[d].dialogue)).toEqual(["deep_dive", "tradeoff"]);
+    expect(MAX_FOLLOW_UPS).toBe(2);
   });
 });
 
@@ -177,13 +193,53 @@ describe("gap to drill", () => {
   });
 
   it("returns null when nothing fits", () => {
-    expect(drillForGap({ title: "Communication was hard to follow", whyItMatters: "Speak in short, clear steps." }, "hld")).toBeNull();
     expect(drillForGap({ title: "Something vague" }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Something vague" }, "lld")).toBeNull();
+  });
+
+  it.each([
+    ["Trade-offs between a queue and a direct call were not discussed", "tradeoff"],
+    ["Picked a database without justification", "tradeoff"],
+    ["No alternatives were weighed for the id scheme", "tradeoff"],
+    ["Chose the storage engine without a reason", "tradeoff"],
+    ["Design choice made with no reason given", "tradeoff"],
+    ["Trade-off on caching the redirect", "tradeoff"],
+  ] as const)("maps the HLD gap %j to the trade-off drill", (title, drill) => {
+    expect(drillForGap({ title }, "hld")).toBe(drill);
+  });
+
+  it("keeps the deep-dive rule for gaps about a mechanism, not a choice", () => {
+    expect(drillForGap({ title: "Cache stampede on a viral link" }, "hld")).toBe("deep_dive");
+    expect(drillForGap({ title: "Retry storms after a failover" }, "hld")).toBe("deep_dive");
+  });
+
+  it.each([
+    ["Communication was hard to follow", "hld"],
+    ["Communication was hard to follow", "lld"],
+    ["Did not explain the design clearly", "hld"],
+    ["Explaining the class design in plain words", "lld"],
+  ] as const)("maps the communication gap %j on %s to the trade-off drill", (title, track) => {
+    expect(drillForGap({ title }, track)).toBe("tradeoff");
+  });
+
+  it("still queues nothing for pacing, time or driving the round, even with communication words", () => {
+    expect(drillForGap({ title: "Pacing and communication in the middle phases" }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Time management" }, "lld")).toBeNull();
+    expect(drillForGap({ title: "Did not drive the interview" }, "hld")).toBeNull();
+  });
+
+  it("takes the judge's trade-off on both tracks", () => {
+    expect(drillForGap({ title: "Anything at all", drill: "tradeoff" }, "hld")).toBe("tradeoff");
+    expect(drillForGap({ title: "Anything at all", drill: "tradeoff" }, "lld")).toBe("tradeoff");
   });
 
   it.each([
     ["Spot and Ticket entities were hidden in nested maps", "lld_skeleton"],
-    ["Pricing is not a separate strategy class", "lld_skeleton"],
+    ["Parking spot class holds the whole relationship model", "lld_skeleton"],
+    ["Pricing is not a separate strategy class", "tradeoff"],
+    ["No design pattern for the pricing rules", "tradeoff"],
+    ["The design is hard to extend: extensibility was missing", "tradeoff"],
+    ["Trade-off between inheritance and composition", "tradeoff"],
   ] as const)("maps the LLD gap %j to %s", (title, drill) => {
     expect(drillForGap({ title }, "lld")).toBe(drill);
   });
@@ -302,10 +358,43 @@ describe("rubric and outcome", () => {
       ["scale_reliability", 4, 3],
       ["design", 4, 2],
       ["navigation", 4, 3],
-      ["depth", 3, 2],
+      ["depth", 4, 3],
+      ["depth", 4, 3],
       ["design", 5, 3],
     ]);
     expect(OUTCOME_LABEL).toEqual({ ready: "Interview-ready", getting_there: "Getting there", needs_work: "Needs work" });
+  });
+
+  it("names the trade-off criteria, and trains depth on system design and design on machine coding", () => {
+    expect(DRILL_RUBRIC.tradeoff.criteria.map((k) => [k.id, k.core])).toEqual([
+      ["position", true],
+      ["reason", true],
+      ["other_side", false],
+      ["holds", true],
+    ]);
+    expect(drillSkill("tradeoff", "hld")).toBe("depth");
+    expect(drillSkill("tradeoff", "lld")).toBe("design");
+    expect(drillSkill("lld_skeleton", "lld")).toBe("design");
+    expect(drillSkill("capacity", "hld")).toBe("scale_reliability");
+  });
+
+  it("gives the deep dive a core follow-up criterion", () => {
+    expect(DRILL_RUBRIC.deep_dive.criteria.map((k) => [k.id, k.core])).toEqual([
+      ["naive", true],
+      ["mechanism", true],
+      ["cost", false],
+      ["follow_up", true],
+    ]);
+  });
+
+  it("still reads a deep-dive row saved with three scores", () => {
+    const saved = (change: Record<string, number>) => ["naive", "mechanism", "cost"].map((id) => ({ id, score: change[id] ?? 3 }));
+    expect(outcomeFor("deep_dive", saved({}))).toBe("ready");
+    expect(outcomeFor("deep_dive", saved({ naive: 2 }))).toBe("getting_there");
+    expect(outcomeFor("deep_dive", saved({ naive: 1 }))).toBe("needs_work");
+    // A new grade that scores the follow-up low still counts against the deep dive.
+    expect(outcomeFor("deep_dive", [...saved({}), { id: "follow_up", score: 1 }])).toBe("needs_work");
+    expect(outcomeFor("deep_dive", [...saved({}), { id: "follow_up", score: 2 }])).toBe("getting_there");
   });
 
   describe.each(DRILL_TYPES)("%s", (drill) => {
@@ -347,5 +436,33 @@ describe("rubric and outcome", () => {
     expect(betterOutcome("needs_work", "getting_there")).toBe("getting_there");
     expect(betterOutcome("ready", "needs_work")).toBe("ready");
     expect(betterOutcome("getting_there", "getting_there")).toBe("getting_there");
+  });
+});
+
+describe("dialogue request schemas", () => {
+  const id = "a1b2c3d4e5f60708";
+
+  it("accepts a reply with an optional time", () => {
+    expect(DrillReplySchema.safeParse({ attemptId: id, answer: "Because writes are rare." }).success).toBe(true);
+    expect(DrillReplySchema.safeParse({ attemptId: id, answer: "x", elapsedSeconds: 90 }).success).toBe(true);
+  });
+
+  it.each([
+    ["an unknown key", { attemptId: id, answer: "x", drill: "tradeoff" }],
+    ["a path in the id", { attemptId: "../../x", answer: "x" }],
+    ["a blank answer", { attemptId: id, answer: "   " }],
+    ["an answer over 8000 characters", { attemptId: id, answer: "x".repeat(8001) }],
+    ["a negative time", { attemptId: id, answer: "x", elapsedSeconds: -1 }],
+    ["a time over two hours", { attemptId: id, answer: "x", elapsedSeconds: 7201 }],
+    ["a missing id", { answer: "x" }],
+  ])("rejects a reply with %s", (_n, body) => {
+    expect(DrillReplySchema.safeParse(body).success).toBe(false);
+  });
+
+  it("takes only an attempt id to abandon", () => {
+    expect(DrillAbandonSchema.safeParse({ attemptId: id }).success).toBe(true);
+    expect(DrillAbandonSchema.safeParse({ attemptId: id, extra: 1 }).success).toBe(false);
+    expect(DrillAbandonSchema.safeParse({ attemptId: "short" }).success).toBe(false);
+    expect(DrillAbandonSchema.safeParse({}).success).toBe(false);
   });
 });

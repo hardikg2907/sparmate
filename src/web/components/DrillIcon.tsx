@@ -59,6 +59,13 @@ export function DrillIcon({ drill, size, className }: { drill: DrillType; size?:
           <path d="M12 3v14M6 11l6 6 6-6M5 21h14" />
         </Svg>
       );
+    case "tradeoff":
+      return (
+        <Svg size={size} className={className}>
+          <path d="M12 4v16M8 20h8M5 7h14" />
+          <path d="M5 7 2.5 13a3 3 0 0 0 5 0L5 7ZM19 7l-2.5 6a3 3 0 0 0 5 0L19 7Z" />
+        </Svg>
+      );
     default:
       return (
         <Svg size={size} className={className}>

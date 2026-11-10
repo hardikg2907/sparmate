@@ -3,7 +3,20 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { DRILL_TYPES } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
 import { APP_ROOT } from "./config";
-import { buildDrill, deepDiveEntries, drillFits, drillsAvailable, interviewerNotesIn, matchDeepDive, pickDeepDive, scaleFacts, variantEntries } from "./drill-content";
+import {
+  buildDrill,
+  deepDiveEntries,
+  drillFits,
+  drillsAvailable,
+  interviewerNotesIn,
+  matchDeepDive,
+  matchTradeoff,
+  pickDeepDive,
+  pickTradeoff,
+  scaleFacts,
+  tradeoffEntries,
+  variantEntries,
+} from "./drill-content";
 import { memoryLogger } from "./log";
 import { ProblemCatalog } from "./problems";
 
@@ -27,8 +40,8 @@ describe("drill content from the shipped briefs", () => {
         expect(built?.key.length, `${problem.meta.id} ${drill}`).toBeGreaterThan(40);
         expect(built?.prompt.task.length).toBeGreaterThan(10);
       }
-      if (problem.meta.track === "hld") expect(available, problem.meta.id).toEqual(["capacity", "walk", "requirements", "deep_dive"]);
-      else expect(available, problem.meta.id).toEqual(["lld_skeleton"]);
+      if (problem.meta.track === "hld") expect(available, problem.meta.id).toEqual(["capacity", "walk", "requirements", "deep_dive", "tradeoff"]);
+      else expect(available, problem.meta.id).toEqual(["tradeoff", "lld_skeleton"]);
     }
   });
 
@@ -36,6 +49,8 @@ describe("drill content from the shipped briefs", () => {
     expect(drillFits(lld, "capacity")).toBe(false);
     expect(drillFits(hld, "lld_skeleton")).toBe(false);
     expect(buildDrill(lld, "walk")).toBeNull();
+    expect(drillFits(hld, "tradeoff")).toBe(true);
+    expect(drillFits(lld, "tradeoff")).toBe(true);
   });
 
   it("capacity math prompts with the numeric facts and keys on the Capacity math section", () => {
@@ -50,13 +65,14 @@ describe("drill content from the shipped briefs", () => {
   });
 
   it("never shows the answer key in the prompt", () => {
-    for (const drill of DRILL_TYPES) {
-      const problem = drill === "lld_skeleton" ? lld : hld;
-      const built = buildDrill(problem, drill);
-      expect(built).not.toBeNull();
-      const shown = JSON.stringify(built?.prompt);
-      const keyLines = (built?.key ?? "").split("\n").filter((l) => l.trim().length > 60);
-      for (const line of keyLines) expect(shown, `${drill}: ${line.slice(0, 40)}`).not.toContain(line.trim());
+    for (const problem of [hld, lld]) {
+      for (const drill of drillsAvailable(problem)) {
+        const built = buildDrill(problem, drill);
+        expect(built).not.toBeNull();
+        const shown = JSON.stringify(built?.prompt);
+        const keyLines = (built?.key ?? "").split("\n").filter((l) => l.trim().length > 60);
+        for (const line of keyLines) expect(shown, `${drill}: ${line.slice(0, 40)}`).not.toContain(line.trim());
+      }
     }
   });
 
@@ -107,6 +123,129 @@ describe("drill content from the shipped briefs", () => {
     expect(built?.key).toContain("`Ticket`");
     expect(built?.key).toContain("enter(type, time)");
     expect(built?.prompt.minutes).toBe(15);
+  });
+});
+
+describe("trade-off content", () => {
+  const withSection = (problem: Problem, name: string, text: string): Problem => ({ ...problem, sections: { ...problem.sections, [name]: text } });
+  const sectionNames = (problem: Problem) => (problem.sections["Patterns that fit"] ?? "").split("**").filter((_, i) => i % 2 === 1);
+
+  it.each(["c2-url-shortener", "c2-rate-limiter", "c2-chat-system"])("system design: %s has one topic per top-level bullet, each with a clean title", (id) => {
+    const problem = all.find((p) => p.meta.id === id) as Problem;
+    const entries = tradeoffEntries(problem);
+    const bullets = (problem.sections["Accepted alternatives"] ?? "").split("\n").filter((l) => l.startsWith("- **"));
+    expect(entries).toHaveLength(bullets.length);
+    for (const entry of entries) {
+      expect(entry.title.endsWith(".")).toBe(false);
+      expect(entry.title).not.toContain("**");
+      expect(entry.text.startsWith("- **")).toBe(true);
+      expect(entry.text).toContain(entry.title);
+    }
+    const built = buildDrill(problem, "tradeoff");
+    expect(built?.prompt.task).toBe(
+      `Take "${entries[0]?.title}": pick the option you would build for this problem, give the reason from its requirements, and say when the other option wins.`,
+    );
+    expect(built?.key).toBe(entries[0]?.text);
+    expect(built?.prompt.topic).toBe(entries[0]?.title);
+    expect(built?.prompt.minutes).toBe(15);
+  });
+
+  it("keeps sub-bullets with their entry and reads the shipped URL Shortener titles", () => {
+    const entries = tradeoffEntries(hld);
+    expect(entries.map((e) => e.title)).toEqual(["Code generation", "Storage", "301 versus 302", "CDN caching of redirects"]);
+    expect(entries[0]?.text).toContain("  - A key generation service that pre-creates codes");
+    expect(entries[0]?.text).not.toContain("Postgres with replicas");
+    expect(entries[2]?.text.startsWith("- **301 versus 302.**")).toBe(true);
+  });
+
+  it("picks the entry that best matches the gap, and rotates with no match", () => {
+    const storage = buildDrill(hld, "tradeoff", { gapTitle: "Storage choice made without a reason" });
+    expect(storage?.prompt.topic).toBe("Storage");
+    const codes = buildDrill(hld, "tradeoff", { gapTitle: "Code generation scheme was never justified" });
+    expect(codes?.prompt.topic).toBe("Code generation");
+    const byText = buildDrill(hld, "tradeoff", { gapTitle: "Collision handling", hint: "" });
+    expect(byText?.prompt.topic).toBe("Code generation");
+    const rotated = [0, 1, 2, 3, 4].map((rotation) => buildDrill(hld, "tradeoff", { gapTitle: "Zzzz qqqq", rotation })?.prompt.topic);
+    expect(rotated).toEqual(["Code generation", "Storage", "301 versus 302", "CDN caching of redirects", "Code generation"]);
+  });
+
+  it("rebuilds the same topic and key from the saved title, whatever the rotation", () => {
+    const first = buildDrill(hld, "tradeoff", { rotation: 2 });
+    for (const rotation of [0, 1, 3]) expect(buildDrill(hld, "tradeoff", { rotation, topic: first?.prompt.topic })?.key).toBe(first?.key);
+  });
+
+  it("a problem fits with one entry and needs no title match with the gap", () => {
+    const one = withSection(hld, "Accepted alternatives", "- **Only choice.** Either is fine.");
+    expect(drillFits(one, "tradeoff")).toBe(true);
+    expect(buildDrill(one, "tradeoff", { gapTitle: "Nothing in common" })?.prompt.topic).toBe("Only choice");
+    expect(drillFits(withSection(hld, "Accepted alternatives", ""), "tradeoff")).toBe(false);
+    expect(drillFits(withSection(hld, "Accepted alternatives", "Plain words with no bullets."), "tradeoff")).toBe(false);
+    expect(drillFits(withSection(lld, "Patterns that fit", ""), "tradeoff")).toBe(false);
+  });
+
+  it("skips a bullet with no bold lead, and ends an entry at the next top-level bullet", () => {
+    const text = ["- No lead here.", "  - and a note", "- **First.** One.", "  - sub a", "", "  - sub b", "- plain again", "  - orphan", "* **Second:** Two."].join("\n");
+    const entries = tradeoffEntries(withSection(hld, "Accepted alternatives", text));
+    expect(entries.map((e) => e.title)).toEqual(["First", "Second"]);
+    expect(entries[0]?.text).toBe("- **First.** One.\n  - sub a\n\n  - sub b");
+    expect(entries[1]?.text).toBe("* **Second:** Two.");
+  });
+
+  it("caps the entries and their lengths, and stays fast on a long odd line", () => {
+    const many = Array.from({ length: 60 }, (_, i) => `- **Entry ${i}.** ${"x".repeat(9000)}`).join("\n");
+    const entries = tradeoffEntries(withSection(hld, "Accepted alternatives", many));
+    expect(entries.length).toBeLessThanOrEqual(30);
+    for (const e of entries) expect(e.text.length).toBeLessThanOrEqual(6000);
+    const started = Date.now();
+    tradeoffEntries(withSection(hld, "Accepted alternatives", `- **${"a. ".repeat(20000)}`));
+    tradeoffEntries(withSection(hld, "Accepted alternatives", `- ****${" ".repeat(30000)}`));
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it("matchTradeoff and pickTradeoff handle no entries and no match", () => {
+    expect(matchTradeoff([], "anything")).toBeNull();
+    expect(pickTradeoff([], "anything")).toBeNull();
+    const entries = tradeoffEntries(hld);
+    expect(matchTradeoff(entries, "Zzzz qqqq")).toBeNull();
+    expect(pickTradeoff(entries, "Zzzz qqqq", "", -3)?.title).toBe("CDN caching of redirects");
+  });
+
+  it.each(["b3-parking-lot", "b3-vending-machine", "b3-lru-cache"])("machine coding: %s asks for the patterns without naming one", (id) => {
+    const problem = all.find((p) => p.meta.id === id) as Problem;
+    const built = buildDrill(problem, "tradeoff");
+    expect(built?.prompt.task).toBe("Name the design patterns you would use in this problem and the ones you would leave out, each with the reason from the requirements.");
+    expect(built?.prompt.topic).toBeUndefined();
+    expect(built?.key).toBe((problem.sections["Patterns that fit"] ?? "").trim());
+    const shown = JSON.stringify(built?.prompt).toLowerCase();
+    const names = sectionNames(problem).map((n) => n.replace(/[:.]+$/, "").toLowerCase());
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) expect(shown, name).not.toContain(name);
+    for (const word of ["strategy", "observer", "singleton", "factory", "state pattern"]) expect(shown, word).not.toContain(word);
+  });
+
+  it("machine coding shows only the problem and keys on the whole section for every shipped brief", () => {
+    for (const problem of all.filter((p) => p.meta.track === "lld")) {
+      const built = buildDrill(problem, "tradeoff");
+      expect(
+        built?.prompt.material.map((m) => m.heading),
+        problem.meta.id,
+      ).toEqual(["The problem"]);
+      expect(built?.key, problem.meta.id).toBe((problem.sections["Patterns that fit"] ?? "").trim());
+    }
+  });
+
+  it("the changed-constraint variant asks to keep or change the choice, and keys on the section plus the expected answer", () => {
+    for (const problem of [hld, lld]) {
+      const entry = variantEntries(problem)[0];
+      const built = buildDrill(problem, "tradeoff", { variant: entry?.id ?? "" });
+      expect(built?.prompt.task).toBe("The situation changed as below. Say whether you keep your design choice or change it, and defend that.");
+      expect(built?.prompt.variant).toEqual({ id: entry?.id, title: entry?.title });
+      expect(built?.prompt.topic).toBeUndefined();
+      const section = problem.meta.track === "lld" ? "Patterns that fit" : "Accepted alternatives";
+      expect(built?.key).toBe(`${(problem.sections[section] ?? "").trim()}\n\nAfter the change, a strong answer covers:\n${entry?.expect}`);
+      expect(built?.prompt.material.at(-1)).toEqual({ heading: "What changed", markdown: entry?.question });
+      expect(JSON.stringify(built?.prompt)).not.toContain(entry?.expect ?? "?");
+    }
   });
 });
 
