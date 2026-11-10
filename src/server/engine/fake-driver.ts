@@ -157,7 +157,10 @@ class FakeConversation implements Conversation {
             if (held?.verdict === "not_yet") {
               const out = await callTool(this.setup, "step_verdict", { phase, verdict: "pass" });
               // A pass the server refuses stays "not yet", as a model following the refusal would leave it.
-              if (out?.isError) return `On ${label.toLowerCase()}: the requirements you named hold up. The step does not pass yet: the latency target is still missing.`;
+              if (out?.isError) {
+                await callTool(this.setup, "step_verdict", { phase, verdict: "not_yet", gap: "What latency does the read path need to meet?" });
+                return `On ${label.toLowerCase()}: the requirements you named hold up. The step does not pass yet: the latency target is still missing.`;
+              }
               return `On ${label.toLowerCase()}: the latency target is stated now, so this step passes.`;
             }
             if (!held) {

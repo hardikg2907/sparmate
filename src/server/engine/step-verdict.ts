@@ -49,7 +49,9 @@ export function recordStepVerdict(session: Pick<Session, "stepVerdicts">, input:
 /** The fewest covered checklist items a guided pass needs on this step. */
 export function passNeed(phase: Pick<PhaseDef, "passNeeds">, total: number): number {
   if (total === 0) return 0;
-  return phase.passNeeds === "one" ? 1 : Math.max(1, Math.ceil(total / 2));
+  if (phase.passNeeds === "one") return 1;
+  if (phase.passNeeds === "all") return total;
+  return Math.max(1, Math.ceil(total / 2));
 }
 
 export type PassCheck = { ok: true } | { ok: false; covered: number; total: number; need: number; open: string[] };
@@ -76,6 +78,11 @@ export function passRefusalText(label: string, refused: Extract<PassCheck, { ok:
     `Call step_verdict with "not_yet" and name the most important one as a missing question or a missing decision. Do not list the others, and do not mention this reading to him.`,
     `If he covered more than this reading shows, call recheck_step for this step once, then decide.`,
   ].join("\n");
+}
+
+/** The refusal for a pass on a step that holds nothing of his yet. */
+export function emptyStepRefusalText(label: string): string {
+  return `${label} cannot pass: he has said nothing in this step, drawn nothing in its frame and written no answer for it. Call step_verdict with "not_yet" and ask for his answer to this step. If he gave it while another step was on the rail, ask him to say it again here or to add it to this step's written answer.`;
 }
 
 /** Which steps have a pass and which do not, in rail order, so the guide never has to recall it. */

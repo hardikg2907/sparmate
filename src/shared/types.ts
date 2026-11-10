@@ -144,11 +144,11 @@ export interface ChecklistItem {
 
 export type CoverageState = "covered" | "partial" | "missing";
 
-/** The checker's verified reading of one checklist item. Its quote was found in his chat or on the board. */
+/** The checker's verified reading of one checklist item. Its quote was found in his chat, on the board, in the code or in his written answer. */
 export interface StepCheckItem {
   state: CoverageState;
   source: "chat" | "board" | "code" | "notes";
-  /** Round time of the chat line the quote came from; null for the board and the code. */
+  /** Round time of the chat line the quote came from; null for every other source. */
   at: number | null;
   quote: string;
   /** What a partly covered item still lacks, in a few words. */

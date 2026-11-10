@@ -212,16 +212,18 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   be 1 to 200 characters of plain text; for `pass`, `gap` is dropped. It is stored in `Session.stepVerdicts[phase]` as
   `{ verdict, gap?, at }` (`at` is round time in ms) and the session state is broadcast. A pass is final: a later
   `not_yet` for a passed step is refused with an error that says the step already passed and must not be raised again.
-  A `pass` may replace a `not_yet`. The guide calls it once per step check. In the reply to "I'm stuck" a `pass` is
+  A `pass` may replace a `not_yet`. The guide calls it once per step check, and again with `not_yet` after a refused pass. In the reply to "I'm stuck" a `pass` is
   refused, so a model answer never earns one. Each check ends with a verdict. A new `pass` must be supported by the
   checker's reading of the step (`passCheck`): the server first brings the reading up to date (a check runs only when
-  the evidence changed since the last one, and waits at most 60 s), then counts the items read as `covered`. A pass
-  needs at least half of the step's items, rounded up and at least one; Deep dives needs one, because its level bar
-  asks for one deep dive done properly. A partial item does not count. Too few covered items refuse the pass with an
+  the evidence changed since the last finished one, and waits at most 60 s), then counts the items read as `covered`.
+  A pass needs at least half of the step's items, rounded up and at least one (`passNeed`); Deep dives needs one,
+  because its level bar asks for one deep dive done properly, and Extension needs both of its items, because it is
+  done only when the demo runs after the change. A partial item does not count. A step he has said, drawn and
+  written nothing for is refused, and so is a pass after the round ended. Too few covered items refuse the pass with an
   error that gives the count, the items not covered yet, and tells the guide to name the most important one, to keep
   the reading to itself, and to call `recheck_step` once if he covered more than it shows. A step with no checklist,
-  or with no finished reading (the checker failed or never ran), is left to the guide, so a broken checker never locks
-  a step. An accepted pass returns the `steps:` line, so the guide names the steps still open.
+  or whose reading does not match his latest work because the checker failed or ran out of time, is left to the guide,
+  so a broken checker never locks a step. An accepted pass returns the `steps:` line, so the guide names the steps still open.
 - `recheck_step({ phase })` (guide only) -> the phase must belong to the track, else an error that lists the valid
   ids. Reads that step's checklist again from scratch (section 5.11): it bypasses the unchanged-evidence skip, and its
   result replaces the step's items. Any step, not only the current one. It waits for a check of that step that is
@@ -465,11 +467,13 @@ about 300 ms):
 - scribe: ops built from the session (a tracker mark update for the problem's bullet, a session log row, a
   review entry, a notes file create or append).
 - brief-writer: copies the URL shortener fixture with a new id and title.
-- checker: reads whole words only. An item is `covered` when one of his lines, a frame label or a code line holds at
-  least half of the item's words, `partial` when it holds fewer, and it quotes that text exactly. It also claims one
+- checker: reads whole words only. An item is `covered` when one of his lines, a frame label, a code line or a line of
+  his written answer holds at least half of the item's words, `partial` when it holds fewer, and it quotes that text
+  exactly, cut at a word boundary. It also claims one
   more item with a quote he never said, so every run exercises the server's quote check.
 - guide: on "Check this step" it calls `pin_note` with an id that is not on the board (refused), then pins the first
-  labelled box, and calls `step_verdict` (`not_yet` with a gap on the first check of a step, `pass` on the next). An
+  labelled box, and calls `step_verdict` (`not_yet` with a gap on the first check of a step, `pass` on the next, and
+  `not_yet` again when the server refuses that pass). An
   "I'm stuck" request gets a short model answer. judge: pins the first labelled element as held and the second as gap.
 
 Keep the FakeDriver in its own file so the Claude driver has no test-only branches.
@@ -596,10 +600,11 @@ The checker role reads one step against its checklist. It runs:
 - at once for the step he leaves, and for the current step when the round ends;
 - in a guided round, for the current step when he asks for a step check (`guided.feedback`), before the guide answers
   (below);
-- in a guided round, for any step the guide names in a `recheck_step` call.
+- in a guided round, for any step the guide names in a `recheck_step` call;
+- in a guided round, for a step the guide calls `pass` on, when its evidence changed since the last reading.
 It never runs while he talks, draws or types code in a step. A list that ticks as he works acts as a hint, and one
 reading per step is all the debrief and the study notes need.
-A step where he said nothing, drew nothing in its frame and (LLD) has no step code is skipped, so a step he only passes
+A step where he said nothing, drew nothing in its frame, wrote no answer for it and (LLD) has no step code is skipped, so a step he only passes
 through runs no check. A check asked for while one runs for the same step becomes one follow-up with the newest
 evidence, and a caller that waits for the check also waits for that follow-up. A check whose evidence (his chat lines,
 the frame text, the step's code, his written answer) did not change since the last finished check is skipped, unless an image is due.
@@ -648,7 +653,8 @@ during the wait leaves the turn queued until he resumes; an end or a discard dro
 step's checklist as the checker last read it, after a line that gives the round time of that reading: one line per item
 with its id, label, state, where it was found (said at mm:ss, on the board, in the code, in the written answer) and what
 a partial item lacks. It tells the guide that the list is evidence that may lag his latest work, how many items a pass
-needs, and that the server refuses a pass the reading does not support. The request tells the guide to call `step_verdict` once for the step, with one gap on `not_yet`. When no check of
+needs, and that the server refuses a pass the reading does not support. The request tells the guide to call `step_verdict` for the step before it writes the verdict, with one gap on
+`not_yet`, and to call it again with `not_yet` when the server refuses a pass. When no check of
 the step has finished, the body says so instead.
 
 `session.state` carries the checklist as `steps` (`publicSteps` in `src/server/engine/public.ts`), never `checklist` or

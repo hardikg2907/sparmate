@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
-import { HLD_PHASES } from "../../shared/phases";
+import { HLD_PHASES, LLD_PHASES } from "../../shared/phases";
 import type { StepCheck } from "../../shared/types";
 import { MAX_GAP_CHARS, parseStepVerdict, passCheck, passNeed, passRefusalText, recordStepVerdict, stepStatusLine } from "./step-verdict";
 
@@ -82,6 +82,13 @@ describe("passCheck", () => {
     expect([1, 2, 3, 4, 5, 7, 10].map((n) => passNeed({}, n))).toEqual([1, 1, 2, 2, 3, 4, 5]);
     expect(passNeed({}, 0)).toBe(0);
     expect(passNeed({ passNeeds: "one" }, 5)).toBe(1);
+    expect(passNeed({ passNeeds: "all" }, 2)).toBe(2);
+    expect(
+      passNeed(
+        LLD_PHASES.find((p) => p.id === "extend")!,
+        2,
+      ),
+    ).toBe(2);
   });
 
   it("refuses a pass when too few items are covered, and does not count a partial item", () => {
