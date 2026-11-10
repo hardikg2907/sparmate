@@ -34,6 +34,8 @@ import {
 import type { Problem } from "../../shared/problem";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { PrivacyGuard } from "../guard/privacy";
+import type { AttemptView, DrillDetail, RecentAttemptRow } from "../../shared/drills";
+import { attemptView, buildDetail, gymExtras, recentAttempts, type DetailContext } from "./drill-detail";
 import { buildDrill, drillFits, drillsAvailable, topicTitles, variantEntries, type DrillContent } from "./drill-content";
 import { canVaryFrom, pickNext, repickStale } from "./drill-pick";
 import { FirstQuestionSchema, GraderOutputSchema, NextQuestionSchema, cleanQuestion, finishGrade, followUpMessage, graderMessage, type GradedAnswer } from "./drill-grader";
@@ -60,6 +62,8 @@ export interface DrillDeps {
   log: Logger;
   /** Replaceable so a test can pin the day. */
   now?: () => Date;
+  /** Cost in dollars by drill attempt id, read from the usage ledger. Without it no attempt shows a cost. */
+  costs?: () => Promise<ReadonlyMap<string, number>>;
 }
 
 const MOVED = "This drill moved to another problem. Open it again from Practice.";
@@ -245,7 +249,32 @@ export class DrillService {
         .map((p) => ({ id: p.meta.id, title: p.meta.title, track: p.meta.track, drills: drillsAvailable(p) }))
         .sort((a, b) => a.title.localeCompare(b.title)),
       week: weekDrillStats(state.attempts, (this.deps.now ?? (() => new Date()))()),
+      ...gymExtras(state, today, (id) => this.deps.problems.get(id)),
     };
+  }
+
+  private async detailContext(): Promise<DetailContext> {
+    return { problem: (id) => this.deps.problems.get(id), costs: (await this.deps.costs?.()) ?? new Map() };
+  }
+
+  async detail(drillId: string): Promise<DrillDetail> {
+    const state = await this.sync(await this.playable());
+    const detail = buildDetail(state, drillId, this.today(), await this.detailContext());
+    if (!detail) throw new HttpError(404, "That drill was not found.");
+    return detail;
+  }
+
+  async attempts(limit: number): Promise<RecentAttemptRow[]> {
+    return recentAttempts(this.deps.store.snapshot(), limit, await this.detailContext());
+  }
+
+  /** The saved attempt for display. Open and legacy attempts have no body to show. */
+  async attempt(attemptId: string): Promise<AttemptView> {
+    const state = await this.sync(await this.playable());
+    const row = state.attempts.find((a) => a.id === attemptId);
+    const body = row && row.status === "done" && !row.legacy ? await this.deps.store.readBody(attemptId) : null;
+    if (!body) throw new HttpError(404, "No detail was saved for this attempt.");
+    return attemptView(body, state);
   }
 
   /**

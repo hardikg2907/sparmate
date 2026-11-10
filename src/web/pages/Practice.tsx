@@ -6,6 +6,7 @@ import { useGym, type GymData } from "../lib/useGym";
 import { useStudyData, type StudyData } from "../lib/useStudyData";
 import { Link, navigate } from "../router";
 import type { PageContext } from "./context";
+import { RecentAttempts } from "./DrillHistory";
 import { DrillsPanel } from "./Gym";
 import { RoundsPanel } from "./Library";
 
@@ -64,7 +65,10 @@ export function PracticeView({ tab: routeTab, study, gym, ctx }: { tab: Practice
           <RoundsPanel data={study} ctx={ctx} />
         </div>
         <div hidden={tab !== "drills"}>
-          <DrillsPanel data={gym} />
+          <div className="space-y-6">
+            <DrillsPanel data={gym} />
+            {tab === "drills" && gym.gym ? <RecentAttempts /> : null}
+          </div>
         </div>
       </div>
     </PageShell>

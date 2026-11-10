@@ -14,6 +14,7 @@ export const TABS: { href: string; label: string; pages: PageName[]; icon: typeo
 ];
 
 export function currentPage(route: ReturnType<typeof useRoute>): PageName | null {
+  if (route.name === "drill-detail") return "practice-drills";
   return route.name === "session" || route.name === "drill" || route.name === "not-found" ? null : route.name;
 }
 

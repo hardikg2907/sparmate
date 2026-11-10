@@ -1,6 +1,6 @@
 import type { BootstrapResponse, ClientMsg, CreateSessionRequest, CustomProblemJobStatus, ServerMsg } from "../shared/protocol";
 import type { DsaResponse } from "../shared/dsa";
-import type { DrillPrompt, DrillResult, DrillTarget, DrillTurnResponse, GymSummary } from "../shared/drills";
+import type { AttemptView, DrillDetail, DrillPrompt, DrillResult, DrillTarget, DrillTurnResponse, GymSummary, RecentAttemptRow } from "../shared/drills";
 import type { Mode, Track } from "../shared/phases";
 import type { ProblemSummary, PublicSession, SessionHistoryItem, Settings } from "../shared/types";
 
@@ -113,6 +113,9 @@ export const api = {
   code: (id: string) => request<CodeSnapshot>("GET", `/api/sessions/${enc(id)}/code`),
   boardPngUrl: (id: string) => `/api/sessions/${enc(id)}/board-final.png`,
   gym: () => request<GymSummary>("GET", "/api/gym"),
+  gymDrill: (drillId: string) => request<DrillDetail>("GET", `/api/gym/drills/${enc(drillId)}`),
+  gymAttempts: (limit?: number) => request<RecentAttemptRow[]>("GET", `/api/gym/attempts${limit === undefined ? "" : `?limit=${limit}`}`),
+  gymAttempt: (attemptId: string) => request<AttemptView>("GET", `/api/gym/attempts/${enc(attemptId)}`),
   gymPrompt: (target: DrillTarget) => request<DrillPrompt>("POST", "/api/gym/prompt", target),
   gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number, variant: string | null = null, topic?: string) =>
     request<DrillTurnResponse>("POST", "/api/gym/submit", {

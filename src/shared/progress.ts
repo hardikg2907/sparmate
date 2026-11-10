@@ -1,4 +1,5 @@
-import type { Mode } from "./phases";
+import { DRILL_INFO, DRILL_TYPES, addDays, drillSkill, localDay, type DrillAttempt, type DrillOutcome, type DrillPoint, type DrillType } from "./drills";
+import type { Mode, Track } from "./phases";
 import { isAttempt, isOpenRound } from "./today";
 import type { HistoryGap, HistoryScore, SessionHistoryItem } from "./types";
 import { DEFAULT_WEEKLY_PLAN, weekStart, type DayKind } from "./week";
@@ -127,17 +128,79 @@ export function gapForSkill(history: readonly SessionHistoryItem[], skill: { id:
   return null;
 }
 
+/** Each skill row draws at most this many drill marks. */
+export const SKILL_DRILL_MARKS = 8;
+/** Drills of the last this many days (today included) count toward a level and the kind rows. */
+export const DRILL_WINDOW_DAYS = 30;
+/** One drill weighs a quarter of a round in a level. */
+export const DRILL_WEIGHT = 0.25;
+/** The server sends the drill points of the last this many days, and no more than `MAX_DRILL_POINTS`. */
+export const DRILL_POINT_DAYS = 90;
+export const MAX_DRILL_POINTS = 500;
+/** The outcomes a kind row draws as pips. */
+export const KIND_PIPS = 8;
+
+/**
+ * The finished, non-legacy attempts that have scores, as points oldest first. A kind that serves both tracks takes the
+ * track of the attempt's problem through `trackOf`; an attempt whose track is unknown is left out.
+ */
+export function drillPoints(
+  attempts: readonly Pick<DrillAttempt, "day" | "drill" | "problemId" | "status" | "legacy" | "scores" | "outcome" | "revised">[],
+  today: string,
+  trackOf: (problemId: string) => Track | null,
+): DrillPoint[] {
+  const since = addDays(today, -(DRILL_POINT_DAYS - 1));
+  const points: DrillPoint[] = [];
+  for (const a of attempts) {
+    if (a.status !== "done" || a.legacy || a.outcome === null || a.scores.length === 0 || a.day < since) continue;
+    const tracks = DRILL_INFO[a.drill].tracks;
+    const track = tracks.length === 1 ? tracks[0] : trackOf(a.problemId);
+    if (!track) continue;
+    const score = a.scores.reduce((sum, s) => sum + s.score, 0) / a.scores.length;
+    points.push({ day: a.day, kind: a.drill, skill: drillSkill(a.drill, track), score, outcome: a.outcome, firstTry: !a.revised && a.outcome === "ready" });
+  }
+  return points.sort((x, y) => x.day.localeCompare(y.day)).slice(-MAX_DRILL_POINTS);
+}
+
+const byDay = (points: readonly DrillPoint[]) => [...points].sort((a, b) => a.day.localeCompare(b.day));
+
+/**
+ * The weighted mean of the round scores and the drill scores of one skill. Each round weighs 1 and each drill a
+ * quarter, but all drills together weigh at most one round, so a burst of drills never outvotes the rounds.
+ */
+export function skillLevel(roundScores: readonly number[], drillScores: readonly number[]): number {
+  const weight = drillScores.length * DRILL_WEIGHT > 1 ? 1 / drillScores.length : DRILL_WEIGHT;
+  const total = roundScores.reduce((a, b) => a + b, 0) + drillScores.reduce((a, b) => a + b, 0) * weight;
+  return round1(total / (roundScores.length + drillScores.length * weight));
+}
+
+export interface SkillDrill {
+  day: string;
+  score: number;
+  kind: DrillType;
+  outcome: DrillOutcome;
+}
+
 export interface SkillRow {
   id: string;
   name: string;
   /** Oldest first, so the last entry is the newest round. */
   scores: number[];
   latest: number;
+  /** Rounds and drills together, to one decimal; see `skillLevel`. */
+  level: number;
+  /** The newest drills for this skill, oldest first. Empty on the rows of the mode that drills do not join. */
+  drills: SkillDrill[];
 }
 
-/** One row per skill for one mode. The two modes are never mixed, because guided rounds have help built in. */
-export function skillRows(history: readonly SessionHistoryItem[], mode: Mode): { rows: SkillRow[]; rounds: number } {
+/**
+ * One row per skill for one mode. The two modes are never mixed, because guided rounds have help built in. Drills join
+ * only the mode that `scoredRounds` picks, since they are done without help; the other mode stays rounds only.
+ */
+export function skillRows(history: readonly SessionHistoryItem[], mode: Mode, points: readonly DrillPoint[], now: Date): { rows: SkillRow[]; rounds: number } {
   const rounds = scored(history, mode);
+  const withDrills = scoredRounds(history).mode === mode;
+  const since = addDays(localDay(now), -(DRILL_WINDOW_DAYS - 1));
   const order: { id: string; name: string }[] = [];
   for (const round of rounds) for (const s of round.scores ?? []) if (!order.some((o) => o.id === s.id)) order.push({ id: s.id, name: s.name });
   const rows = order.map(({ id, name }): SkillRow => {
@@ -145,9 +208,47 @@ export function skillRows(history: readonly SessionHistoryItem[], mode: Mode): {
       .slice(0, SKILL_DOTS)
       .flatMap((r) => r.scores?.filter((s) => s.id === id).map((s) => s.score) ?? [])
       .reverse();
-    return { id, name, scores, latest: scores[scores.length - 1] ?? 0 };
+    const mine = withDrills ? byDay(points).filter((p) => p.skill === id) : [];
+    const levelRounds = rounds.flatMap((r) => r.scores?.filter((s) => s.id === id).map((s) => s.score) ?? []).slice(0, FOCUS_ROUNDS);
+    const recent = mine.filter((p) => p.day >= since).map((p) => p.score);
+    return {
+      id,
+      name,
+      scores,
+      latest: scores[scores.length - 1] ?? 0,
+      level: levelRounds.length > 0 ? skillLevel(levelRounds, recent) : 0,
+      drills: mine.slice(-SKILL_DRILL_MARKS).map(({ day, score, kind, outcome }) => ({ day, score, kind, outcome })),
+    };
   });
   return { rows: rows.filter((r) => r.scores.length > 0), rounds: rounds.length };
+}
+
+export interface DrillKindRow {
+  kind: DrillType;
+  /** The newest outcomes, oldest first. */
+  outcomes: DrillOutcome[];
+  /** Attempts in the last `DRILL_WINDOW_DAYS` days. */
+  recent: number;
+  /** Interview-ready with no revision, as a share of `recent`; null with no recent attempt. */
+  share: number | null;
+}
+
+/** One row per drill kind that has a point, in the order of the kinds. */
+export function drillKindRows(points: readonly DrillPoint[], today: string): DrillKindRow[] {
+  const since = addDays(today, -(DRILL_WINDOW_DAYS - 1));
+  return DRILL_TYPES.flatMap((kind): DrillKindRow[] => {
+    const mine = byDay(points).filter((p) => p.kind === kind);
+    if (mine.length === 0) return [];
+    const recent = mine.filter((p) => p.day >= since);
+    return [
+      {
+        kind,
+        outcomes: mine.slice(-KIND_PIPS).map((p) => p.outcome),
+        recent: recent.length,
+        share: recent.length > 0 ? recent.filter((p) => p.firstTry).length / recent.length : null,
+      },
+    ];
+  });
 }
 
 export interface WeekStats {

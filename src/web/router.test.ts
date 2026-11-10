@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, beforeEach, vi } from "vitest";
-import { drillPath, guardNavigation, hashSnapshot, legacyTarget, navigate, parseRoute, subscribeToRoute } from "./router";
+import { drillDetailPath, drillPath, guardNavigation, hashSnapshot, legacyTarget, navigate, parseRoute, subscribeToRoute } from "./router";
 
 describe("parseRoute", () => {
   it.each([
@@ -45,6 +45,23 @@ describe("parseRoute", () => {
     const queued = parseRoute("/gym/drill/deep_dive/c2-news-feed/0123456789abcdef/");
     expect(queued).toEqual({ name: "drill", target: { drill: "deep_dive", problemId: "c2-news-feed", drillId: "0123456789abcdef" } });
     if (queued.name === "drill") expect(drillPath(queued.target)).toBe("/gym/drill/deep_dive/c2-news-feed/0123456789abcdef");
+  });
+
+  it("reads the history of a queued drill from the address, and builds the same address back", () => {
+    expect(parseRoute("/practice/drills/0123456789abcdef")).toEqual({ name: "drill-detail", drillId: "0123456789abcdef" });
+    expect(parseRoute("/practice/drills/0123456789abcdef/")).toEqual({ name: "drill-detail", drillId: "0123456789abcdef" });
+    expect(drillDetailPath("0123456789abcdef")).toBe("/practice/drills/0123456789abcdef");
+    expect(legacyTarget("/practice/drills/0123456789abcdef")).toBeNull();
+  });
+
+  it.each([
+    "/practice/drills/zz",
+    "/practice/drills/0123456789ABCDEF",
+    "/practice/drills/0123456789abcdef0",
+    "/practice/drills/0123456789abcdef/x",
+    "/practice/drills/../progress",
+  ])("does not read %s as a drill history", (path) => {
+    expect(parseRoute(path)).toEqual({ name: "not-found" });
   });
 
   it.each(["/gym/drill", "/gym/drill/juggling/c2-url-shortener", "/gym/drill/capacity/../x", "/gym/drill/capacity/c2-url-shortener/zz", "/gym/drill/capacity/C2"])(

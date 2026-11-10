@@ -1,4 +1,5 @@
 import type { GymDrillRow, GymSummary } from "../../shared/drills";
+import { fixtureClosed, fixturePoints } from "./gymHistory";
 
 const TODAY = "2026-11-08";
 
@@ -114,4 +115,6 @@ export const fixtureGym: GymSummary = {
     { id: "b3-parking-lot", title: "Parking Lot", track: "lld", drills: ["tradeoff", "lld_skeleton"] },
   ],
   week: { ready: 2, attempted: 3 },
+  closed: fixtureClosed,
+  points: fixturePoints,
 };

@@ -3,9 +3,11 @@ import type { Root } from "react-dom/client";
 import { AppProviders } from "../components/AppProviders";
 import { PaletteSourceContext } from "../components/CommandPalette";
 import type { DsaData } from "../lib/useDsa";
+import { HistorySourceContext } from "../lib/useDrillHistory";
 import { DueDrillCountContext, type GymData } from "../lib/useGym";
 import type { StudyData } from "../lib/useStudyData";
 import type { Settings } from "../../shared/types";
+import { DrillDetailPage } from "../pages/DrillHistory";
 import { LibraryNewView } from "../pages/LibraryNew";
 import { PracticeView } from "../pages/Practice";
 import { ProgressView } from "../pages/Progress";
@@ -19,6 +21,7 @@ import type { Mode } from "../../shared/phases";
 import type { PublicSession } from "../../shared/types";
 import { FakeServer } from "./fakeServer";
 import { fixtureGym } from "./gym";
+import { fixtureDetail, fixtureHistorySource } from "./gymHistory";
 import { fixtureAllHistory, fixtureBootstrap, fixtureHistory, fixtureOpenRounds, fixtureProblems, fixtureSettings } from "./home";
 import { fixtureDsa } from "./dsa";
 import { useFixtureStudyData } from "./studyData";
@@ -27,7 +30,7 @@ import { fixtureUsage } from "./usage";
 import { LLD_CODE, LLD_FINAL_CODE, withLegacyNotes } from "./sessions";
 import { hldDebrief, hldRoom, lldDebrief, lldRoom } from "./rooms";
 
-export const PAGE_FIXTURES = ["home", "library", "library-new", "progress", "history", "settings", "gym", "dsa"] as const;
+export const PAGE_FIXTURES = ["home", "library", "library-new", "progress", "history", "settings", "gym", "drill-detail", "dsa"] as const;
 const FIXTURE_PATH: Record<string, string> = {
   home: "/",
   library: "/practice",
@@ -36,6 +39,7 @@ const FIXTURE_PATH: Record<string, string> = {
   history: "/progress#history",
   settings: "/settings",
   gym: "/practice/drills",
+  "drill-detail": `/practice/drills/${fixtureDetail.item.id}`,
   dsa: "/progress#dsa",
 };
 export const FIXTURES = ["home", "room-hld", "room-lld", "debrief-hld", "debrief-lld", "usage", "drill-dialogue"] as const;
@@ -256,7 +260,9 @@ function FixturePage({
   return (
     <PaletteSourceContext.Provider value={palette}>
       <DueDrillCountContext.Provider value={fixtureGym.dueCount}>
-        <FixtureBody name={name} data={data} ctx={ctx} now={now} dsa={dsa} gym={gym} settings={settings} testMode={testMode} onSettings={setSettings} firstRun={firstRun} />
+        <HistorySourceContext.Provider value={fixtureHistorySource}>
+          <FixtureBody name={name} data={data} ctx={ctx} now={now} dsa={dsa} gym={gym} settings={settings} testMode={testMode} onSettings={setSettings} firstRun={firstRun} />
+        </HistorySourceContext.Provider>
       </DueDrillCountContext.Provider>
     </PaletteSourceContext.Provider>
   );
@@ -289,6 +295,7 @@ function FixtureBody({
   if (name === "library-new") return <LibraryNewView data={data} ctx={ctx} />;
   if (name === "progress" || name === "history" || name === "dsa") return <ProgressView data={data} ctx={ctx} now={now} dsa={dsa} gym={fixtureGym} />;
   if (name === "gym") return <PracticeView tab="drills" study={data} gym={gym} ctx={ctx} />;
+  if (name === "drill-detail") return <DrillDetailPage ctx={ctx} drillId={fixtureDetail.item.id} />;
   if (name === "settings") {
     return (
       <SettingsView

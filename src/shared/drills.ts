@@ -472,7 +472,114 @@ export interface GymSummary {
   /** Problems a drill may use: played ones and custom ones. */
   problems: { id: string; title: string; track: Track; /** The drills this problem can supply. */ drills: DrillType[] }[];
   week: { ready: number; attempted: number };
+  /** Closed drills, newest first. */
+  closed: GymClosedRow[];
+  /** Finished attempts of the last `DRILL_POINT_DAYS` days, oldest first. Progress counts them in its skill rows. */
+  points: DrillPoint[];
 }
+
+/** Most closed drills a summary lists. */
+export const MAX_CLOSED_ROWS = 50;
+
+export interface GymClosedRow {
+  id: string;
+  gapTitle: string;
+  drill: DrillType;
+  title: string;
+  originProblemTitle: string;
+  /** The day the drill closed. */
+  closedOn: string;
+}
+
+/** One finished drill as Progress counts it: the skill it trains and the mean of its first grade. */
+export interface DrillPoint {
+  day: string;
+  kind: DrillType;
+  /** The round scorecard skill the attempt trained. */
+  skill: string;
+  /** Mean of the first grade's scores, on the 1 to 4 scale. */
+  score: number;
+  outcome: DrillOutcome;
+  /** Interview-ready with no revision. */
+  firstTry: boolean;
+}
+
+export interface DrillScoreView {
+  id: string;
+  label: string;
+  core: boolean;
+  score: number;
+}
+
+/** One finished attempt as the history lists it. The cost comes from the usage ledger. */
+export interface DrillAttemptRow {
+  id: string;
+  at: string;
+  problemTitle: string;
+  variantTitle: string | null;
+  outcome: DrillOutcome;
+  firstOutcome: DrillOutcome | null;
+  revised: boolean;
+  scores: DrillScoreView[];
+  seconds: number | null;
+  costUsd: number | null;
+  legacy: boolean;
+}
+
+/** An attempt row in a list that mixes kinds. */
+export interface RecentAttemptRow extends DrillAttemptRow {
+  drill: DrillType;
+  title: string;
+  drillId: string | null;
+}
+
+export interface DrillDetail {
+  today: string;
+  item: {
+    id: string;
+    drill: DrillType;
+    title: string;
+    gapTitle: string;
+    status: DrillStatus;
+    passes: number;
+    dueOn: string;
+    originProblemTitle: string;
+    /** The problem of the next attempt. */
+    problemId: string;
+    problemTitle: string;
+    variantTitle: string | null;
+    /** The problems, and changed constraints, that earned an Interview-ready result. */
+    proofs: string[];
+  };
+  /** The attempts that counted for this drill, newest first. */
+  attempts: DrillAttemptRow[];
+}
+
+/** One saved attempt for display. `strong` is absent unless the candidate can no longer be asked the question for credit. */
+export interface AttemptView {
+  id: string;
+  drill: DrillType;
+  title: string;
+  problemTitle: string;
+  task: string;
+  changed: string | null;
+  answers: string[];
+  turns: DrillTurn[];
+  grades: { outcome: DrillOutcome; scores: DrillScoreView[]; wentWell: string[]; improve: string[]; yourLine: string; strong?: string }[];
+}
+
+export const DEFAULT_ATTEMPT_LIMIT = 30;
+export const MAX_ATTEMPT_LIMIT = 100;
+
+/** The query of `GET /api/gym/attempts`. A repeated key, an unknown key or a number out of range is refused. */
+export const AttemptsQuerySchema = z.strictObject({
+  limit: z
+    .string()
+    .regex(/^[1-9]\d{0,2}$/)
+    .transform(Number)
+    .pipe(z.number().int().max(MAX_ATTEMPT_LIMIT))
+    .optional(),
+});
 
 export interface DrillPrompt {
   drill: DrillType;

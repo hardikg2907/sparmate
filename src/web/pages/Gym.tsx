@@ -7,6 +7,7 @@ import {
   READY_TO_CLOSE,
   REVISED_INTERVAL_DAYS,
   type DrillType,
+  type GymClosedRow,
   type GymDrillRow,
   type GymSummary,
 } from "../../shared/drills";
@@ -17,7 +18,7 @@ import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Badge, Button, Card, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import type { GymData } from "../lib/useGym";
-import { Link, drillPath } from "../router";
+import { Link, drillDetailPath, drillPath } from "../router";
 
 export const HOW_A_GAP_CLOSES = `Three interview-ready results in a row close the gap, on at least two different problems, and the last one on a first try. Each repeat uses another problem, or the same problem with a changed constraint. After a first-try ready result the next drill comes ${READY_INTERVAL_DAYS[0]} days later, then ${READY_INTERVAL_DAYS[1]}. Getting there, or ready only after a revision, brings it back in ${REVISED_INTERVAL_DAYS} days. Needs work starts again tomorrow.`;
 /** How many drills the "Also due" card lists before it says how many more wait. */
@@ -89,7 +90,51 @@ function GymBody({ gym, onAll }: { gym: GymSummary; onAll: () => void }) {
     <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
       {hero ? <Hero row={hero} today={gym.today} /> : <NothingDue gym={gym} onAll={onAll} />}
       <AlsoDue rows={rest} today={gym.today} onAll={onAll} hasHero={hero !== undefined} />
+      {gym.closed.length > 0 ? <ClosedDrills rows={gym.closed} /> : null}
     </div>
+  );
+}
+
+/** How many closed drills show before the rest wait behind a button. */
+const CLOSED_SHOWN = 5;
+
+/** Drills that reached three interview-ready results. Each links to its history. */
+function ClosedDrills({ rows }: { rows: GymClosedRow[] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows.slice(0, CLOSED_SHOWN);
+  return (
+    <Card variant="raised" className="p-5 sm:p-6 lg:col-span-2" aria-labelledby="closed-drills">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="closed-drills" className="text-lead font-bold">
+          Closed drills
+        </h2>
+        <span className="text-meta text-muted-foreground">{rows.length}</span>
+      </div>
+      <ul className="mt-2 divide-y divide-border/60">
+        {shown.map((row) => (
+          <li key={row.id}>
+            <Link href={drillDetailPath(row.id)} className="-mx-2.5 flex items-center gap-3.5 rounded-lg px-2.5 py-3 transition-colors hover:bg-accent/50">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-primary-soft text-primary-soft-foreground" aria-hidden="true">
+                <DrillIcon drill={row.drill} size={18} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-body font-semibold">{row.title}</span>
+                <span className="block truncate text-meta text-muted-foreground">{row.gapTitle}</span>
+                <span className="block truncate text-meta text-faint">From your round on {row.originProblemTitle}</span>
+              </span>
+              <span className="shrink-0 text-right text-ui text-muted-foreground">Closed {shortDay(parseDay(row.closedOn))}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {rows.length > CLOSED_SHOWN ? (
+        <div className="mt-3 border-t border-border/60 pt-4">
+          <button type="button" aria-expanded={all} onClick={() => setAll((v) => !v)} className="text-ui font-semibold text-primary-text underline-offset-4 hover:underline">
+            {all ? "Show fewer" : `Show all ${rows.length}`}
+          </button>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
@@ -151,12 +196,15 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
           <span>{row.task}</span>
         </p>
       ) : null}
-      <div className="mt-8">
+      <div className="mt-8 flex flex-wrap items-center gap-3">
         <Button asChild size="lg" variant="default">
           <Link href={rowPath(row)}>
             <PlayFilledIcon size={14} />
             Start drill
           </Link>
+        </Button>
+        <Button asChild size="lg" variant="outline">
+          <Link href={drillDetailPath(row.id)}>History</Link>
         </Button>
       </div>
     </section>
@@ -258,6 +306,13 @@ function AlsoDue({ rows, today, onAll, hasHero }: { rows: GymDrillRow[]; today: 
                   {dueText(row, today)}
                   {overdueSince(row, today) ? <small className="block text-meta text-faint">{overdueSince(row, today)}</small> : null}
                 </span>
+              </Link>
+              <Link
+                href={drillDetailPath(row.id)}
+                aria-label={`History of ${row.title}: ${row.gapTitle}`}
+                className="-mt-1.5 mb-2 ml-[3.125rem] inline-block rounded-md py-1 text-ui font-semibold text-primary-text underline-offset-4 hover:underline"
+              >
+                History
               </Link>
             </li>
           ))}

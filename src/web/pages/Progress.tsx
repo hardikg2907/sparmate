@@ -1,10 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DsaResponse } from "../../shared/dsa";
-import type { GymSummary } from "../../shared/drills";
+import { DRILL_INFO, OUTCOME_LABEL, type DrillOutcome, type GymSummary } from "../../shared/drills";
 import type { Mode } from "../../shared/phases";
-import { BAR_SCORE, focusFigure, focusSkill, gapForSkill, skillRows, stepRows, weekStats, type FocusSkill, type SkillRow } from "../../shared/progress";
+import {
+  BAR_SCORE,
+  drillKindRows,
+  focusFigure,
+  focusSkill,
+  gapForSkill,
+  skillRows,
+  stepRows,
+  weekStats,
+  type DrillKindRow,
+  type FocusSkill,
+  type SkillRow,
+} from "../../shared/progress";
 import { redoQueue, type RedoEntry } from "../../shared/today";
 import { weekStart } from "../../shared/week";
+import { DrillIcon } from "../components/DrillIcon";
 import { PlayFilledIcon, TargetIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
 import { SidePanel } from "../components/SidePanel";
@@ -101,7 +114,21 @@ function SubNav() {
   );
 }
 
-export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { data: StudyData; ctx: PageContext; now?: Date; dsa: DsaData; gym?: GymSummary | null }) {
+export function ProgressView({
+  data,
+  ctx,
+  now: fixedNow,
+  dsa,
+  gym = null,
+  gymError = null,
+}: {
+  data: StudyData;
+  ctx: PageContext;
+  now?: Date;
+  dsa: DsaData;
+  gym?: GymSummary | null;
+  gymError?: string | null;
+}) {
   const liveNow = useNow();
   const now = fixedNow ?? liveNow;
   const { problems, history, error } = data;
@@ -114,7 +141,9 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { da
   const queue = useMemo(() => (problems && history ? redoQueue(problems, history) : []), [problems, history]);
   const stats = useMemo(() => weekStats(history ?? [], ctx.settings.weeklyPlan, now), [history, ctx.settings.weeklyPlan, now]);
   const mode = skillMode ?? focus?.mode ?? "interview";
-  const rows = useMemo(() => skillRows(history ?? [], mode), [history, mode]);
+  const points = gym?.points;
+  const rows = useMemo(() => skillRows(history ?? [], mode, points ?? [], now), [history, mode, points, now]);
+  const kinds = useMemo(() => (gym ? drillKindRows(gym.points, gym.today) : null), [gym]);
   const gap = focus && history ? gapForSkill(history, focus) : null;
   const settled = history !== null && !dsa.loading;
 
@@ -169,7 +198,10 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { da
           {history === null && !error ? (
             <Skeleton className="h-72 rounded-xl" role="status" />
           ) : (
-            <SkillsCard rows={rows.rows} rounds={rows.rounds} mode={mode} onMode={setSkillMode} />
+            <div className="space-y-6">
+              <SkillsCard rows={rows.rows} rounds={rows.rounds} mode={mode} onMode={setSkillMode} />
+              <DrillKindsCard kinds={kinds} failed={gymError !== null} />
+            </div>
           )}
         </section>
         <div className="pt-8">
@@ -203,11 +235,11 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { da
 export function ProgressPage({ ctx }: { ctx: PageContext }) {
   const data = useStudyData();
   const dsa = useDsa(ctx.settings.leetcodeUsername !== undefined, ctx.settings.leetcodeUsername);
-  const { gym } = useGym();
+  const { gym, error } = useGym();
   useEffect(() => {
     document.title = "Progress · Sparmate";
   }, []);
-  return <ProgressView data={data} ctx={ctx} dsa={dsa} gym={gym} />;
+  return <ProgressView data={data} ctx={ctx} dsa={dsa} gym={gym} gymError={error} />;
 }
 
 function WeekStats({
@@ -385,11 +417,13 @@ function SkillsCard({ rows, rounds, mode, onMode }: { rows: SkillRow[]; rounds: 
     <Card variant="raised" className="p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lead font-semibold">
-          Latest score per skill
-          <InfoTip label="About the scores">
-            <span className="block">
+          Level per skill
+          <InfoTip label="About the levels">
+            <span className="block">Your last 3 rounds, plus drills from the last 30 days at a lower weight.</span>
+            <span className="mt-2 block">Drills count in the Interview view, or in the Guided view when you have no interview round.</span>
+            <span className="mt-2 block">
               Scores run from 1 to 4: {SCORE_WORD[1]?.toLowerCase()}, {SCORE_WORD[2]?.toLowerCase()}, {SCORE_WORD[3]?.toLowerCase()}, {SCORE_WORD[4]?.toLowerCase()}. The dashed
-              line is the bar for your target level. Each dot is one round, and the newest is bold.
+              line is the bar for your target level. Each dot is one round, and the newest is bold. Each diamond is one drill.
             </span>
           </InfoTip>
         </h2>
@@ -417,34 +451,106 @@ function SkillsCard({ rows, rounds, mode, onMode }: { rows: SkillRow[]; rounds: 
         <span>
           {rounds} {MODE_LABEL[mode].toLowerCase()} {rounds === 1 ? "round" : "rounds"} so far
         </span>
-        <span>Dashed line: target bar</span>
+        <span>Dots: rounds. Diamonds: drills. Dashed line: target bar</span>
       </div>
     </Card>
   );
 }
 
+const toneOf = (score: number) => (score >= BAR_SCORE ? "bg-success-fill" : score >= 2 ? "bg-warning-fill" : "bg-destructive-fill");
+
 function SkillLine({ row }: { row: SkillRow }) {
   const at = (score: number) => `${((score - 1) / 3) * 100}%`;
-  const tone = row.latest >= BAR_SCORE ? "bg-success-fill" : row.latest === 2 ? "bg-warning-fill" : "bg-destructive-fill";
+  const tone = toneOf(row.level);
+  const level = row.level.toFixed(1);
   return (
-    <li className="grid grid-cols-[minmax(0,9.5rem)_minmax(0,1fr)_1.5rem] items-center gap-x-4 py-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_1.5rem]">
+    <li className="grid grid-cols-[minmax(0,9.5rem)_minmax(0,1fr)_2.25rem] items-center gap-x-4 py-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_2.25rem]">
       <span className="truncate text-ui text-foreground">{row.name}</span>
-      <span className="relative block h-5" role="img" aria-label={`${row.name}: ${row.scores.join(", then ")} of 4, newest last`}>
-        <span className="absolute inset-x-0 top-1/2 h-px bg-border-strong/60" />
-        <span className="absolute -inset-y-0.5 border-l border-dashed border-success-fill/80" style={{ left: at(BAR_SCORE) }} />
-        {row.scores.map((score, index) => {
-          const newest = index === row.scores.length - 1;
-          return (
-            <span
-              key={index}
-              className={cn("absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full", newest ? `size-3 ${tone}` : `size-2 opacity-40 ${tone}`)}
-              style={{ left: at(score) }}
-            />
-          );
-        })}
+      <span className="block">
+        <span className="relative block h-5" role="img" aria-label={`${row.name}: ${row.scores.join(", then ")} of 4, newest last`}>
+          <span className="absolute inset-x-0 top-1/2 h-px bg-border-strong/60" />
+          <span className="absolute -inset-y-0.5 border-l border-dashed border-success-fill/80" style={{ left: at(BAR_SCORE) }} />
+          {row.scores.map((score, index) => {
+            const newest = index === row.scores.length - 1;
+            return (
+              <span
+                key={index}
+                className={cn("absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full", newest ? `size-3 ${tone}` : `size-2 opacity-40 ${tone}`)}
+                style={{ left: at(score) }}
+              />
+            );
+          })}
+        </span>
+        {row.drills.length > 0 ? (
+          <span className="relative block h-3.5">
+            {row.drills.map((drill, index) => {
+              const score = round1(drill.score);
+              return (
+                <span
+                  key={index}
+                  role="img"
+                  aria-label={`Drill, ${DRILL_INFO[drill.kind].title}, ${score.toFixed(1)}, ${OUTCOME_LABEL[drill.outcome]}`}
+                  title={`${DRILL_INFO[drill.kind].title}, ${score.toFixed(1)}`}
+                  className={cn("absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45", toneOf(drill.score))}
+                  style={{ left: at(drill.score) }}
+                />
+              );
+            })}
+          </span>
+        ) : null}
       </span>
-      <span className="text-right text-body font-bold tabular-nums">{row.latest}</span>
+      <span className="text-right text-body font-bold tabular-nums" aria-label={`${row.name} level ${level} of 4`}>
+        {level}
+      </span>
     </li>
+  );
+}
+
+const PIP_TONE: Record<DrillOutcome, string> = { ready: "bg-success-fill", getting_there: "bg-amber", needs_work: "bg-destructive-fill" };
+
+function DrillKindsCard({ kinds, failed }: { kinds: DrillKindRow[] | null; failed: boolean }) {
+  return (
+    <Card variant="raised" className="p-5 sm:p-6" aria-labelledby="drill-kinds-title">
+      <h2 id="drill-kinds-title" className="text-lead font-semibold">
+        Drills by kind
+      </h2>
+      {kinds === null && !failed ? (
+        <div role="status" className="mt-4">
+          <span className="sr-only">Loading drill results…</span>
+          <Skeleton className="h-24" />
+        </div>
+      ) : kinds === null ? (
+        <p className="mt-3 text-ui text-muted-foreground">The drill results could not be loaded.</p>
+      ) : kinds.length === 0 ? (
+        <p className="mt-3 text-ui text-muted-foreground">No drill has been graded yet. Each kind you try shows its last results here.</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-border/60">
+          {kinds.map((row) => (
+            <li key={row.kind}>
+              <Link href="/practice/drills" className="-mx-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-2.5 py-3 transition-colors hover:bg-accent/50">
+                <span className="flex min-w-0 flex-1 basis-44 items-center gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-soft-foreground" aria-hidden="true">
+                    <DrillIcon drill={row.kind} size={16} />
+                  </span>
+                  <span className="truncate text-body font-semibold">{DRILL_INFO[row.kind].title}</span>
+                </span>
+                <ol aria-label="Last results, oldest first" className="inline-flex gap-1">
+                  {row.outcomes.map((outcome, index) => (
+                    <li key={index} className={cn("h-2 w-4 rounded-sm", PIP_TONE[outcome])}>
+                      <span className="sr-only">{OUTCOME_LABEL[outcome]}</span>
+                    </li>
+                  ))}
+                </ol>
+                <span className="text-ui text-muted-foreground">
+                  {row.recent} {row.recent === 1 ? "attempt" : "attempts"} in 30 days
+                  {row.share !== null ? `, ${Math.round(row.share * 100)}% ready on the first try` : ""}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
