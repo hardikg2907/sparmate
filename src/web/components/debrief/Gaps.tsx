@@ -183,9 +183,9 @@ function GapRow({ gap, index, state, mark, severity, actions }: { gap: Gap; inde
           <ChevronDownIcon size={14} className={cn("shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
         </button>
         {/* The lesson starts from the row, so a gap never has to be opened to be taught. The open body has its own. */}
-        {open || state === "done" ? null : (
+        {open || state === "done" || state === "practised" ? null : (
           <span className="ml-auto">
-            <PrimaryAction gap={gap} state={state} actions={actions} size="sm" />
+            <PrimaryAction gap={gap} state={state} mark={mark} actions={actions} size="sm" />
           </span>
         )}
       </div>
