@@ -130,7 +130,7 @@ export function attemptView(body: AttemptBody, state: DrillState, today: string)
       wentWell: [...g.wentWell],
       improve: [...g.improve],
       yourLine: g.yourLine,
-      ...(showStrong && g.strong !== "" ? { strong: g.strong } : {}),
+      ...(showStrong ? (g.strong !== "" ? { strong: g.strong } : { noStrong: true }) : {}),
     })),
   };
 }

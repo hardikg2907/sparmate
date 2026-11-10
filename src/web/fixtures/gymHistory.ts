@@ -117,6 +117,7 @@ const BODIES: Record<string, AttemptView> = {
         wentWell: ["The order of the boxes is right."],
         improve: ["Say what each box reads and writes.", "Name the slowest step."],
         yourLine: "It reads the cache, and on a miss it reads a replica.",
+        noStrong: true,
       },
       {
         outcome: "ready",
