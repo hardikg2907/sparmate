@@ -377,7 +377,7 @@ function DrillsSection({ drills }: { drills: UsageSummaryResponse["drills"] }) {
         <>
           <Card variant="raised" className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <StatCell index={0} label="Drill cost" value={usd(drills.cost)} subtext="Spent grading answers" />
-            <StatCell index={1} label="Attempts" value={drills.attempts.toLocaleString()} subtext="Drills graded with an id" />
+            <StatCell index={1} label="Attempts" value={drills.attempts.toLocaleString()} subtext="Drills sent for grading" />
             <StatCell
               index={2}
               label="Grader calls"
