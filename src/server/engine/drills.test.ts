@@ -1234,17 +1234,51 @@ describe("dialogue drills", () => {
 
   describe("one question at a time", () => {
     /** A service whose interviewer answers from a script and records each message it was sent. */
-    const scripted = (answers: (string | Error)[], next = false) => {
+    const scripted = (answers: (string | Error | null)[], next = false) => {
       const sent: string[] = [];
       const svc = service2(async (setup) => {
         if (!setup.fake.drillFollowUp) return undefined;
         sent.push(setup.turn.text);
-        const answer = answers.shift() ?? "Spare?";
+        const answer = answers.length > 0 ? answers.shift() : "Spare?";
         if (answer instanceof Error) throw answer;
+        // null stands for "no more questions" on a later turn.
+        if (answer === null || answer === undefined) return { another: false, question: "" };
         return next && setup.fake.drillFollowUp.asked > 0 ? { another: true, question: answer } : { question: answer };
       });
       return { svc, sent };
     };
+
+    it("salvages a flawed reply that follows a failed call, with no third call", async () => {
+      const { svc, sent } = scripted([new DriverError("down"), "Which store would you pick, and why?"]);
+      expect(question(await svc.submit(free, OPEN)).question).toBe("Which store would you pick?");
+      expect(sent).toHaveLength(2);
+      expect(sent[1]).not.toContain("rejected_question");
+    });
+
+    it("grades the conversation when the second call says no more question is needed", async () => {
+      const { svc, sent } = scripted(["Why that store?", "What breaks first, and how would you see it?", null], true);
+      const q1 = question(await svc.submit(free, OPEN));
+      expect(result(await svc.reply(q1.attemptId, 1, SHORT_REPLY)).turns).toHaveLength(3);
+      expect(sent).toHaveLength(3);
+    });
+
+    it.each([
+      ["statement", "Your design is just a cache, so what happens on a miss?"],
+      ["opener", "The hardest part of this problem is the counter. Where does it live?"],
+      ["key", "What does each insert of a fresh random code cost at peak?"],
+    ] as const)("sends the %s reason with the rejected question", async (problem, first) => {
+      const { svc, sent } = scripted([first, "Where does the counter live?"]);
+      expect(question(await svc.submit(free, OPEN)).question).toBe("Where does the counter live?");
+      expect(sent[1]).toContain(QUESTION_PROBLEMS[problem]);
+    });
+
+    it("counts words the candidate wrote in a reply as theirs", async () => {
+      const { svc, sent } = scripted(["Why that store?", "What does each insert of a fresh random code cost at peak?"], true);
+      const q1 = question(await svc.submit(free, OPEN));
+      const q2 = question(await svc.reply(q1.attemptId, 1, "On a clash I insert again with a fresh random code."));
+      expect(q2.question).toBe("What does each insert of a fresh random code cost at peak?");
+      expect(sent).toHaveLength(2);
+    });
 
     it("asks again once with the reason when a question asks two things, and uses the new one", async () => {
       const { svc, sent } = scripted(["Where does the write go, and what does the reader see?", "Where does the write go?"]);

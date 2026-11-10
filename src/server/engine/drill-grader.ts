@@ -120,38 +120,179 @@ export function dropKeyReveals(lines: readonly string[], key: string, known: str
   });
 }
 
-/**
- * A question builds on the candidate's own words, so it may bring in fewer key words than a feedback line before it
- * counts as handing over a mechanism the candidate never wrote.
- */
-export const QUESTION_REVEAL_WORDS = 2;
-
 export type QuestionProblem = "two" | "opener" | "statement" | "key";
 
 /** Why a question was not used, in words the model reads when it is asked again. */
 export const QUESTION_PROBLEMS: Record<QuestionProblem, string> = {
-  two: 'it asks two things at once. Ask one question with one question mark and no second clause joined by "and".',
+  two: 'it asks two things at once. Ask one question with one question mark, no second clause joined by "and", and nothing after the question mark.',
   opener: "it opens by telling the candidate what the hard part of the problem is. Ask about what the candidate wrote.",
   statement: "it tells the candidate what their design is. Quote or name only what the candidate wrote, then ask.",
   key: "it names something from the reference that the candidate did not write. Ask what happens, what it costs or why, in the candidate's own terms.",
 };
 
-// The input is model output capped by its schema; each pattern is anchored or has bounded repeats, so none can backtrack badly.
-const JOINED = /,\s+and\s+(?:what|how|why|where|which|when|who|whose|does|do|did|is|are|was|were|can|could|would|will|should|has|have)\b/i;
-const OPENER = /^the\s+(?:hardest|hard|tricky|trickiest|key|main|real|core|central|crux)\b/i;
-const STATEMENT = /\byour\s+(?:[a-z-]+\s+){0,2}is\s+(?:a|an|just|really|actually)\s/i;
+// The input is model output capped by its schema. In each pattern below no two repeats can match the same characters,
+// and nested repeats are bounded, so none can backtrack badly.
+const AUX = "(?:does|do|did|is|are|was|were|can|could|would|will|should|has|have|might|must)";
+/** Where a question starts: a question word, "where" or "when" with a verb, or a verb before its subject. */
+const QUESTION_START = new RegExp(
+  `^(?:(?:so|and|but|then)\\s+)?${AUX}\\s+\\S|(?:^|[,:]\\s+)(?:(?:so|and|but|then)\\s+)?(?:(?:what|which|who|whose|how|why)\\b|(?:where|when)\\s+${AUX}\\b|${AUX}\\s+(?:you|it|this|that|these|those|the|a|an|your|they|we|there|each|every|one)\\b)`,
+  "i",
+);
+/** A second question joined to the first: ", and what ...", "and why?", "; how ...". */
+const SECOND = new RegExp(
+  `(?:,\\s+and\\s+(?:what|which|who|whose|how|why|where|when|if|whether|${AUX})\\b|\\s+and\\s+(?:what|which|how|why|where|when)\\b(?=\\s*\\?|\\s+${AUX}\\b)|;\\s*(?:what|which|who|how|why|where|when|${AUX})\\b)`,
+  "i",
+);
+const OPENER =
+  /^(?:(?:so|now|well|here|okay|ok),?\s+)?the\s+(?:(?:hardest|hard|trickiest|tricky|key|main|real|core|central|biggest)\s+(?:part|problem|challenge|issue|difficulty|question|risk|catch)|crux)\b/i;
+const STATEMENT = /\byour\s+((?:[a-z-]+\s+){0,2})is\s+(?:a|an|just|really|actually|basically|essentially)\s+([a-z-]+(?:\s+[a-z-]+){0,2})/i;
+/** A subject that is the candidate's whole design, so naming what it "is" tells them their design. */
+const DESIGN_WORDS = new Set(["design", "approach", "plan", "solution", "system", "architecture", "answer", "idea", "model", "scheme", "strategy"]);
+/** Words too common to name a mechanism when two of them sit side by side. */
+const PAIR_FILLER = new Set([
+  "that",
+  "with",
+  "from",
+  "your",
+  "into",
+  "them",
+  "what",
+  "when",
+  "this",
+  "they",
+  "each",
+  "then",
+  "than",
+  "have",
+  "will",
+  "make",
+  "more",
+  "only",
+  "also",
+  "does",
+  "over",
+  "just",
+  "about",
+  "would",
+  "could",
+  "should",
+  "there",
+  "their",
+  "which",
+  "where",
+  "while",
+  "after",
+  "before",
+  "being",
+  "been",
+  "were",
+  "happens",
+  "happen",
+  "same",
+  "other",
+  "every",
+  "some",
+  "many",
+  "much",
+  "most",
+  "still",
+]);
+const QUESTION_NUMBER_DIGITS = 3;
+const QUESTION_WORD_CHARS = 6;
+const STATEMENT_WORD_CHARS = 7;
+/** A question builds on the candidate's own words, so fewer key words than in a feedback line already give it away. */
+export const QUESTION_REVEAL_WORDS = 2;
 
-function problemOf(text: string, key: string, known: string): QuestionProblem | null {
-  if (dropKeyCopies([text], key).length === 0 || dropKeyReveals([text], key, known, QUESTION_REVEAL_WORDS).length === 0) return "key";
-  if (OPENER.test(text)) return "opener";
-  if (STATEMENT.test(text)) return "statement";
-  if ((text.match(/\?/g) ?? []).length > 1 || sentences(text).some((x) => x.endsWith("?") && JOINED.test(x))) return "two";
-  return null;
+function numbers(text: string): Set<string> {
+  return new Set((text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => n.replace(/,/g, "").replace(/\.$/, "")));
+}
+
+function pairs(words: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i + 1 < words.length; i++) out.add(`${words[i]} ${words[i + 1]}`);
+  return out;
+}
+
+/**
+ * Whether a question brings in part of the key the candidate did not write and was not shown: a number of three
+ * digits or more, two longer words, or two words side by side as the key has them (a mechanism's name, such as
+ * "<adjective> <noun>", is often two short words).
+ */
+function questionReveals(text: string, key: string, known: string): boolean {
+  const seenNumbers = numbers(known);
+  const keyNumbers = numbers(key);
+  for (const n of numbers(text)) {
+    if (n.replace(/\D/g, "").length >= QUESTION_NUMBER_DIGITS && keyNumbers.has(n) && !seenNumbers.has(n)) return true;
+  }
+  const words = (line: string) => tokens(line).filter((w) => !/[0-9]/.test(w));
+  const keyWords = words(key);
+  const inKey = new Set(keyWords);
+  const seen = new Set(tokens(known));
+  const asked = words(text);
+  const fresh = new Set(asked.filter((w) => inKey.has(w) && !seen.has(w) && w.length >= QUESTION_WORD_CHARS));
+  if (fresh.size >= QUESTION_REVEAL_WORDS) return true;
+  const keyPairs = pairs(keyWords);
+  for (let i = 0; i + 1 < asked.length; i++) {
+    const a = asked[i] ?? "";
+    const b = asked[i + 1] ?? "";
+    if (a.length < 4 || b.length < 4 || PAIR_FILLER.has(a) || PAIR_FILLER.has(b)) continue;
+    if ((!seen.has(a) || !seen.has(b)) && keyPairs.has(`${a} ${b}`)) return true;
+  }
+  return false;
+}
+
+/** The positions of the question marks that are not inside a quote, so a quoted question is the candidate's own words. */
+function marksOutsideQuotes(text: string): number[] {
+  const marks: number[] = [];
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') quoted = !quoted;
+    else if (c === "“") quoted = true;
+    else if (c === "”") quoted = false;
+    else if (c === "?" && !quoted) marks.push(i);
+  }
+  return marks;
 }
 
 /** A setup sentence may join clauses with "and"; only the sentence that asks can hold a second question. */
 function sentences(text: string): string[] {
   return text.split(/(?<=[.!?])\s+/);
+}
+
+/** Where a second question starts inside the asking sentence, or -1. It counts only after a real question start. */
+function secondAt(ask: string): number {
+  const second = SECOND.exec(ask);
+  if (!second) return -1;
+  return QUESTION_START.test(ask.slice(0, second.index)) ? second.index : -1;
+}
+
+function statesDesign(text: string, key: string, known: string): boolean {
+  const m = STATEMENT.exec(text);
+  if (!m) return false;
+  const subject = (m[1] ?? "").toLowerCase().split(/\s+/);
+  if (subject.some((w) => DESIGN_WORDS.has(w))) return true;
+  // Otherwise the statement names a mechanism only when its words come from the key: one long word, or two side by side.
+  const keyWords = tokens(key);
+  const inKey = new Set(keyWords);
+  const keyPairs = pairs(keyWords);
+  const seen = new Set(tokens(known));
+  const named = tokens(m[2] ?? "");
+  if (named.some((w) => w.length >= STATEMENT_WORD_CHARS && inKey.has(w) && !seen.has(w))) return true;
+  return named.some((w, i) => i + 1 < named.length && (!seen.has(w) || !seen.has(named[i + 1] ?? "")) && keyPairs.has(`${w} ${named[i + 1]}`));
+}
+
+/** The first rule a question breaks, checked in this order, or null. */
+function problemOf(text: string, key: string, known: string): QuestionProblem | null {
+  if (dropKeyCopies([text], key).length === 0 || questionReveals(text, key, known)) return "key";
+  if (OPENER.test(text)) return "opener";
+  if (statesDesign(text, key, known)) return "statement";
+  const marks = marksOutsideQuotes(text);
+  const first = marks[0] ?? -1;
+  const after = first >= 0 ? text.slice(first + 1).replace(/^["')\]”\s]+/, "") : "";
+  if (marks.length > 1 || after !== "") return "two";
+  const ask = sentences(first >= 0 ? text.slice(0, first + 1) : text).at(-1) ?? "";
+  return secondAt(ask) >= 0 ? "two" : null;
 }
 
 export interface QuestionReview {
@@ -163,29 +304,31 @@ export interface QuestionReview {
 /**
  * Checks a follow-up question from the model. An interviewer asks one thing at a time, never tells the candidate what
  * their design is or where the difficulty lies, and never brings in the key. `known` is what the candidate wrote and
- * was shown: words from it are never a giveaway. Control characters go, the length is capped and private names are
- * redacted. Null when nothing is left.
+ * was shown: words from it are never a giveaway. Control characters go, private names are redacted before the
+ * length is capped, so a cut never leaves part of a name. Null when nothing is left.
  */
 export function reviewQuestion(raw: string, key: string, known: string, redact: (text: string) => string): QuestionReview | null {
-  const flat = flatQuestion(raw);
-  const question = redact(clip(flat, SHOWN_QUESTION_CHARS));
+  const flat = redact(flatQuestion(raw));
+  const question = clip(flat, SHOWN_QUESTION_CHARS);
   if (question === "") return null;
-  return { question, problem: problemOf(redact(flat), key, known) };
+  return { question, problem: problemOf(flat, key, known) };
 }
 
 /**
- * The question to show when the model asked a flawed one twice. A question of two parts keeps its first part; anything
- * that still breaks a rule after that becomes the fixed question, so a question never hands the key back.
+ * The question to show when the model asked a flawed one twice. It keeps the text up to the first question mark and
+ * cuts a second question joined to the first. When what is left is not a question, has an open quote, or still
+ * breaks a rule, the fixed question stands in, so a question never hands the key back.
  */
 export function salvageQuestion(raw: string, key: string, known: string, redact: (text: string) => string): string {
   const flat = redact(flatQuestion(raw));
-  const mark = flat.indexOf("?");
-  const parts = sentences(mark >= 0 ? flat.slice(0, mark + 1) : flat);
+  const first = marksOutsideQuotes(flat)[0] ?? -1;
+  const parts = sentences(first >= 0 ? flat.slice(0, first + 1) : flat);
   const ask = parts.at(-1) ?? "";
-  const joined = JOINED.exec(ask);
-  if (joined) parts[parts.length - 1] = `${ask.slice(0, joined.index).trimEnd()}?`;
+  const cut = secondAt(ask);
+  if (cut >= 0) parts[parts.length - 1] = `${ask.slice(0, cut).trimEnd()}?`;
   const text = parts.join(" ");
-  if (text === "" || text === "?" || problemOf(text, key, known) !== null) return FALLBACK_QUESTION;
+  const quotes = (text.match(/"/g) ?? []).length % 2 === 0 && (text.match(/“/g) ?? []).length === (text.match(/”/g) ?? []).length;
+  if (!text.endsWith("?") || !quotes || !QUESTION_START.test(parts.at(-1) ?? "") || problemOf(text, key, known) !== null) return FALLBACK_QUESTION;
   return clip(text, SHOWN_QUESTION_CHARS);
 }
 

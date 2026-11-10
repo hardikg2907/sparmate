@@ -416,18 +416,66 @@ describe("reviewQuestion", () => {
   });
 
   it("flags a question that tells the candidate what their design is", () => {
-    expect(review("Your store is a write-behind queue. What happens when it fills?")?.problem).toBe("statement");
     expect(review("Your design is just a cache, so what happens on a miss?")?.problem).toBe("statement");
+    // A word from the key the candidate never wrote, named as what their part is.
+    expect(review("Your store is a counter with leases. What happens when one is lost?")?.problem).toBe("statement");
   });
 
-  it("flags a question that brings in the key", () => {
-    expect(review("Is a counter encoded in base62 with ranges your plan?")?.problem).toBe("key");
-    // Two longer key words the candidate never wrote: the mechanism itself.
-    expect(review("What if each server got ranges handed out ahead of time?")?.problem).toBe("key");
-    // A number from the key is a giveaway on its own.
-    expect(review("What happens after 300 seconds?")?.problem).toBe("key");
-    // Words the candidate wrote, or the drill showed, are never a giveaway.
-    expect(review("What does encoding cost when the sequence is the database's own?")?.problem).toBeNull();
+  it("passes a question that restates the candidate's own part", () => {
+    expect(review("If your primary is a single machine, what happens when it dies?")?.problem).toBeNull();
+    expect(review("What happens when your replica is a minute behind?")?.problem).toBeNull();
+  });
+
+  it("flags text after the question mark, which can carry a hint or a second ask", () => {
+    expect(review("What happens to the old primary after the switch? Think about a lease.")?.problem).toBe("two");
+    expect(review("What happens when the database is slow? Also walk me through recovery.")?.problem).toBe("two");
+    expect(review('What did you mean by "fast enough?"')?.problem).toBeNull();
+  });
+
+  it.each([
+    ["and why with no comma", "Which store would you choose and why?"],
+    ["and how with a verb", "What breaks first and how would you notice it?"],
+    ["a joined if", "Where does it go, and if it fails, what happens?"],
+    ["a semicolon", "What does it cost; how would you measure it?"],
+  ])("flags %s as two questions", (_n, q) => {
+    expect(review(q)?.problem).toBe("two");
+  });
+
+  it("does not read a clause inside a condition as a second question", () => {
+    expect(review("If a writer crashes, and is restarted, what does the reader see?")?.problem).toBeNull();
+    expect(review("When the leader dies, and can't be reached, who takes over?")?.problem).toBeNull();
+  });
+
+  it("counts a question mark inside a quote as the candidate's words", () => {
+    expect(review('You wrote "why not shard?". What happens at ten times the load?')?.problem).toBeNull();
+  });
+
+  it("flags an opener only when it names the difficulty", () => {
+    expect(review("So the hardest part of this problem is the sequence. Where would you keep it?")?.problem).toBe("opener");
+    expect(review("The main database fails over. What does a reader see during the switch?")?.problem).toBeNull();
+    expect(review("The key you store per user expires. What does the next read return?")?.problem).toBeNull();
+  });
+
+  it("flags a mechanism named in two words as the key has them", () => {
+    const k = "Place keys with consistent hashing and virtual nodes, so a new node moves only a slice of the keys.";
+    const kn = "I would hash each key to a node with a router.";
+    expect(review("What would virtual nodes change about the load per shard?", k, kn)?.problem).toBe("key");
+    expect(review("What would consistent hashing change here?", k, kn)?.problem).toBe("key");
+    expect(review("What happens to the router when a node is added?", k, kn)?.problem).toBeNull();
+  });
+
+  it("counts only numbers of three digits or more from the key in a question", () => {
+    const k = "A node takes 4,000 writes a second, so 10 nodes cover the peak.";
+    expect(review("What if one node of 4 dies?", k, "")?.problem).toBeNull();
+    expect(review("What happens at 10 times the load?", k, "")?.problem).toBeNull();
+    expect(review("What happens past 4,000 writes a second?", k, "")?.problem).toBe("key");
+    expect(review("What happens past 4000 writes a second?", k, "I said 4,000 writes a second for a node.")?.problem).toBeNull();
+  });
+
+  it("redacts before it clips, so a cut never shows part of a name", () => {
+    const raw = `${"x".repeat(292)} Alexandria knows?`;
+    const out = reviewQuestion(raw, key, known, (t) => t.replace("Alexandria", "[name]"))?.question ?? "";
+    expect(out).not.toMatch(/Alexand/);
   });
 });
 
@@ -444,6 +492,15 @@ describe("salvageQuestion", () => {
   it("cuts only the sentence that asks, never a setup sentence", () => {
     const q = "Orders come from web and phone, and where they land matters for refunds. Which store would you choose, and why?";
     expect(salvageQuestion(q, key, known, same)).toBe("Orders come from web and phone, and where they land matters for refunds. Which store would you choose?");
+  });
+
+  it("redacts the salvaged question", () => {
+    expect(salvageQuestion("Did Dana pick it, and why?", key, known, (t) => t.replace("Dana", "[name]"))).toBe("Did [name] pick it?");
+  });
+
+  it("falls back when what is left is not a question or leaves a quote open", () => {
+    expect(salvageQuestion('You wrote "why not shard? What happens then?', key, known, same)).toBe(FALLBACK_QUESTION);
+    expect(salvageQuestion("Walk me through it, and what happens on a retry", key, known, same)).toBe(FALLBACK_QUESTION);
   });
 
   it("falls back to the fixed question when the first part still breaks a rule", () => {
