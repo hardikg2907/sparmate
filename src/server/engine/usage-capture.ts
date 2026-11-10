@@ -160,6 +160,14 @@ export function attachFailureStats<E extends object>(err: E, stats: TurnStats): 
   return err;
 }
 
+/**
+ * Stats for a call whose process stopped before any result. Nothing is known to be billed, so the cost is 0 and not
+ * unknown: an unknown cost would be priced from the tokens and flagged as an estimate, and there are no tokens.
+ */
+export function noResultStats(startedMs: number, model: string): TurnStats {
+  return { durationMs: Date.now() - startedMs, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, model };
+}
+
 export function failureStats(err: unknown): TurnStats | null {
   return typeof err === "object" && err !== null ? (failedCallStats.get(err) ?? null) : null;
 }

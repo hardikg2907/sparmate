@@ -1154,7 +1154,8 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 - Linked from the Menu in the main bar, next to Settings.
 - Totals: API-equivalent cost, input tokens, output tokens, cache hit rate, number of model calls, rounds. The
   ledger records a failed call as a row with `ok: false` (a row without `ok` reads as ok), and the totals count
-  these as `failedCalls`, shown beside the call count. When the SDK gives no cost, the row is priced from its tokens
+  these as `failedCalls`, shown beside the call count. A model process that stops without a result still writes such a
+  row, with zero tokens and no estimate; a call the app closes or aborts itself writes no row. When the SDK gives no cost, the row is priced from its tokens
   with `costEstimated: true`, and an older row with tokens and a stored cost of 0 is priced at the dearest model
   the same way. The totals count these as `estimatedCalls`, and the cost shows "≈" when any call is estimated.
   Days are bucketed in local time.

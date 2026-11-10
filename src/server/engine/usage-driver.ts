@@ -42,7 +42,8 @@ function toRecord(setup: UsageSetup, stats: TurnStats, ok: boolean): UsageRecord
 }
 
 export function wrapDriverWithLedger(driver: Driver & { closeAll(): void }, ledger: UsageLedger): Driver & { closeAll(): void } {
-  // Only a failure that carried a model result spent tokens; an abort before the model ran writes no row.
+  // A failure writes a row when the driver attached stats: a model result, or a process that stopped on its own.
+  // A call we closed or aborted ourselves carries none, so it writes no row.
   const recordFailure = (setup: UsageSetup, err: unknown) => {
     const stats = failureStats(err);
     if (stats) ledger.record(toRecord(setup, stats, false));
