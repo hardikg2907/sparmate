@@ -468,6 +468,46 @@ describe("checking in on a quiet candidate", () => {
   });
 });
 
+describe("a round the interviewer already closed", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("starts the debrief when the interviewer answers time up with silence", async () => {
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    const driver: Driver = {
+      ...inner,
+      startConversation(s) {
+        const conv = inner.startConversation(s);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          async send(turn, handlers) {
+            if (turn.meta.checkpoint !== "time_up") return conv.send(turn, handlers);
+            handlers.onTextDelta("<silent/>");
+            return { text: "<silent/>", stats: { durationMs: 1, costUsd: 0 } };
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(45 * MIN + 5_000);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(session.status).toBe("debriefed");
+    });
+    const texts = interviewerTexts(t.msgs);
+    expect(texts.every((x) => x.trim() !== "" && !x.includes("silent"))).toBe(true);
+    expect(texts.some((x) => x.startsWith("We're out of time"))).toBe(false);
+    const end = t.msgs.findIndex((m) => m.type === "chat.message" && m.entry.text === "Time is up.");
+    expect(end).toBeGreaterThan(-1);
+    expect(t.msgs.slice(end).some((m) => m.type === "chat.delta" && m.channel === "interview")).toBe(false);
+    expect(session.transcript.some((e) => e.kind === "clock" && e.text === "clock: time up")).toBe(true);
+    rt.dispose();
+  });
+});
+
 /** Fails chosen sends; everything else is answered by the fake driver. */
 function flakyDriver(failOn: (call: number, setup: ConversationSetup) => boolean) {
   const inner = createFakeDriver({ chunkDelayMs: 0 });
