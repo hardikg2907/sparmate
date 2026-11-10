@@ -6,7 +6,7 @@ import { DrillIcon } from "../components/DrillIcon";
 import { Markdown } from "../components/Markdown";
 import { ArrowLeftIcon, CheckIcon, WarnIcon } from "../components/icons";
 import { InfoTip, TrackChip } from "../components/study";
-import { Alert, Button, Card, Skeleton, Spinner, Textarea, cn } from "../components/ui";
+import { Alert, Badge, Button, Card, Skeleton, Spinner, Textarea, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import { testHooksEnabled } from "../session/testHooks";
 import { countdownText, useCountdown } from "../lib/useCountdown";
@@ -220,8 +220,11 @@ function PromptView({ prompt }: { prompt: DrillPrompt }) {
         <h1 id="drill-heading" className="mt-3 text-display font-bold">
           {prompt.title}
         </h1>
-        <p className="mt-1 text-lead text-muted-foreground">
-          On <b className="font-semibold text-foreground">{prompt.problem.title}</b>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-lead text-muted-foreground">
+          <span>
+            On <b className="font-semibold text-foreground">{prompt.problem.title}</b>
+          </span>
+          {prompt.variant ? <Badge tone="accent">Changed constraint</Badge> : null}
         </p>
       </div>
       <Card variant="raised" className="p-6">
@@ -385,8 +388,11 @@ function ResultView({ prompt, result, onRevise }: { prompt: DrillPrompt; result:
         <h1 id="result-title" className={cn("mt-5 w-fit origin-left font-display text-display font-extrabold sm:text-[64px] sm:leading-[68px]", ready && motion && "drill-settle")}>
           {OUTCOME_LABEL[result.outcome]}
         </h1>
-        <p className="mt-3 text-body text-muted-foreground sm:text-lead">
-          On <b className="font-semibold text-foreground">{prompt.problem.title}</b>
+        <p className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-body text-muted-foreground sm:text-lead">
+          <span>
+            On <b className="font-semibold text-foreground">{prompt.problem.title}</b>
+          </span>
+          {prompt.variant ? <Badge tone="accent">Changed constraint</Badge> : null}
         </p>
         {result.revised && result.firstOutcome ? <p className="mt-1 text-ui text-muted-foreground">After a revision. First try: {OUTCOME_LABEL[result.firstOutcome]}.</p> : null}
         <ScheduleFacts result={result} />

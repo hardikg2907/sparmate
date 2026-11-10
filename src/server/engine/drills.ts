@@ -14,6 +14,7 @@ import {
   firstDueDay,
   isDue,
   localDay,
+  proofKey,
   weekDrillStats,
   type DrillAttempt,
   type DrillItem,
@@ -28,6 +29,7 @@ import type { Problem } from "../../shared/problem";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { PrivacyGuard } from "../guard/privacy";
 import { buildDrill, drillFits, drillsAvailable, type DrillContent } from "./drill-content";
+import { canVaryFrom, pickNext, repickStale } from "./drill-pick";
 import { GraderOutputSchema, finishGrade, graderMessage, type GradedAnswer } from "./drill-grader";
 import type { Driver } from "./driver";
 import { DriverError } from "./driver";
@@ -98,7 +100,7 @@ export function queueGapDrills(draft: DrillState, history: readonly SessionHisto
       if (!drill || !drillFits(problem, drill)) continue;
       const id = drillItemId(round.id, gap.title);
       if (known.has(id)) continue;
-      const repeat = draft.items.some((i) => i.status === "open" && i.problemId === round.problemId && i.drill === drill && i.gapTitle === gap.title);
+      const repeat = draft.items.some((i) => i.status === "open" && i.originProblemId === round.problemId && i.drill === drill && i.gapTitle === gap.title);
       known.add(id);
       if (repeat) continue;
       draft.items.push({
@@ -128,8 +130,8 @@ export function playableProblems(all: readonly Problem[], history: readonly Pick
   return all.filter((p) => p.custom || played.has(p.meta.id));
 }
 
-function asRow(item: DrillItem, problem: Problem, today: string, rotation: number): GymDrillRow {
-  const content = buildDrill(problem, item.drill, { gapTitle: item.gapTitle, hint: item.gapHint, rotation });
+function asRow(item: DrillItem, problem: Problem, originTitle: string, today: string): GymDrillRow {
+  const content = buildDrill(problem, item.drill, { gapTitle: item.gapTitle, hint: item.gapHint, ...(item.variant ? { variant: item.variant } : {}) });
   return {
     id: item.id,
     gapTitle: item.gapTitle,
@@ -138,6 +140,8 @@ function asRow(item: DrillItem, problem: Problem, today: string, rotation: numbe
     title: DRILL_INFO[item.drill].title,
     problemId: item.problemId,
     problemTitle: problem.meta.title,
+    variantTitle: content?.prompt.variant?.title ?? null,
+    originProblemTitle: originTitle,
     minutes: DRILL_INFO[item.drill].minutes,
     dueOn: item.dueOn,
     due: isDue(item, today),
@@ -165,7 +169,8 @@ export class DrillService {
     await this.deps.store.update((draft) => {
       const marked = draft.backfilledOn;
       const added = queueGapDrills(draft, history, problems, today);
-      return { save: added || draft.backfilledOn !== marked, value: null };
+      const moved = repickStale(draft.items, draft.attempts, problems);
+      return { save: added || moved || draft.backfilledOn !== marked, value: null };
     });
     return this.deps.store.snapshot();
   }
@@ -177,9 +182,7 @@ export class DrillService {
     const queue = state.items
       .filter((i) => i.status === "open" && problems.has(i.problemId))
       .sort(byDueDay)
-      .map((i) =>
-        asRow(i, problems.get(i.problemId) as Problem, today, state.attempts.filter((a) => a.status === "done" && a.problemId === i.problemId && a.drill === i.drill).length),
-      );
+      .map((i) => asRow(i, problems.get(i.problemId) as Problem, this.deps.problems.get(i.originProblemId)?.meta.title ?? i.originProblemId, today));
     return {
       today,
       queue,
@@ -192,29 +195,30 @@ export class DrillService {
   }
 
   /** Finds the problem and checks the drill fits it. Throws a 404 for anything the candidate may not drill. */
-  private async resolve(target: DrillTarget, state: DrillState): Promise<{ problem: Problem; item: DrillItem | null; content: DrillContent }> {
+  private async resolve(target: DrillTarget, state: DrillState): Promise<{ problem: Problem; item: DrillItem | null; content: DrillContent; variant: string | null }> {
     const problems = await this.playable();
+    // The queue answers first: a stale problem on a queued drill is a conflict, not a missing problem.
+    const item = this.matchItem(state, target, this.today());
     const problem = problems.get(target.problemId);
     if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
     if (!drillsForTrack(problem.meta.track).includes(target.drill)) throw new HttpError(400, "That drill does not fit this problem.");
-    const item = this.matchItem(state, target, this.today());
+    // A queued drill never rotates: its topic follows the gap. Only a free drill moves on to the next topic.
     const rotation = state.attempts.filter((a) => a.status === "done" && a.problemId === problem.meta.id && a.drill === target.drill).length;
-    const content = buildDrill(problem, target.drill, { ...(item ? { gapTitle: item.gapTitle, hint: item.gapHint } : {}), rotation });
+    const content = buildDrill(problem, target.drill, item ? { gapTitle: item.gapTitle, hint: item.gapHint, ...(item.variant ? { variant: item.variant } : {}) } : { rotation });
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
-    return { problem, item, content };
+    return { problem, item, content, variant: content.prompt.variant && item ? item.variant : null };
   }
 
   /** The queued drill an attempt may count for: the one named, or else the earliest due one of the same kind on the problem. */
   private matchItem(state: DrillState, target: DrillTarget, today: string): DrillItem | null {
     if (target.drillId) {
       const named = state.items.find((i) => i.id === target.drillId);
-      if (!named || named.status !== "open" || named.problemId !== target.problemId || named.drill !== target.drill) {
-        throw new HttpError(404, "That drill is no longer in the queue.");
-      }
+      if (!named || named.status !== "open" || named.drill !== target.drill) throw new HttpError(404, "That drill is no longer in the queue.");
+      if (named.problemId !== target.problemId) throw new HttpError(409, "This drill moved to another problem. Open it again from Practice.");
       return named;
     }
-    // A free drill counts only for a queued one that is due, so practising early cannot rush a gap to closed.
-    return state.items.filter((i) => isDue(i, today) && i.problemId === target.problemId && i.drill === target.drill).sort(byDueDay)[0] ?? null;
+    // A free drill counts only for a queued one that is due and asks the same plain problem, so practising early cannot rush a gap to closed.
+    return state.items.filter((i) => isDue(i, today) && i.problemId === target.problemId && i.drill === target.drill && i.variant === null).sort(byDueDay)[0] ?? null;
   }
 
   async prompt(target: DrillTarget): Promise<DrillPrompt> {
@@ -242,7 +246,7 @@ export class DrillService {
   private async submitNow(target: DrillTarget, answer: string, elapsedSeconds?: number): Promise<DrillResult> {
     const problems = await this.playable();
     const state = await this.sync(problems);
-    const { problem, content } = await this.resolve(target, state);
+    const { problem, content, variant } = await this.resolve(target, state);
     const clock = this.deps.now ?? (() => new Date());
     const opened = clock();
     const attemptId = randomBytes(8).toString("hex");
@@ -255,7 +259,7 @@ export class DrillService {
         day: localDay(opened),
         drill: target.drill,
         problemId: target.problemId,
-        variant: null,
+        variant,
         drillId: null,
         status: "open",
         outcome: null,
@@ -279,6 +283,7 @@ export class DrillService {
         problemTitle: problem.meta.title.slice(0, 300),
         task: content.prompt.task.slice(0, 2000),
         topic: content.prompt.topic?.slice(0, 300) ?? null,
+        ...(content.changed ? { changed: content.changed.slice(0, 2000) } : {}),
         answers: [{ at: opened.toISOString(), text: answer }],
         turns: [],
         grades: [
@@ -301,24 +306,13 @@ export class DrillService {
 
     return this.deps.store.update((draft) => {
       // The queue may have changed while the grader worked, so the match is made again on the saved state.
-      const item = this.matchLive(draft, target, today);
+      const item = this.matchLive(draft, target, today, variant);
       let readyCount: number | null = null;
       let closed = false;
       let nextDueOn: string | null = null;
       let itemBefore: DrillAttempt["itemBefore"];
       // An attempt before the drill's day is practice: it is logged and changes nothing.
       const counts = item !== null && isDue(item, today);
-      if (item && counts) {
-        itemBefore = { passes: item.passes, readyOn: [...item.readyOn] };
-        const next = applyOutcome({ passes: item.passes, readyOn: item.readyOn, outcome: graded.outcome, revised: false, problemId: target.problemId, today });
-        item.passes = next.passes;
-        item.readyOn = next.readyOn;
-        item.dueOn = next.dueOn;
-        item.status = next.status;
-        readyCount = next.passes;
-        closed = next.status === "closed";
-        nextDueOn = closed ? null : next.dueOn;
-      }
       const row = draft.attempts.find((a) => a.id === attemptId);
       if (row) {
         row.status = "done";
@@ -326,8 +320,33 @@ export class DrillService {
         row.scores = graded.scores;
         row.drillId = counts ? (item?.id ?? null) : null;
         row.seconds = elapsedSeconds ?? null;
-        if (itemBefore) row.itemBefore = itemBefore;
       }
+      if (item && counts) {
+        itemBefore = { passes: item.passes, readyOn: [...item.readyOn] };
+        // The pick is made with this attempt in the history, and saved with the schedule in the same update.
+        const pick = pickNext(item, problems, draft.attempts);
+        const next = applyOutcome({
+          passes: item.passes,
+          readyOn: item.readyOn,
+          outcome: graded.outcome,
+          revised: false,
+          proof: proofKey(target.problemId, variant),
+          canVary: canVaryFrom(pick, target.problemId),
+          today,
+        });
+        item.passes = next.passes;
+        item.readyOn = next.readyOn;
+        item.dueOn = next.dueOn;
+        item.status = next.status;
+        if (pick) {
+          item.problemId = pick.problemId;
+          item.variant = pick.variant;
+        }
+        readyCount = next.passes;
+        closed = next.status === "closed";
+        nextDueOn = closed ? null : next.dueOn;
+      }
+      if (row && itemBefore) row.itemBefore = itemBefore;
       const result: DrillResult = {
         attemptId,
         outcome: graded.outcome,
@@ -383,7 +402,7 @@ export class DrillService {
     const clock = this.deps.now ?? (() => new Date());
     const problems = await this.playable();
     const state = await this.sync(problems);
-    this.checkRevisable(
+    const saved = this.checkRevisable(
       state.attempts.find((a) => a.id === attemptId),
       localDay(clock()),
     );
@@ -393,7 +412,7 @@ export class DrillService {
     if (!body || !firstGrade || !firstAnswer) throw new HttpError(409, "This attempt cannot be revised.");
     const problem = problems.get(body.problemId);
     if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
-    const content = buildDrill(problem, body.drill, { ...(body.topic ? { topic: body.topic } : {}) });
+    const content = buildDrill(problem, body.drill, { ...(body.topic ? { topic: body.topic } : {}), ...(saved.variant ? { variant: saved.variant } : {}) });
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
 
     const opened = clock();
@@ -428,7 +447,8 @@ export class DrillService {
       let nextDueOn: string | null = null;
       const item = live.drillId ? draft.items.find((i) => i.id === live.drillId) : undefined;
       if (item && item.status === "open" && live.itemBefore && better) {
-        const next = applyOutcome({ ...live.itemBefore, outcome: finalOutcome, revised: true, problemId: live.problemId, today });
+        // A revised result never closes a drill, so `canVary` is not read on this path.
+        const next = applyOutcome({ ...live.itemBefore, outcome: finalOutcome, revised: true, proof: proofKey(live.problemId, live.variant), canVary: true, today });
         item.passes = next.passes;
         item.readyOn = next.readyOn;
         item.dueOn = next.dueOn;
@@ -475,9 +495,11 @@ export class DrillService {
     }
   }
 
-  private matchLive(draft: DrillState, target: DrillTarget, today: string): DrillItem | null {
+  /** The item the graded attempt may count for, or null when it moved to another problem or changed constraint while grading. */
+  private matchLive(draft: DrillState, target: DrillTarget, today: string, variant: string | null): DrillItem | null {
     try {
-      return this.matchItem(draft, target, today);
+      const item = this.matchItem(draft, target, today);
+      return item && item.variant === variant ? item : null;
     } catch {
       return null;
     }

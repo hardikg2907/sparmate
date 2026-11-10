@@ -14,8 +14,10 @@ function row(
   dueOn: string,
   passes: number,
   task: string,
+  variantTitle: string | null = null,
+  originProblemTitle: string = problemTitle,
 ): GymDrillRow {
-  return { id, gapTitle, topic, drill, title, problemId, problemTitle, minutes, dueOn, due: dueOn <= TODAY, passes, task };
+  return { id, gapTitle, topic, drill, title, problemId, problemTitle, variantTitle, originProblemTitle, minutes, dueOn, due: dueOn <= TODAY, passes, task };
 }
 
 /** A queue with five drills due, so the page shows the hero, the list and the "more due" line. */
@@ -41,12 +43,14 @@ export const fixtureGym: GymSummary = {
       null,
       "walk",
       "Walk a request",
-      "c2-url-shortener",
-      "URL Shortener",
+      "c2-news-feed",
+      "News Feed",
       10,
       "2026-11-08",
       1,
-      "Walk one redirect through your design, box by box, from the first call to the last.",
+      "Walk one request through your design after the change below. Say which boxes change and why.",
+      "Hot spot (one post)",
+      "URL Shortener",
     ),
     row(
       "a1b2c3d4e5f60003",

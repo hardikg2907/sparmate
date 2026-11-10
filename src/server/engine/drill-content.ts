@@ -1,10 +1,12 @@
-import { DRILL_INFO, drillsForTrack, type DrillPrompt, type DrillType } from "../../shared/drills";
+import { DRILL_INFO, MAX_VARIANT_ID, drillsForTrack, type DrillPrompt, type DrillType } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
 
 /** What a drill shows the candidate, and the answer key only the grader reads. */
 export interface DrillContent {
   prompt: DrillPrompt;
   key: string;
+  /** The changed-constraint question of a variant, saved with the attempt. */
+  changed?: string;
 }
 
 export interface DrillContext {
@@ -16,6 +18,8 @@ export interface DrillContext {
   rotation?: number;
   /** A deep dive's title, to rebuild the same topic a saved attempt used. */
   topic?: string;
+  /** The id of a changed-constraint entry of the brief. An id the brief does not have builds the normal drill. */
+  variant?: string;
 }
 
 const BULLET = /^\s*[-*]\s+(.+)$/;
@@ -95,15 +99,14 @@ function stems(text: string): Set<string> {
 
 /**
  * The deep dive that shares the most words with the gap, counting its whole text and its title three times over.
- * Without a shared word the rotation points at one.
+ * Null when no entry shares a word with the gap.
  */
-export function pickDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", reason = "", rotation = 0): DeepDiveEntry | null {
-  if (entries.length === 0) return null;
+export function matchDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", reason = ""): DeepDiveEntry | null {
   const fromTitle = stems(gapTitle);
   const fromReason = stems(reason);
-  let best = -1;
+  let best: DeepDiveEntry | null = null;
   let score = 0;
-  entries.forEach((entry, index) => {
+  for (const entry of entries) {
     const title = stems(entry.title);
     let total = 0;
     for (const s of stems(`${entry.title} ${entry.text}`)) {
@@ -114,12 +117,142 @@ export function pickDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", r
     }
     if (total > score) {
       score = total;
-      best = index;
+      best = entry;
     }
-  });
-  if (best >= 0) return entries[best] ?? null;
-  return entries[Math.abs(rotation) % entries.length] ?? null;
+  }
+  return best;
 }
+
+/** The matching deep dive, else the one the rotation points at. Only a free drill wants the rotation. */
+export function pickDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", reason = "", rotation = 0): DeepDiveEntry | null {
+  if (entries.length === 0) return null;
+  return matchDeepDive(entries, gapTitle, reason) ?? entries[Math.abs(rotation) % entries.length] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Changed constraints: the curveballs of a system design brief and the extensions of a machine coding brief.
+
+export interface VariantEntry {
+  /** A slug of the title: lower-case letters, digits and hyphens. */
+  id: string;
+  title: string;
+  /** What the candidate sees. */
+  question: string;
+  /** What a strong answer covers. It joins the answer key and never leaves the server. */
+  expect: string;
+}
+
+const MAX_VARIANT_ENTRIES = 8;
+const MAX_VARIANT_SECTION = 30_000;
+const MAX_VARIANT_TITLE = 120;
+const MAX_VARIANT_QUESTION = 1500;
+const MAX_VARIANT_EXPECT = 4000;
+const EXPECT_MARKER = "Expect:";
+/** An entry that says the candidate met it already is not offered again. */
+const SEEN_MARKERS = ["already seen", "already used", "seen before", "past session", "earlier attempt", "earlier session"];
+
+function variantSection(problem: Problem): string {
+  return section(problem, problem.meta.track === "lld" ? "Extensions" : "Curveballs").slice(0, MAX_VARIANT_SECTION);
+}
+
+/** A line that opens a numbered item, such as "1. **Hot link:** ...". Returns the text after the number. */
+function numberedStart(line: string): string | null {
+  let i = 0;
+  while (i < 3 && line[i] === " ") i++;
+  let digits = 0;
+  while (digits < 3 && /[0-9]/.test(line[i + digits] ?? "")) digits++;
+  if (digits === 0) return null;
+  const mark = line[i + digits];
+  if ((mark !== "." && mark !== ")") || line[i + digits + 1] !== " ") return null;
+  return line.slice(i + digits + 2);
+}
+
+/** Cuts bullet marks and spaces off the end, so a question never ends on the dash that began an "Expect:" line. */
+function trimTail(text: string): string {
+  let end = text.length;
+  while (end > 0 && " \t\r\n-*".includes(text[end - 1] ?? "x")) end--;
+  return text.slice(0, end);
+}
+
+function slug(title: string): string {
+  const flat = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  let start = 0;
+  let end = flat.length;
+  while (start < end && flat[start] === "-") start++;
+  while (end > start && flat[end - 1] === "-") end--;
+  return flat.slice(start, end).slice(0, MAX_VARIANT_ID).replace(/-+$/, "");
+}
+
+function expectIndex(text: string): number {
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(EXPECT_MARKER, from);
+    if (at < 0) return -1;
+    if (at === 0 || !/[A-Za-z0-9]/.test(text[at - 1] ?? " ")) return at;
+    from = at + EXPECT_MARKER.length;
+  }
+}
+
+function parseVariantEntry(raw: string): Omit<VariantEntry, "id"> | null {
+  const text = raw.trim();
+  if (!text.startsWith("**")) return null;
+  const close = text.indexOf("**", 2);
+  if (close < 3) return null;
+  const lead = text.slice(2, close);
+  if (lead.includes("\n") || lead.length > 300) return null;
+  const title = lead
+    .trim()
+    .replace(/[:.\s]+$/, "")
+    .slice(0, MAX_VARIANT_TITLE);
+  if (title === "") return null;
+  const lower = text.toLowerCase();
+  if (SEEN_MARKERS.some((m) => lower.includes(m))) return null;
+  let rest = text.slice(close + 2);
+  if (rest.startsWith(":")) rest = rest.slice(1);
+  const at = expectIndex(rest);
+  if (at < 0) return null;
+  const question = trimTail(rest.slice(0, at)).trim().slice(0, MAX_VARIANT_QUESTION);
+  const expect = rest
+    .slice(at + EXPECT_MARKER.length)
+    .trim()
+    .slice(0, MAX_VARIANT_EXPECT);
+  if (question === "" || expect === "") return null;
+  return { title, question, expect };
+}
+
+/**
+ * The changed-constraint entries of a brief, in brief order. Each numbered item is one entry: a bold lead is its title,
+ * the text before "Expect:" is the question and the text after joins the answer key. Anything before the first
+ * numbered item is a note to the interviewer and is ignored. An entry with no title or no "Expect:", or one that says
+ * it was seen already, is skipped. Brief text is untrusted, so the parse walks the lines once and every length is capped.
+ */
+export function variantEntries(problem: Problem): VariantEntry[] {
+  const blocks: string[][] = [];
+  for (const line of variantSection(problem).split("\n")) {
+    const start = numberedStart(line);
+    if (start !== null) blocks.push([start]);
+    else blocks.at(-1)?.push(line);
+  }
+  const entries: VariantEntry[] = [];
+  const seen = new Set<string>();
+  for (const block of blocks) {
+    const entry = parseVariantEntry(block.join("\n"));
+    const id = entry ? slug(entry.title) : "";
+    if (!entry || id === "" || seen.has(id)) continue;
+    seen.add(id);
+    entries.push({ id, ...entry });
+    if (entries.length >= MAX_VARIANT_ENTRIES) break;
+  }
+  return entries;
+}
+
+const VARIANT_TASK: Record<DrillType, string> = {
+  capacity: "The load changed as below. Redo only the numbers that change, and say what each new number forces.",
+  walk: "Walk one request through your design after the change below. Say which boxes change and why.",
+  requirements: "The interviewer adds the change below. Say which requirements move and what you ask again, with the numbers you would assume.",
+  deep_dive: "Take the change below: say what breaks first, what you would build instead, and what it costs.",
+  lld_skeleton: "The requirement below is new. Write the classes that change or are added, with fields and signatures, and say which class stays untouched.",
+};
 
 /** Hidden-fact bullets that carry a number: the scale facts a capacity estimate starts from. */
 export function scaleFacts(problem: Problem): string[] {
@@ -145,8 +278,31 @@ export function drillsAvailable(problem: Problem): DrillType[] {
   return drillsForTrack(problem.meta.track).filter((d) => drillFits(problem, d));
 }
 
-/** Builds the prompt and the key for one drill on one problem, or null when the brief cannot supply it. */
+/**
+ * Builds the prompt and the key for one drill on one problem, or null when the brief cannot supply it. With a variant
+ * the same drill asks the problem after one changed constraint.
+ */
 export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext = {}): DrillContent | null {
+  const entry = ctx.variant ? variantEntries(problem).find((e) => e.id === ctx.variant) : undefined;
+  if (!entry) return buildNormal(problem, drill, ctx);
+  // The deep dive behind a variant follows the change itself, so a saved attempt rebuilds the same key.
+  const base = buildNormal(problem, drill, drill === "deep_dive" ? { gapTitle: entry.title, hint: entry.question } : {});
+  if (!base) return null;
+  const material = base.prompt.material.filter((m) => m.heading !== "The topic");
+  return {
+    prompt: {
+      ...base.prompt,
+      task: VARIANT_TASK[drill],
+      ...(drill === "deep_dive" ? { topic: entry.title } : {}),
+      variant: { title: entry.title },
+      material: [...material, { heading: "What changed", markdown: entry.question }],
+    },
+    key: `${base.key}\n\nAfter the change, a strong answer covers:\n${entry.expect}`,
+    changed: entry.question,
+  };
+}
+
+function buildNormal(problem: Problem, drill: DrillType, ctx: DrillContext): DrillContent | null {
   if (!drillFits(problem, drill)) return null;
   const info = DRILL_INFO[drill];
   // The interviewer's closing "where would you like to start?" belongs to a live round, not a drill.

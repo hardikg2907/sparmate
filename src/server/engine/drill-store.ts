@@ -1,7 +1,19 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { ATTEMPT_ID, DRILL_ID, DRILL_OUTCOMES, MAX_ANSWER_CHARS, MAX_ELAPSED_SECONDS, MAX_READY_ON, DaySchema, DrillTypeSchema, PROBLEM_ID } from "../../shared/drills";
+import {
+  ATTEMPT_ID,
+  DRILL_ID,
+  DRILL_OUTCOMES,
+  MAX_ANSWER_CHARS,
+  MAX_ELAPSED_SECONDS,
+  MAX_READY_ON,
+  MAX_VARIANT_ID,
+  VARIANT_ID,
+  DaySchema,
+  DrillTypeSchema,
+  PROBLEM_ID,
+} from "../../shared/drills";
 import { readTextIfExists, sha256Hex, writeFileAtomic } from "./fsutil";
 import type { Logger } from "./log";
 
@@ -13,14 +25,20 @@ const MAX_V1_ATTEMPTS = 1000;
 const OutcomeSchema = z.enum(DRILL_OUTCOMES);
 const ScoreSchema = z.strictObject({ id: z.string().min(1).max(60), score: z.number().int().min(1).max(4) });
 const ProblemIdSchema = z.string().min(1).max(100);
+/** A problem id, or a problem id and a variant id joined by "#". */
+const ProofKeySchema = z
+  .string()
+  .min(1)
+  .max(100 + 1 + MAX_VARIANT_ID);
+const VariantIdSchema = z.string().regex(VARIANT_ID).max(MAX_VARIANT_ID);
 
 const ItemSchema = z.strictObject({
   id: z.string().regex(DRILL_ID),
   sessionId: z.string().min(1).max(200),
   problemId: ProblemIdSchema,
   originProblemId: ProblemIdSchema,
-  variant: z.string().min(1).max(200).nullable(),
-  readyOn: z.array(ProblemIdSchema).max(MAX_READY_ON),
+  variant: VariantIdSchema.nullable(),
+  readyOn: z.array(ProofKeySchema).max(MAX_READY_ON),
   gapTitle: z.string().min(1).max(600),
   gapHint: z.string().max(1200),
   drill: DrillTypeSchema,
@@ -36,7 +54,7 @@ const AttemptSchema = z.strictObject({
   day: DaySchema,
   drill: DrillTypeSchema,
   problemId: ProblemIdSchema,
-  variant: z.string().min(1).max(200).nullable(),
+  variant: VariantIdSchema.nullable(),
   drillId: z.string().regex(DRILL_ID).nullable(),
   status: z.enum(["open", "done"]),
   outcome: OutcomeSchema.nullable(),
@@ -45,7 +63,7 @@ const AttemptSchema = z.strictObject({
   scores: z.array(ScoreSchema).max(12),
   seconds: z.number().int().min(0).max(MAX_ELAPSED_SECONDS).nullable(),
   legacy: z.boolean(),
-  itemBefore: z.strictObject({ passes: z.number().int().min(0).max(3), readyOn: z.array(ProblemIdSchema).max(MAX_READY_ON) }).optional(),
+  itemBefore: z.strictObject({ passes: z.number().int().min(0).max(3), readyOn: z.array(ProofKeySchema).max(MAX_READY_ON) }).optional(),
 });
 
 export const DrillStateSchema = z.strictObject({
@@ -102,6 +120,8 @@ export const AttemptBodySchema = z.strictObject({
   problemTitle: z.string().max(300),
   task: z.string().max(2000),
   topic: z.string().max(300).nullable(),
+  /** The changed-constraint question a variant asked. */
+  changed: z.string().max(2000).optional(),
   answers: z.array(z.strictObject({ at: z.string().max(40), text: z.string().max(MAX_ANSWER_CHARS) })).max(2),
   turns: z.array(z.strictObject({ role: z.enum(["grader", "candidate"]), at: z.string().max(40), text: z.string().max(MAX_ANSWER_CHARS) })).max(8),
   grades: z

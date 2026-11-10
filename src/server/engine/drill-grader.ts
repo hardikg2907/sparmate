@@ -125,7 +125,7 @@ export function graderMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "prob
   return [
     `<drill>${DRILL_INFO[prompt.drill].title}</drill>`,
     `<problem>${prompt.problem.title}</problem>`,
-    `<task>${prompt.task}</task>`,
+    `<task>${escapeBlock(prompt.task)}</task>`,
     "<shown_to_candidate>",
     ...prompt.material.map((m) => escapeBlock(`${m.heading}:\n${m.markdown}`)),
     "</shown_to_candidate>",

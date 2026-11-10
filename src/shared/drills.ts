@@ -201,19 +201,29 @@ export function outcomeFor(drill: DrillType, scores: readonly { id: string; scor
   return "getting_there";
 }
 
-/** Most problem ids one item remembers a ready result on. */
+/** Most proof keys one item remembers a ready result on. */
 export const MAX_READY_ON = 50;
+/** Longest variant id: a slug of the changed-constraint title. */
+export const MAX_VARIANT_ID = 80;
+export const VARIANT_ID = /^[a-z0-9][a-z0-9-]*$/;
+/** Interview-ready results on this many different proofs are needed before a drill may close. */
+export const DIFFERENT_PROOFS_TO_CLOSE = 2;
+
+/** What a ready result proves: the problem, or a problem with one changed constraint. */
+export function proofKey(problemId: string, variant: string | null): string {
+  return variant ? `${problemId}#${variant}` : problemId;
+}
 
 export interface DrillItem {
   id: string;
   sessionId: string;
-  /** The problem of the next attempt. */
+  /** The problem of the next attempt. The server picks it. */
   problemId: string;
   /** The problem of the round that showed the gap. It never changes. */
   originProblemId: string;
-  /** Null until a drill asks the same gap on a changed scenario. */
+  /** The changed constraint of the next attempt, or null for the problem as written. */
   variant: string | null;
-  /** Problems that gave a ready result for this item, without duplicates. Emptied when the count starts again. */
+  /** Proof keys of the ready results for this item, without duplicates. Emptied when the count starts again. */
   readyOn: string[];
   gapTitle: string;
   /** What the judge said good looks like; it helps pick the deep dive that matches the gap. */
@@ -238,24 +248,32 @@ export interface OutcomeInput {
   outcome: DrillOutcome;
   /** True when the outcome came after a revision. */
   revised: boolean;
-  problemId: string;
+  /** What this result proves; see `proofKey`. */
+  proof: string;
+  /** True when the picker can offer this item another problem, or a changed constraint, for the next attempt. */
+  canVary: boolean;
   today: string;
 }
 
 /**
  * What one attempt on a queued drill does to its item. The stored field `passes` is the ready count: Interview-ready
  * results in a row. A first-try ready result moves the next drill out (3 days, then 7) and the third closes the
- * drill. A ready result after a revision counts but stops at 2, so a drill never closes on a revised answer. A
- * "getting there" keeps the count and returns in 2 days. "Needs work" starts the count again and returns tomorrow.
+ * drill, but only when the ready results cover at least two different proofs or the picker has nothing else to offer;
+ * otherwise the count stays at 2 and the drill returns in 3 days on another problem or a changed constraint. A ready
+ * result after a revision counts but stops at 2, so a drill never closes on a revised answer. A "getting there" keeps
+ * the count and returns in 2 days. "Needs work" starts the count again and returns tomorrow.
  */
 export function applyOutcome(input: OutcomeInput): { passes: number; readyOn: string[]; dueOn: string; status: DrillStatus } {
   const { outcome, today } = input;
   if (outcome === "needs_work") return { passes: 0, readyOn: [], dueOn: addDays(today, 1), status: "open" };
   if (outcome === "getting_there") return { passes: input.passes, readyOn: [...input.readyOn], dueOn: addDays(today, REVISED_INTERVAL_DAYS), status: "open" };
-  const readyOn = input.readyOn.includes(input.problemId) ? [...input.readyOn] : [...input.readyOn, input.problemId].slice(-MAX_READY_ON);
+  const readyOn = input.readyOn.includes(input.proof) ? [...input.readyOn] : [...input.readyOn, input.proof].slice(-MAX_READY_ON);
   if (input.revised) return { passes: Math.min(READY_TO_CLOSE - 1, input.passes + 1), readyOn, dueOn: addDays(today, REVISED_INTERVAL_DAYS), status: "open" };
   const passes = Math.min(READY_TO_CLOSE, input.passes + 1);
-  if (passes >= READY_TO_CLOSE) return { passes, readyOn, dueOn: today, status: "closed" };
+  if (passes >= READY_TO_CLOSE) {
+    if (new Set(readyOn).size >= DIFFERENT_PROOFS_TO_CLOSE || !input.canVary) return { passes, readyOn, dueOn: today, status: "closed" };
+    return { passes: READY_TO_CLOSE - 1, readyOn, dueOn: addDays(today, READY_INTERVAL_DAYS[0]), status: "open" };
+  }
   return { passes, readyOn, dueOn: addDays(today, READY_INTERVAL_DAYS[passes - 1] ?? 7), status: "open" };
 }
 
@@ -355,8 +373,13 @@ export interface GymDrillRow {
   topic: string | null;
   drill: DrillType;
   title: string;
+  /** The problem of the next attempt. */
   problemId: string;
   problemTitle: string;
+  /** The title of the changed constraint, when the next attempt asks one. */
+  variantTitle: string | null;
+  /** The problem of the round that showed the gap. */
+  originProblemTitle: string;
   minutes: number;
   dueOn: string;
   due: boolean;
@@ -384,6 +407,8 @@ export interface DrillPrompt {
   /** The deep-dive topic, for a deep dive. */
   topic?: string;
   problem: { id: string; title: string; track: Track };
+  /** Set when the drill asks the problem with one changed constraint. */
+  variant?: { title: string };
   material: { heading: string; markdown: string }[];
   /** Short line under the answer box. */
   answerHint: string;
