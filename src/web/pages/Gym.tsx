@@ -381,6 +381,7 @@ function AllDrillsPanel({ gym, onClose }: { gym: GymSummary; onClose: () => void
             <li key={problem.id}>
               <Link
                 href={drillPath({ drill: picked, problemId: problem.id })}
+                aria-label={`Start ${DRILL_INFO[picked].title} on ${problem.title}`}
                 className="-mx-3 flex items-center justify-between gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-accent/50"
               >
                 <span className="min-w-0">

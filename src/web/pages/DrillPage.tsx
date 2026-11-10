@@ -23,6 +23,7 @@ import { parseDay, shortDay } from "../lib/dates";
 import { scoreFill } from "../lib/scoreTone";
 import { testHooksEnabled } from "../session/testHooks";
 import { countdownText, useCountdown } from "../lib/useCountdown";
+import { clockStart, earlyNote } from "../lib/drillStart";
 import { Link, drillPath, guardNavigation, navigate } from "../router";
 import { HOW_A_GAP_CLOSES, Pips } from "./Gym";
 import type { PageContext } from "./context";
@@ -98,8 +99,9 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
         setSubmitError(notice);
         setBusy(false);
         setRestarting(false);
-        segmentStart.current = Date.now();
-        setStartedAt((held) => (p.open ? openedAtMs(p.open) : (held ?? Date.now())));
+        // A new answer's clock starts with its first keystroke (`clockStart`); a resumed conversation runs from its start.
+        if (p.open) segmentStart.current = Date.now();
+        setStartedAt((held) => (p.open ? openedAtMs(p.open) : held));
         document.title = `${p.title} · Sparmate`;
       },
       (failure: unknown) => {
@@ -128,6 +130,13 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
     });
     return () => guardNavigation(null);
   }, [guarded]);
+
+  const onAnswer = (text: string) => {
+    setAnswer(text);
+    const now = Date.now();
+    segmentStart.current = clockStart(segmentStart.current, text, now);
+    setStartedAt((held) => clockStart(held, text, now));
+  };
 
   const sinceLastCall = () => {
     const from = segmentStart.current ?? startedAt;
@@ -239,7 +248,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
 
   return (
     <div className="page-canvas flex h-full min-h-0 flex-col overflow-y-auto">
-      <TopBar prompt={prompt} startedAt={result ? null : startedAt} />
+      <TopBar prompt={prompt} startedAt={result ? null : startedAt} waiting={!result && startedAt === null} />
       <main tabIndex={-1} className="mx-auto w-full max-w-[1224px] flex-1 px-4 pb-16 pt-8 sm:px-8">
         {loadError ? (
           <Alert
@@ -266,7 +275,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
             <FeedbackView result={result} />
             <AnswerView
               answer={answer}
-              onAnswer={setAnswer}
+              onAnswer={onAnswer}
               hint={prompt.answerHint}
               busy={busy}
               error={submitError}
@@ -295,7 +304,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
             <PromptView prompt={prompt} />
             <AnswerView
               answer={answer}
-              onAnswer={setAnswer}
+              onAnswer={onAnswer}
               hint={prompt.answerHint}
               note={dialogue ? "One or two follow-up questions come before the result." : undefined}
               busy={busy}
@@ -341,7 +350,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
   );
 }
 
-function TopBar({ prompt, startedAt }: { prompt: DrillPrompt | null; startedAt: number | null }) {
+function TopBar({ prompt, startedAt, waiting }: { prompt: DrillPrompt | null; startedAt: number | null; waiting: boolean }) {
   return (
     <header className="header-hairline sticky top-0 z-20 shrink-0 border-b border-border/70 bg-card/90 shadow-xs backdrop-blur-xl supports-[backdrop-filter]:bg-card/80">
       <div className="mx-auto flex h-14 max-w-[1224px] items-center gap-4 px-4 sm:px-8">
@@ -357,7 +366,7 @@ function TopBar({ prompt, startedAt }: { prompt: DrillPrompt | null; startedAt: 
             <span className="truncate">{prompt.title}</span>
           </span>
         ) : null}
-        <div className="ml-auto">{prompt && startedAt !== null ? <DrillTimer minutes={prompt.minutes} startedAt={startedAt} /> : null}</div>
+        <div className="ml-auto">{prompt && (startedAt !== null || waiting) ? <DrillTimer minutes={prompt.minutes} startedAt={startedAt} /> : null}</div>
       </div>
     </header>
   );
@@ -365,15 +374,16 @@ function TopBar({ prompt, startedAt }: { prompt: DrillPrompt | null; startedAt: 
 
 function DrillTimer({ minutes, startedAt }: { minutes: number; startedAt: number | null }) {
   const { remainingMs, over } = useCountdown(startedAt, minutes * 60_000);
+  const waiting = startedAt === null;
   return (
     <div
       role="timer"
       aria-live="off"
-      aria-label={over ? `Over by ${countdownText(remainingMs)}` : `Time left ${countdownText(remainingMs)}`}
+      aria-label={waiting ? `${countdownText(remainingMs)}, starts when you type` : over ? `Over by ${countdownText(remainingMs)}` : `Time left ${countdownText(remainingMs)}`}
       className={cn("flex h-8 items-baseline gap-1.5 rounded-md px-2.5 pt-[3px]", over ? "tint bg-warning-soft text-warning" : "room-timer text-foreground")}
     >
       <span className={cn("font-mono text-title font-bold tabular-nums", !over && "text-gradient")}>{countdownText(remainingMs)}</span>
-      <span className="text-meta font-semibold text-muted-foreground">{over ? "over" : "left"}</span>
+      <span className="text-meta font-semibold text-muted-foreground">{waiting ? "starts when you type" : over ? "over" : "left"}</span>
     </div>
   );
 }
@@ -395,6 +405,7 @@ export function PromptView({ prompt }: { prompt: DrillPrompt }) {
           </span>
           {prompt.variant ? <Badge tone="accent">Changed constraint</Badge> : null}
         </p>
+        {prompt.early ? <p className="mt-2 text-ui text-muted-foreground">{earlyNote(prompt.early.dueOn)}</p> : null}
       </div>
       <Card variant="raised" className="p-6">
         <h2 className="text-meta font-semibold uppercase tracking-wide text-muted-foreground">Your task</h2>

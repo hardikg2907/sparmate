@@ -316,6 +316,17 @@ describe("running a drill", () => {
     expect(JSON.stringify(prompt)).not.toContain("single primary database handles writes with room to spare");
   });
 
+  it("says when a queued drill is opened before its day, and not on its day or for a free drill", async () => {
+    const queued = (await service.summary()).queue.find((r) => r.drill === "capacity");
+    const t = { ...target, drillId: queued?.id };
+    expect((await service.prompt(t)).early).toBeUndefined();
+    await send(t, ANSWER_READY);
+    expect((await service.prompt(t)).early).toEqual({ dueOn: "2026-11-06" });
+    expect((await service.prompt(target)).early).toBeUndefined();
+    clock = new Date(2026, 10, 6, 9, 0);
+    expect((await service.prompt(t)).early).toBeUndefined();
+  });
+
   it("a ready result on a queued drill moves it out 3 days, then 7, and the third closes it", async () => {
     const queued = (await service.summary()).queue.find((r) => r.drill === "capacity");
     expect(queued).toBeDefined();

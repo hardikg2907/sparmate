@@ -584,7 +584,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
 ### Drill screen
 
 - The drill screen is full screen with a slim bar: Back to Practice, the drill name and a soft countdown that turns amber
-  and counts up in overtime. Two columns hold the prompt cards and one raised answer card. A changed-constraint drill
+  and counts up in overtime. It starts with the first keystroke of an answer and reads "starts when you type" until then. Two columns hold the prompt cards and one raised answer card. A changed-constraint drill
   shows the accent "Changed constraint" tag beside the problem name, and a "What changed" card with the other material.
   The result shows the same tag beside the problem. A dialogue drill (the deep dive and the trade-off) says in a quiet
   line under the answer box that one or two follow-up questions come before the result. After the opening answer the

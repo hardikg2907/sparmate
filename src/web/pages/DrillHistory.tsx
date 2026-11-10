@@ -195,9 +195,15 @@ function AttemptItem({ row, showKind }: { row: DrillAttemptRow | RecentAttemptRo
             <ChangedTag row={row} />
           </span>
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-muted-foreground">
-            <ScoreStrip scores={row.scores} />
-            <span>{row.seconds === null ? "Time not recorded" : formatSeconds(row.seconds)}</span>
-            <span>{row.costUsd === null ? "Cost not recorded" : formatCost(row.costUsd)}</span>
+            {row.scores.length === 0 && row.seconds === null && row.costUsd === null ? (
+              <span className="text-faint">No scores, time or cost recorded</span>
+            ) : (
+              <>
+                <ScoreStrip scores={row.scores} />
+                {row.seconds === null ? null : <span>{formatSeconds(row.seconds)}</span>}
+                {row.costUsd === null ? null : <span>{formatCost(row.costUsd)}</span>}
+              </>
+            )}
           </span>
         </span>
       </button>
