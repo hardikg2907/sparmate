@@ -298,8 +298,7 @@ describe("variantEntries", () => {
   });
 });
 
-// The briefs gain candidate-only questions in the same change
-describe.skip("shipped variant questions", () => {
+describe("shipped variant questions", () => {
   it("variant questions hold no interviewer notes", () => {
     for (const problem of all) {
       for (const entry of variantEntries(problem)) {
