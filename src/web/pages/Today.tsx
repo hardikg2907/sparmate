@@ -456,7 +456,7 @@ function Hero({
           <Link href="/library">Open the library</Link>
         </Button>
         <Button asChild size="lg" variant="ghost">
-          <Link href="/library/new">Practise any question</Link>
+          <Link href="/practice/new">Practise any question</Link>
         </Button>
       </div>
     </section>

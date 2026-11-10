@@ -9,7 +9,7 @@ describe("parseRoute", () => {
     ["/practice", "practice"],
     ["/practice/", "practice"],
     ["/practice/drills", "practice-drills"],
-    ["/library/new", "library-new"],
+    ["/practice/new", "practice-new"],
     ["/progress", "progress"],
     ["/settings", "settings"],
     ["/usage", "usage"],
@@ -21,6 +21,7 @@ describe("parseRoute", () => {
   it.each([
     ["/library", "/practice", "practice"],
     ["/library/", "/practice", "practice"],
+    ["/library/new", "/practice/new", "practice-new"],
     ["/gym", "/practice/drills", "practice-drills"],
     ["/dsa", "/progress#dsa", "progress"],
     ["/history/", "/progress#history", "progress"],
@@ -30,7 +31,7 @@ describe("parseRoute", () => {
   });
 
   it("has no redirect for current addresses", () => {
-    for (const path of ["/", "/practice", "/practice/drills", "/progress", "/library/new", "/gym/drill/capacity/c2-url-shortener", "/constructor"]) {
+    for (const path of ["/", "/practice", "/practice/drills", "/progress", "/practice/new", "/gym/drill/capacity/c2-url-shortener", "/constructor"]) {
       expect(legacyTarget(path)).toBeNull();
     }
   });

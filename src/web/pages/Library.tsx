@@ -129,7 +129,7 @@ export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }
                 action={
                   tab === "custom" ? (
                     <Button asChild size="sm" variant="outline">
-                      <Link href="/library/new">Practise any question</Link>
+                      <Link href="/practice/new">Practise any question</Link>
                     </Button>
                   ) : filter !== "all" ? (
                     <Button size="sm" variant="outline" onClick={() => setFilter("all")}>

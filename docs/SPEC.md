@@ -962,8 +962,8 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 - "Sparmate" and three links: Today, Practice and Progress. The current page is underlined. A "Jump to…" box opens
   the command palette, and a Menu button holds Settings, Usage and the keyboard shortcuts, with the Test mode pill
   beside it. On a phone the links move to a bottom tab bar with a Jump tab. The Practice link shows the number of
-  due drills, and nothing when none is due. The old addresses `/library`, `/gym`, `/dsa` and `/history` are replaced
-  in place by `/practice`, `/practice/drills`, `/progress#dsa` and `/progress#history`.
+  due drills, and nothing when none is due. The old addresses `/library`, `/library/new`, `/gym`, `/dsa` and `/history`
+  are replaced in place by `/practice`, `/practice/new`, `/practice/drills`, `/progress#dsa` and `/progress#history`.
 
 **Today `/`**
 - Kicker date and the day's title ("System design day", "Machine coding day", "DSA day", "Redo day", "Rest day"). A
@@ -990,7 +990,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   the chips, the title, the interviewer's opening line, the Status, Round and Debrief facts, the Interview or Guided
   switch (default from the mode rule), one primary Start button and a small caption. A problem with an open round shows
   "Finish the open round" in place of Start.
-- "Practise any question" (top right) opens `/library/new`: a textarea for a pasted prompt, an HLD/LLD toggle and a
+- "Practise any question" (top right) opens `/practice/new`: a textarea for a pasted prompt, an HLD/LLD toggle and a
   Prepare button. It shows multi-stage preparation progress ("Researching: N searches, M pages", "Writing the brief",
   "Checking facts"). Once ready it shows a setup card with the problem title, track, sources count, checks count,
   corrections applied, a confidence note, and "Start interview" and "Guided" buttons, without revealing the hidden brief.

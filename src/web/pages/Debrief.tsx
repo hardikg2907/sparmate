@@ -18,8 +18,8 @@ import { Banner, Badge, Card, SectionTitle } from "../components/ui";
 import { currentGap, gapCounts, gapMarks, gapState, type GapMark } from "../lib/gapMarks";
 import { nextAction } from "../lib/debriefNext";
 import { gapDividerText, teachMessage } from "../../shared/gaps";
-import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatClock, formatDate } from "../lib/format";
-import { finalRoundMs, phaseSpentMs } from "../lib/timing";
+import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatDate } from "../lib/format";
+import { debriefClockText, finalRoundMs, phaseSpentMs } from "../lib/timing";
 import { scrollToInScroller } from "../lib/scrollInScroller";
 import { Link, navigate } from "../router";
 import type { ChatItem, SessionController } from "../session/types";
@@ -53,7 +53,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
         </h1>
         <span className="hidden shrink-0 text-ui text-muted-foreground sm:inline" title={TRACK_TITLE[session.track]}>
           {TRACK_LABEL[session.track]} {MODE_LABEL[session.mode].toLowerCase()}, {formatDate(session.createdAt)}
-          {roundMs !== null ? `, ${formatClock(roundMs)} of ${Math.round(session.clock.durationMs / 60_000)}:00` : ""}
+          {roundMs !== null ? `, ${debriefClockText(session.mode, roundMs, session.clock.durationMs)}` : ""}
         </span>
         {session.status === "debriefed" ? null : (
           <span className="ml-auto">

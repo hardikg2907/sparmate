@@ -352,8 +352,8 @@ page that has the main bar.
 
 The main bar (Today, Practice, Progress, the Jump box and one Menu) shows on the reading pages. Practice holds Rounds and
 Drills; Progress holds This week, Skills, DSA and History as sections. Rooms and debriefs are full screen without it.
-The old addresses `/library`, `/gym`, `/dsa` and `/history` are replaced in place by `/practice`, `/practice/drills`,
-`/progress#dsa` and `/progress#history`.
+The old addresses `/library`, `/library/new`, `/gym`, `/dsa` and `/history` are replaced in place by `/practice`,
+`/practice/new`, `/practice/drills`, `/progress#dsa` and `/progress#history`.
 
 ### Start a round
 
@@ -457,8 +457,9 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
   shows "Test mode is on" (the mode is set when the server starts, so the Menu has no switch). On a phone the bar keeps
   the logo and the Menu, and a bottom tab bar holds Today, Practice, Progress and Jump.
 - **Jump palette.** A dialog with a search field and groups in this order: Continue (open rounds, with "Paused, 43 of 120
-  min"), Start (today's recommended round), Problems (with track and difficulty), Pages, Settings. Arrow keys move, Enter
-  opens, Esc closes. A row matches when the query is a substring of it, or when each query word starts a word of it.
+  min"), Start (today's recommended round), Problems (with track and difficulty), Rounds (finished rounds, newest first,
+  three shown until the user types), Pages, Settings. Arrow keys move, Enter opens, Esc closes. A row matches when the
+  query is a substring of it, or when each query word starts a word of it.
 - **Frame.** A centred column about 1160 px wide. Heroes are mesh panels with one filled button. Side cards are raised
   panels. Detail goes behind a side panel, a popover or an info tip, never in an accordion. A fact never shares a line
   with dots: each has its own label and value.

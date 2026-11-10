@@ -32,7 +32,7 @@ export function PracticeView({ tab: routeTab, study, gym, ctx }: { tab: Practice
           title="Practice"
           aside={
             <Button asChild variant="outline">
-              <Link href="/library/new">
+              <Link href="/practice/new">
                 <ListIcon size={16} />
                 Practise any question
               </Link>
