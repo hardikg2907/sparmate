@@ -1743,7 +1743,7 @@ export class SessionRuntime {
       ),
       defineTool(
         "read_transcript",
-        "Read the round's transcript, interviewer and candidate lines with their mm:ss times. Give at (mm:ss) to read only the few minutes around one moment.",
+        "Read the round's transcript: interviewer and candidate lines and round events, with their mm:ss times. Give at (mm:ss) to read only the few minutes around one moment.",
         { at: z.string().max(10).optional() },
         async ({ at }) => {
           const atMs = at === undefined ? null : parseStamp(at);

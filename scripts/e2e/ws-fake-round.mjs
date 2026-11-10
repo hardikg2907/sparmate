@@ -647,6 +647,7 @@ async function hldRound(dirs) {
     label: "coach opening",
   });
   check("coach opens after the debrief", coachOpen.entry.text.includes("Let's start with"), coachOpen.entry.text.slice(0, 80));
+  check("coach can read the round's transcript", /I read [1-9]\d* lines of the round/.test(coachOpen.entry.text), coachOpen.entry.text.slice(0, 200));
   mark = c.mark();
   c.send({ type: "chat.send", channel: "coach", clientMsgId: "k1", text: "Can you explain the first gap?" });
   const coachReply = await c.waitFor((m) => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach", { since: mark, label: "coach reply" });

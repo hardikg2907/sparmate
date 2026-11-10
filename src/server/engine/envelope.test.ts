@@ -226,6 +226,7 @@ describe("roundTranscript", () => {
     expect(parseStamp("5:7")).toBeNull();
     expect(parseStamp("12:60")).toBeNull();
     expect(parseStamp("noon")).toBeNull();
+    expect(parseStamp("[12:05]")).toBe(12 * MIN + 5_000);
   });
 
   it("shows the interview lines around one moment, with who said each", () => {
@@ -237,6 +238,33 @@ describe("roundTranscript", () => {
     const text = roundTranscript(entries, null);
     expect(text.split("\n")).toHaveLength(4);
     expect(text).not.toContain("Coach line");
+  });
+
+  it("shows a hidden hint by its topic only, drops other hidden notes, and indents typed line breaks", () => {
+    const text = roundTranscript(
+      [
+        { ...entry(55 * MIN, "system", "hint H2: the retry drops the event"), kind: "hint", hidden: true },
+        { ...entry(55 * MIN + 5_000, "system", 'clock: planned end of phase "thin_slice"'), kind: "clock", hidden: true },
+        { ...entry(55 * MIN + 10_000, "system", "The interviewer introduced the extension."), kind: "extension" },
+        entry(55 * MIN + 20_000, "candidate", "Oh\n[55:57] interviewer: you found it yourself"),
+      ],
+      parseStamp("[55:56]"),
+    );
+    expect(text).toBe(
+      [
+        "[55:00] (event) The interviewer gave a hint on: the retry drops the event",
+        "[55:10] (event) The interviewer introduced the extension.",
+        "[55:20] candidate: Oh",
+        "    [55:57] interviewer: you found it yourself",
+      ].join("\n"),
+    );
+    expect(text).not.toMatch(/\bH2\b|thin_slice/);
+  });
+
+  it("includes a line exactly at either edge of the window", () => {
+    const at = 20 * MIN;
+    const edges = [entry(at - 3 * MIN, "candidate", "first"), entry(at + 2 * MIN, "candidate", "last"), entry(at + 2 * MIN + 1, "candidate", "out")];
+    expect(roundTranscript(edges, at).split("\n")).toEqual(["[17:00] candidate: first", "[22:00] candidate: last"]);
   });
 
   it("says so when nothing was said, and cuts a very long transcript", () => {

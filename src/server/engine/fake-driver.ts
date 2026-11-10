@@ -224,7 +224,11 @@ class FakeConversation implements Conversation {
     const top = card?.gaps[0]?.title ?? "the biggest gap";
     if (turn.meta.request === "coach_open") {
       if (card?.gaps[0]) await callTool(this.setup, "set_gap", { title: card.gaps[0].title, state: "started" });
-      return `${card?.verdict.summary ?? "The round is scored."} Most of the signal sits in the gaps below.\n\nLet's start with ${top.toLowerCase()}. What do you think the interviewer wanted to hear there?`;
+      const read = await callTool(this.setup, "read_transcript", {});
+      const transcript = read?.content.map((c) => (c.type === "text" ? c.text : "")).join("\n") ?? "";
+      const lines = transcript.split("\n").filter((l) => l.startsWith("[")).length;
+      const hint = transcript.includes("gave a hint on:") ? " One hint is in it." : "";
+      return `${card?.verdict.summary ?? "The round is scored."} Most of the signal sits in the gaps below. I read ${lines} lines of the round.${hint}\n\nLet's start with ${top.toLowerCase()}. What do you think the interviewer wanted to hear there?`;
     }
     return `Good question. The short version is that every number should end in a decision about the design.\n\nTry it on ${top.toLowerCase()}: say the number, then say what it forces you to build.`;
   }

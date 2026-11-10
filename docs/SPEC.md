@@ -196,9 +196,11 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   `[{type:"image", data, mimeType:"image/png"}, {type:"text", text: graphText}]`. If the browser does not
   answer, return the graph text alone and say the image was unavailable.
 - `read_transcript({ at? })` (coach only) -> the round's interview transcript, one `[mm:ss] role: text` line per entry
-  with app events as `(event)` lines. With `at` (`mm:ss`, at most 10 characters) it returns only the lines from three
-  minutes before to two minutes after that time; any other `at` is a short tool error. A transcript over 60,000
-  characters is cut, with a note to ask for a time.
+  with app events as `(event)` lines. A recorded hint shows as `The interviewer gave a hint on: <topic>`, without its
+  level; other hidden notes are left out; a line break inside an entry starts an indented line. With `at` (`mm:ss`,
+  brackets allowed, at most 10 characters) it returns only the lines from three minutes before to two minutes after
+  that time; an `at` that is not a time is a tool error. A transcript over 60,000 characters is cut, with a note to ask
+  for a time.
 - `set_phase({ phase })` -> phase must belong to the track; records `phaseHistory` with `by: "interviewer"`.
 - `note_hint({ level: 1|2|3, topic })` -> appends to `session.hints`. Hidden from the candidate.
 - `end_interview({ reason })` -> ends the round (same path as the candidate's end).
