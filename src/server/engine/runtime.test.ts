@@ -1397,18 +1397,61 @@ describe("the coach and the scorecard gaps", () => {
     rt.dispose();
   });
 
-  it("answers a first coach message that a restart cut off before its reply", async () => {
-    const { rt, session } = await coachRoom({ started: false });
+  /** A debriefed room whose first coach send fails, after streaming `partial` when it is given. */
+  async function failingCoachRoom(partial: string | null) {
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    let failNext = true;
+    const sends: UserTurn[] = [];
+    const driver: Driver = {
+      ...inner,
+      startConversation(setupArgs) {
+        const conv = inner.startConversation(setupArgs);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          send(turn, handlers) {
+            if (setupArgs.role === "coach") {
+              sends.push(turn);
+              if (failNext) {
+                failNext = false;
+                if (partial) handlers.onTextDelta(partial);
+                return Promise.reject(new DriverError("The coach process stopped."));
+              }
+            }
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    session.status = "debriefed";
+    session.scorecard = { gaps: GAPS, verdict: { sde2: "hire", senior: "lean_no_hire", summary: "ok" } } as unknown as Session["scorecard"];
+    const rt = new SessionRuntime(t.deps, session, await urlShortener());
+    await rt.init();
+    rt.attach(t.peer);
+    const failed = () => vi.waitFor(() => expect(t.msgs.some((m) => m.type === "agent.status" && m.channel === "coach" && m.state === "error")).toBe(true));
+    return { t, rt, session, sends, failed };
+  }
+
+  it("runs an opening that failed part way again on a second press", async () => {
+    const { t, rt, sends, failed } = await failingCoachRoom("Your deep dives held up well. ");
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await failed();
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await vi.waitFor(() => expect(sends).toHaveLength(2));
+    expect(sends.map((turn) => turn.meta)).toEqual([expect.objectContaining({ request: "coach_open" }), expect.objectContaining({ request: "coach_open" })]);
     rt.dispose();
-    session.transcript.push({ id: "q1", at: 0, wall: new Date().toISOString(), channel: "coach", role: "candidate", text: "Teach me this gap: Hot keys" });
-    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
-    const again = new SessionRuntime(t.deps, session, await urlShortener());
-    await again.init();
-    again.attach(t.peer);
-    await vi.waitFor(() => expect(session.transcript.filter((e) => e.channel === "coach" && e.role === "coach")).toHaveLength(1));
+  });
+
+  it("does not rerun a failed candidate turn when the start button is pressed", async () => {
+    const { t, rt, sends, failed } = await failingCoachRoom(null);
+    await rt.handle({ type: "chat.send", channel: "coach", clientMsgId: "q1", text: "Teach me this gap: Hot keys" }, t.peer);
+    await failed();
+    await rt.handle({ type: "coach.open" }, t.peer);
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(session.transcript.filter((e) => e.channel === "coach" && e.role === "coach")).toHaveLength(1);
-    again.dispose();
+    expect(sends).toHaveLength(1);
+    rt.dispose();
   });
 
   it("makes the candidate's first message the coach's first turn when the chat was never started", async () => {

@@ -431,12 +431,6 @@ export class SessionRuntime {
       this.scheduler.reschedule();
       this.syncAwayTimer();
     }
-    // A coach message that a restart cut off before its reply still gets one.
-    const lastCoach = [...s.transcript].reverse().find((e) => e.channel === "coach" && e.role !== "system");
-    if (s.status === "debriefed" && lastCoach?.role === "candidate") {
-      this.coach.queue.push(this.coachCandidateTurn(lastCoach.text));
-      void this.pump(this.coach);
-    }
     this.syncCoachAwayTimer();
   }
 
@@ -1663,7 +1657,7 @@ export class SessionRuntime {
       build: () => {
         const { view, commit } = this.coachContext(this.coach);
         const body =
-          'They pressed "Start with the coach". Write your opening message now: sum up the scorecard in two or three sentences, then say "let\'s start with" the top gap and ask one question about the moment where it bit.';
+          'The debrief is ready. Write your opening message now: sum up the scorecard in two or three sentences, then say "let\'s start with" the top gap and begin teaching it.';
         return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "coach_open" } }, commit };
       },
     };

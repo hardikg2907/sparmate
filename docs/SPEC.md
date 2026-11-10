@@ -461,8 +461,7 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 - The coach waits for the candidate, because an opening nobody reads still costs a model turn. It starts when they
   press "Start with the coach" in the empty coach panel (`coach.open`, which sends the opening once and only while the
   chat has no coach or candidate line; after a failed opening, a second press runs it again), press "Teach me this" or
-  send a first message (after a failed opening, that runs the opening and then answers the message). When the last
-  coach line is the candidate's because a restart cut off the reply, the round answers it when it loads. Its first reply is the opening,
+  send a first message (after a failed opening, that runs the opening and then answers the message). Its first reply is the opening,
   written from the scorecard (summary in two or three sentences, then "let's start with" the gap the first message
   names, or the top gap), following TEACHING.md section 2 and the problem
   session step 6 (teach each gap directly, about ten minutes each). While
