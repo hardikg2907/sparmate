@@ -3,7 +3,7 @@ import {
   DriverError,
   type Conversation,
   type ConversationSetup,
-  type Driver,
+  type ManagedDriver,
   type OneShotResult,
   type OneShotSetup,
   type RoleSetup,
@@ -13,7 +13,7 @@ import {
   type UserTurn,
 } from "./driver";
 import { truncate, type Logger } from "./log";
-import { addStats, attachFailureStats, extractConversationStats, extractOneShotStats, failureStats } from "./usage-capture";
+import { AssistantSpend, addStats, attachFailureStats, extractConversationStats, extractOneShotStats, failureStats, noResultStats } from "./usage-capture";
 
 export interface ClaudeDriverOptions {
   /** Empty folder every model subprocess runs in. */
@@ -101,7 +101,7 @@ class InputQueue<T> {
 
 type AssistantErrorKind = NonNullable<Extract<SDKMessage, { type: "assistant" }>["error"]>;
 
-function plainMessage(kind: AssistantErrorKind | null, status: number | null | undefined): string {
+export function plainMessage(kind: AssistantErrorKind | null, status: number | null | undefined): string {
   switch (kind) {
     case "authentication_failed":
     case "oauth_org_not_allowed":
@@ -274,6 +274,106 @@ function resultFailure(result: Extract<SDKResultMessage, { type: "result" }>, ki
   return new DriverError(plainMessage(kind, status), detail);
 }
 
+/** Whitespace runs become one space, so a repeat that differs only in line breaks still matches. */
+function collapse(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** Index in `raw` just after the part that collapses to the first `length` characters of collapse(raw). */
+function rawEnd(raw: string, length: number): number {
+  let count = 0;
+  let inSpace = false;
+  for (let i = 0; i < raw.length; i++) {
+    if (/\s/.test(raw[i]!)) {
+      if (!inSpace && count > 0) count++;
+      inSpace = true;
+    } else {
+      inSpace = false;
+      count++;
+    }
+    if (count >= length) return i + 1;
+  }
+  return raw.length;
+}
+
+/**
+ * Joins the top-level text blocks of one turn into the text the user sees. When the model writes a paragraph, calls a
+ * tool, then writes it again, the repeat is held back while it still matches the start of an earlier block and
+ * dropped when the block ends equal to one. Text is compared with whitespace collapsed, because a repeat often differs
+ * only in the line breaks. A held block that goes on past an earlier block keeps only what follows that block, and
+ * any other block that stops matching is released whole with its separator, so ordinary text still streams live.
+ */
+class TurnText {
+  text = "";
+  private readonly earlier: string[] = [];
+  private cur: { index: number; text: string; held: boolean } | null = null;
+
+  constructor(private readonly emit: (delta: string) => void) {}
+
+  private out(delta: string): void {
+    this.text += delta;
+    this.emit(delta);
+  }
+
+  private release(text: string): void {
+    this.out(`${this.text.length > 0 ? "\n\n" : ""}${text}`);
+  }
+
+  startBlock(index: number): void {
+    this.finish();
+    this.cur = { index, text: "", held: this.earlier.length > 0 };
+  }
+
+  delta(delta: string): void {
+    const cur = this.cur;
+    if (!cur) {
+      this.out(delta);
+      return;
+    }
+    cur.text += delta;
+    if (!cur.held) {
+      this.out(delta);
+      return;
+    }
+    const seen = collapse(cur.text);
+    if (this.earlier.some((e) => e.startsWith(seen))) return;
+    cur.held = false;
+    const repeated = this.earlier.filter((e) => e !== "" && seen.startsWith(`${e} `)).sort((a, b) => b.length - a.length)[0];
+    this.release(repeated ? cur.text.slice(rawEnd(cur.text, repeated.length)).trimStart() : cur.text);
+  }
+
+  stopBlock(index: number): void {
+    if (this.cur?.index === index) this.finish();
+  }
+
+  finish(): void {
+    const cur = this.cur;
+    if (!cur) return;
+    this.cur = null;
+    const seen = collapse(cur.text);
+    if (cur.held && seen !== "" && !this.earlier.includes(seen)) this.release(cur.text);
+    this.earlier.push(seen);
+  }
+}
+
+/** The blocks of a reply that was never streamed, without a block that repeats an earlier one. */
+function distinctBlocks(blocks: string[]): string[] {
+  const seen: string[] = [];
+  const kept: string[] = [];
+  for (const block of blocks) {
+    const collapsed = collapse(block);
+    if (seen.includes(collapsed)) continue;
+    seen.push(collapsed);
+    kept.push(block);
+  }
+  return kept;
+}
+
+/** Set once the server starts to stop, so a process the terminal's interrupt kills first is not logged as a failure. */
+interface DriverLifecycle {
+  stopping: boolean;
+}
+
 class ClaudeConversation implements Conversation {
   private readonly input = new InputQueue<SDKUserMessage>();
   private readonly abort = new AbortController();
@@ -290,6 +390,7 @@ class ClaudeConversation implements Conversation {
     private readonly setup: ConversationSetup,
     private readonly opts: ClaudeDriverOptions,
     private readonly registry: Set<{ close(): void }>,
+    private readonly lifecycle: DriverLifecycle,
   ) {
     this.costBaselineKnown = !setup.resumeSessionId;
     this.sessionId = setup.resumeSessionId;
@@ -321,8 +422,9 @@ class ClaudeConversation implements Conversation {
 
   private async readTurn(handlers: TurnHandlers): Promise<TurnReply> {
     const started = Date.now();
-    let streamed = "";
+    const turnText = new TurnText((d) => handlers.onTextDelta(d));
     const assistantTexts: string[] = [];
+    const spend = new AssistantSpend();
     let errorKind: AssistantErrorKind | null = null;
     const iterator = this.iterator;
     if (!iterator) throw new DriverError("The model process is not running.");
@@ -331,27 +433,26 @@ class ClaudeConversation implements Conversation {
       try {
         next = await iterator.next();
       } catch (err) {
-        throw new DriverError(this.closed ? "The conversation was closed." : "The model process stopped. Retry.", `${String(err)} ${this.stderr.text()}`);
+        throw this.stopped(started, spend, `${String(err)} ${this.stderr.text()}`);
       }
-      if (next.done) throw new DriverError("The model process stopped. Retry.", `stream ended ${this.stderr.text()}`);
+      if (next.done) throw this.stopped(started, spend, `stream ended ${this.stderr.text()}`);
       const msg = next.value;
       if ("session_id" in msg && typeof msg.session_id === "string" && msg.session_id) this.sessionId = msg.session_id;
 
       if (msg.type === "stream_event") {
         if (msg.parent_tool_use_id !== null) continue;
         const ev = msg.event;
-        if (ev.type === "content_block_start" && ev.content_block.type === "text" && streamed.length > 0) {
-          streamed += "\n\n";
-          handlers.onTextDelta("\n\n");
-        } else if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
-          streamed += ev.delta.text;
-          handlers.onTextDelta(ev.delta.text);
-        }
+        if (ev.type === "content_block_start" && ev.content_block.type === "text") turnText.startBlock(ev.index);
+        else if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") turnText.delta(ev.delta.text);
+        else if (ev.type === "content_block_stop") turnText.stopBlock(ev.index);
       } else if (msg.type === "assistant") {
         if (msg.parent_tool_use_id !== null) continue;
         if (msg.error) errorKind = msg.error;
+        spend.add(msg.message.id, msg.message.usage);
         for (const block of msg.message.content) if (block.type === "text") assistantTexts.push(block.text);
       } else if (msg.type === "result") {
+        turnText.finish();
+        const streamed = turnText.text;
         const { stats, nextCumulativeCost } = extractConversationStats(msg, started, this.lastCumulativeCost, this.setup.model);
         this.lastCumulativeCost = nextCumulativeCost;
         if (!this.costBaselineKnown) {
@@ -360,13 +461,19 @@ class ClaudeConversation implements Conversation {
         }
         if (msg.subtype === "success" && !msg.is_error) {
           if (streamed) return { text: streamed, stats };
-          const text = assistantTexts.join("\n\n") || msg.result;
+          const text = distinctBlocks(assistantTexts).join("\n\n") || msg.result;
           if (text) handlers.onTextDelta(text);
           return { text, stats };
         }
         throw attachFailureStats(resultFailure(msg, errorKind, this.stderr), stats);
       }
     }
+  }
+
+  /** The process ended mid-turn. Our own close() is not a failure, so only a real stop carries stats for the ledger. */
+  private stopped(started: number, spend: AssistantSpend, detail: string): DriverError {
+    if (this.closed || this.lifecycle.stopping) return new DriverError("The conversation was closed.", detail);
+    return attachFailureStats(new DriverError("The model process stopped. Retry.", detail), noResultStats(started, this.setup.model, spend));
   }
 
   close(): void {
@@ -388,6 +495,7 @@ async function runOnceAttempt<T>(
   opts: ClaudeDriverOptions,
   jsonSchema: Record<string, unknown> | null,
   registry: Set<{ close(): void }>,
+  lifecycle: DriverLifecycle,
 ): Promise<OneShotResult<T>> {
   if (setup.signal?.aborted) throw new DriverError("The model process was aborted.");
   const started = Date.now();
@@ -409,8 +517,11 @@ async function runOnceAttempt<T>(
   };
   input.push(userMessage(setup.turn));
   const q = query({ prompt: input.iterate(), options });
+  // A call we cancel ourselves writes no ledger row; a process that dies on its own does.
+  let cancelled = false;
   const handle = {
     close: () => {
+      cancelled = true;
       abort.abort();
       try {
         q.close();
@@ -426,10 +537,16 @@ async function runOnceAttempt<T>(
   setup.signal?.addEventListener("abort", onQueryAbort, { once: true });
   let errorKind: AssistantErrorKind | null = null;
   const texts: string[] = [];
+  const spend = new AssistantSpend();
+  const stoppedError = (message: string, detail: string): DriverError => {
+    const err = new DriverError(message, detail);
+    return cancelled || lifecycle.stopping || setup.signal?.aborted ? err : attachFailureStats(err, noResultStats(started, setup.model, spend));
+  };
   try {
     for await (const msg of q) {
       if (msg.type === "assistant" && msg.parent_tool_use_id === null) {
         if (msg.error) errorKind = msg.error;
+        spend.add(msg.message.id, msg.message.usage);
         for (const block of msg.message.content) {
           if (block.type === "text") texts.push(block.text);
           else if (block.type === "tool_use") {
@@ -455,10 +572,10 @@ async function runOnceAttempt<T>(
         return { text, output: parsed.data, stats };
       }
     }
-    throw new DriverError("The model process stopped early. Retry.", `no result ${stderr.text()}`);
+    throw stoppedError("The model process stopped early. Retry.", `no result ${stderr.text()}`);
   } catch (err) {
     if (err instanceof DriverError) throw err;
-    throw new DriverError("The model process stopped. Retry.", `${String(err)} ${stderr.text()}`);
+    throw stoppedError("The model process stopped. Retry.", `${String(err)} ${stderr.text()}`);
   } finally {
     setup.signal?.removeEventListener("abort", onSignalAbort);
     setup.signal?.removeEventListener("abort", onQueryAbort);
@@ -472,14 +589,15 @@ async function runOnceAttempt<T>(
   }
 }
 
-export function createClaudeDriver(opts: ClaudeDriverOptions): Driver & { closeAll(): void } {
+export function createClaudeDriver(opts: ClaudeDriverOptions): ManagedDriver {
   const registry = new Set<{ close(): void }>();
+  const lifecycle: DriverLifecycle = { stopping: false };
   return {
     kind: "claude",
-    startConversation: (setup: ConversationSetup) => new ClaudeConversation(setup, opts, registry),
+    startConversation: (setup: ConversationSetup) => new ClaudeConversation(setup, opts, registry, lifecycle),
     async runOnce<T>(setup: OneShotSetup<T>): Promise<OneShotResult<T>> {
       try {
-        return await runOnceAttempt(setup, opts, setup.output?.jsonSchema ?? null, registry);
+        return await runOnceAttempt(setup, opts, setup.output?.jsonSchema ?? null, registry, lifecycle);
       } catch (err) {
         const fallback = setup.output?.fallbackJsonSchema;
         if (fallback && err instanceof DriverError && /json.?schema/i.test(err.detail)) {
@@ -487,7 +605,7 @@ export function createClaudeDriver(opts: ClaudeDriverOptions): Driver & { closeA
           // The refused attempt may have spent tokens, so its stats join the retry's single ledger row.
           const first = failureStats(err);
           try {
-            const res = await runOnceAttempt(setup, opts, fallback, registry);
+            const res = await runOnceAttempt(setup, opts, fallback, registry, lifecycle);
             return first ? { ...res, stats: addStats(first, res.stats) } : res;
           } catch (retryErr) {
             const second = failureStats(retryErr);
@@ -499,7 +617,11 @@ export function createClaudeDriver(opts: ClaudeDriverOptions): Driver & { closeA
         throw err;
       }
     },
+    markStopping() {
+      lifecycle.stopping = true;
+    },
     closeAll() {
+      lifecycle.stopping = true;
       for (const h of [...registry]) h.close();
     },
   };

@@ -245,7 +245,7 @@ describe("failure handling", () => {
     expect(session.status).toBe("paused");
     expect(session.pauseReason).toBe("error");
     const err = t.msgs.find((m) => m.type === "agent.status" && m.state === "error");
-    expect(err).toMatchObject({ channel: "interview", error: "The model is rate limited right now. Wait a minute, then retry." });
+    expect(err).toMatchObject({ channel: "interview", error: "The model is rate limited right now. Wait a minute." });
 
     // While paused the clock stands still.
     const before = session.pausedMs;

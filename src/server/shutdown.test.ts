@@ -6,7 +6,7 @@ describe("createShutdownHandler", () => {
     const kokoro = { shutdown: vi.fn() };
     const killRunners = vi.fn();
     const manager = { shutdown: vi.fn().mockResolvedValue(undefined) };
-    const driver = { closeAll: vi.fn() };
+    const driver = { markStopping: vi.fn(), closeAll: vi.fn() };
     const app = { close: vi.fn().mockResolvedValue(undefined) };
     const log = {
       info: vi.fn(),
@@ -32,6 +32,8 @@ describe("createShutdownHandler", () => {
     expect(kokoro.shutdown).toHaveBeenCalled();
     expect(killRunners).toHaveBeenCalled();
     expect(manager.shutdown).toHaveBeenCalled();
+    expect(driver.markStopping).toHaveBeenCalled();
+    expect(driver.markStopping.mock.invocationCallOrder[0]).toBeLessThan(manager.shutdown.mock.invocationCallOrder[0]!);
     expect(driver.closeAll).toHaveBeenCalled();
     expect(app.close).toHaveBeenCalled();
     expect(log.close).toHaveBeenCalled();
@@ -45,7 +47,7 @@ describe("createShutdownHandler", () => {
       const manager = {
         shutdown: vi.fn().mockReturnValue(new Promise(() => {})),
       };
-      const driver = { closeAll: vi.fn() };
+      const driver = { markStopping: vi.fn(), closeAll: vi.fn() };
       const app = { close: vi.fn().mockResolvedValue(undefined) };
       const log = {
         info: vi.fn(),
@@ -78,7 +80,7 @@ describe("createShutdownHandler", () => {
   it("ignores duplicate shutdown signals", async () => {
     const kokoro = { shutdown: vi.fn() };
     const manager = { shutdown: vi.fn().mockResolvedValue(undefined) };
-    const driver = { closeAll: vi.fn() };
+    const driver = { markStopping: vi.fn(), closeAll: vi.fn() };
     const app = { close: vi.fn().mockResolvedValue(undefined) };
     const log = {
       info: vi.fn(),

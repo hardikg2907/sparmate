@@ -39,7 +39,7 @@ export interface UsageTotals {
   cacheCreationTokens: number;
   cacheHitRate: number;
   calls: number;
-  /** Calls that ended in an error but still spent tokens. */
+  /** Calls that ended in an error, including a model process that stopped before it reported any tokens. */
   failedCalls: number;
   /** Calls whose cost is priced from tokens, not reported by the SDK. */
   estimatedCalls: number;

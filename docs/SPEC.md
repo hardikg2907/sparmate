@@ -1154,10 +1154,13 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 - Linked from the Menu in the main bar, next to Settings.
 - Totals: API-equivalent cost, input tokens, output tokens, cache hit rate, number of model calls, rounds. The
   ledger records a failed call as a row with `ok: false` (a row without `ok` reads as ok), and the totals count
-  these as `failedCalls`, shown beside the call count. When the SDK gives no cost, the row is priced from its tokens
-  with `costEstimated: true`, and an older row with tokens and a stored cost of 0 is priced at the dearest model
-  the same way. The totals count these as `estimatedCalls`, and the cost shows "≈" when any call is estimated.
-  Days are bucketed in local time.
+  these as `failedCalls`, shown beside the call count. A model process that stops without a result still writes
+  such a row. It carries the tokens of the assistant messages seen until then (each message id counted once) and
+  is priced from them with `costEstimated: true`; with none seen, it has zero tokens, cost 0 and no estimate. A
+  call the app closes or aborts itself, or one cut off when the server stops, writes no row. When the SDK gives
+  no cost, the row is priced from its tokens with `costEstimated: true`, and an older row with tokens and a
+  stored cost of 0 is priced at the dearest model the same way. The totals count these as `estimatedCalls`, and
+  the cost shows "≈" when any call is estimated. Days are bucketed in local time.
 - Cost per day bar chart (last 30 days, plain SVG/CSS bars).
 - A Drills section: drill cost, attempts and grader calls; a table by drill kind (the drill's title, or "Earlier drills" for rows without a kind) and a table by attempt (date, drill kind, problem, calls, cost) that shows the first 20 and a control to show the rest. With no drill call it shows one line saying so. Grader calls recorded before attempts had ids count in the totals and by kind, and appear as one note under the tables.
 - Tables by problem (with separate rounds cost and drills cost beside the total), by round (each row links to that round's debrief), by role and by model.

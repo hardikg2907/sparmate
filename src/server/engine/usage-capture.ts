@@ -160,6 +160,38 @@ export function attachFailureStats<E extends object>(err: E, stats: TurnStats): 
   return err;
 }
 
+/** Token usage of the assistant messages seen so far in one call; the SDK may repeat a message id with the same usage. */
+export class AssistantSpend {
+  private readonly byId = new Map<string, CumulativeTokens>();
+  private anonymous = 0;
+
+  add(id: string | undefined, usage: Parameters<typeof extractTokenCounts>[0]): void {
+    this.byId.set(id || `anonymous-${this.anonymous++}`, extractTokenCounts(usage).tokens);
+  }
+
+  total(): CumulativeTokens {
+    const sum = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+    for (const t of this.byId.values()) {
+      sum.inputTokens += t.inputTokens;
+      sum.outputTokens += t.outputTokens;
+      sum.cacheReadTokens += t.cacheReadTokens;
+      sum.cacheCreationTokens += t.cacheCreationTokens;
+    }
+    return sum;
+  }
+}
+
+/**
+ * Stats for a call whose process stopped before any result. With no tokens seen, nothing is known to be billed, so the
+ * cost is 0 and the row is not flagged as an estimate. With tokens seen from assistant messages, the cost is unknown,
+ * so the row is priced from those tokens and flagged as an estimate.
+ */
+export function noResultStats(startedMs: number, model: string, spend?: AssistantSpend): TurnStats {
+  const tokens = spend?.total() ?? { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+  const seen = tokens.inputTokens + tokens.outputTokens + tokens.cacheReadTokens + tokens.cacheCreationTokens > 0;
+  return { durationMs: Date.now() - startedMs, costUsd: seen ? null : 0, ...tokens, model };
+}
+
 export function failureStats(err: unknown): TurnStats | null {
   return typeof err === "object" && err !== null ? (failedCallStats.get(err) ?? null) : null;
 }

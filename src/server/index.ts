@@ -28,7 +28,7 @@ import { runSetupChecks, SetupStatus } from "./setup/checks";
 export interface ShutdownDeps {
   kokoro: { shutdown(): void };
   manager: { shutdown(): Promise<void> };
-  driver: { closeAll(): void };
+  driver: { markStopping(): void; closeAll(): void };
   app: { close(): Promise<void> };
   log: { info(msg: string): void; error(msg: string, err?: unknown): void; close(): Promise<void> };
   killRunners?: () => void;
@@ -53,6 +53,8 @@ export function createShutdownHandler(deps: ShutdownDeps): (signal: string) => P
     forceTimer.unref?.();
 
     try {
+      // The terminal's interrupt may already be killing model processes; they must not count as failed calls.
+      deps.driver.markStopping();
       deps.kokoro.shutdown();
       deps.killRunners?.();
       await deps.manager.shutdown();

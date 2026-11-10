@@ -530,7 +530,10 @@ function UsageNotes({ trackingSince }: { trackingSince: string | null }) {
   return (
     <div className="surface-flat space-y-1.5 rounded-xl bg-card p-5 text-ui text-muted-foreground">
       <p>Cost is what the same calls would cost on the API. On a Claude plan you pay by plan limits, not by this amount.</p>
-      <p>A failed call still spent tokens, so it counts in every total. A cost marked ≈ is priced from token counts because the model gave no figure.</p>
+      <p>
+        A failed call counts in every total. A model process that stops before it reports its usage counts with the tokens seen until then. A cost marked ≈ is priced from token
+        counts because the model gave no figure.
+      </p>
       <p>
         {dateFormatted
           ? `Tracking started on ${dateFormatted}; rounds before that show no data.`
