@@ -136,7 +136,7 @@ Pick one the candidate has not seen. If they built room for one already, pick an
 - The fix is one `std::mutex` with a `std::lock_guard` in every public method, `get` and `size` included, and the value copied out under the lock.
 - A second race: a `get` holds a node while another thread's `put` evicts it, or two `put`s of new keys both pass the capacity check.
 
-Stretch signal: states the cost with the brief's numbers. At 50,000 calls per second and about 1 microsecond per call, one mutex is busy about 5% of the time, so one lock is enough. For much higher rates they shard: N caches with one mutex each, picked by the key's hash. The cost is that eviction is per shard, so the cache is only approximately LRU.
+Stretch signal: states the cost with the problem's numbers. At 50,000 calls per second and about 1 microsecond per call, one mutex is busy about 5% of the time, so one lock is enough. For much higher rates they shard: N caches with one mutex each, picked by the key's hash. The cost is that eviction is per shard, so the cache is only approximately LRU.
 
 ## Level bar
 

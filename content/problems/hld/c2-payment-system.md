@@ -123,6 +123,8 @@ Core entities:
 
 Walk one timeout: the call times out at 8 seconds, the API answers `pending`, and the page shows "confirming". Nothing is marked failed. At 90 seconds the resolver looks up the reference. A found charge goes through T2. An empty answer means no charge was made, so the payment becomes `failed` and the buyer can try again. A webhook that arrives first does the same job through the same T2.
 
+Walk one refund: support sends `POST /payments/{paymentId}/refunds` with its own `Idempotency-Key`, the amount 2,000 and the seller S1. The API answers `409` if the payment has not succeeded, and `422` if the amount is more than S1's refundable rest. Otherwise it inserts a `Refund` row as `pending` and calls the provider with the refund's own key, with no transaction open. One Postgres transaction then does a compare-and-set on the refund status and raises `refundedAmount` with a conditional update. The same transaction posts the ledger lines (debit `seller_payable:S1` 1,800, debit `platform_revenue` 200, credit `psp_receivable` 2,000) and writes the outbox row for `refund.succeeded`. A lost answer leaves the row `pending`, and the resolver or the webhook finishes it through the same transaction.
+
 Crash points (steps: 1 insert, 2 provider call, 3 T2, 4 publish, 5 order service applies the event). No row below can lead to a second charge, because the provider key is the payment id and an order has one open or paid payment.
 
 | Failure | Left behind | Repaired by |

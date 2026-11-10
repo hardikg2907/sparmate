@@ -186,7 +186,7 @@ Each scenario starts from a fresh machine unless it says otherwise. Adapt the ca
 
 ## Extensions
 
-Pick one the candidate has not seen. Prefer 1 or 2. Number 3 has the same shape as the maintenance mode they already built. Say the requirement, ask "What changes?", and hold the facts back until they ask.
+Pick one. Say the requirement, ask "What changes?", and hold the facts back until they ask.
 
 1. **Change whenever the stock allows it:** product says the machine must find change whenever its stock can make it, not only when greedy can. What changes?
    - Facts: prefer the fewest pieces, and any answer wins a tie. The change is always under 100. The stock still includes the customer's own pieces. A failure still cancels the sale and returns the exact pieces. Example: slot 0 holds Juice at price 14, the stock holds one 5 and three 2 pieces, and the customer inserts one 20. The change is 6. The new rule returns three 2 pieces, and the stock then holds the 20 and the 5. With only one 5 in stock, change 6 is truly impossible, so the 20 comes back.
@@ -202,8 +202,6 @@ Pick one the candidate has not seen. Prefer 1 or 2. Number 3 has the same shape 
    - Facts: the dispenser returns success or failure. On failure the sale is cancelled. The customer gets back the exact pieces. The quantity and the stock stay as they were. The machine then goes to OUT_OF_ORDER. In that state every customer call is refused as out of order, and a piece inserted comes straight back. The operator's restock and load calls still work. A new operator call `repair()` goes back to idle. `repair()` in any other state is refused. A jam stops the whole machine, not one slot.
    - Expect: a third state and a cell for every method. A dispenser interface injected at construction; the demo uses a fake that fails on demand. In the completion check, change is worked out in a local, then the dispenser runs, and only then do the stock and quantity change. A good answer says why that order matters.
    - Same: with a dispenser that never fails, scenarios 1 to 11 give the same results. Cancel, change and the busy rule do not change.
-   - Interviewer note: this extension is close to the maintenance mode the candidate saw.
-4. **Maintenance mode (already seen):** the operator enters a maintenance state. Customers are out of service during it, and restock and load money work only there. Do not use it.
 
 ## Concurrency follow-up
 
