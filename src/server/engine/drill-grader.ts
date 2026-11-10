@@ -122,7 +122,9 @@ export function dropKeyReveals(lines: readonly string[], key: string, known: str
  * a question never hands the key back. Null when nothing is left.
  */
 export function cleanQuestion(raw: string, key: string, redact: (text: string) => string): string | null {
-  const text = redact(clip(raw, SHOWN_QUESTION_CHARS));
+  // An interviewer asks one thing at a time, so anything after the first question mark is cut.
+  const mark = raw.indexOf("?");
+  const text = redact(clip(mark >= 0 ? raw.slice(0, mark + 1) : raw, SHOWN_QUESTION_CHARS));
   if (text === "") return null;
   return dropKeyCopies([text], key).length === 0 ? FALLBACK_QUESTION : text;
 }
@@ -148,7 +150,9 @@ export function finishGrade(output: GraderOutput, answer: string, opts: FinishOp
     throw new Error("The grader did not score exactly the criteria of this drill.");
   }
   const scores = criteria.map((k) => ({ id: k.id, score: output.scores.find((s) => s.id === k.id)?.score ?? 1 }));
-  const text = (line: string) => opts.redact(clip(line, SHOWN_CHARS));
+  // The page shows labels only, so an id the model wrote into a line reads as its label.
+  const named = (line: string) => criteria.reduce((out, k) => (k.id.includes("_") ? out.split(k.id).join(`"${k.label}"`) : out), line);
+  const text = (line: string) => opts.redact(clip(named(line), SHOWN_CHARS));
   const known = [answer, opts.shown, ...criteria.map((k) => k.label)].join("\n");
   const lines = (list: readonly string[]) =>
     dropKeyReveals(

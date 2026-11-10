@@ -360,6 +360,17 @@ describe("follow-up question schemas", () => {
   });
 });
 
+describe("one question at a time", () => {
+  it("cuts a follow-up question after its first question mark", () => {
+    expect(cleanQuestion("What happens to the unused numbers? Also, how would you hide the order?", "", (t) => t)).toBe("What happens to the unused numbers?");
+  });
+
+  it("shows a criterion's label where the model wrote its id", () => {
+    const out = finish({ ...ok, improve: ["For picks_numbers, say which figures matter."] }, "Reads are high.");
+    expect(out.improve).toEqual(['For "Picks the numbers that decide", say which figures matter.']);
+  });
+});
+
 describe("cleanQuestion", () => {
   const key = "A counter encoded in base62, with ranges handed to each server so there is no single hot counter.";
   const same = (t: string) => t;
