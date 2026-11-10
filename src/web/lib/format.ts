@@ -57,7 +57,12 @@ export const MARK_TONE: Record<TrackerMark, Tone> = { "[ ]": "neutral", "[~]": "
  * must stand alone, so code such as `grid[x]` keeps its brackets.
  */
 export function marksInWords(text: string): string {
-  return text.replace(/(?<![\w\]])\[(~|x| )\](?!\w)/g, (mark) => MARK_LABEL[mark as TrackerMark].toLowerCase());
+  return text.replace(/(?<![\w\])`])\[(~|x| )\](?![\w`])/g, (mark) => MARK_LABEL[mark as TrackerMark].toLowerCase());
+}
+
+/** A study note summary saved by an older version said "(mark [~]"; only that form is rewritten, never the text it quotes. */
+export function summaryInWords(summary: string): string {
+  return summary.replace(/\(mark (\[(~|x| )\])/, (_all, mark: string) => `(mark it ${MARK_LABEL[mark as TrackerMark].toLowerCase()}`);
 }
 
 export const TRACK_LABEL: Record<Track, string> = { hld: "HLD", lld: "LLD" };

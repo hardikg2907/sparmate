@@ -529,11 +529,18 @@ body {
   padding: 0.05em 0.35em;
 }
 /*
- * Overlay scrollbars hide until a scroll starts, so a wide diagram looked cut off at the edge. A styled bar always
- * shows; the standard scrollbar properties are reset first, because a browser that sees them ignores the styled one.
+ * Overlay scrollbars hide until a scroll starts, so a wide diagram looked cut off at the edge. Two cues fix that. A
+ * shadow shows on each side that has more to scroll to, in every browser: the cover gradients scroll with the content
+ * and hide the shadow at an end. Chrome and Safari also show a styled bar, once the standard scrollbar properties are
+ * reset, because a browser that sees them ignores the styled one.
  */
 .md pre {
-  background: var(--muted);
+  background:
+    linear-gradient(to right, var(--muted) 30%, transparent) left / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--muted) 30%, transparent) right / 2rem 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--foreground) 18%, transparent), transparent) left / 0.75rem 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--foreground) 18%, transparent), transparent) right / 0.75rem 100% no-repeat scroll,
+    var(--muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
   padding: 0.65em 0.85em;
@@ -547,7 +554,7 @@ body {
   height: 8px;
 }
 .md pre::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--input);
   border-radius: 4px;
 }
 .md pre code {

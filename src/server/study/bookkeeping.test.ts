@@ -194,6 +194,18 @@ describe("op summaries and privacy", () => {
     expect(proposal.ops[0]?.summary).toBe('Update "URL Shortener" (mark it partly done)');
   });
 
+  it("still builds the summary when a blocked term is also a word of the op's kind or a mark", async () => {
+    const g = await makeGuard(["review", "x"]);
+    const proposal = await plan(
+      [
+        { kind: "review_append_entry", markdown: "## C2 — URL Shortener · taught 2026-10-30\n1. Explain to a junior: why codes collide." },
+        { kind: "tracker_update_bullet", section: C2, bullet: "URL Shortener", mark: "[x]" },
+      ],
+      g,
+    );
+    expect(proposal.ops.map((op) => op.summary)).toEqual(['Add a [redacted].md entry: "C2 — URL Shortener · taught 2026-10-30"', 'Update "URL Shortener" (mark it done)']);
+  });
+
   it("redacts a blocked term before the summary is cut, so no part of it shows", async () => {
     const g = await makeGuard(["globexcorp"]);
     const proposal = await plan([{ kind: "tracker_add_subbullet", section: C2, parentBullet: "URL Shortener", text: `${"y".repeat(50)} globexcorp` }], g);

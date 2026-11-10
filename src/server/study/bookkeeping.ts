@@ -40,8 +40,8 @@ export async function planProposal(studyRoot: string, sessionId: string, ops: Bo
     }
     const op = parsed.data;
     const file = targetFile(op);
-    // Redacting before the summary is shortened keeps a cut never splitting a blocked term into a part that slips past.
-    const summary = guard.redact(describe(redactStrings(op, guard)));
+    // Redact before shortening, so a cut cannot leave part of a blocked term.
+    const summary = guard.redact(describe(redactedForSummary(op, guard)));
 
     let result: OpResult;
     if (index >= LIMITS.proposalOps) {
@@ -367,6 +367,12 @@ function oneLine(text: string): string {
 
 function trimBlock(text: string): string {
   return text.replace(/\r\n?/g, "\n").replace(/^\n+/, "").trimEnd();
+}
+
+/** The op with its free text redacted. The kind and the mark are fixed words, and the summary is built from them. */
+function redactedForSummary(op: BookkeepingOp, guard: PrivacyGuard): BookkeepingOp {
+  const redacted = redactStrings(op, guard);
+  return { ...redacted, kind: op.kind, ...("mark" in op ? { mark: op.mark } : {}) } as BookkeepingOp;
 }
 
 /** The summary is read on the page, where a bracket mark means nothing. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysSince, formatClock, formatDate, formatMinutes, marksInWords } from "./format";
+import { daysSince, formatClock, formatDate, formatMinutes, marksInWords, summaryInWords } from "./format";
 
 describe("formatClock", () => {
   it("pads minutes and seconds", () => {
@@ -52,5 +52,13 @@ describe("marksInWords", () => {
     expect(marksInWords("No marks here [y].")).toBe("No marks here [y].");
     expect(marksInWords("Indexed grid[x] without a bounds check, and int arr[ ] then [x]2.")).toBe("Indexed grid[x] without a bounds check, and int arr[ ] then [x]2.");
     expect(marksInWords("(mark [~], add notes)")).toBe("(mark partly done, add notes)");
+    expect(marksInWords("Calls foo()[x] and quotes `[x]` as code.")).toBe("Calls foo()[x] and quotes `[x]` as code.");
+  });
+});
+
+describe("summaryInWords", () => {
+  it("rewrites only the mark of an older summary, never the text it quotes", () => {
+    expect(summaryInWords('Update "URL Shortener" (mark [~], add "notes/x.md")')).toBe('Update "URL Shortener" (mark it partly done, add "notes/x.md")');
+    expect(summaryInWords('Add a sub-bullet under "Cache": "Checklist: [x] TTL"')).toBe('Add a sub-bullet under "Cache": "Checklist: [x] TTL"');
   });
 });
