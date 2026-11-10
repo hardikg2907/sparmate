@@ -11,6 +11,7 @@ import { SidePanel } from "../components/SidePanel";
 import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Button, Card, Segmented, SectionTitle, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
+import { scrollToInScroller } from "../lib/scrollInScroller";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
 import { mediumsTip } from "../lib/dsaText";
 import { useDsa, type DsaData } from "../lib/useDsa";
@@ -35,10 +36,8 @@ const SECTIONS = [
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 function jumpTo(id: string): void {
-  document.getElementById(id)?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+  scrollToInScroller(document.getElementById(id), { behavior: "smooth" });
 }
 
 /** The page's own scroller, which is what moves under the bar. The window never scrolls. */
@@ -123,7 +122,7 @@ export function ProgressView({ data, ctx, now: fixedNow, dsa, gym = null }: { da
   // sections above the target grow when their data arrives.
   useEffect(() => {
     if (hashNav.hash.length <= 1 || scrolledFor.current === hashNav) return;
-    document.getElementById(hashNav.hash.slice(1))?.scrollIntoView({ block: "start" });
+    scrollToInScroller(document.getElementById(hashNav.hash.slice(1)));
     if (settled) scrolledFor.current = hashNav;
   }, [hashNav, settled]);
 

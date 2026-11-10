@@ -389,17 +389,19 @@
   --color-amber-foreground: var(--amber-foreground);
 }
 
+/* The frame never scrolls. `clip` rather than `hidden`, because a hidden box still scrolls from code (focus, anchors,
+   scrollIntoView) and would push the bar out of the window. */
 html,
 body {
   height: 100%;
   margin: 0;
-  overflow: hidden;
+  overflow: clip;
 }
 
 #root {
   height: 100%;
   width: 100%;
-  overflow: hidden;
+  overflow: clip;
   position: fixed;
   inset: 0;
 }

@@ -655,6 +655,9 @@ Scripts and tests depend on these, so the revamp keeps them exactly.
   microphone (`scripts/e2e/voice-lifecycle.mjs`).
 - The room root keeps `flex h-full`, the room never scrolls as a whole, and no scroller sits inside another
   (`scripts/e2e/layout-check.mjs`).
+- The frame (`html`, `body`, `#root` and the room and debrief roots) uses `overflow: clip`, so it cannot scroll even from code. A page
+  jumps to a section with `scrollToInScroller` (`src/web/lib/scrollInScroller.ts`), never `scrollIntoView`, so only its own
+  scroller moves (`scripts/e2e/layout-check.mjs`).
 - `window.__irBoard` and `window.__irShell` with `?testhooks=1`, and the `__fixtureLog` in fixture mode.
 - Fixture names: `home` (Today), `library` (Practice, Rounds), `library-new`, `progress`, `history` and `dsa` (Progress,
   opened at that section), `settings`, `gym` (Practice, Drills), the room and debrief fixtures, and `usage`. URL

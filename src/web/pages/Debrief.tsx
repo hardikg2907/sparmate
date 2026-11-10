@@ -20,6 +20,7 @@ import { nextAction } from "../lib/debriefNext";
 import { gapDividerText, teachMessage } from "../../shared/gaps";
 import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatClock, formatDate } from "../lib/format";
 import { finalRoundMs, phaseSpentMs } from "../lib/timing";
+import { scrollToInScroller } from "../lib/scrollInScroller";
 import { Link, navigate } from "../router";
 import type { ChatItem, SessionController } from "../session/types";
 import type { Theme } from "../theme";
@@ -42,7 +43,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
   const marks = useGapMarks(scorecard, session, ctl.chat.coach);
 
   return (
-    <div className="fade-in flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="fade-in flex h-full min-h-0 flex-col overflow-clip">
       <header className="header-hairline relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card px-3 shadow-xs sm:px-4">
         <Link href="/" aria-label="Back to home" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
           <ArrowLeftIcon size={16} />
@@ -64,7 +65,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
       <ConnectionBanner status={state.connection} onRetry={actions.reconnect} />
       <MessageBanners state={state} actions={actions} />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col overflow-clip md:flex-row">
         <main className="page-canvas relative min-w-0 flex-1 overflow-y-auto" tabIndex={-1}>
           <div className="reveal-children mx-auto max-w-4xl space-y-6 px-4 pb-20 pt-6 sm:px-8">
             {session.status === "debriefing" ? (
@@ -163,7 +164,7 @@ function showGapInChat(title: string): void {
   const dividers = [...document.querySelectorAll<HTMLElement>("[data-gap-divider]")].filter((el) => el.dataset.gapDivider === text);
   const divider = dividers.at(-1);
   const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  (divider ?? coach)?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: divider ? "nearest" : "start" });
+  scrollToInScroller(divider ?? coach, { behavior: smooth ? "smooth" : "auto", block: divider ? "nearest" : "start" });
   if (divider) {
     divider.classList.remove("chat-flash");
     void divider.offsetWidth;
