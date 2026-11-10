@@ -410,18 +410,29 @@ describe("variantEntries", () => {
     expect(all.filter((p) => p.meta.track === "lld")).toHaveLength(9);
   });
 
-  it("reads the curveballs of a system design brief and skips a seen entry", () => {
+  it("reads the curveballs of a system design brief", () => {
     const entries = variantEntries(hld);
     expect(entries.map((e) => e.id)).toEqual(["hot-link", "cache-failure", "global-latency"]);
     expect(entries[0]?.title).toBe("Hot link");
     expect(entries[0]?.question).toContain("A celebrity posts one of our links");
     expect(entries[0]?.expect).toContain("in-process cache");
     const limiter = variantEntries(all.find((p) => p.meta.id === "c2-rate-limiter") as Problem);
-    expect(limiter.map((e) => e.id)).toEqual(["shard-failure", "second-region"]);
+    expect(limiter.map((e) => e.id)).toEqual(["hot-client", "shard-failure", "second-region"]);
   });
 
-  it("reads the extensions of a machine coding brief and skips the seen display boards", () => {
-    expect(variantEntries(lld).map((e) => e.id)).toEqual(["electric-vehicle-charging", "weekend-and-night-rates"]);
+  it("reads the extensions of a machine coding brief", () => {
+    expect(variantEntries(lld).map((e) => e.id)).toEqual(["electric-vehicle-charging", "weekend-and-night-rates", "display-boards"]);
+  });
+
+  it("skips an entry marked as one the candidate has already met", () => {
+    const brief = stubBrief("hld", {
+      Curveballs: [
+        "1. **Seen one (already seen):** What now? Expect: a plan.",
+        "2. **Old one (used in an earlier session):** What now? Expect: a plan.",
+        "3. **Fresh one:** What now? Expect: a plan.",
+      ].join("\n"),
+    });
+    expect(variantEntries(brief).map((e) => e.id)).toEqual(["fresh-one"]);
   });
 
   it("keeps sub-bullet facts in the question and the checks in the key", () => {

@@ -1,11 +1,13 @@
 // Validates problem files: frontmatter, required sections, tracker bullet present in TRACKER.md, id matches file name,
-// and an "Expect:" in every numbered Curveballs or Extensions entry not marked "(already seen)".
+// an "Expect:" in every numbered Curveballs or Extensions entry not marked "(already seen)", and at least two
+// checklist items in every step whose items come from the brief.
 // Usage: npx tsx scripts/check-problems.ts [file ...]   (no arguments: every file under content/problems)
 // Bullets are checked against study-kit/TRACKER.md, or against the TRACKER.md in STUDY_ROOT when that is set.
 import { readFile, readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseProblem } from "../src/server/engine/problems";
+import { BRIEF_STEPS, deriveChecklist, MIN_BRIEF_STEP_ITEMS } from "../src/shared/checklist";
 import { findBullet } from "../src/server/study/tracker";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -63,6 +65,11 @@ for (const file of files) {
     }
     const changes = p.meta.track === "lld" ? "Extensions" : "Curveballs";
     for (const num of entriesWithoutExpect(p.sections[changes] ?? "")) problems.push(`${changes} entry ${num} has no "Expect:"`);
+    const checklist = deriveChecklist(p.meta.track, p.sections);
+    for (const step of BRIEF_STEPS[p.meta.track]) {
+      const items = checklist[step]?.length ?? 0;
+      if (items < MIN_BRIEF_STEP_ITEMS) problems.push(`step "${step}" has ${items} checklist item${items === 1 ? "" : "s"}; it needs ${MIN_BRIEF_STEP_ITEMS} or more`);
+    }
   } catch (err) {
     problems.push((err as Error).message);
   }

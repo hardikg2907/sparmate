@@ -117,7 +117,7 @@ Each scenario starts with a fresh cache of capacity 3 unless stated. Keys are `i
 
 ## Extensions
 
-Pick one the candidate has not seen. If they built room for one already, pick another. Say the requirement, ask "What changes?", and hold the facts back until they ask.
+Pick one. If they built room for one already, pick another. Say the requirement, ask "What changes?", and hold the facts back until they ask.
 
 1. **Expiry:** each entry may carry a time to live in whole seconds, given at `put`. An expired entry must never be returned. What changes?
    - Facts: the caller passes the current time into every `get` and `put`, and the cache never reads the clock. A TTL is at least 1 second, and an entry without one never expires. An entry put at `t` with TTL `d` expires at `t + d`: a `get` at exactly `t + d` already misses. A `get` does not extend it, and a `put` of an existing key restarts it and replaces the TTL, so a `put` without a TTL makes the entry permanent. The caller's time never goes backward. `size()` takes no time argument.
@@ -136,7 +136,7 @@ Pick one the candidate has not seen. If they built room for one already, pick an
 - The fix is one `std::mutex` with a `std::lock_guard` in every public method, `get` and `size` included, and the value copied out under the lock.
 - A second race: a `get` holds a node while another thread's `put` evicts it, or two `put`s of new keys both pass the capacity check.
 
-Stretch signal: states the cost with the brief's numbers. At 50,000 calls per second and about 1 microsecond per call, one mutex is busy about 5% of the time, so one lock is enough. For much higher rates they shard: N caches with one mutex each, picked by the key's hash. The cost is that eviction is per shard, so the cache is only approximately LRU.
+Stretch signal: states the cost with the problem's numbers. At 50,000 calls per second and about 1 microsecond per call, one mutex is busy about 5% of the time, so one lock is enough. For much higher rates they shard: N caches with one mutex each, picked by the key's hash. The cost is that eviction is per shard, so the cache is only approximately LRU.
 
 ## Level bar
 

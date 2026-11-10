@@ -104,7 +104,7 @@ The end-to-end scripts in `scripts/e2e/` that run in fake mode need no model, fo
 
 1. Copy a brief from `content/problems/hld/` or `content/problems/lld/` and edit it. The file name must match the `id` in its frontmatter.
 2. Add the matching bullet to `study-kit/TRACKER.md`, under the section the `tracker` entry names.
-3. Run `npx tsx scripts/check-problems.ts`. It must print `ok` for your file.
+3. Run `npx tsx scripts/check-problems.ts`. It must print `ok` for your file. Among other things it checks that every step read from the brief gets at least two checklist items: a system design brief needs two or more "Walk one ..." lines in "Reference design".
 
 The README section "Problems" lists what a brief holds.
 

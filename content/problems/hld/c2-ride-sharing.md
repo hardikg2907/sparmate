@@ -134,6 +134,8 @@ The trip states. Every move is `UPDATE ... WHERE status = :from`, so zero rows m
 
 Walk one ride: the ride service stores a `REQUESTED` ride and queues it. A matcher reserves the best driver and pushes the offer, and on accept one conditional update makes the ride `ASSIGNED`.
 
+Walk one rider cancel: the rider sends `POST /rides/{rideId}/cancel` while the ride is `ASSIGNED` or `ARRIVED`. The ride service runs one `UPDATE ... WHERE status = :from`, and zero rows means the event is late, so a trip already in progress or over gets `409`. On success the ride becomes `CANCELLED` and the service appends a `RideEvent` row. This move frees the driver, so it deletes the busy marker `offer:{driverId}`. A cancel while the ride is still `REQUESTED` works the same way, and a driver who accepts afterwards updates no row and hears `gone`.
+
 Walk a race: two matchers pick the same driver. Only one `SET NX` returns `OK`, and the other matcher moves on. Suppose a failover lost the key and both offers go out. The driver accepts both. The first update commits, and the second hits the unique index on active `driver_id`, so the driver hears `gone`. A late accept at 15.3 seconds fails the server clock check. If it slips through, the conditional update still lets only one driver have the ride.
 
 Walk a crash: a matcher dies mid-wait. The ride is still `REQUESTED` in Postgres, and the reservation expires by itself. The lease lapses, the sweeper re-queues the ride, and the next matcher reads `tried:{rideId}` and carries on.

@@ -161,7 +161,7 @@ Setup for every scenario: users 1 Alice, 2 Bob, 3 Carol, 4 Dave, 5 Erin. Group 1
 4. **Percent split.**
    - a. Carol pays 10000 percent [Alice 50, Bob 30, Dave 20]. Balances: Alice owes Carol 5000, Bob owes Carol 3000, Dave owes Carol 2000.
    - b. Alice pays 101 percent [Bob 50, Carol 50]. Bob owes Alice 51, Carol owes Alice 50.
-   - c. Alice pays 100 percent [Bob 33.33, Carol 33.33, Dave 33.34]. The three amounts add up to 100 and each is 33 or 34. With the brief's rule: Bob owes Alice 34, Carol 33, Dave 33. Skip this one if their API cannot take two decimals, and note that as a gap.
+   - c. Alice pays 100 percent [Bob 33.33, Carol 33.33, Dave 33.34]. The three amounts add up to 100 and each is 33 or 34. With the problem's rounding rule: Bob owes Alice 34, Carol 33, Dave 33. Skip this one if their API cannot take two decimals, and note that as a gap.
 5. **Netting across groups, and a flip.** Start with scenario 1. Then Flat: Bob pays 500 equal [Alice, Bob]. The Alice and Bob pair becomes "Bob owes Alice 50", one line, with no "Alice owes Bob 250" line. Carol and Dave still owe Alice 300 each. Then Trip: Bob pays 500 equal [Alice, Bob]. The pair flips to "Alice owes Bob 200". Final lines: Alice owes Bob 200, Carol owes Alice 300, Dave owes Alice 300. Net positions: Alice +400, Bob +200, Carol −300, Dave −300.
 6. **Settle-up, partial then full.** Start with scenario 1. Bob pays Alice 100: Bob owes Alice 200. Bob pays Alice 200: the Bob line is gone. Carol and Dave still owe Alice 300 each. Net positions: Alice +600, Bob 0, Carol −300, Dave −300.
 7. **Settle-up rejected.** Start with scenario 1. Each call below is rejected, and the three 300 lines stay as they were:
@@ -202,7 +202,7 @@ Pick the one that probes their biggest gap. A candidate who used a `switch` on t
 1. **Share-based splits:** "Split by shares: Bob 2, Carol 1, Dave 1." What changes?
    - Facts: each value is a whole number of shares, none negative, at most 1,000,000. Zero means that person owes nothing. All zero is rejected, because it divides by zero. The leftover rule is the same one.
    - Expect: one new class, `ShareSplit`, that calls the same `allocate`, plus one registration line. No edit to `addExpense`, `Ledger` or the other strategies. A candidate who sees equal as "1 share each" has seen the real shape.
-   - Check: Alice pays 1000 shares [Bob 2, Carol 1, Dave 1]. Bob owes Alice 500, Carol 250, Dave 250. Alice pays 1000 shares [Bob 3, Carol 2]. Bob owes Alice 600, Carol 400. Alice pays 1001 shares [Bob 2, Carol 1]. With the brief's rule, Bob owes Alice 668 and Carol 333. Largest remainder gives 667 and 334. Both add up to 1001.
+   - Check: Alice pays 1000 shares [Bob 2, Carol 1, Dave 1]. Bob owes Alice 500, Carol 250, Dave 250. Alice pays 1000 shares [Bob 3, Carol 2]. Bob owes Alice 600, Carol 400. Alice pays 1001 shares [Bob 2, Carol 1]. With the problem's rounding rule, Bob owes Alice 668 and Carol 333. Largest remainder gives 667 and 334. Both add up to 1001.
    - Same: scenarios 1 to 11 give the same results. A rejected expense still changes nothing.
 2. **Simplify debts:** "Show the fewest payments that settle everyone." What changes?
    - Facts: it is a read-only suggestion. It does not change the stored pair balances or any net position, and it may pair people who never owed each other directly. Real use has at most about 12 people with a non-zero net position.
@@ -225,7 +225,7 @@ Pick the one that probes their biggest gap. A candidate who used a `switch` on t
 - `std::map::operator[]` inserts, so even a read can write. Reads need the lock too.
 - The fix is one `std::mutex` with a `std::lock_guard` in every public method. The strategy's `split` is a pure function, so it may run before the lock. The group and membership reads belong inside the lock, because `addGroup` can insert into the same map. An edit is one critical section.
 
-Stretch signal: states the cost with the brief's numbers. At about 100 calls per second and a few microseconds each, one lock is busy well under 1% of the time. One lock per pair needs the locks taken in sorted key order for a multi-pair expense, or two expenses can deadlock, and it buys nothing at this load. Sharding by group does not work here, because balances are global: two groups share the same Alice and Bob pair. They also say not to call anything unknown while holding the lock.
+Stretch signal: states the cost with the problem's numbers. At about 100 calls per second and a few microseconds each, one lock is busy well under 1% of the time. One lock per pair needs the locks taken in sorted key order for a multi-pair expense, or two expenses can deadlock, and it buys nothing at this load. Sharding by group does not work here, because balances are global: two groups share the same Alice and Bob pair. They also say not to call anything unknown while holding the lock.
 
 ## Level bar
 
