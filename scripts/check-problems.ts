@@ -7,8 +7,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseProblem } from "../src/server/engine/problems";
-import { deriveChecklist } from "../src/shared/checklist";
-import type { Track } from "../src/shared/phases";
+import { BRIEF_STEPS, deriveChecklist, MIN_BRIEF_STEP_ITEMS } from "../src/shared/checklist";
 import { findBullet } from "../src/server/study/tracker";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,16 +21,6 @@ async function listProblemFiles(): Promise<string[]> {
   }
   return out.sort();
 }
-
-/**
- * Steps whose checklist is read from the brief. A step with one item gives the candidate one target and the step
- * checker nothing to weigh it against. The machine coding skeleton and thin slice are one item by design.
- */
-const BRIEF_STEPS: Record<Track, string[]> = {
-  hld: ["requirements", "entities", "api", "design", "deep_dives"],
-  lld: ["clarify", "entities", "behaviour", "fill_out"],
-};
-const MIN_STEP_ITEMS = 2;
 
 const NUMBERED = /^ {0,3}(\d{1,3})[.)] /;
 const EXPECT = /(^|[^A-Za-z0-9])Expect:/;
@@ -79,7 +68,7 @@ for (const file of files) {
     const checklist = deriveChecklist(p.meta.track, p.sections);
     for (const step of BRIEF_STEPS[p.meta.track]) {
       const items = checklist[step]?.length ?? 0;
-      if (items < MIN_STEP_ITEMS) problems.push(`step "${step}" has ${items} checklist item${items === 1 ? "" : "s"}; it needs ${MIN_STEP_ITEMS} or more`);
+      if (items < MIN_BRIEF_STEP_ITEMS) problems.push(`step "${step}" has ${items} checklist item${items === 1 ? "" : "s"}; it needs ${MIN_BRIEF_STEP_ITEMS} or more`);
     }
   } catch (err) {
     problems.push((err as Error).message);
