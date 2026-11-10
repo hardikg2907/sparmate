@@ -116,6 +116,8 @@ export const api = {
   gymPrompt: (target: DrillTarget) => request<DrillPrompt>("POST", "/api/gym/prompt", target),
   gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number) =>
     request<DrillResult>("POST", "/api/gym/submit", { ...target, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
+  gymRevise: (attemptId: string, answer: string, elapsedSeconds?: number) =>
+    request<DrillResult>("POST", "/api/gym/revise", { attemptId, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
   settings: () => request<Settings>("GET", "/api/settings"),
   saveSettings: (settings: Settings) => request<unknown>("PUT", "/api/settings", settings),
   ttsStatus: () => request<{ available: boolean }>("GET", "/api/tts/status"),

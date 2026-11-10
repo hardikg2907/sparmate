@@ -100,15 +100,106 @@ export function addDays(day: string, days: number): string {
 // ---------------------------------------------------------------------------
 // Schedule
 
-export const PASSES_TO_CLOSE = 3;
-/** Days until the next drill after the first and the second pass in a row. */
-export const PASS_INTERVAL_DAYS = [3, 7] as const;
+/** Interview-ready results that close a drill. */
+export const READY_TO_CLOSE = 3;
+/** Days until the next drill after the first and the second first-try ready result. */
+export const READY_INTERVAL_DAYS = [3, 7] as const;
+/** Days until the next drill after a ready result that came with a revision, and after a "getting there". */
+export const REVISED_INTERVAL_DAYS = 2;
 
 export type DrillStatus = "open" | "closed";
-export type DrillVerdict = "pass" | "not_yet";
-
 export const DRILL_OUTCOMES = ["ready", "getting_there", "needs_work"] as const;
 export type DrillOutcome = (typeof DRILL_OUTCOMES)[number];
+
+export const OUTCOME_LABEL: Record<DrillOutcome, string> = { ready: "Interview-ready", getting_there: "Getting there", needs_work: "Needs work" };
+
+const OUTCOME_RANK: Record<DrillOutcome, number> = { needs_work: 0, getting_there: 1, ready: 2 };
+
+/** The better of two outcomes; the first wins a tie. */
+export function betterOutcome(a: DrillOutcome, b: DrillOutcome): DrillOutcome {
+  return OUTCOME_RANK[b] > OUTCOME_RANK[a] ? b : a;
+}
+
+export function isBetterOutcome(a: DrillOutcome, than: DrillOutcome): boolean {
+  return OUTCOME_RANK[a] > OUTCOME_RANK[than];
+}
+
+// ---------------------------------------------------------------------------
+// Rubric. Scores use the judge's scale: 1 missing or wrong, 2 partly there, 3 at the bar, 4 strong.
+
+export interface DrillCriterion {
+  id: string;
+  label: string;
+  /** A core criterion decides the outcome; the others only colour the feedback. */
+  core: boolean;
+}
+
+export interface DrillRubric {
+  /** The round scorecard dimension the drill trains. */
+  skill: string;
+  criteria: DrillCriterion[];
+}
+
+const c = (id: string, label: string, core = false): DrillCriterion => ({ id, label, core });
+
+export const DRILL_RUBRIC: Record<DrillType, DrillRubric> = {
+  capacity: {
+    skill: "scale_reliability",
+    criteria: [
+      c("picks_numbers", "Picks the numbers that decide", true),
+      c("math", "Math is about right", true),
+      c("decisions", "Each number ends in a decision", true),
+      c("assumptions", "States its assumptions"),
+    ],
+  },
+  walk: {
+    skill: "design",
+    criteria: [
+      c("path", "Full path in the right order", true),
+      c("jobs", "Each box has a job", true),
+      c("data", "Says what is read and written where"),
+      c("weak_step", "Names the slow or weak step"),
+    ],
+  },
+  requirements: {
+    skill: "navigation",
+    criteria: [
+      c("functions", "Core functions", true),
+      c("numbers", "Quality needs as numbers", true),
+      c("questions", "Asks the questions that change the design", true),
+      c("scope", "Says what is out of scope"),
+    ],
+  },
+  deep_dive: {
+    skill: "depth",
+    criteria: [c("naive", "Says what breaks in the naive way", true), c("mechanism", "A mechanism that works, one level deeper", true), c("cost", "States the cost")],
+  },
+  lld_skeleton: {
+    skill: "design",
+    criteria: [
+      c("classes", "Right classes", true),
+      c("owners", "Each rule has one owner", true),
+      c("signatures", "Signatures express the behaviour", true),
+      c("relations", "Relations and states"),
+      c("change", "Room for the next change"),
+    ],
+  },
+};
+
+/**
+ * Ready needs every core criterion at 3 or more and no criterion at 1. A core criterion at 1, or two core criteria
+ * below 3, needs work. Everything else is getting there. A criterion with no score counts as 1.
+ */
+export function outcomeFor(drill: DrillType, scores: readonly { id: string; score: number }[]): DrillOutcome {
+  const byId = new Map(scores.map((s) => [s.id, s.score]));
+  const criteria = DRILL_RUBRIC[drill].criteria;
+  const score = (id: string) => byId.get(id) ?? 1;
+  const core = criteria.filter((k) => k.core);
+  if (core.some((k) => score(k.id) === 1)) return "needs_work";
+  if (core.filter((k) => score(k.id) < 3).length >= 2) return "needs_work";
+  if (core.every((k) => score(k.id) >= 3) && criteria.every((k) => score(k.id) !== 1)) return "ready";
+  return "getting_there";
+}
 
 /** Most problem ids one item remembers a ready result on. */
 export const MAX_READY_ON = 50;
@@ -140,15 +231,32 @@ export function firstDueDay(debriefDay: string): string {
   return addDays(debriefDay, 1);
 }
 
+export interface OutcomeInput {
+  /** The ready count before the attempt. */
+  passes: number;
+  readyOn: readonly string[];
+  outcome: DrillOutcome;
+  /** True when the outcome came after a revision. */
+  revised: boolean;
+  problemId: string;
+  today: string;
+}
+
 /**
- * What one attempt on a queued drill does. A pass moves the next drill out (3 days, then 7) and the third pass in a
- * row closes it. A "not yet" starts the count again and brings the drill back tomorrow.
+ * What one attempt on a queued drill does to its item. The stored field `passes` is the ready count: Interview-ready
+ * results in a row. A first-try ready result moves the next drill out (3 days, then 7) and the third closes the
+ * drill. A ready result after a revision counts but stops at 2, so a drill never closes on a revised answer. A
+ * "getting there" keeps the count and returns in 2 days. "Needs work" starts the count again and returns tomorrow.
  */
-export function applyVerdict(item: Pick<DrillItem, "passes">, verdict: DrillVerdict, today: string): { passes: number; dueOn: string; status: DrillStatus } {
-  if (verdict === "not_yet") return { passes: 0, dueOn: addDays(today, 1), status: "open" };
-  const passes = Math.min(PASSES_TO_CLOSE, item.passes + 1);
-  if (passes >= PASSES_TO_CLOSE) return { passes, dueOn: today, status: "closed" };
-  return { passes, dueOn: addDays(today, PASS_INTERVAL_DAYS[passes - 1] ?? 7), status: "open" };
+export function applyOutcome(input: OutcomeInput): { passes: number; readyOn: string[]; dueOn: string; status: DrillStatus } {
+  const { outcome, today } = input;
+  if (outcome === "needs_work") return { passes: 0, readyOn: [], dueOn: addDays(today, 1), status: "open" };
+  if (outcome === "getting_there") return { passes: input.passes, readyOn: [...input.readyOn], dueOn: addDays(today, REVISED_INTERVAL_DAYS), status: "open" };
+  const readyOn = input.readyOn.includes(input.problemId) ? [...input.readyOn] : [...input.readyOn, input.problemId].slice(-MAX_READY_ON);
+  if (input.revised) return { passes: Math.min(READY_TO_CLOSE - 1, input.passes + 1), readyOn, dueOn: addDays(today, REVISED_INTERVAL_DAYS), status: "open" };
+  const passes = Math.min(READY_TO_CLOSE, input.passes + 1);
+  if (passes >= READY_TO_CLOSE) return { passes, readyOn, dueOn: today, status: "closed" };
+  return { passes, readyOn, dueOn: addDays(today, READY_INTERVAL_DAYS[passes - 1] ?? 7), status: "open" };
 }
 
 /** How a due day reads: "Due today", "Overdue" (with the day it fell due), "Tomorrow", or the day itself. */
@@ -191,14 +299,16 @@ export interface DrillAttempt {
   seconds: number | null;
   /** True for a row that came from the first file format and has no body file. */
   legacy: boolean;
+  /** The queued item's state before this attempt; set only when the attempt counted for an item. */
+  itemBefore?: { passes: number; readyOn: string[] } | undefined;
 }
 
 /** Ready and finished drills in the local week that holds `now`. Free drills count too; an open attempt does not. */
-export function weekDrillStats(attempts: readonly Pick<DrillAttempt, "day" | "status" | "outcome">[], now: Date): { passed: number; attempted: number } {
+export function weekDrillStats(attempts: readonly Pick<DrillAttempt, "day" | "status" | "outcome">[], now: Date): { ready: number; attempted: number } {
   const first = localDay(weekStart(now));
   const next = addDays(first, 7);
   const mine = attempts.filter((a) => a.status === "done" && a.day >= first && a.day < next);
-  return { passed: mine.filter((a) => a.outcome === "ready").length, attempted: mine.length };
+  return { ready: mine.filter((a) => a.outcome === "ready").length, attempted: mine.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +338,15 @@ export const DrillSubmitSchema = z.strictObject({
 });
 export type DrillSubmit = z.infer<typeof DrillSubmitSchema>;
 
+const AnswerSchema = DrillSubmitSchema.shape.answer;
+
+export const DrillReviseSchema = z.strictObject({
+  attemptId: z.string().regex(ATTEMPT_ID),
+  answer: AnswerSchema,
+  elapsedSeconds: z.number().int().min(0).max(MAX_ELAPSED_SECONDS).optional(),
+});
+export type DrillRevise = z.infer<typeof DrillReviseSchema>;
+
 export interface GymDrillRow {
   id: string;
   /** The scorecard gap this drill trains. */
@@ -241,6 +360,7 @@ export interface GymDrillRow {
   minutes: number;
   dueOn: string;
   due: boolean;
+  /** Interview-ready results in a row. */
   passes: number;
   /** The one-line task, ready for the hero. */
   task: string;
@@ -253,7 +373,7 @@ export interface GymSummary {
   dueCount: number;
   /** Problems a drill may use: played ones and custom ones. */
   problems: { id: string; title: string; track: Track; /** The drills this problem can supply. */ drills: DrillType[] }[];
-  week: { passed: number; attempted: number };
+  week: { ready: number; attempted: number };
 }
 
 export interface DrillPrompt {
@@ -271,12 +391,19 @@ export interface DrillPrompt {
 
 export interface DrillResult {
   attemptId: string;
-  verdict: DrillVerdict;
-  fix: string;
+  outcome: DrillOutcome;
+  /** The outcome of the first try; null until a revision has been graded. */
+  firstOutcome: DrillOutcome | null;
+  revised: boolean;
+  /** The criteria of the grade that set the outcome. */
+  scores: { id: string; label: string; core: boolean; score: number }[];
+  wentWell: string[];
+  improve: string[];
   yourLine: string;
-  passSounds: string;
-  /** Null for a free drill that matched no queued one. */
-  passesInRow: number | null;
+  /** One revision is allowed, on the day of the attempt, unless the first try was ready. */
+  canRevise: boolean;
+  /** Interview-ready results in a row for the queued drill; null for a free drill that matched none. */
+  readyCount: number | null;
   closed: boolean;
   nextDueOn: string | null;
   /** The next due drill other than this one, if any. */

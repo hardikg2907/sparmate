@@ -59,7 +59,7 @@ export const fixtureGym: GymSummary = {
       10,
       "2026-11-08",
       0,
-      "Write the questions you would ask and the requirements you would settle.",
+      "Nobody answers here, so write each question with the answer or number you would assume.",
     ),
     row(
       "a1b2c3d4e5f60004",
@@ -96,5 +96,5 @@ export const fixtureGym: GymSummary = {
     { id: "c2-news-feed", title: "News Feed", track: "hld", drills: ["capacity", "walk", "requirements", "deep_dive"] },
     { id: "b3-parking-lot", title: "Parking Lot", track: "lld", drills: ["lld_skeleton"] },
   ],
-  week: { passed: 2, attempted: 3 },
+  week: { ready: 2, attempted: 3 },
 };

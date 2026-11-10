@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { CreateSessionSchema, PrepareCustomProblemSchema, type BootstrapResponse } from "../../shared/protocol";
-import { DrillSubmitSchema, DrillTargetSchema } from "../../shared/drills";
+import { DrillReviseSchema, DrillSubmitSchema, DrillTargetSchema } from "../../shared/drills";
 import { SettingsSchema } from "../../shared/types";
 import type { ServerConfig } from "../engine/config";
 import type { DrillService } from "../engine/drills";
@@ -162,6 +162,19 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const { answer, elapsedSeconds, ...target } = parsed.data;
     try {
       return await deps.drills.submit(target, answer, elapsedSeconds);
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
+  });
+
+  app.post("/api/gym/revise", async (req, reply) => {
+    const parsed = DrillReviseSchema.safeParse(req.body);
+    const typed = (req.body as { answer?: unknown } | null)?.answer;
+    if (typeof typed === "string" && typed.trim() === "") return badRequest(reply, "Write an answer first.");
+    if (!parsed.success || !deps.drills) return badRequest(reply, "Write an answer of up to 8000 characters.");
+    try {
+      return await deps.drills.revise(parsed.data.attemptId, parsed.data.answer, parsed.data.elapsedSeconds);
     } catch (err) {
       if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
       throw err;

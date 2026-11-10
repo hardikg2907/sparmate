@@ -45,6 +45,7 @@ const AttemptSchema = z.strictObject({
   scores: z.array(ScoreSchema).max(12),
   seconds: z.number().int().min(0).max(MAX_ELAPSED_SECONDS).nullable(),
   legacy: z.boolean(),
+  itemBefore: z.strictObject({ passes: z.number().int().min(0).max(3), readyOn: z.array(ProblemIdSchema).max(MAX_READY_ON) }).optional(),
 });
 
 export const DrillStateSchema = z.strictObject({
