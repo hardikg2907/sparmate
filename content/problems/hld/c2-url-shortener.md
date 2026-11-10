@@ -127,9 +127,9 @@ Walk one create: validate the URL, get a unique code, insert the row (the unique
 ## Curveballs
 
 Use one, at the extension point, unless the candidate already handled it.
-1. **Hot link (10x load on one key):** "A celebrity posts one of our links. That single link now gets 200,000 redirects per second for an hour. What breaks first?" One code lives on one Redis shard, so more shards do not help. Expect: a small in-process cache on each redirect server, CDN caching for that link, or replicating the hot key.
-2. **Cache failure:** "Redis is down at peak." Expect: the replicas take the reads, with capacity math on whether they can; a circuit breaker and load shedding so the database is not crushed; warming the cache back up gradually.
-3. **Global latency:** "Users in Asia see 400 ms redirects." Expect: regional caches and read replicas; writes stay in one home region; codes stay unique across regions through range allocation or a region prefix.
+1. **Hot link (10x load on one key):** "A celebrity posts one of our links. That single link now gets 200,000 redirects per second for an hour. What breaks first?" Expect: one code lives on one Redis shard, so more shards do not help. Fixes: a small in-process cache on each redirect server, CDN caching for that link, or replicating the hot key.
+2. **Cache failure:** "Redis is down at peak. What happens, and what do you do?" Expect: the replicas take the reads, with capacity math on whether they can; a circuit breaker and load shedding so the database is not crushed; warming the cache back up gradually.
+3. **Global latency:** "Users in Asia see 400 ms redirects. What do you change?" Expect: regional caches and read replicas; writes stay in one home region; codes stay unique across regions through range allocation or a region prefix.
 
 ## Level bar
 

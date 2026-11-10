@@ -1,4 +1,5 @@
-// Validates problem files: frontmatter, required sections, tracker bullet present in TRACKER.md, id matches file name.
+// Validates problem files: frontmatter, required sections, tracker bullet present in TRACKER.md, id matches file name,
+// and an "Expect:" in every numbered Curveballs or Extensions entry not marked "(already seen)".
 // Usage: npx tsx scripts/check-problems.ts [file ...]   (no arguments: every file under content/problems)
 // Bullets are checked against study-kit/TRACKER.md, or against the TRACKER.md in STUDY_ROOT when that is set.
 import { readFile, readdir } from "node:fs/promises";
@@ -17,6 +18,28 @@ async function listProblemFiles(): Promise<string[]> {
     for (const name of await readdir(dir)) if (name.endsWith(".md")) out.push(join(dir, name));
   }
   return out.sort();
+}
+
+const NUMBERED = /^ {0,3}(\d{1,3})[.)] /;
+const EXPECT = /(^|[^A-Za-z0-9])Expect:/;
+
+/**
+ * Numbers of the entries that lack "Expect:". A drill shows the candidate only the text before it, so an entry
+ * without it would never be offered. An entry the candidate has already seen is never offered either.
+ */
+function entriesWithoutExpect(section: string): string[] {
+  const entries: { num: string; text: string }[] = [];
+  let last: { num: string; text: string } | undefined;
+  for (const line of section.split("\n")) {
+    const m = NUMBERED.exec(line);
+    if (m?.[1]) {
+      last = { num: m[1], text: line };
+      entries.push(last);
+    } else if (last) {
+      last.text += `\n${line}`;
+    }
+  }
+  return entries.filter((e) => !e.text.toLowerCase().includes("already seen") && !EXPECT.test(e.text)).map((e) => e.num);
 }
 
 const files = process.argv.length > 2 ? process.argv.slice(2).map((f) => resolve(f)) : await listProblemFiles();
@@ -38,6 +61,8 @@ for (const file of files) {
     for (const [heading, text] of Object.entries(p.sections)) {
       if (text.trim().length < 40) problems.push(`section "${heading}" is nearly empty`);
     }
+    const changes = p.meta.track === "lld" ? "Extensions" : "Curveballs";
+    for (const num of entriesWithoutExpect(p.sections[changes] ?? "")) problems.push(`${changes} entry ${num} has no "Expect:"`);
   } catch (err) {
     problems.push((err as Error).message);
   }
