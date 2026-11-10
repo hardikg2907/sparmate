@@ -167,7 +167,8 @@ export interface StepCheck {
 
 /**
  * The guide's call on one guided step, which is the only "passed" the candidate sees. `at` is round time in
- * milliseconds. A pass is final for the round; a "not yet" carries the one gap the guide named.
+ * milliseconds. A pass is final for the round; a "not yet" carries the one gap the guide named, or the server's count
+ * of what is open once the step's checks give only a count.
  */
 export interface StepVerdict {
   verdict: "pass" | "not_yet";

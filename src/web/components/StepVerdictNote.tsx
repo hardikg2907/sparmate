@@ -4,7 +4,7 @@ import { cn } from "./ui";
 
 /**
  * The guide's call on the current step, shown where the checklist used to sit. Nothing shows before the first check.
- * The gap is model output, so it renders as text only.
+ * The gap is model output or the server's count of what is open, so it renders as text only.
  */
 export function StepVerdictNote({ stepLabel, verdict, className }: { stepLabel: string; verdict: StepVerdict | undefined; className?: string }) {
   if (!verdict) return null;

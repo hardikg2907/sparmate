@@ -103,9 +103,10 @@ import { describeError, type Logger } from "./log";
 import { validatePin, withPin } from "./pins";
 import { computeReadiness } from "./readiness";
 import {
-  countOnly,
+  checksCountOnly,
   emptyStepRefusalText,
   NAMED_CHECKS,
+  openCountPhrase,
   openCountText,
   parseStepVerdict,
   passCheck,
@@ -319,8 +320,6 @@ export class SessionRuntime {
   private rechecksThisTurn = 0;
   /** True while the guide answers "I'm stuck": a model answer never earns a pass, whatever the guide says. */
   private passBarredThisTurn = false;
-  /** The step whose check in this reply gives only a count of what is open, or null. */
-  private countOnlyThisTurn: string | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private boardWrites: Promise<void> = Promise.resolve();
   /** Wall time until which board and code edits still count after time ran out; null when none may land. */
@@ -1276,7 +1275,6 @@ export class SessionRuntime {
     } finally {
       ch.busy = false;
       this.passBarredThisTurn = false;
-      this.countOnlyThisTurn = null;
       if (ch === this.interview) {
         if (this.session.status === "paused") {
           ch.conv?.close();
@@ -1369,7 +1367,15 @@ export class SessionRuntime {
     const events = [...this.pending()];
     const view: ContextView = {
       time: this.timeView(),
-      ...(s.mode === "guided" ? { steps: stepStatusLine(this.phases, s.stepVerdicts) } : {}),
+      ...(s.mode === "guided"
+        ? {
+            steps: stepStatusLine(
+              this.phases,
+              s.stepVerdicts,
+              this.phases.filter((p) => this.countsOnly(p.id)).map((p) => p.id),
+            ),
+          }
+        : {}),
       board: { version: boardVersion, graphText: s.board.graphText, changed: boardVersion !== ch.boardSeen },
       ...(withNotes ? { notes: this.notesView(ch) } : {}),
       code: this.codeView(ch),
@@ -1424,10 +1430,8 @@ export class SessionRuntime {
         const phase = this.phases.find((p) => p.id === phaseId);
         const label = phase?.label ?? phaseId;
         const written = (this.session.stepNotes[phaseId] ?? "").trim();
-        const counting = countOnly(this.session.stepVerdicts?.[phaseId]);
-        this.countOnlyThisTurn = counting ? phaseId : null;
-        const ifNotYet = counting
-          ? `This step already had ${NAMED_CHECKS} "Not yet" checks, so this check names nothing. If it does not pass, do not say what is missing, in the reply or in the gap: say that ${this.openCountWords(phaseId)} still open, and that pressing Hint names the next one. Pin nothing in this reply.`
+        const ifNotYet = this.countsOnly(phaseId)
+          ? `This step already had ${NAMED_CHECKS} "Not yet" checks, so this check names nothing. If it does not pass, do not say what is missing, in the reply or in the gap: say that ${openCountPhrase(this.openCount(phaseId))} still open, and that pressing Hint gives a nudge toward the next one. Pin nothing in this reply.`
           : "If it does not pass, name the one most important gap, as a missing question or a missing decision and not its answer.";
         const body = [
           `The candidate pressed "Check this step" for the step "${label}"${phase ? ` (goal: ${phase.goal})` : ""}. Give feedback on this step only. Call step_verdict once for this step (phase "${phaseId}") before you write the verdict, and call it again with "not_yet" if the app refuses a pass. Then write one thing that holds and the verdict. ${ifNotYet}`,
@@ -1442,18 +1446,21 @@ export class SessionRuntime {
     };
   }
 
-  /** Items of the step the checker has not read as covered, or null when there is no finished reading. */
+  private countsOnly(phase: string): boolean {
+    return checksCountOnly(this.session, phase, this.session.stepVerdicts?.[phase]);
+  }
+
+  /**
+   * Items of the step the checker has not read as covered, or null when there is no finished reading. A step that
+   * needs one of its items has one thing open until one is covered, since the others are alternatives.
+   */
   private openCount(phase: string): number | null {
     const items = this.session.checklist[phase] ?? [];
     const check = this.session.stepChecks[phase];
     if (items.length === 0 || check?.checkedAt == null) return null;
-    return items.filter((i) => check.items[i.id]?.state !== "covered").length;
-  }
-
-  private openCountWords(phase: string): string {
-    const open = this.openCount(phase);
-    if (open === null || open < 1) return "some things are";
-    return open === 1 ? "one thing is" : `${open} things are`;
+    const open = items.filter((i) => check.items[i.id]?.state !== "covered").length;
+    if (this.phases.find((p) => p.id === phase)?.passNeeds === "one") return open < items.length ? null : 1;
+    return open;
   }
 
   /** "I'm stuck" for the current step: a short model answer, then the step goes back to him. */
@@ -1482,7 +1489,7 @@ export class SessionRuntime {
         const label = this.currentPhase()?.label ?? this.session.phase;
         const entered = [...this.session.phaseHistory].reverse().find((h) => h.phase === this.session.phase)?.at ?? 0;
         const given = this.session.hints.filter((h) => h.at >= entered).map((h) => `H${h.level}`);
-        const counting = countOnly(this.session.stepVerdicts?.[this.session.phase]);
+        const counting = this.countsOnly(this.session.phase);
         const body = [
           `The candidate asked for a hint on the step "${label}". Give only the next rung of the hint ladder (H1 points at an area, H2 names the concern, H3 offers two options) and record it with note_hint. Rungs already given on this step: ${given.length > 0 ? given.join(", ") : "none"}.`,
           ...(counting
@@ -1491,7 +1498,9 @@ export class SessionRuntime {
               ]
             : []),
           ...(given.includes("H3")
-            ? [`H3 was given on this step already. Give no model answer: aim a rung at another open point, or say that "I'm stuck" gives a short model answer.`]
+            ? [
+                `H3 was given on this step already. Give no model answer: aim an H3 at another open point and record it with note_hint at level 3, or say that "I'm stuck" gives a short model answer.`,
+              ]
             : []),
         ].join("\n");
         const { view, commit } = this.interviewContext(this.interview);
@@ -1751,17 +1760,20 @@ export class SessionRuntime {
           "Attach a short note to one box or arrow on the candidate's board, where the remark applies. Use an id from the pin targets that view_whiteboard lists. One plain sentence.",
           { elementId: z.string().min(1).max(64), note: z.string().min(1).max(LIMITS.pinNoteChars) },
           async ({ elementId, note }) =>
-            this.countOnlyThisTurn !== null
-              ? textOutput("This check gives only a count of what is open, so it pins nothing.", true)
+            this.countsOnly(this.session.phase)
+              ? textOutput("Checks of this step give only a count of what is open, so pin nothing.", true)
               : this.addPin({ elementId, note, tone: "note", by: "guide" }),
         ),
         defineTool(
           "step_verdict",
-          `Record your call on one step. This is the only "passed" the candidate sees, so call it once for each step check. Use "pass" when the step meets the level bar; a pass is final and you must not raise that step again. The app refuses a pass that the step's checklist reading does not support; then call it again with "not_yet". Use "not_yet" with one gap, the most important one, phrased as a missing question or a missing decision and not its answer. Steps: ${phaseIds}.`,
+          `Record your call on one step. This is the only "passed" the candidate sees, so call it once for each step check. Use "pass" when the step meets the level bar; a pass is final and you must not raise that step again. The app refuses a pass that the step's checklist reading does not support; then call it again with "not_yet". Use "not_yet" with one gap, the most important one, phrased as a missing question or a missing decision and not its answer; when checks of the step give only a count, the app writes the gap itself. Steps: ${phaseIds}.`,
           StepVerdictShape,
           async (args) => {
+            // A count-only "not_yet" stores the count, so a guide that rightly leaves the gap empty is not pushed to name one.
+            const raw = typeof args === "object" && args !== null && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
+            const quietPhase = raw && typeof raw.phase === "string" && raw.verdict === "not_yet" && this.countsOnly(raw.phase) ? raw.phase : null;
             const parsed = parseStepVerdict(
-              args,
+              quietPhase !== null ? { ...raw, gap: openCountText(this.openCount(quietPhase)) } : args,
               this.phases.map((p) => p.id),
             );
             if (!parsed.ok) return textOutput(parsed.error, true);
@@ -1770,16 +1782,16 @@ export class SessionRuntime {
               return textOutput("This reply gives a model answer, so the step cannot pass now. Ask him to redo the step; judge it on his next check.", true);
             if (verdict === "pass" && this.session.stepVerdicts?.[phase]?.verdict !== "pass") {
               const refused = await this.passRefusal(phase);
-              if (refused && this.countOnlyThisTurn === phase)
+              if (refused && this.countsOnly(phase))
                 return textOutput(
-                  `The step cannot pass yet. This check names nothing: call step_verdict with "not_yet" and say only that ${this.openCountWords(phase)} still open.`,
+                  `The step cannot pass yet. Checks of this step name nothing: call step_verdict with "not_yet" and say only that ${openCountPhrase(this.openCount(phase))} still open.`,
                   true,
                 );
               if (refused) return textOutput(refused, true);
             }
             // A count-only check stores the count itself, so the page never shows the item the guide was told not to name.
-            const counted = verdict === "not_yet" && this.countOnlyThisTurn === phase;
-            const input = counted ? { ...parsed.value, gap: openCountText(this.openCount(phase)) } : parsed.value;
+            const counted = verdict === "not_yet" && quietPhase === phase;
+            const input = parsed.value;
             const done = recordStepVerdict(this.session, input, this.roundNow());
             if (!done.ok) return textOutput(done.error, true);
             this.saveSoon();

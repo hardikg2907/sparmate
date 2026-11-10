@@ -2,7 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
 import { HLD_PHASES, LLD_PHASES } from "../../shared/phases";
 import type { StepCheck } from "../../shared/types";
-import { countOnly, MAX_GAP_CHARS, notYetCount, openCountText, parseStepVerdict, passCheck, passNeed, passRefusalText, recordStepVerdict, stepStatusLine } from "./step-verdict";
+import {
+  checksCountOnly,
+  countOnly,
+  MAX_GAP_CHARS,
+  notYetCount,
+  openCountText,
+  parseStepVerdict,
+  passCheck,
+  passNeed,
+  passRefusalText,
+  recordStepVerdict,
+  stepStatusLine,
+} from "./step-verdict";
 
 const PHASES = ["requirements", "entities", "api"];
 const parse = (args: unknown) => parseStepVerdict(args, PHASES);
@@ -126,6 +138,9 @@ describe("stepStatusLine", () => {
     expect(stepStatusLine(HLD_PHASES, verdicts)).toBe("passed: Core entities, API · not passed yet: Requirements, High-level design, Deep dives");
     const all = Object.fromEntries(HLD_PHASES.map((p) => [p.id, { verdict: "pass" as const, at: 1 }]));
     expect(stepStatusLine(HLD_PHASES, all)).toBe("every step has passed");
+    expect(stepStatusLine(HLD_PHASES, verdicts, ["requirements"])).toBe(
+      "passed: Core entities, API · not passed yet: Requirements, High-level design, Deep dives · checks give only a count: Requirements",
+    );
   });
 });
 
@@ -149,9 +164,17 @@ describe("repeated checks", () => {
   });
 
   it("says how much is open and never what", () => {
-    expect(openCountText(3)).toBe("3 things are still open. Press Hint to hear the next one.");
-    expect(openCountText(1)).toBe("One thing is still open. Press Hint to hear it.");
-    expect(openCountText(null)).toBe("Some things are still open. Press Hint to hear the next one.");
-    expect(openCountText(0)).toBe("Some things are still open. Press Hint to hear the next one.");
+    expect(openCountText(3)).toBe("3 things are still open. Press Hint for a nudge toward the next one.");
+    expect(openCountText(1)).toBe("One thing is still open. Press Hint for a nudge toward it.");
+    expect(openCountText(null)).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
+    expect(openCountText(0)).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
+  });
+
+  it("never counts a machine-coding build step or an interview round", () => {
+    const twice = { verdict: "not_yet" as const, gap: "x", at: 1, misses: 2 };
+    expect(checksCountOnly({ track: "hld", mode: "guided" }, "requirements", twice)).toBe(true);
+    expect(checksCountOnly({ track: "lld", mode: "guided" }, "entities", twice)).toBe(true);
+    for (const phase of ["skeleton", "thin_slice", "fill_out", "extend"]) expect(checksCountOnly({ track: "lld", mode: "guided" }, phase, twice)).toBe(false);
+    expect(checksCountOnly({ track: "hld", mode: "interview" }, "requirements", twice)).toBe(false);
   });
 });

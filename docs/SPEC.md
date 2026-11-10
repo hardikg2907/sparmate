@@ -218,10 +218,14 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   be 1 to 200 characters of plain text; for `pass`, `gap` is dropped. It is stored in `Session.stepVerdicts[phase]` as
   `{ verdict, gap?, at, misses? }` (`at` is round time in ms; `misses` counts the step's `not_yet` calls, and a
   session saved without it counts a held `not_yet` as one) and the session state is broadcast. After a step's second
-  `not_yet` its checks give only a count (`countOnly`): the request tells the guide to name nothing that is missing,
-  `pin_note` is refused in that reply, and the server stores the gap as `openCountText` ("3 things are still open.
-  Press Hint to hear the next one."), from the items the checker has not read as covered, whatever gap the guide
-  wrote. A hint press is then how he hears the next open item. A pass is final: a later
+  `not_yet` its checks give only a count (`checksCountOnly`), whether he pressed "Check this step" or asked in the
+  chat: the request and the `steps:` line ("checks give only a count: Requirements") tell the guide to name nothing
+  that is missing, `pin_note` is refused while the current step is counted, and the server stores the gap as
+  `openCountText` ("3 things are still open. Press Hint for a nudge toward the next one."), whatever gap the guide
+  wrote, an empty one included. The count is the items the checker has not read as covered; a step that needs one
+  item (Deep dives) counts one until one is covered, and with no finished reading it reads "Some things". The machine
+  coding build steps (Skeleton on) are never counted, because their checks name the exact cause of a failing compile
+  or run. A hint press is then how he hears the next open item. A pass is final: a later
   `not_yet` for a passed step is refused with an error that says the step already passed and must not be raised again.
   A `pass` may replace a `not_yet`. The guide calls it once per step check, and again with `not_yet` after a refused pass. In the reply to "I'm stuck" a `pass` is
   refused, so a model answer never earns one. Each check ends with a verdict. A new `pass` must be supported by the
@@ -689,13 +693,15 @@ step's checklist as the checker last read it, after a line that gives the round 
 with its id, label, state, where it was found (said at mm:ss, on the board, in the code, in the written answer) and what
 a partial item lacks. It tells the guide that the list is evidence that may lag his latest work, how many items a pass
 needs, and that the server refuses a pass the reading does not support. The request tells the guide to call `step_verdict` for the step before it writes the verdict, with one gap on
-`not_yet`, and to call it again with `not_yet` when the server refuses a pass. When no check of
+`not_yet` (only a count once the step's checks give only a count), and to call it again with `not_yet` when the server
+refuses a pass. When no check of
 the step has finished, the body says so instead.
 
 `session.state` carries the checklist as `steps` (`publicSteps` in `src/server/engine/public.ts`), never `checklist` or
 `stepChecks`. A debrief gets every item with its label, state and where it was covered. Every live round, guided or
 interview, gets an empty `steps` until the round ends, because the list comes from the hidden brief and even a count of
-covered items tells him whether a step is done. A guided round shows him the guide's `stepVerdicts` instead, and an
+covered items tells him whether a step is done. A guided round shows him the guide's `stepVerdicts` instead (a
+count-only "not yet" says how many items are open only after two named gaps on that step), and an
 `assistCount` (how many times he asked for a model answer; the steps stay on the server until the debrief). `pins`
 follows the checklist rule: none in an interview round, the guide's in a guided round, all of them once the round is
 over.
@@ -1176,7 +1182,8 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   without a frame brings the Code tab forward instead.
 - The work toolbar has "Show this step" (the current step's frame) and "Whole board" while the board is in view.
 - Step verdict (live guided rounds only), a card at the top of the chat column, for the current step: "Passed" with a
-  check, or "Not yet" followed by the guide's one gap, shown as plain text. Before the first check it shows nothing.
+  check, or "Not yet" followed by the guide's one gap (or, after two of them on the step, the server's count of what is
+open), shown as plain text. Before the first check it shows nothing.
   The checklist is not shown during the round, in either mode.
 - Guided rounds show the guide's pins on the board.
 - "What the interviewer sees" toggle: shows the current graph text (and its warnings). It makes the board's
@@ -1302,7 +1309,7 @@ Guide (guided mode), modelled on step-by-step guided practice:
 - Checks requirements against the brief's Core items and the Level bar; a missing Extra is never a gap. When a step
   meets the Level bar it calls `step_verdict` with `pass` and says so plainly; it never says "nearly done" or "close to
   done". Otherwise it names exactly one gap, the most important, as a missing question or a missing decision and not
-  its answer. It never raises a passed step again, and small items go to the debrief. In the deep dives, numbers need to
+  its answer, until the step's checks give only a count. It never raises a passed step again, and small items go to the debrief. In the deep dives, numbers need to
   be right to an order of magnitude, and only the numbers that drive a decision need their consequence.
 - Gives a model answer only through "I'm stuck": about 150 words with no tables or quizzes, a line asking him to redo
   the step, never a `pass` and never a `note_hint`. A chat request for the answer ("just tell me", "teach me", "which

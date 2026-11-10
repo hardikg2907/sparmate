@@ -2107,12 +2107,42 @@ describe("guided step verdicts, assists and move-on offers", () => {
     const request = w.turns.find((x) => x.meta.request === "feedback")?.text ?? "";
     expect(request).toContain(`so this check names nothing`);
     expect(request).toContain(`say that ${items.length - 1} things are still open`);
-    expect(session.stepVerdicts?.requirements).toMatchObject({ verdict: "not_yet", gap: `${items.length - 1} things are still open. Press Hint to hear the next one.`, misses: 3 });
-    expect(session.pins).toEqual([]);
+    expect(session.stepVerdicts?.requirements).toMatchObject({
+      verdict: "not_yet",
+      gap: `${items.length - 1} things are still open. Press Hint for a nudge toward the next one.`,
+      misses: 3,
+    });
+    expect(await w.tool("pin_note", { elementId: "anything", note: "Say what this box does." })).toMatchObject({ isError: true, text: expect.stringContaining("pin nothing") });
 
     await rt.handle({ type: "guided.hint" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(w.turns.find((x) => x.meta.request === "hint")?.text).toContain("this hint is how he hears the next open item");
+    rt.dispose();
+  });
+
+  it("gives a count also when the step is checked in a chat turn, and accepts an empty gap there", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    session.stepVerdicts = {
+      requirements: { verdict: "not_yet", gap: "What latency does a redirect need?", at: 1, misses: 2 },
+      deep_dives: { verdict: "not_yet", gap: "How are codes made unique?", at: 2, misses: 2 },
+    };
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Is my requirements step done now?" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(w.turns.find((x) => x.meta.kind === "candidate")?.text).toContain("checks give only a count: Requirements, Deep dives");
+
+    const named = await w.tool("step_verdict", { phase: "requirements", verdict: "not_yet", gap: "You have not asked how many links are created." });
+    expect(named.text).toContain("Name nothing that is missing");
+    expect(session.stepVerdicts?.requirements?.gap).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
+    expect((await w.tool("step_verdict", { phase: "deep_dives", verdict: "not_yet", gap: "" })).isError).toBe(false);
+    expect(session.stepVerdicts?.deep_dives?.gap).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
+
+    session.stepChecks = { ...session.stepChecks, deep_dives: { status: "done", checkedAt: 3, usedImage: false, items: {} } };
+    await w.tool("step_verdict", { phase: "deep_dives", verdict: "not_yet" });
+    expect(session.stepVerdicts?.deep_dives?.gap).toBe("One thing is still open. Press Hint for a nudge toward it.");
     rt.dispose();
   });
 
