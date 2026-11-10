@@ -534,7 +534,7 @@ export function ConversationView({
         </p>
       ) : null}
       <div>
-        <Button variant="ghost" size="sm" disabled={busy} onClick={onStartOver}>
+        <Button variant="ghost" size="sm" className="-ml-2.5" disabled={busy} onClick={onStartOver}>
           Start over
         </Button>
       </div>

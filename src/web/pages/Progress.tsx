@@ -447,7 +447,7 @@ function SkillsCard({ rows, rounds, mode, onMode }: { rows: SkillRow[]; rounds: 
           ))}
         </ul>
       )}
-      <div className="mt-4 flex items-center justify-between border-t border-border pt-3.5 text-meta text-muted-foreground">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border pt-3.5 text-meta text-muted-foreground">
         <span>
           {rounds} {MODE_LABEL[mode].toLowerCase()} {rounds === 1 ? "round" : "rounds"} so far
         </span>

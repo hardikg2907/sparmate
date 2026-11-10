@@ -119,8 +119,8 @@ function ClosedDrills({ rows }: { rows: GymClosedRow[] }) {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-body font-semibold">{row.title}</span>
-                <span className="block truncate text-meta text-muted-foreground">{row.gapTitle}</span>
-                <span className="block truncate text-meta text-faint">From your round on {row.originProblemTitle}</span>
+                <span className="block break-words text-meta text-muted-foreground sm:truncate">{row.gapTitle}</span>
+                <span className="block break-words text-meta text-faint sm:truncate">From your round on {row.originProblemTitle}</span>
               </span>
               <span className="shrink-0 text-right text-ui text-muted-foreground">Closed {shortDay(parseDay(row.closedOn))}</span>
             </Link>
