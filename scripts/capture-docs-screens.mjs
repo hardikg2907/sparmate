@@ -70,7 +70,19 @@ const SHOTS = [
   { name: "room-lld", query: `fixture=room-lld&mode=guided&${COMMON}`, room: true, before: settleRoom },
   { name: "debrief", query: `fixture=debrief-hld&mode=guided&${COMMON}`, room: true, before: settleRoom },
   { name: "practice", query: `fixture=gym&${COMMON}` },
-  { name: "progress", query: `fixture=progress&${COMMON}` },
+  {
+    name: "progress",
+    query: `fixture=progress&${COMMON}`,
+    // The page is one long scroll. The level per skill, the drill marks and "Drills by kind" sit under the Skills tab.
+    before: async (page) => {
+      await page.evaluate(() => {
+        location.hash = "skills";
+      });
+      await sleep(1200);
+    },
+  },
+  { name: "drill-dialogue", query: `fixture=drill-dialogue&${COMMON}` },
+  { name: "drill-detail", query: `fixture=drill-detail&${COMMON}` },
   {
     name: "palette",
     query: HOME,

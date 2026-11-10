@@ -19,7 +19,7 @@
 - **Voice in and out.** Speak your answers and hear the interviewer's replies.
 - **A weekly plan.** Today picks the session for the day from your plan: a redo, a new problem, a DSA day or rest.
 - **DSA progress.** The Progress page counts your LeetCode solves from a day you choose, against your weekly goal. It reads your public profile through LeetCode's unofficial GraphQL endpoint, so it can change, and it needs no login.
-- **Drills.** Under Practice, short drills of 10 to 15 minutes, queued from the gaps in your debriefs and spaced 1, 3 and 7 days apart. A grader scores a few named criteria on your reasoning, you get short feedback and one revision, and three interview-ready results close the gap. Two of the six kinds, the deep dive and "Defend a trade-off", run as a short dialogue: the grader asks one or two follow-up questions before the result, the way an interviewer probes. Each repeat of a drill uses a different problem, or the same problem with a changed constraint, so the results on at least two different problems cannot be recall of one answer. Every attempt is saved: open a drill's history to read each answer, its grade and what it cost.
+- **Drills.** Under Practice, short graded drills of 10 to 15 minutes, queued from the gaps in your debriefs, in six kinds: capacity math, walk a request, requirements sprint, pick a deep dive, defend a trade-off and an LLD skeleton. A grader scores named criteria from 1 to 4 and gives Interview-ready, Getting there or Needs work, with one revision for a written drill, and the deep dive and the trade-off run as a dialogue with one or two follow-up questions. Each repeat uses another problem or a changed constraint, a drill closes after three Interview-ready results on at least two problems, and every attempt is saved in the drill's history.
 - **Progress.** One focus skill each week, your level per skill (your latest rounds, with drills counted at a lower weight), the results of each drill kind, the redo queue and your round history.
 - **A command palette.** Press ⌘K (Ctrl+K elsewhere) to jump to a page, a problem or a past round.
 - **A usage page.** See tokens and cost for each round, role and model.
@@ -35,6 +35,10 @@
 | Practice                                                             | Progress                                                                    |
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | ![Practice, with the drills that are due](docs/screens/practice.png) | ![Progress: skills, redo queue, DSA and history](docs/screens/progress.png) |
+
+| Drill dialogue                                                                           | Drill history                                                                        |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| ![A trade-off drill after the first follow-up question](docs/screens/drill-dialogue.png) | ![One drill's attempts, with outcomes, time and cost](docs/screens/drill-detail.png) |
 
 | Command palette                                                | Today on a phone                                                                                         |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -121,27 +125,27 @@ In `.env`, set `STUDY_ROOT` to the folder you want for your study files. If you 
 
 All settings in `.env`:
 
-| Variable               | Default                           | Purpose                                                                     |
-| ---------------------- | --------------------------------- | --------------------------------------------------------------------------- |
-| `STUDY_ROOT`           | `~/sparmate-study`                | Your study folder.                                                          |
-| `DATA_DIR`             | `<STUDY_ROOT>/rounds`             | Sessions, settings, custom problems, drill schedule, logs and usage ledger. |
-| `PORT`                 | `4747`                            | Server port.                                                                |
-| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro`               | Kokoro voice files.                                                         |
-| `SPARMATE_DENYLIST`    | `~/.config/sparmate/denylist.txt` | Extra words to keep out of your files (see Privacy).                        |
+| Variable               | Default                           | Purpose                                                                                |
+| ---------------------- | --------------------------------- | -------------------------------------------------------------------------------------- |
+| `STUDY_ROOT`           | `~/sparmate-study`                | Your study folder.                                                                     |
+| `DATA_DIR`             | `<STUDY_ROOT>/rounds`             | Sessions, settings, custom problems, drills and their attempts, logs and usage ledger. |
+| `PORT`                 | `4747`                            | Server port.                                                                           |
+| `SPARMATE_KOKORO_HOME` | `<DATA_DIR>/kokoro`               | Kokoro voice files.                                                                    |
+| `SPARMATE_DENYLIST`    | `~/.config/sparmate/denylist.txt` | Extra words to keep out of your files (see Privacy).                                   |
 
 ## Your study folder
 
 The study folder is yours. The app reads it and writes to it only in the ways listed here. You can keep it in its own private git repository. If you do, add `rounds/` to its `.gitignore`.
 
-| Path          | What it is for                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `TRACKER.md`  | Your plan and progress. Each problem has a mark: `[ ]` not started, `[~]` taught but not yet recalled, `[x]` solved at the bar. |
-| `REVIEW.md`   | Recall questions. The app adds new ones after a round, and the coach re-tests old ones.                                         |
-| `TEACHING.md` | The rules the coach follows when it teaches you. Edit it to change how you are taught.                                          |
-| `ABOUT_ME.md` | Your profile. It sets the bar for every round.                                                                                  |
-| `notes/`      | What you have learnt, one file per topic.                                                                                       |
-| `lld/`        | Your C++ attempts, as `lld/<problem>/attempt-<date>.cpp`. You can edit them in any editor and the page picks up the change.     |
-| `rounds/`     | Session transcripts, boards, scores, settings and the usage ledger. The app writes here as a round runs.                        |
+| Path          | What it is for                                                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRACKER.md`  | Your plan and progress. Each problem has a mark: `[ ]` not started, `[~]` taught but not yet recalled, `[x]` solved at the bar.                                                       |
+| `REVIEW.md`   | Recall questions. The app adds new ones after a round, and the coach re-tests old ones.                                                                                               |
+| `TEACHING.md` | The rules the coach follows when it teaches you. Edit it to change how you are taught.                                                                                                |
+| `ABOUT_ME.md` | Your profile. It sets the bar for every round.                                                                                                                                        |
+| `notes/`      | What you have learnt, one file per topic.                                                                                                                                             |
+| `lld/`        | Your C++ attempts, as `lld/<problem>/attempt-<date>.cpp`. You can edit them in any editor and the page picks up the change.                                                           |
+| `rounds/`     | Session transcripts, boards, scores, settings, the drill schedule (`drills.json`) and every drill attempt (`drill-attempts/`), and the usage ledger. The app writes here as you work. |
 
 **The app writes study files only when you click Save.** That covers `TRACKER.md`, `REVIEW.md` and `notes/`. It also refuses to write if a file changed after it drafted the edit. The two exceptions are `rounds/` (round data) and the new `.cpp` file that an LLD round creates.
 
@@ -208,10 +212,11 @@ Rounds use your Claude plan, like any Claude Code session. The default models ar
 | Coach                                    | Claude Opus 5.5           | medium                           |
 | Scribe (study notes and custom problems) | Claude Opus 5.5           | medium                           |
 | Step checker                             | Claude Sonnet 5.5 (fixed) | low                              |
+| Drill grader                             | Claude Sonnet 5.5         | medium                           |
 
 To spend less, open Settings and switch the interviewer and the coach to Claude Sonnet 5.5. Keep the judge on Opus if you want the sharpest scoring.
 
-The **Usage** page (`/usage`, linked in the header) shows tokens, cost, duration and role for every model call, with daily charts and breakdowns by problem, round, role and model. Each round has its own row, with its cost, and the row links to its debrief. Costs are API-equivalent prices. When the SDK does not report a cost, the app prices the call from its tokens, and the page shows a "≈" next to totals that include such estimates.
+The **Usage** page (`/usage`, linked in the header) shows tokens, cost, duration and role for every model call, with daily charts and breakdowns by problem, round, role and model. A Drills section shows what grading cost, and each problem splits round cost from drill cost. Each round has its own row, with its cost, and the row links to its debrief. Costs are API-equivalent prices. When the SDK does not report a cost, the app prices the call from its tokens, and the page shows a "≈" next to totals that include such estimates.
 
 ## Problems
 

@@ -711,7 +711,7 @@ Scripts and tests depend on these, so the revamp keeps them exactly.
   scroller moves (`scripts/e2e/layout-check.mjs`).
 - `window.__irBoard` and `window.__irShell` with `?testhooks=1`, and the `__fixtureLog` in fixture mode.
 - Fixture names: `home` (Today), `library` (Practice, Rounds), `library-new`, `progress`, `history` and `dsa` (Progress,
-  opened at that section), `settings`, `gym` (Practice, Drills), `drill-detail` (the history of one drill), the room and debrief fixtures, and `usage`. URL
+  opened at that section), `settings`, `gym` (Practice, Drills), `drill-detail` (the history of one drill), `drill-dialogue` (a dialogue drill after its first question), the room and debrief fixtures, and `usage`. URL
   parameters: `fixture`, `theme`, `mode`, `status`, `error`, `reason`, `offline`, `timeup`, `stale`, `preparing`, `now`
   (a date, for Today and Progress), `unfinished=0`, `username`, `plan`, `testmode=0`, and for Today `today=first` (no
   rounds yet, no drills) and `today=rest` (today's slot of the plan becomes rest). On Today a `username` or a `state`
