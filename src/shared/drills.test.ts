@@ -320,6 +320,10 @@ describe("gap to drill", () => {
     "Counting requests inside a time box per key",
     "Reserved minutes unused at checkout",
     "Stalled consumers on a hot partition",
+    "Requests that timed out before the API replied",
+    "Retries that never reach the API gateway",
+    "Shards that never reached capacity",
+    "Requests that spend too long on the design's slowest hop",
   ])("keeps the judge's drill for the design gap %s", (title) => {
     expect(drillForGap({ title, drill: "deep_dive" }, "hld")).toBe("deep_dive");
   });

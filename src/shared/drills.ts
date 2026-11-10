@@ -92,8 +92,12 @@ const LLD_RULES: Rule[] = [
   { drill: "lld_skeleton", pattern: /entit|class|interface|skeleton|model(l)?ing|object|relationship|data shape|abstraction|responsib|encapsulat|\bapi\b|noun/ },
 ];
 
-/** The steps of a round, as a gap title names them. */
-const STEP = String.raw`(the )?(step|phase|round|requirements|scoping|clarif\w*|capacity( math)?|api|entities|design|deep dives?|curveball|extension|skeleton)`;
+/**
+ * The steps of a round, as a gap title names them. "The API", "capacity" and "design" also name parts of a design
+ * ("never reached the API gateway"), so only a phrase that is about time on a step may use the wider list.
+ */
+const STEP = String.raw`(the )?(step|phase|round|requirements|scoping|clarif\w*|capacity math|deep dives?|curveball|extension|skeleton)`;
+const ANY_STEP = String.raw`(the )?(step|phase|round|requirements|scoping|clarif\w*|capacity( math)?|api|entities|design|deep dives?|curveball|extension|skeleton)`;
 const NUMBER_WORD = String.raw`(\d+|five|ten|fifteen|twenty|twenty-five|thirty|forty)`;
 
 /**
@@ -107,7 +111,7 @@ const ROUND_ONLY = new RegExp(
     String.raw`\b(ran|running|went) (long|over)( time)? (on|in) ${STEP}\b`,
     String.raw`\b(requirements|scoping|capacity|api|design|entities|skeleton) step (ran|went|running) (long|over)\b`,
     String.raw`\b(spent|spending|spend|spends) too long on ${STEP}\b|\btoo much time on ${STEP}\b`,
-    String.raw`\b${NUMBER_WORD} minutes on ${STEP}\b|\b${NUMBER_WORD} minutes (left )?unused\b`,
+    String.raw`\b${NUMBER_WORD} minutes on ${ANY_STEP}\b|\b${NUMBER_WORD} minutes (left )?unused\b`,
     String.raw`\bround's (remaining |spare )?time\b|\bunused round time\b|\btook (half|most) of the round\b`,
     String.raw`\bstay(ed|ing|s)? on the question\b`,
     String.raw`\b(questions?|curveball|probes?|follow-ups?|halves|half) (left |went )?unanswered\b|\bleft the (questions?|curveball|probes?) unanswered\b`,
