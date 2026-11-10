@@ -19,8 +19,7 @@ export function EvidenceItem({ evidence, verified, point, dimensionName }: { evi
     <li className="flex gap-2.5">
       <span
         className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full", plus ? "bg-success-soft text-success" : "bg-destructive-soft text-destructive")}
-        role="img"
-        aria-label={plus ? "Counts in your favour" : "Counts against you"}
+        aria-hidden="true"
       >
         {plus ? <PlusIcon size={12} /> : <MinusIcon size={12} />}
       </span>
@@ -33,6 +32,7 @@ export function EvidenceItem({ evidence, verified, point, dimensionName }: { evi
         ) : null}
         <blockquote className="max-w-[68ch] break-words text-body text-foreground">“{evidence.quote}”</blockquote>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-meta text-muted-foreground">
+          <span className={cn("font-semibold", plus ? "text-success" : "text-destructive")}>{plus ? "Counts for you" : "Counts against you"}</span>
           <span>
             {SOURCE_LABEL[evidence.source]}
             {evidence.at ? ` at ${evidence.at}` : ""}

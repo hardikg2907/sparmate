@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { withCurrentPlan } from "../../shared/phases";
+import { notesWereSaved } from "../../shared/studyNotes";
 import { DEFAULT_TARGET } from "../../shared/target";
 import type { Proposal, Session, SessionHistoryItem } from "../../shared/types";
 import { resolveInside } from "../study/files";
@@ -75,7 +76,7 @@ export function summarize(s: Session): SessionSummary {
     verdict: s.scorecard?.verdict.sde2 ?? null,
     readiness: s.scorecard?.readiness?.call ?? null,
     pause: pauseSummary(s),
-    notesSaved: (s.studyNotes?.appliedCount ?? 0) > 0,
+    notesSaved: notesWereSaved(s.studyNotes),
     focus: s.focus !== null && s.focus !== undefined,
     clock: { startedAt: s.startedAt, pausedMs: s.pausedMs, pauseStartedAt: s.pauseStartedAt, durationMs: s.durationMs },
     ...scoredParts(s),

@@ -40,7 +40,8 @@ export async function planProposal(studyRoot: string, sessionId: string, ops: Bo
     }
     const op = parsed.data;
     const file = targetFile(op);
-    const summary = guard.redact(describe(op));
+    // Redact before shortening, so a cut cannot leave part of a blocked term.
+    const summary = guard.redact(describe(redactedForSummary(op, guard)));
 
     let result: OpResult;
     if (index >= LIMITS.proposalOps) {
@@ -368,23 +369,35 @@ function trimBlock(text: string): string {
   return text.replace(/\r\n?/g, "\n").replace(/^\n+/, "").trimEnd();
 }
 
+/** The op with its free text redacted. The kind and the mark are fixed words, and the summary is built from them. */
+function redactedForSummary(op: BookkeepingOp, guard: PrivacyGuard): BookkeepingOp {
+  const redacted = redactStrings(op, guard);
+  return { ...redacted, kind: op.kind, ...("mark" in op ? { mark: op.mark } : {}) } as BookkeepingOp;
+}
+
+/** The summary is read on the page, where a bracket mark means nothing. */
+const MARK_WORDS = { "[ ]": "not done", "[~]": "partly done", "[x]": "done" } as const;
+
 function describe(op: BookkeepingOp): string {
   const short = (text: string, max = 60): string => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
   switch (op.kind) {
     case "tracker_update_bullet": {
       const parts: string[] = [];
-      if (op.mark !== undefined) parts.push(`mark ${op.mark}`);
+      if (op.mark !== undefined) parts.push(`mark it ${MARK_WORDS[op.mark]}`);
       if (op.appendSuffix !== undefined) parts.push(`add "${short(oneLine(op.appendSuffix), 50)}"`);
       return `Update "${short(op.bullet)}"${parts.length > 0 ? ` (${parts.join(", ")})` : ""}`;
     }
+    // Several ops of one kind are common in a draft, so each summary names its own content.
     case "tracker_add_subbullet":
-      return `Add a sub-bullet under "${short(op.parentBullet)}"`;
+      return `Add a sub-bullet under "${short(op.parentBullet, 40)}": "${short(oneLine(op.text))}"`;
     case "tracker_append_session_log_row":
       return `Add a Session Log row for ${op.date}`;
     case "tracker_append_gap_row":
-      return `Add a Gaps Found & Filled row for ${op.date}`;
-    case "review_append_entry":
-      return "Add an entry to REVIEW.md";
+      return `Add a Gaps Found & Filled row: "${short(oneLine(op.gap))}"`;
+    case "review_append_entry": {
+      const heading = op.markdown.split("\n").find((line) => line.trim() !== "") ?? "";
+      return `Add a REVIEW.md entry: "${short(oneLine(heading.replace(/^#+\s*/, "")))}"`;
+    }
     case "notes_create":
       return `Create ${op.path}`;
     case "notes_append":

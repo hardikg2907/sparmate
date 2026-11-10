@@ -18,6 +18,7 @@ import { Banner, Badge, Card, SectionTitle } from "../components/ui";
 import { currentGap, gapCounts, gapMarks, gapState, type GapMark } from "../lib/gapMarks";
 import { nextAction } from "../lib/debriefNext";
 import { gapDividerText, teachMessage } from "../../shared/gaps";
+import { notesWereSaved } from "../../shared/studyNotes";
 import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatDate } from "../lib/format";
 import { debriefClockText, finalRoundMs, phaseSpentMs } from "../lib/timing";
 import { scrollToInScroller } from "../lib/scrollInScroller";
@@ -217,7 +218,7 @@ function ScorecardBody({
   const gaps = sortedGaps(scorecard);
   const current = currentGap(gaps, marks);
   const counts = gapCounts(gaps, marks);
-  const notesSaved = (state.notes.result?.applied.length ?? session.studyNotes?.appliedCount ?? 0) > 0;
+  const notesSaved = (state.notes.result?.applied.length ?? 0) > 0 || notesWereSaved(session.studyNotes);
   const next = nextAction({ gaps, marks, notesSaved, mode: session.mode, readiness: scorecard.readiness?.call ?? null });
   const teach = (gap: Scorecard["gaps"][number]) => actions.sendChat("coach", teachMessage(gap));
   const act = () => {

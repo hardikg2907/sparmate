@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Proposal, ProposalOp, Session } from "../../../shared/types";
-import { formatDateTime } from "../../lib/format";
+import { formatDateTime, summaryInWords } from "../../lib/format";
+import { draftCountText, notesWereSaved } from "../../../shared/studyNotes";
 import type { NotesState } from "../../session/types";
 import { CheckIcon, CrossIcon, InfoIcon, WarnIcon } from "../icons";
 import { Alert, Badge, Button, Card, Checkbox, Label, SectionTitle, Spinner, toast } from "../ui";
@@ -29,7 +30,7 @@ export function StudyNotes({ notes, saved, enabled, onDraft, onApply }: StudyNot
   }, [notes.result, notes.proposal]);
   return (
     <section id="notes" aria-labelledby="notes-heading" className="scroll-mt-4">
-      <SectionTitle id="notes-heading" aside="Draft once the gaps are done. You can draft any time.">
+      <SectionTitle id="notes-heading" aside={notesWereSaved(saved) ? undefined : "Draft once the gaps are done. You can draft any time."}>
         Study notes
       </SectionTitle>
       {drafting ? (
@@ -38,12 +39,12 @@ export function StudyNotes({ notes, saved, enabled, onDraft, onApply }: StudyNot
         </Card>
       ) : proposal ? (
         <ProposalView key={proposal.id} proposal={proposal} notes={notes} saved={saved} enabled={enabled} onDraft={onDraft} onApply={onApply} />
-      ) : saved && saved.appliedCount > 0 ? (
+      ) : saved && notesWereSaved(saved) ? (
         <Card variant="raised" className="flex flex-wrap items-center justify-between gap-4 p-5">
           <p className="flex items-center gap-2 text-body text-foreground" role="status">
             <CheckIcon size={16} className="text-success" />
             <span>
-              Saved {saved.appliedCount} {saved.appliedCount === 1 ? "change" : "changes"} to your study files
+              {saved.appliedCount > 0 ? `Saved ${saved.appliedCount} ${saved.appliedCount === 1 ? "change" : "changes"} to your study files` : "Study notes saved"}
               {saved.savedAt ? ` on ${formatDateTime(saved.savedAt)}` : ""}.
             </span>
           </p>
@@ -108,7 +109,7 @@ function ProposalView({ proposal, notes, enabled, onDraft, onApply }: { proposal
         <div className="flex items-start justify-between gap-4">
           <p className="flex min-w-0 items-start gap-2 text-ui text-muted-foreground">
             <InfoIcon size={16} className="mt-0.5 shrink-0" />
-            <span>Read each change. Untick what you do not want. The diff shows every available change, and only ticked ones are saved.</span>
+            <span>{draftCountText(proposal.ops)} Read each one and untick what you do not want. Only ticked changes are saved.</span>
           </p>
           <Button size="sm" onClick={onDraft} disabled={!enabled || notes.applying}>
             Draft again
@@ -136,9 +137,11 @@ function ProposalView({ proposal, notes, enabled, onDraft, onApply }: { proposal
                       checked={selected.has(op.id) && !op.blocked && !stale}
                       disabled={Boolean(op.blocked) || saved || locked}
                       onCheckedChange={() => toggle(op.id)}
+                      aria-labelledby={`${id}-label`}
                     />
-                    <Label htmlFor={id} className="min-w-0 flex-1 font-normal leading-snug text-foreground peer-disabled:opacity-100">
-                      <span className="font-medium text-foreground">{op.summary}</span>
+                    <Label id={`${id}-label`} htmlFor={id} className="min-w-0 flex-1 font-normal leading-snug text-foreground peer-disabled:opacity-100">
+                      <span className="font-medium text-foreground">{summaryInWords(op.summary)}</span>
+                      <span className="sr-only"> ({op.file})</span>
                       {op.blocked ? <span className="mt-0.5 block text-meta text-warning">Cannot be applied: {op.blocked}</span> : null}
                       {reason && !stale ? <span className="mt-0.5 block text-meta text-destructive">Not saved: {reason}</span> : null}
                     </Label>
@@ -200,7 +203,7 @@ function ApplyResult({ proposal, result, stale }: { proposal: Proposal; result: 
           <ul className="mt-1.5 space-y-0.5 pl-6 text-ui text-muted-foreground">
             {result.applied.map((id) => (
               <li key={id}>
-                {summaryOf(id)?.summary ?? id} <span className="font-mono text-meta">({summaryOf(id)?.file})</span>
+                {summaryInWords(summaryOf(id)?.summary ?? id)} <span className="font-mono text-meta">({summaryOf(id)?.file})</span>
               </li>
             ))}
           </ul>
@@ -215,7 +218,7 @@ function ApplyResult({ proposal, result, stale }: { proposal: Proposal; result: 
           <ul className="mt-1.5 space-y-0.5 pl-6 text-ui text-muted-foreground">
             {result.failed.map((failure) => (
               <li key={failure.opId}>
-                {summaryOf(failure.opId)?.summary ?? failure.opId}: {failure.reason}
+                {summaryInWords(summaryOf(failure.opId)?.summary ?? failure.opId)}: {failure.reason}
               </li>
             ))}
           </ul>

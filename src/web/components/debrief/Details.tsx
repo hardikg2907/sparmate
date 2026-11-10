@@ -1,5 +1,5 @@
 import type { PublicSession, Scorecard } from "../../../shared/types";
-import { MARK_LABEL, MARK_TONE } from "../../lib/format";
+import { MARK_LABEL, MARK_TONE, marksInWords } from "../../lib/format";
 import type { CodeState } from "../../session/types";
 import type { Theme } from "../../theme";
 import { Badge, Segmented, Tabs, TabsContent, TabsUnderlineList, TabsUnderlineTrigger } from "../ui";
@@ -65,16 +65,14 @@ export function Details({ tab, onTab, view, onView, session, scorecard, board, g
           </div>
           {trackerMarkReason ? (
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ui text-muted-foreground">
-              <Badge mono tone={MARK_TONE[trackerMark]} title={MARK_LABEL[trackerMark]}>
-                {trackerMark} {MARK_LABEL[trackerMark].toLowerCase()}
-              </Badge>
+              <Badge tone={MARK_TONE[trackerMark]}>Tracker: {MARK_LABEL[trackerMark].toLowerCase()}</Badge>
               <span>
-                Why {trackerMark}: {trackerMarkReason}
+                Why {MARK_LABEL[trackerMark].toLowerCase()}: {marksInWords(trackerMarkReason)}
               </span>
             </p>
           ) : (
-            <Badge mono tone={MARK_TONE[trackerMark]} title={MARK_LABEL[trackerMark]} className="w-fit">
-              {trackerMark} {MARK_LABEL[trackerMark].toLowerCase()}
+            <Badge tone={MARK_TONE[trackerMark]} className="w-fit">
+              Tracker: {MARK_LABEL[trackerMark].toLowerCase()}
             </Badge>
           )}
           {view === "step" && hasSteps ? (

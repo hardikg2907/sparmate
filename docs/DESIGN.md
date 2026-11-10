@@ -436,7 +436,7 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
   A ⋯ menu holds **Restart lesson** and **Practise this gap**. The chat shows a divider line, "Now on: <gap>",
   where each gap begins, and **Continue in chat** scrolls the chat to it.
 - **Draft study notes** sits in its own section after the gaps, with the hint "Draft once the gaps are done. You can
-  draft any time." The proposal view keeps every behaviour: grouped by file, a tick box per change, blocked changes
+  draft any time." until notes are saved. The proposal view keeps every behaviour: grouped by file, a tick box per change, blocked changes
   disabled with the reason, a diff per file, **Save selected**, the result list, and **Draft again** on a stale draft.
 
 ### Finish or discard from Today
@@ -672,8 +672,8 @@ Today is one page for the whole day, and with data it fills the first screen at 
 - **NEXT.** One soft brand card with the label "NEXT", the action in one line and the only filled primary button on
   the page. A muted progress line under it has a thin segmented bar, one segment per gap.
 - **Gaps.** The current gap is a raised card with a state badge, the only coloured badge in the list, and an outline
-  button. Every other gap is a quiet row between hairlines, with no card, a regular-weight title, muted minutes and
-  a small state dot or a tick for done. Section headings (Gaps to work on, Study notes, Summary) share one style.
+  button. Every other gap is a quiet row between hairlines, with no card, a regular-weight title, muted minutes,
+  a small state dot or a tick for done, and a small outline button when the gap is not done. Section headings (Gaps to work on, Study notes, Summary) share one style.
 - **Details.** Underline tabs: Evidence (with a By step or By score toggle), Time, What the judge saw, and
   Reference. In **By step**, each step is its own raised card: the step's frame sits in a sunken well like paper
   laid on the card, with the pins at their places; the title carries a tinted-glass pill with the coverage ring and

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useLayoutEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "./ui";
@@ -15,7 +15,30 @@ const components: Components = {
     );
   },
   img: ({ alt }) => (alt ? <span className="italic text-muted-foreground">[image: {alt}]</span> : null),
+  pre: ({ node, ...rest }) => {
+    void node;
+    return <ScrollablePre {...rest} />;
+  },
 };
+
+/**
+ * A wide block scrolls sideways, and only an element that takes focus can be scrolled from the keyboard. A block
+ * that fits stays out of the tab order and out of the landmarks.
+ */
+function ScrollablePre(props: ComponentPropsWithoutRef<"pre">) {
+  const ref = useRef<HTMLPreElement>(null);
+  const [wide, setWide] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWide(el.scrollWidth > el.clientWidth);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    return () => observer?.disconnect();
+  }, [props.children]);
+  return <pre ref={ref} {...props} {...(wide ? { tabIndex: 0, role: "region", "aria-label": "Code block, scrolls sideways" } : {})} />;
+}
 
 const PLUGINS = [remarkGfm];
 
