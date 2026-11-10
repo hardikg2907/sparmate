@@ -5,7 +5,9 @@ import {
   FirstQuestionSchema,
   GraderOutputSchema,
   NextQuestionSchema,
-  cleanQuestion,
+  reviewQuestion,
+  salvageQuestion,
+  QUESTION_PROBLEMS,
   dropKeyCopies,
   dropKeyReveals,
   finishGrade,
@@ -361,8 +363,8 @@ describe("follow-up question schemas", () => {
 });
 
 describe("one question at a time", () => {
-  it("cuts a follow-up question after its first question mark", () => {
-    expect(cleanQuestion("What happens to the unused numbers? Also, how would you hide the order?", "", (t) => t)).toBe("What happens to the unused numbers?");
+  it("keeps only the first question when it has to salvage one", () => {
+    expect(salvageQuestion("What happens to the unused numbers? Also, how would you hide the order?", "", "", (t) => t)).toBe("What happens to the unused numbers?");
   });
 
   it("shows a criterion's label where the model wrote its id", () => {
@@ -371,31 +373,220 @@ describe("one question at a time", () => {
   });
 });
 
-describe("cleanQuestion", () => {
-  const key = "A counter encoded in base62, with ranges handed to each server so there is no single hot counter.";
+describe("reviewQuestion", () => {
+  const key = "A counter encoded in base62, with ranges handed to each server so there is no single hot counter. Lease blocks expire after 300 seconds.";
+  const known = "I would use one database sequence and encode it so the codes stay short.";
   const same = (t: string) => t;
+  const review = (q: string, k = key, kn = known) => reviewQuestion(q, k, kn, same);
 
   it("strips control characters, flattens spaces and clips the length", () => {
-    expect(cleanQuestion("Why\u0000 this\n\n  choice\u0007 now?", key, same)).toBe("Why this choice now?");
-    const long = cleanQuestion(`${"word ".repeat(200)}`, key, same) ?? "";
+    expect(review("Why\u0000 this\n\n  choice\u0007 now?")).toEqual({ question: "Why this choice now?", problem: null });
+    const long = review(`${"word ".repeat(200)}`)?.question ?? "";
     expect(long.length).toBeLessThanOrEqual(300);
     expect(long.endsWith("…")).toBe(true);
   });
 
   it("redacts after cleaning", () => {
-    expect(cleanQuestion("Ask Dana about it?", key, (t) => t.replace("Dana", "[name]"))).toBe("Ask [name] about it?");
+    expect(reviewQuestion("Ask Dana about it?", key, known, (t) => t.replace("Dana", "[name]"))?.question).toBe("Ask [name] about it?");
   });
 
   it("is null when nothing is left", () => {
-    expect(cleanQuestion("  \u0000\n ", key, same)).toBeNull();
-    expect(cleanQuestion("secret", key, () => "")).toBeNull();
+    expect(review("  \u0000\n ")).toBeNull();
+    expect(reviewQuestion("secret", key, known, () => "")).toBeNull();
   });
 
-  it("replaces a question that shares six words in a row with the key", () => {
-    expect(cleanQuestion("Is a counter encoded in base62 with ranges your plan?", key, same)).toBe(FALLBACK_QUESTION);
-    expect(cleanQuestion("So there is no single hot counter, right?", key, same)).toBe(FALLBACK_QUESTION);
-    expect(cleanQuestion("Do you need a counter, and why base62?", key, same)).toBe("Do you need a counter, and why base62?");
-    expect(FALLBACK_QUESTION).toBe("What is the weakest part of what you just said, and how would you fix it?");
+  it("passes one question built on the candidate's words", () => {
+    expect(review("What happens to your database sequence when two writers ask at once?")?.problem).toBeNull();
+    expect(review("Orders come from web and phone, and where they land matters. What happens on a refund?")?.problem).toBeNull();
+    expect(review("Would you keep one sequence, or split it?")?.problem).toBeNull();
+  });
+
+  it.each([
+    ["two question marks", "Where does the write go? What does the reader see?"],
+    ["a clause joined by and what", "Where does the write go, and what does the reader see?"],
+    ["a closing and why", "Which store would you choose, and why?"],
+    ["a joined does", "How big does the table get, and does it fit in memory?"],
+  ])("flags %s as two questions", (_n, q) => {
+    expect(review(q)?.problem).toBe("two");
+  });
+
+  it("flags an opener that names where the difficulty lies", () => {
+    expect(review("The hardest part here is the shared sequence. Where would you keep it?")?.problem).toBe("opener");
+    expect(review("The key issue is order. Where would you keep it?")?.problem).toBe("opener");
+  });
+
+  it("flags a question that tells the candidate what their design is", () => {
+    expect(review("Your design is just a cache, so what happens on a miss?")?.problem).toBe("statement");
+    // A word from the key the candidate never wrote, named as what their part is.
+    expect(review("Your store is a counter with leases. What happens when one is lost?")?.problem).toBe("statement");
+  });
+
+  it("passes a question that restates the candidate's own part", () => {
+    expect(review("If your primary is a single machine, what happens when it dies?")?.problem).toBeNull();
+    expect(review("What happens when your replica is a minute behind?")?.problem).toBeNull();
+  });
+
+  it("flags text after the question mark, which can carry a hint or a second ask", () => {
+    expect(review("What happens to the old primary after the switch? Think about a lease.")?.problem).toBe("two");
+    expect(review("What happens when the database is slow? Also walk me through recovery.")?.problem).toBe("two");
+    expect(review('What did you mean by "fast enough?"')?.problem).toBeNull();
+  });
+
+  it.each([
+    ["and why with no comma", "Which store would you choose and why?"],
+    ["and how with a verb", "What breaks first and how would you notice it?"],
+    ["a joined if", "Where does it go, and if it fails, what happens?"],
+    ["a semicolon", "What does it cost; how would you measure it?"],
+  ])("flags %s as two questions", (_n, q) => {
+    expect(review(q)?.problem).toBe("two");
+  });
+
+  it("does not read a clause inside a condition as a second question", () => {
+    expect(review("If a writer crashes, and is restarted, what does the reader see?")?.problem).toBeNull();
+    expect(review("When the leader dies, and can't be reached, who takes over?")?.problem).toBeNull();
+  });
+
+  it("counts a question mark inside a quote as the candidate's words", () => {
+    expect(review('You wrote "why not shard?". What happens at ten times the load?')?.problem).toBeNull();
+  });
+
+  it("flags an opener only when it names the difficulty", () => {
+    expect(review("So the hardest part of this problem is the sequence. Where would you keep it?")?.problem).toBe("opener");
+    expect(review("The main database fails over. What does a reader see during the switch?")?.problem).toBeNull();
+    expect(review("The key you store per user expires. What does the next read return?")?.problem).toBeNull();
+  });
+
+  it("flags a mechanism named in two words as the key has them", () => {
+    const k = "Place keys with consistent hashing and virtual nodes, so a new node moves only a slice of the keys.";
+    const kn = "I would hash each key to a node with a router.";
+    expect(review("What would virtual nodes change about the load per shard?", k, kn)?.problem).toBe("key");
+    expect(review("What would consistent hashing change here?", k, kn)?.problem).toBe("key");
+    expect(review("What happens to the router when a node is added?", k, kn)?.problem).toBeNull();
+  });
+
+  it("counts only numbers of three digits or more from the key in a question", () => {
+    const k = "A node takes 4,000 writes a second, so 10 nodes cover the peak.";
+    expect(review("What if one node of 4 dies?", k, "")?.problem).toBeNull();
+    expect(review("What happens at 10 times the load?", k, "")?.problem).toBeNull();
+    expect(review("What happens past 4,000 writes a second?", k, "")?.problem).toBe("key");
+    expect(review("What happens past 4000 writes a second?", k, "I said 4,000 writes a second for a node.")?.problem).toBeNull();
+  });
+
+  it("flags a quote that hides a second question", () => {
+    expect(review('"What happens on failover? How do you recover?"')?.problem).toBe("two");
+    expect(review('What does "fast mean? What would you pick?')?.problem).toBe("two");
+    expect(review('"What happens on failover?"')?.problem).toBeNull();
+  });
+
+  it("flags a request with no question mark that runs on into a second sentence", () => {
+    expect(review("Walk me through failover. Think about a lease.")?.problem).toBe("two");
+    expect(review("Walk me through one write from start to end.")?.problem).toBeNull();
+  });
+
+  it.each([
+    ["and what happens", "Where does the write go and what happens to the reader?"],
+    ["and how many", "What breaks first and how many users notice?"],
+    ["or what", "What breaks first, or what would you watch?"],
+    ["and then what", "What happens on failover, and then what does the reader see?"],
+    ["also how", "What breaks first, and also how would you see it?"],
+    ["a bracketed and", "What breaks first (and how would you notice)?"],
+  ])("flags a second question joined by %s", (_n, q) => {
+    expect(review(q)?.problem).toBe("two");
+  });
+
+  it.each([
+    "The hardest thing about this problem is the fan-out. How would you size it?",
+    "The tricky bit is the fan-out. How would you size it?",
+    "The challenge here is the fan-out. How would you size it?",
+    "I think the hardest part is the fan-out. How would you size it?",
+    "Okay \u2014 the hardest part is the fan-out. How would you size it?",
+  ])("flags the opener %s", (q) => {
+    expect(review(q)?.problem).toBe("opener");
+  });
+
+  it("still passes a question that asks about the main problem", () => {
+    expect(review("What is the main problem with that?")?.problem).toBeNull();
+  });
+
+  it("does not count a topic title the drill showed as a copy of the key", () => {
+    const k = "### Real-time delivery, routing and presence for every user\nFan out through gateways.";
+    const kn = "Take Real-time delivery, routing and presence for every user: say what goes wrong.";
+    expect(review("For real-time delivery, routing and presence for every user, what happens when the database is slow?", k, kn)?.problem).toBeNull();
+  });
+
+  it("does not count plain words, or a word form the candidate wrote, as key words", () => {
+    const k = "Writes reach about 12,000 per second at peak, and clients retry after a timeout.";
+    expect(review("How many writes per second does that one database take at peak?", k, "")?.problem).toBeNull();
+    expect(review("What happens when a client retries after a timeout?", k, "")?.problem).toBeNull();
+    expect(review("What happens to the replicas?", "Replicas lag and replication stalls.", "my replica lags")?.problem).toBeNull();
+  });
+
+  it("does not read a case set up with if as a statement of the design", () => {
+    expect(review("If your plan is just to retry, what happens on the third failure?")?.problem).toBeNull();
+    expect(review("Your cache is a layer in front of the database. What happens on a miss?", "A layer sits in front of the store.", "")?.problem).toBeNull();
+  });
+
+  it("flags a question too long for the page", () => {
+    expect(review(`What happens when ${"the load grows ".repeat(25)}?`)?.problem).toBe("long");
+  });
+
+  it("redacts before it clips, so a cut never shows part of a name", () => {
+    const raw = `${"x".repeat(292)} Alexandria knows?`;
+    const out = reviewQuestion(raw, key, known, (t) => t.replace("Alexandria", "[name]"))?.question ?? "";
+    expect(out).not.toMatch(/Alexand/);
+  });
+});
+
+describe("salvageQuestion", () => {
+  const key = "Ranges handed to each server so there is no single hot counter.";
+  const known = "One database sequence, encoded short.";
+  const same = (t: string) => t;
+
+  it("keeps the first part of a two-part question", () => {
+    expect(salvageQuestion("Where does the write go, and what does the reader see?", key, known, same)).toBe("Where does the write go?");
+    expect(salvageQuestion("Which store would you choose, and why?", key, known, same)).toBe("Which store would you choose?");
+  });
+
+  it("cuts only the sentence that asks, never a setup sentence", () => {
+    const q = "Orders come from web and phone, and where they land matters for refunds. Which store would you choose, and why?";
+    expect(salvageQuestion(q, key, known, same)).toBe("Orders come from web and phone, and where they land matters for refunds. Which store would you choose?");
+  });
+
+  it("never leaves a dash, a semicolon or a bracket before the question mark", () => {
+    expect(salvageQuestion("What breaks first \u2014 and how would you notice?", key, known, same)).toBe("What breaks first?");
+    expect(salvageQuestion("What does it cost; and why?", key, known, same)).toBe("What does it cost?");
+    expect(salvageQuestion("What breaks first (and how would you notice)?", key, known, same)).toBe("What breaks first?");
+  });
+
+  it("redacts the salvaged question", () => {
+    expect(salvageQuestion("Did Dana pick it, and why?", key, known, (t) => t.replace("Dana", "[name]"))).toBe("Did [name] pick it?");
+  });
+
+  it("falls back when what is left is not a question or leaves a quote open", () => {
+    expect(salvageQuestion('You wrote "why not shard? What happens then?', key, known, same)).toBe(FALLBACK_QUESTION);
+    expect(salvageQuestion("Walk me through it, and what happens on a retry", key, known, same)).toBe(FALLBACK_QUESTION);
+  });
+
+  it("falls back to the fixed question when the first part still breaks a rule", () => {
+    expect(salvageQuestion("Your plan is a sequence. Why not ranges handed to each server?", key, known, same)).toBe(FALLBACK_QUESTION);
+    expect(salvageQuestion("The hardest part is the sequence, and where does it live?", key, known, same)).toBe(FALLBACK_QUESTION);
+    expect(salvageQuestion("?", key, known, same)).toBe(FALLBACK_QUESTION);
+  });
+
+  it("uses a fixed question that asks one thing", () => {
+    expect(FALLBACK_QUESTION).toBe("What is the weakest part of what you just said?");
+    expect(reviewQuestion(FALLBACK_QUESTION, key, known, same)?.problem).toBeNull();
+  });
+});
+
+describe("follow-up message after a rejected question", () => {
+  const prompt = { drill: "deep_dive" as const, task: "T", problem: { id: "p", title: "P", track: "hld" as const }, material: [] };
+
+  it("shows the rejected question escaped, with the reason", () => {
+    const text = followUpMessage(prompt, "key", [{ role: "candidate", text: "a" }], 0, { question: "Why <this>, and how?", problem: "two" });
+    expect(text).toContain("<rejected_question>Why &lt;this&gt;, and how?</rejected_question>");
+    expect(text).toContain(QUESTION_PROBLEMS.two);
+    expect(followUpMessage(prompt, "key", [{ role: "candidate", text: "a" }], 0)).not.toContain("rejected_question");
   });
 });
 
@@ -404,8 +595,8 @@ describe("fake interviewer", () => {
   const ask = (turns: ReturnType<typeof turn>[], asked: number) => fakeFollowUp({ drillFollowUp: { kind: "tradeoff", key: "k", turns, asked } });
 
   it("asks one fixed first question", () => {
-    expect(ask([turn("candidate", "x")], 0)).toEqual({ question: "What does that cost, and when would you choose the other way?" });
-    expect(FAKE_FIRST_QUESTION).toBe("What does that cost, and when would you choose the other way?");
+    expect(ask([turn("candidate", "x")], 0)).toEqual({ question: "When would you choose the other way?" });
+    expect(FAKE_FIRST_QUESTION).toBe("When would you choose the other way?");
   });
 
   it("asks a second question only after a reply of fewer than 12 words", () => {

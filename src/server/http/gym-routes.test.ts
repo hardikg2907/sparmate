@@ -299,7 +299,7 @@ describe("the dialogue routes", () => {
 
   it("answers a submit with the first question, and a reply with the result", async () => {
     const q = await start();
-    expect(q).toMatchObject({ kind: "question", asked: 1, of: 2, question: "What does that cost, and when would you choose the other way?" });
+    expect(q).toMatchObject({ kind: "question", asked: 1, of: 2, question: "When would you choose the other way?" });
     expect(Object.keys(q).sort()).toEqual(["asked", "attemptId", "kind", "of", "question"]);
     const res = await post("/api/gym/reply", { attemptId: q.attemptId, asked: 1, answer: LONG, elapsedSeconds: 30 });
     expect(res.statusCode).toBe(200);

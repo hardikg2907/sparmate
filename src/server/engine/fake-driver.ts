@@ -489,7 +489,7 @@ export function fakeGrade(facts: FakeFacts): GraderOutput {
 }
 
 export const FAKE_STRONG_LINE = "Each number or step ends with what it forces, such as a cache when reads far outnumber writes.";
-export const FAKE_FIRST_QUESTION = "What does that cost, and when would you choose the other way?";
+export const FAKE_FIRST_QUESTION = "When would you choose the other way?";
 export const FAKE_SECOND_QUESTION = "Give one number or one failure case that backs it.";
 /** A reply shorter than this many words earns a second question. */
 const FAKE_SHORT_REPLY_WORDS = 12;

@@ -38,7 +38,19 @@ import type { AttemptView, DrillDetail, RecentAttemptRow } from "../../shared/dr
 import { attemptView, buildDetail, gymExtras, recentAttempts, type DetailContext } from "./drill-detail";
 import { buildDrill, drillFits, drillsAvailable, topicTitles, variantEntries, type DrillContent } from "./drill-content";
 import { canVaryFrom, pickNext, repickStale } from "./drill-pick";
-import { FirstQuestionSchema, GraderOutputSchema, NextQuestionSchema, cleanQuestion, finishGrade, followUpMessage, graderMessage, type GradedAnswer } from "./drill-grader";
+import {
+  FALLBACK_QUESTION,
+  FirstQuestionSchema,
+  GraderOutputSchema,
+  NextQuestionSchema,
+  finishGrade,
+  followUpMessage,
+  graderMessage,
+  reviewQuestion,
+  salvageQuestion,
+  type GradedAnswer,
+  type RejectedQuestion,
+} from "./drill-grader";
 import type { Driver, FakeFacts } from "./driver";
 import { DriverError } from "./driver";
 import type { AttemptBody, DrillState, DrillStore } from "./drill-store";
@@ -173,6 +185,11 @@ function rotationOf(attempts: readonly DrillAttempt[], target: DrillTarget, item
   const done = attempts.filter((a) => a.status === "done");
   if (target.drillId && item) return done.filter((a) => a.drillId === item.id).length;
   return done.filter((a) => a.problemId === target.problemId && a.drill === target.drill).length;
+}
+
+/** What a drill shows the candidate: words from it are never a giveaway of the key. */
+function shownText(content: DrillContent): string {
+  return [content.prompt.problem.title, content.prompt.task, ...content.prompt.material.map((m) => m.markdown)].join("\n");
 }
 
 function asRow(item: DrillItem, problem: Problem, originTitle: string, today: string, attempts: readonly DrillAttempt[]): GymDrillRow {
@@ -875,8 +892,7 @@ export class DrillService {
           schema: GraderOutputSchema,
           fake: { problem, track: problem.meta.track, drill: { kind: drill, key: content.key, answer } },
         });
-        const shown = [content.prompt.problem.title, content.prompt.task, ...content.prompt.material.map((m) => m.markdown)].join("\n");
-        return finishGrade(output, answer, { drill, key: content.key, shown, redact: (line) => this.deps.guard.redact(line) });
+        return finishGrade(output, answer, { drill, key: content.key, shown: shownText(content), redact: (line) => this.deps.guard.redact(line) });
       } catch (err) {
         this.deps.log.warn(`Drill grader attempt ${attempt + 1} failed for ${problem.meta.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);
       }
@@ -887,7 +903,9 @@ export class DrillService {
   /**
    * The interviewer's next question for a dialogue drill. `asked` counts the questions in `turns`; with none, the first
    * question is always asked, and after that the model decides whether another is needed. The question is model output:
-   * it is cleaned and checked against the key before it can reach the page.
+   * it is cleaned and checked before it can reach the page. A question that asks two things, tells the candidate what
+   * their design is or brings in the key is asked again once with the reason; the second call is the last, so a flawed
+   * question then keeps only its first part, or becomes the fixed one.
    */
   private async ask(
     problem: Problem,
@@ -897,25 +915,44 @@ export class DrillService {
     attemptId: string,
     drill: DrillType,
   ): Promise<{ another: boolean; question: string }> {
-    const text = followUpMessage(content.prompt, content.key, turns, asked);
     const candidateText = turns.filter((t) => t.role === "candidate").at(-1)?.text ?? "";
     const redact = (line: string) => this.deps.guard.redact(line);
+    const known = [shownText(content), ...turns.filter((t) => t.role === "candidate").map((t) => t.text)].join("\n");
     const fake: FakeFacts = { problem, track: problem.meta.track, drillFollowUp: { kind: drill, key: content.key, turns: [...turns], asked } };
+    let rejected: RejectedQuestion | undefined;
+    // The second reply is cut down first; the first reply is the next best, and the fixed question comes last.
+    const salvage = (raw: string) => {
+      const kept = salvageQuestion(raw, content.key, known, redact);
+      const earlier = rejected && kept === FALLBACK_QUESTION ? salvageQuestion(rejected.question, content.key, known, redact) : kept;
+      this.deps.log.warn(`Drill interviewer question cut down for ${problem.meta.id}: ${earlier === FALLBACK_QUESTION ? "fixed question" : "first part"}`);
+      return earlier;
+    };
+    // The fixed question is asked once per conversation; a second time would read as the interviewer repeating itself.
+    const settle = (question: string) =>
+      question === FALLBACK_QUESTION && turns.some((t) => t.role === "grader" && t.text === FALLBACK_QUESTION) ? { another: false, question: "" } : { another: true, question };
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        if (asked === 0) {
-          const out = await this.callModel(problem, content, attemptId, drill, { prompt: "drill-follow-up", text, candidateText, schema: FirstQuestionSchema, fake });
-          const question = cleanQuestion(out.question, content.key, redact);
-          if (question === null) throw new DriverError("The interviewer asked an empty question.");
-          return { another: true, question };
+        const text = followUpMessage(content.prompt, content.key, turns, asked, rejected);
+        const raw =
+          asked === 0
+            ? (await this.callModel(problem, content, attemptId, drill, { prompt: "drill-follow-up", text, candidateText, schema: FirstQuestionSchema, fake })).question
+            : await this.callModel(problem, content, attemptId, drill, { prompt: "drill-follow-up", text, candidateText, schema: NextQuestionSchema, fake }).then((out) =>
+                out.another ? out.question : "",
+              );
+        const review = reviewQuestion(raw, content.key, known, redact);
+        if (review === null) {
+          if (asked === 0) throw new DriverError("The interviewer asked an empty question.");
+          return { another: false, question: "" };
         }
-        const out = await this.callModel(problem, content, attemptId, drill, { prompt: "drill-follow-up", text, candidateText, schema: NextQuestionSchema, fake });
-        const question = out.another ? cleanQuestion(out.question, content.key, redact) : null;
-        return { another: question !== null, question: question ?? "" };
+        if (review.problem === null) return { another: true, question: review.question };
+        if (attempt === 1) return settle(salvage(raw));
+        this.deps.log.warn(`Drill interviewer question not used for ${problem.meta.id}: ${review.problem}`);
+        rejected = { question: raw, problem: review.problem };
       } catch (err) {
         this.deps.log.warn(`Drill interviewer attempt ${attempt + 1} failed for ${problem.meta.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);
       }
     }
+    if (rejected) return settle(salvage(rejected.question));
     throw new HttpError(502, "The interviewer did not answer. Your answer is still in the box. Try again.");
   }
 }
