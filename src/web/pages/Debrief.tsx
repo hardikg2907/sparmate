@@ -100,6 +100,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
         </div>
         {/* Below the md breakpoint the coach sits under the scorecard, at the end of one scrolling page, so the score gets the whole screen on a phone. */}
         <aside
+          data-nested-scroll=""
           style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
           className="flex h-[80dvh] min-h-0 shrink-0 flex-col border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0"
         >

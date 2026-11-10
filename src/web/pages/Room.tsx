@@ -189,7 +189,12 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-clip md:flex-row">
-        <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-clip", phoneView === "chat" && "max-md:invisible max-md:absolute max-md:inset-0")} tabIndex={-1} inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
+        <main
+          className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-clip", phoneView === "chat" && "max-md:invisible max-md:absolute max-md:inset-0")}
+          tabIndex={-1}
+          inert={pauseCover !== null}
+          aria-hidden={pauseCover !== null}
+        >
           <div className="room-toolbar flex min-h-9 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 max-md:py-1.5 md:h-9 md:flex-nowrap">
             <PhaseGoal session={session} />
             <div className="flex shrink-0 items-center gap-2">
@@ -303,7 +308,10 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
-          className={cn("room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:w-full md:w-(--chat-w)", phoneView === "chat" ? "max-md:flex-1" : "max-md:invisible max-md:absolute max-md:inset-0")}
+          className={cn(
+            "room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:w-full md:w-(--chat-w)",
+            phoneView === "chat" ? "max-md:flex-1" : "max-md:invisible max-md:absolute max-md:inset-0",
+          )}
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}
         >

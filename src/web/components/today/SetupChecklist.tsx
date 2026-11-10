@@ -25,7 +25,10 @@ export function SetupChecklist({ steps }: { steps: readonly SetupStep[] }) {
           <li
             key={step.id}
             aria-current={index === current ? "step" : undefined}
-            className={cn("mesh-tile flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl px-4 py-3 sm:flex-nowrap", index === current ? "ring-1 ring-white/50" : step.done ? "" : "opacity-90")}
+            className={cn(
+              "mesh-tile flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl px-4 py-3 sm:flex-nowrap",
+              index === current ? "ring-1 ring-white/50" : step.done ? "" : "opacity-90",
+            )}
           >
             <span
               aria-hidden="true"

@@ -154,8 +154,10 @@ try {
               }
             }
 
-            // Check if any v-scroller has an ancestor that also has active v-scroll
+            // Check if any v-scroller has an ancestor that also has active v-scroll. A block marked data-nested-scroll
+            // (the debrief's coach chat on a phone) scrolls inside a scrolling page on purpose.
             for (const sc of vScrollers) {
+              if (sc.el.closest("[data-nested-scroll]")) continue;
               let parent = sc.el.parentElement;
               while (parent) {
                 const pStyle = window.getComputedStyle(parent);
