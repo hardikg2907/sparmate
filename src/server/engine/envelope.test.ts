@@ -98,6 +98,21 @@ describe("clock turn", () => {
     expect(text).not.toContain("<silent/>");
   });
 
+  it("asks for one check-in after a quiet stretch, naming what stayed still and allowing no hint", () => {
+    const hld = clockTurn(time, 300_000, "silence", "hld", { quietMs: 4 * MIN + 20_000 });
+    expect(hld).toContain("for about 4 minutes");
+    expect(hld).toContain("the board and the step notes");
+    expect(hld).toContain("Give no hint");
+    expect(clockTurn(time, null, "silence", "lld", { quietMs: 8 * MIN })).toContain("the code, the board and the step notes");
+  });
+
+  it("asks for one line at the planned length of a guided round, and never for silence", () => {
+    const text = clockTurn({ ...time, guided: true }, null, "overtime", "hld", { plannedMs: 45 * MIN });
+    expect(text).toContain("planned length of about 45 minutes");
+    expect(text).toContain("never silent");
+    expect(text).not.toContain("<silent/>");
+  });
+
   it("names the right brief section for the extension", () => {
     expect(clockTurn(time, null, "extension", "hld")).toContain("Curveballs");
     expect(clockTurn(time, null, "extension", "lld")).toContain("Extensions");

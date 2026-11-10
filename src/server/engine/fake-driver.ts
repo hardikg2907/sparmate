@@ -135,6 +135,8 @@ class FakeConversation implements Conversation {
         }
         if (cp === "time_up") return "We're out of time, so let's stop here. Thank you.";
         if (cp === "phase_over") return "You are well past the plan for this step. Would you like to move on to the next one?";
+        if (cp === "silence") return "Talk me through where you are.";
+        if (cp === "overtime") return "We've reached the planned time. Finish what you're on, or end the round here, your call.";
         return "<silent/>";
       }
       case "request": {

@@ -151,7 +151,7 @@ describe("a full interview round on the clock", () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
   afterEach(() => vi.useRealTimers());
 
-  it("nudges silently, delivers the extension, warns quietly, closes at time-up and debriefs", async () => {
+  it("nudges silently, checks in once, delivers the extension, warns quietly, closes at time-up and debriefs", async () => {
     const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
     const session = newSession("interview");
     const rt = await t.start(session);
@@ -159,13 +159,17 @@ describe("a full interview round on the clock", () => {
     expect(interviewerTexts(t.msgs)).toEqual(["Let's design a URL shortener, something like bit.ly. Where would you like to start?"]);
 
     await vi.advanceTimersByTimeAsync(5 * MIN);
-    // The planned end of requirements fired, the fake interviewer chose silence: nothing shown, a hidden note kept.
-    expect(interviewerTexts(t.msgs)).toHaveLength(1);
+    // Four quiet minutes earned one check-in. The planned end of requirements fired after it, and the fake interviewer
+    // chose silence there: nothing shown, a hidden note kept.
+    expect(interviewerTexts(t.msgs)).toEqual(["Let's design a URL shortener, something like bit.ly. Where would you like to start?", "Talk me through where you are."]);
+    expect(session.transcript.find((e) => e.role === "interviewer" && e.text.startsWith("Talk me"))?.at).toBe(4 * MIN);
     expect(session.transcript.some((e) => e.kind === "clock" && e.hidden && e.text.includes("requirements"))).toBe(true);
     expect(t.msgs.some((m) => m.type === "chat.message" && m.entry.hidden)).toBe(false);
 
     await vi.advanceTimersByTimeAsync(30 * MIN);
     const texts = interviewerTexts(t.msgs);
+    // The whole stretch stays quiet, so it never gets a second check-in.
+    expect(texts.filter((x) => x === "Talk me through where you are.")).toHaveLength(1);
     expect(texts.at(-1)).toMatch(/^Let's add something\. A celebrity posts one of our links/);
     expect(session.extension?.text).toBe(texts.at(-1));
     expect(session.extension?.at).toBeGreaterThanOrEqual(35 * MIN);
@@ -197,6 +201,90 @@ describe("a full interview round on the clock", () => {
     expect(session.transcript.some((e) => e.kind === "clock")).toBe(true);
     // Guided rounds never end on the clock.
     await vi.advanceTimersByTimeAsync(120 * MIN);
+    expect(session.status).toBe("live");
+    rt.dispose();
+  });
+});
+
+const CHECK_IN = "Talk me through where you are.";
+const checkIns = (msgs: ServerMsg[]) => interviewerTexts(msgs).filter((x) => x === CHECK_IN);
+
+describe("checking in on a quiet candidate", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("restarts the quiet window when he edits the board", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const rt = await t.start(newSession("interview"));
+    await vi.advanceTimersByTimeAsync(3 * MIN);
+    await rt.handle({ type: "board.update", version: 1, elements: [] }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("checks in once per quiet stretch, and again after he has spoken", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(15 * MIN);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    expect(session.transcript.filter((e) => e.kind === "clock" && e.text === "clock: candidate quiet")).toHaveLength(1);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Sorry, I was thinking about the read path." }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(2);
+    rt.dispose();
+  });
+
+  it("holds the window while paused and starts it again on resume", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    await rt.handle({ type: "session.pause" }, t.peer);
+    await vi.advanceTimersByTimeAsync(30 * MIN);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    expect(session.transcript.find((e) => e.text === CHECK_IN)?.at).toBe(6 * MIN);
+    rt.dispose();
+  });
+
+  it("drops a check-in that fell due while the interviewer was mid-reply, and counts the quiet from that reply", async () => {
+    const t = setup(slowWhen(saidBy("cache"), 5 * MIN));
+    const rt = await t.start(newSession("interview"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Should I put a cache in front?" }, t.peer);
+    await vi.advanceTimersByTimeAsync(9 * MIN - 10_000);
+    expect(interviewerTexts(t.msgs)).toHaveLength(2);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("gives a guided round a longer window and one line when it reaches its planned length", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(6 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    // Steady work from here on, so only the planned length speaks.
+    for (let v = 1; v <= 9; v++) {
+      await vi.advanceTimersByTimeAsync(4 * MIN);
+      await rt.handle({ type: "board.update", version: v, elements: [] }, t.peer);
+    }
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    const overtime = interviewerTexts(t.msgs).filter((x) => x.startsWith("We've reached the planned time"));
+    expect(overtime).toHaveLength(1);
+    expect(session.transcript.find((e) => e.kind === "clock" && e.text === "clock: planned length reached")?.at).toBeGreaterThanOrEqual(45 * MIN);
+    expect(checkIns(t.msgs)).toHaveLength(1);
     expect(session.status).toBe("live");
     rt.dispose();
   });
@@ -1190,7 +1278,7 @@ describe("the interviewer queue", () => {
     const t = setup(slowWhen(saidBy("short links"), 2 * MIN));
     const session = newSession("interview");
     const rt = await t.start(session);
-    await vi.advanceTimersByTimeAsync(4 * MIN);
+    await vi.advanceTimersByTimeAsync(3.5 * MIN);
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "We need short links and redirects." }, t.peer);
     // The planned end of requirements passes while that reply streams, so its nudge waits in the queue.
     await vi.advanceTimersByTimeAsync(1.5 * MIN);
@@ -1249,6 +1337,17 @@ describe("freezing the work at the end", () => {
     const rt = await t.start(session, problem);
     return { t, rt, session };
   }
+
+  it("waits longer before a check-in in machine coding, and a code edit restarts the wait", async () => {
+    const { t, rt } = await parkingLotRound();
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    await rt.handle({ type: "code.update", version: 1, content: `${HEADER}class Lot {};\n` }, t.peer);
+    await vi.advanceTimersByTimeAsync(8 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
 
   it("judges the code he typed just before he ended the round", async () => {
     const { t, rt, session } = await parkingLotRound();
