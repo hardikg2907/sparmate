@@ -310,6 +310,50 @@ describe("gap to drill", () => {
     expect(drillForGap({ title, drill: "deep_dive" }, "hld")).toBe("deep_dive");
   });
 
+  it.each([
+    "Jobs running long past their timeout",
+    "Driver offers left unanswered",
+    "Provider calls that go unanswered",
+    "Requests that spend too long in the queue",
+    "Authorisation holds that run out of time before capture",
+    "Election rounds time out under partition",
+    "Counting requests inside a time box per key",
+    "Reserved minutes unused at checkout",
+    "Stalled consumers on a hot partition",
+  ])("keeps the judge's drill for the design gap %s", (title) => {
+    expect(drillForGap({ title, drill: "deep_dive" }, "hld")).toBe("deep_dive");
+  });
+
+  it.each([
+    "Twenty minutes on requirements",
+    "Spent 20 minutes on capacity",
+    "Rushed the deep dive",
+    "Never got to the deep dive",
+    "Timed out before the deep dive",
+    "Too much time on requirements",
+    "Requirements step ran over",
+    "Ran over time on capacity",
+    "Capacity math took half of the round",
+    "Didn't get to the extension",
+  ])("overrules the judge's drill for the step-timing gap %s", (title) => {
+    expect(drillForGap({ title, drill: "deep_dive" }, "hld")).toBeNull();
+    expect(drillForGap({ title, drill: "tradeoff" }, "lld")).toBeNull();
+  });
+
+  it.each(["Stalled when pushed on sharding", "Out of time before failure handling", "Over-long capacity step"])(
+    "queues nothing for the likely round gap %s when the judge chose no drill",
+    (title) => {
+      expect(drillForGap({ title }, "hld")).toBeNull();
+    },
+  );
+
+  it("reads the capacity verbs in any tense, in the title only", () => {
+    for (const title of ["Numbers that decided nothing", "Numbers that shaped nothing", "Numbers that drove no decision"]) {
+      expect(drillForGap({ title }, "hld"), title).toBe("capacity");
+    }
+    expect(drillForGap({ title: "Order number generation", whyItMatters: "Numbers must be unique and decide ordering." }, "hld")).toBeNull();
+  });
+
   it("reads the capacity words as whole words", () => {
     expect(drillForGap({ title: "Matching riders to nearby drivers", whyItMatters: "A number of drivers move at once." }, "hld")).toBeNull();
     expect(drillForGap({ title: "Response data shape for the feed" }, "hld")).toBeNull();
@@ -336,6 +380,7 @@ describe("gap to drill", () => {
   it("maps a machine coding gap about the extension or a choice to the trade-off drill", () => {
     expect(drillForGap({ title: "Refund design choice settled only once the interviewer listed both" }, "lld")).toBe("tradeoff");
     expect(drillForGap({ title: "Extensibility of the fee rules" }, "lld")).toBe("tradeoff");
+    expect(drillForGap({ title: "Extension handled by a new branch in every method" }, "lld")).toBe("tradeoff");
     expect(drillForGap({ title: "Never reached the extension" }, "lld")).toBeNull();
     expect(drillForGap({ title: "Ran out of time before the extension", drill: "tradeoff" }, "lld")).toBeNull();
   });

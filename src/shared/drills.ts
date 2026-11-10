@@ -57,10 +57,12 @@ interface Rule {
 }
 
 const HLD_RULES: Rule[] = [
+  { drill: "capacity", pattern: /capacity|back[- ]of[- ]the[- ]envelope|estimat|\bqps\b|throughput|sizing|storage (math|numbers)|scale (math|numbers)/ },
   {
+    // "Numbers that decide nothing": the title only, because a reason often says what some number must decide.
     drill: "capacity",
-    pattern:
-      /capacity|back[- ]of[- ]the[- ]envelope|estimat|\bqps\b|throughput|sizing|storage (math|numbers)|scale (math|numbers)|numbers?\b.*\b(decisions?|decides?|shapes?|drives?)\b/,
+    pattern: /\bnumbers?\b[^.]{0,60}\b(decid(e|es|ed|ing)|decisions?|drove|driven|driv(e|es|ing)|shap(e|es|ed|ing))\b/,
+    titleOnly: true,
   },
   { drill: "deep_dive", pattern: /deep[- ]dive/ },
   { drill: "requirements", pattern: /requirement|clarif|scoping|\bscope\b|non-functional|assumption|constraint|ask(ing)? (the )?(right )?questions/ },
@@ -86,23 +88,41 @@ const HLD_RULES: Rule[] = [
 ];
 
 const LLD_RULES: Rule[] = [
-  { drill: "tradeoff", pattern: /pattern|strategy|extensib|trade-?off|justif|alternative|unreason|rationale|\bchoos\w*|\bchose\b|\bchoice\b/, titleOnly: true },
+  { drill: "tradeoff", pattern: /pattern|strategy|extens(ib|ion)|trade-?off|justif|alternative|unreason|rationale|\bchoos\w*|\bchose\b|\bchoice\b/, titleOnly: true },
   { drill: "lld_skeleton", pattern: /entit|class|interface|skeleton|model(l)?ing|object|relationship|data shape|abstraction|responsib|encapsulat|\bapi\b|noun/ },
 ];
 
+/** The steps of a round, as a gap title names them. */
+const STEP = String.raw`(the )?(step|phase|round|requirements|scoping|clarif\w*|capacity( math)?|api|entities|design|deep dives?|curveball|extension|skeleton)`;
+const NUMBER_WORD = String.raw`(\d+|five|ten|fifteen|twenty|twenty-five|thirty|forty)`;
+
 /**
- * Phrases that only ever describe how the round was run, never a part of a design. They overrule even the judge's
- * drill, because no drill trains them.
+ * Phrases that tie time or pace to a step of the round, the round itself or the question asked, so they cannot name a
+ * part of a design. They overrule even the judge's drill, because no drill trains them.
  */
-const ROUND_ONLY =
-  /staying in the round|leading the round|drive the (round|interview)|\b(ran|run|running) out of time\b|\b(ran|running) long\b|\b(spent|spending|spend|spends) too long\b|\bround'?s (remaining |spare )?time\b|unused round time|\bstay(ed|ing|s)? on the question\b|\bunanswered\b|never reached the (extension|deep dives?|curveball|last step)|\btime to spare\b|\b(minutes|time) (left )?unused\b|(inside|within|to) (its|the|a) time box\b|\b(us(e|ed|ing)|spen(d|ds|ding|t)) (the )?(remaining|spare|leftover) (minutes|round time)\b/;
+const ROUND_ONLY = new RegExp(
+  [
+    String.raw`staying in the round|leading the round|drive the (round|interview)`,
+    String.raw`\b(ran|running) out of (round )?time\b|\bran over time\b`,
+    String.raw`\b(ran|running|went) (long|over)( time)? (on|in) ${STEP}\b`,
+    String.raw`\b(requirements|scoping|capacity|api|design|entities|skeleton) step (ran|went|running) (long|over)\b`,
+    String.raw`\b(spent|spending|spend|spends) too long on ${STEP}\b|\btoo much time on ${STEP}\b`,
+    String.raw`\b${NUMBER_WORD} minutes on ${STEP}\b|\b${NUMBER_WORD} minutes (left )?unused\b`,
+    String.raw`\bround's (remaining |spare )?time\b|\bunused round time\b|\btook (half|most) of the round\b`,
+    String.raw`\bstay(ed|ing|s)? on the question\b`,
+    String.raw`\b(questions?|curveball|probes?|follow-ups?|halves|half) (left |went )?unanswered\b|\bleft the (questions?|curveball|probes?) unanswered\b`,
+    String.raw`\b(never|didn'?t|did not) (reach(ed)?|get|got) (to )?${STEP}\b|\btimed out before ${STEP}\b|\brushed ${STEP}\b`,
+    String.raw`\btime to spare\b|\b(to|inside|within) its time box\b`,
+    String.raw`\b(us(e|ed|ing)|spen(d|ds|ding|t)) (the )?(remaining|spare|leftover) (minutes|round time)\b`,
+  ].join("|"),
+);
 
 /**
  * Words that usually describe how the round was run, but also name parts of some designs ("broadcast pacing", "a
- * time-boxed lease"). They decide only when the judge chose no drill.
+ * time-boxed lease", "offers left unanswered"). They decide only when the judge chose no drill.
  */
 const ROUND_LIKELY =
-  /pacing|\bpace\b|time[- ]?(management|box)|phase (timing|pacing)|\b(when|while|once) stuck\b|\b(remaining|spare|leftover) (time(?![- ]to)|minutes)\b|answering (both|every|all|each) (questions?|probes?|parts?|halves|half|follow-ups?)\b|\bminutes on (the )?(requirements|capacity|api|entities|design|deep dive|clarif|skeleton|step)|finished early/;
+  /pacing|\bpace\b|time[- ]?(management|box)|phase (timing|pacing)|\b(when|while|once) stuck\b|\bstall(ed|ing)\b|\b(remaining|spare|leftover) (time(?![- ]to)|minutes)\b|answering (both|every|all|each) (questions?|probes?|parts?|halves|half|follow-ups?)\b|\bfinished early\b|\bout of time\b|\bunanswered\b|\bover-?long\b/;
 
 /** A gap about getting the idea across is trained by defending a choice aloud. */
 const ABOUT_EXPLAINING = /explain|explanation|communicat|articulat/;
