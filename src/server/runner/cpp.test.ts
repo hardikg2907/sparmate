@@ -32,17 +32,6 @@ async function program(name: string, source: string): Promise<string> {
   return path;
 }
 
-/**
- * A run limit long enough for the program to reach main() before it is killed. Starting a sandboxed program takes
- * a few hundred milliseconds on an idle machine and two to three times that on a busy one, so a short fixed limit
- * can end the run before the program prints anything. A full run of a trivial program, measured just before,
- * bounds that start-up cost at the current load.
- */
-async function limitPastStartup(local: CppRunner, floorMs: number): Promise<number> {
-  const { run: ran } = await local.compileAndRun(fixture("hello.cpp"));
-  return Math.max(floorMs, 3 * ran!.durationMs);
-}
-
 /** A killed process can stay a zombie until its new parent reaps it, but it can no longer run. */
 function stopped(pid: number): boolean {
   try {
@@ -245,12 +234,12 @@ describe("compileAndRun", () => {
   });
 });
 
-// The wall-clock length of a run includes process start-up and the kernel's teardown, which stretch on a busy
-// machine. That the kill lands at the limit and the result follows the program's death at once is checked in
-// process.test.ts against a clock the machine's load cannot move; these tests check the sandboxed path end to end.
+// A run's limit and its length count from the program's start report, so loading a fresh binary costs it nothing;
+// the kernel's teardown after the kill still stretches on a busy machine. That the kill lands at the limit is
+// checked in process.test.ts against a clock the machine's load cannot move; these tests check the sandboxed path.
 describe("timeouts", () => {
   it("stops an infinite loop and reports a timeout, keeping the output it produced", async () => {
-    const limit = await limitPastStartup(runner, 700);
+    const limit = 500;
     const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: limit });
     const { run: ran } = await quick.compileAndRun(fixture("infinite.cpp"));
     expect(ran).toMatchObject({ timedOut: true, exitCode: null, signal: "SIGKILL", stdout: "started\n" });
@@ -263,10 +252,54 @@ describe("timeouts", () => {
     expect(ran!.durationMs).toBeGreaterThanOrEqual(4900);
   }, 30_000);
 
+  it("starts the limit when the program starts, so a limit shorter than starting a fresh binary still lets it finish", async () => {
+    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 250 });
+    const { run: ran } = await quick.compileAndRun(fixture("hello.cpp"));
+    expect(ran).toMatchObject({ exitCode: 0, timedOut: false, stdout: "hello from the candidate\n6\n", stderr: "" });
+    expect(ran!.durationMs).toBeLessThan(250);
+  });
+
+  it("counts the user's own initializers against the limit, because the start report runs before them", async () => {
+    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 500 });
+    const source =
+      "#include <chrono>\n#include <cstdio>\n" +
+      "static int spun = [] {\n  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(1);\n" +
+      "  while (std::chrono::steady_clock::now() < end) {\n  }\n  return 1;\n}();\n" +
+      'int main() { std::puts("main"); return spun - 1; }\n';
+    const { run: ran } = await quick.compileAndRun(await program("slow_initializer.cpp", source));
+    expect(ran).toMatchObject({ timedOut: true, signal: "SIGKILL", stdout: "" });
+  });
+
+  it("lets main() end with pthread_exit() and exits as the last thread would", async () => {
+    const source = '#include <cstdio>\n#include <pthread.h>\nint main() {\n  std::puts("bye");\n  pthread_exit(nullptr);\n}\n';
+    const { run: ran } = await runner.compileAndRun(await program("pthread_exit.cpp", source));
+    expect(ran).toMatchObject({ exitCode: 0, signal: null, timedOut: false, stdout: "bye\n", stderr: "" });
+  });
+
+  it("is not confused by a program that writes to fd 3 or opens a file there", async () => {
+    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 1000 });
+    const source =
+      "#include <cstdio>\n#include <fcntl.h>\n#include <unistd.h>\n" +
+      'int main() {\n  bool wrote = write(3, "m", 1) == 1;\n  int fd = open("mine.txt", O_CREAT | O_WRONLY, 0600);\n' +
+      '  std::printf("wrote %d fd %d\\n", wrote, fd);\n  std::fflush(stdout);\n  usleep(300000);\n  return 0;\n}\n';
+    const { run: ran } = await quick.compileAndRun(await program("fd_three.cpp", source));
+    expect(ran).toMatchObject({ exitCode: 0, signal: null, timedOut: false, stdout: "wrote 0 fd 3\n", stderr: "" });
+  });
+
+  it("stops a program that hangs before it reports its start, at the start-up limit, and says so", async () => {
+    // The program's own write() replaces the one the start report calls, so it hangs where loading would.
+    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 100, runStartupTimeoutMs: 2000 });
+    const source = '#include <unistd.h>\nextern "C" ssize_t write(int, const void*, size_t) {\n  for (;;) sleep(1);\n}\nint main() { return 0; }\n';
+    const { run: ran } = await quick.compileAndRun(await program("never_reports.cpp", source));
+    expect(ran).toMatchObject({ timedOut: true, signal: "SIGKILL", stdout: "" });
+    expect(ran!.stderr).toContain("The program did not start within 2 seconds and was stopped.");
+    expect(ran!.durationMs).toBeGreaterThanOrEqual(1950);
+  });
+
   it("kills the whole process group, so a child the program left behind does not survive", async () => {
     // Unsandboxed, because the sandbox refuses the fork this test needs.
     const unsandboxed = { tmpRoot, sandbox: false };
-    const quick = createCppRunnerWithLimits(unsandboxed, { runTimeoutMs: await limitPastStartup(createCppRunner(unsandboxed), 800) });
+    const quick = createCppRunnerWithLimits(unsandboxed, { runTimeoutMs: 500 });
     const { run: ran } = await quick.compileAndRun(fixture("fork_loop.cpp"));
     expect(ran!.timedOut).toBe(true);
 
@@ -406,8 +439,9 @@ describe("harness runs", () => {
   it("includes the candidate's file, runs the harness main() and never the candidate's", async () => {
     const harness = await readFixture("harness_counter.cpp");
     const result = await runner.runHarness(fixture("candidate_counter.cpp"), harness);
-    expect(result.compile.ok).toBe(true);
-    expect(result.run).toMatchObject({ exitCode: 0, signal: null, stdout: "harness ok 3\n", timedOut: false });
+    // The sanitizer build links the runner's start report too, which must add nothing to what the user reads.
+    expect(result.compile).toMatchObject({ ok: true, diagnostics: [], stderr: "" });
+    expect(result.run).toMatchObject({ exitCode: 0, signal: null, stdout: "harness ok 3\n", stderr: "", timedOut: false });
     expect(result.run!.stdout).not.toContain("CANDIDATE MAIN RAN");
   });
 
@@ -606,7 +640,7 @@ describe("process and resource limits", () => {
       "#include <cstdio>\n#include <unistd.h>\n" +
       "int main() {\n  pid_t first = getpid();\n  int made = 0;\n  for (int i = 0; i < 6; i++) if (fork() > 0) made++;\n" +
       '  if (getpid() == first) { std::printf("forks %d\\n", made); std::fflush(stdout); }\n  volatile unsigned long spin = 0;\n  while (true) spin = spin + 1;\n}\n';
-    const limit = await limitPastStartup(runner, 800);
+    const limit = 500;
     const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: limit });
     const { run: ran } = await quick.compileAndRun(await program("fork_bomb.cpp", source));
     expect(ran).toMatchObject({ timedOut: true, signal: "SIGKILL" });
@@ -614,18 +648,24 @@ describe("process and resource limits", () => {
     if (process.platform === "darwin") expect(ran!.stdout).toBe("forks 0\n");
   });
 
-  it.skipIf(process.platform !== "darwin")("stops a program that keeps allocating memory, well before the time limit", async () => {
-    // Bounded at 1 GB, so a broken watch cannot exhaust the machine either.
+  it.skipIf(process.platform !== "darwin")("stops a program that keeps allocating memory close to the cap, well before the time limit", async () => {
+    // Bounded at 1 GB, so a broken watch cannot exhaust the machine either. Each step prints how far it got.
     const source =
       "#include <cstdio>\n#include <cstdlib>\n#include <cstring>\n" +
       "int main() {\n  const std::size_t step = 16u << 20;\n  for (int i = 0; i < 64; i++) {\n" +
-      "    char* block = static_cast<char*>(std::malloc(step));\n    if (!block) return 2;\n    std::memset(block, 1, step);\n  }\n" +
-      '  std::puts("allocated 1 GB");\n  std::fflush(stdout);\n  volatile unsigned long spin = 0;\n  while (true) spin = spin + 1;\n}\n';
-    const capped = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: await limitPastStartup(runner, 4000), runMemoryBytes: 128 * 1024 * 1024 });
+      "    char* block = static_cast<char*>(std::malloc(step));\n    if (!block) return 2;\n    std::memset(block, 1, step);\n" +
+      '    std::printf("%d\\n", (i + 1) * 16);\n    std::fflush(stdout);\n  }\n' +
+      "  volatile unsigned long spin = 0;\n  while (true) spin = spin + 1;\n}\n";
+    const capped = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 4000, runMemoryBytes: 128 * 1024 * 1024 });
     const { run: ran } = await capped.compileAndRun(await program("memory_bomb.cpp", source));
     // Not timed out, so the memory watch stopped it before the limit did.
     expect(ran).toMatchObject({ timedOut: false, signal: "SIGKILL" });
     expect(ran!.stderr).toContain("The program used more than 128 MB of memory and was stopped.");
+    const reached = Number(ran!.stdout.trim().split("\n").at(-1));
+    // The cap is passed during the step after 112 MB at the earliest, so less would mean no progress was read.
+    expect(reached).toBeGreaterThanOrEqual(112);
+    // The rss poll alone lets this program reach 288 MB or more, so this bound needs the program's own watch.
+    expect(reached).toBeLessThanOrEqual(160);
   });
 
   it.skipIf(process.platform !== "darwin")("stops a compiler that passes its memory cap", async () => {

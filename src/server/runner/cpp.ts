@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseClangDiagnostics, toUtf16Columns } from "../../shared/clang";
 import type { CompileDiagnostic, RunResult } from "../../shared/types";
 import { type ProcessResult, runProcess, truncateUtf8 } from "./process";
+import { PROGRAM_HOOK_FILE, programHookSource } from "./program-hook";
 import {
   SANDBOX_EXEC,
   buildCompileSandboxProfile,
@@ -48,11 +49,16 @@ export interface RunnerLimits {
   harnessCompileTimeoutMs: number;
   runTimeoutMs: number;
   harnessRunTimeoutMs: number;
+  /** How long a built program may take to reach its own code. Its time limit starts only then. */
+  runStartupTimeoutMs: number;
   /** Cap for the stdout and for the stderr of a run, and for the compiler's stderr returned to the caller. */
   outputCapBytes: number;
   harnessMaxBytes: number;
   candidateMaxBytes: number;
-  /** Resident memory caps on macOS, which enforces no memory rlimit; Linux uses prlimit's address-space limit. */
+  /**
+   * Memory caps on macOS, which enforces no memory rlimit: a program's physical footprint, checked from inside it,
+   * and the compiler's resident memory. Linux uses prlimit's address-space limit.
+   */
   runMemoryBytes: number;
   compileMemoryBytes: number;
 }
@@ -63,6 +69,7 @@ export const RUNNER_LIMITS: Readonly<RunnerLimits> = {
   harnessCompileTimeoutMs: 60_000,
   runTimeoutMs: 5_000,
   harnessRunTimeoutMs: 10_000,
+  runStartupTimeoutMs: 10_000,
   outputCapBytes: 64 * 1024,
   harnessMaxBytes: 100 * 1024,
   candidateMaxBytes: 1_000_000,
@@ -210,6 +217,13 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
     return interpretCompile(run, args.reports, args.timeoutMs, limits.outputCapBytes, limits.compileMemoryBytes);
   };
 
+  /** Every built program links the hook first, so the run's time limit and memory cap apply to the program itself. */
+  const writeHook = async (dir: string): Promise<string> => {
+    const path = join(dir, PROGRAM_HOOK_FILE);
+    await writeFile(path, programHookSource(limits.runMemoryBytes));
+    return path;
+  };
+
   const execute = async (dir: string, program: string, timeoutMs: number, extraEnv: Record<string, string>): Promise<NonNullable<RunResult["run"]>> => {
     if (wantSandbox && !sandboxAvailable()) {
       return {
@@ -246,16 +260,19 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
       cwd: dir,
       env: environment(dir, extraEnv),
       timeoutMs,
+      startupTimeoutMs: limits.runStartupTimeoutMs,
       maxStdoutBytes: limits.outputCapBytes,
       maxStderrBytes: limits.outputCapBytes,
       maxRssBytes: limits.runMemoryBytes,
     });
-    const stderr = withCutNote(run.spawnError === null ? withoutProcNoise(run.stderr) : `${run.spawnError}\n`, run.stderrCut, limits.outputCapBytes);
+    let stderr = withCutNote(run.spawnError === null ? withoutProcNoise(run.stderr) : `${run.spawnError}\n`, run.stderrCut, limits.outputCapBytes);
+    if (run.memoryExceeded) stderr += `\n${memoryNote("program", limits.runMemoryBytes)}\n`;
+    if (run.startupTimedOut) stderr += `\nThe program did not start within ${Math.round(limits.runStartupTimeoutMs / 1000)} seconds and was stopped.\n`;
     return {
       exitCode: run.exitCode,
       signal: run.signal,
       stdout: withCutNote(run.stdout, run.stdoutCut, limits.outputCapBytes),
-      stderr: run.memoryExceeded ? `${stderr}\n${memoryNote("program", limits.runMemoryBytes)}\n` : stderr,
+      stderr,
       timedOut: run.timedOut,
       durationMs: run.durationMs,
     };
@@ -269,7 +286,7 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
       await writeFile(source, PROBE_SOURCE);
       const built = await compile({
         cwd: dir,
-        inputs: [source],
+        inputs: [await writeHook(dir), source],
         flags: sanitizerFlags(mode),
         output: join(dir, "probe"),
         timeoutMs: limits.compileTimeoutMs,
@@ -324,7 +341,7 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
         const program = join(dir, "program");
         const compileResult = await compile({
           cwd: dir,
-          inputs: [source],
+          inputs: [await writeHook(dir), source],
           flags: [],
           output: program,
           timeoutMs: limits.compileTimeoutMs,
@@ -357,7 +374,7 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
         const program = join(dir, "program");
         const compileResult = await compile({
           cwd: dir,
-          inputs: [harnessFile],
+          inputs: [await writeHook(dir), harnessFile],
           flags: sanitizerFlags(mode),
           output: program,
           timeoutMs: limits.harnessCompileTimeoutMs,
@@ -429,6 +446,7 @@ function notStarted(error: unknown): ProcessResult {
     stdoutCut: false,
     stderrCut: false,
     timedOut: false,
+    startupTimedOut: false,
     memoryExceeded: false,
     durationMs: 0,
     spawnError: code === undefined ? "could not start the process" : `could not start the process (${code})`,
