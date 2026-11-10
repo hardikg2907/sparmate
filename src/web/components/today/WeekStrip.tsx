@@ -61,7 +61,7 @@ function Mark({ day }: { day: WeekDay }) {
 /** Seven cells for the week, Monday first. On a phone each cell is a narrow column, so the whole week fits the screen. */
 export function WeekStrip({ days }: { days: readonly WeekDay[] }) {
   return (
-    <ol aria-label="This week's plan" className="grid grid-cols-7 gap-1.5 sm:gap-2">
+    <ol aria-label="This week's plan" className="grid grid-cols-7 gap-1.5 py-1 sm:gap-2">
       {days.map((day) => (
         <li
           key={day.name}

@@ -170,6 +170,13 @@ function WhileYouWait({ session }: { session: PublicSession }) {
   );
 }
 
+/** On a phone the coach is the last section of a scrolling page, so the page itself moves to it. Beside the scorecard there is nothing to move. */
+function revealCoach(): HTMLElement | null {
+  const coach = document.querySelector<HTMLElement>('section[aria-label="Coach"]');
+  scrollToInScroller(coach, { behavior: "smooth", block: "start" });
+  return coach;
+}
+
 /**
  * Brings the coach chat to the divider where the gap began, or to the chat itself when the round has no divider.
  * The gap's newest divider is often already on screen at the foot of the chat, so scrolling alone shows no change.
@@ -177,7 +184,7 @@ function WhileYouWait({ session }: { session: PublicSession }) {
  */
 function showGapInChat(title: string): void {
   const text = gapDividerText(title);
-  const coach = document.querySelector<HTMLElement>('section[aria-label="Coach"]');
+  const coach = revealCoach();
   const dividers = [...document.querySelectorAll<HTMLElement>("[data-gap-divider]")].filter((el) => el.dataset.gapDivider === text);
   const divider = dividers.at(-1);
   scrollToInScroller(divider ?? coach, { behavior: "smooth", block: divider ? "nearest" : "start" });
@@ -238,7 +245,11 @@ function ScorecardBody({
   const counts = gapCounts(gaps, marks);
   const notesSaved = (state.notes.result?.applied.length ?? 0) > 0 || notesWereSaved(session.studyNotes);
   const next = nextAction({ gaps, marks, notesSaved, mode: session.mode, readiness: scorecard.readiness?.call ?? null });
-  const teach = (gap: Scorecard["gaps"][number]) => actions.sendChat("coach", teachMessage(gap));
+  const teach = (gap: Scorecard["gaps"][number]) => {
+    const sent = actions.sendChat("coach", teachMessage(gap));
+    revealCoach();
+    return sent;
+  };
   const act = () => {
     if (next.kind === "answer_coach") showGapInChat(next.gap.title);
     else if (next.kind === "start_gap") teach(next.gap);

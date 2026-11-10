@@ -23,6 +23,7 @@ import { revealFor } from "../lib/reveal";
 import { phaseSpentMs } from "../lib/timing";
 import { useRoundMs } from "../hooks/useClock";
 import { useDelayed } from "../hooks/useDelayed";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatClock } from "../lib/format";
 import { ERROR_PAUSE_TEXT, pauseText } from "../lib/pause";
 import { Link, navigate } from "../router";
@@ -57,13 +58,10 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   const [confirm, setConfirm] = useState<"end" | "leave" | "discard" | null>(null);
   const [reveal, setReveal] = useState<{ line: number; column: number; nonce: number } | null>(null);
   const [chatWidth, setChatWidth] = useChatWidth();
-  // On a phone the work area and the chat each need the whole screen, so the room shows one at a time.
-  const [phoneView, setPhoneView] = useState<"work" | "chat">("chat");
-  const chatCount = ctl.chat.interview.length;
-  const [seenChat, setSeenChat] = useState(chatCount);
-  useEffect(() => {
-    if (phoneView === "chat") setSeenChat(chatCount);
-  }, [phoneView, chatCount]);
+  // On a phone the chat shrinks to a strip while the work area shows, and the work area gives way while the chat is opened.
+  const [phoneView, setPhoneView] = useState<"work" | "chat">("work");
+  const phone = useMediaQuery("(max-width: 767px)");
+  const workHidden = phone && phoneView === "chat";
 
   const errored = agent.state === "error";
   // A model error offers Retry; every other pause is the user's to lift with Resume.
@@ -179,21 +177,17 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
           onChange={setPhoneView}
           options={[
             { value: "work", label: lld ? "Code and board" : "Board" },
-            {
-              value: "chat",
-              label: speaker,
-              badge: phoneView === "work" && chatCount > seenChat ? <span role="img" aria-label="New message" className="size-2 rounded-full bg-primary" /> : undefined,
-            },
+            { value: "chat", label: `${speaker} chat` },
           ]}
         />
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-clip md:flex-row">
         <main
-          className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-clip", phoneView === "chat" && "max-md:invisible max-md:absolute max-md:inset-0")}
+          className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-clip", workHidden && "pane-hidden absolute inset-0")}
           tabIndex={-1}
-          inert={pauseCover !== null}
-          aria-hidden={pauseCover !== null}
+          inert={pauseCover !== null || workHidden}
+          aria-hidden={pauseCover !== null || workHidden}
         >
           <div className="room-toolbar flex min-h-9 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 max-md:py-1.5 md:h-9 md:flex-nowrap">
             <PhaseGoal session={session} />
@@ -282,7 +276,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                           />
                         </div>
                       </div>
-                      <div className="room-console h-56 shrink-0 overflow-clip [&>*]:h-full">
+                      <div className="room-console h-56 shrink-0 max-md:h-28 overflow-clip [&>*]:h-full">
                         <Console
                           lastRun={state.code.lastRun}
                           running={state.code.running}
@@ -310,7 +304,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
           className={cn(
             "room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:w-full md:w-(--chat-w)",
-            phoneView === "chat" ? "max-md:flex-1" : "max-md:invisible max-md:absolute max-md:inset-0",
+            phoneView === "chat" ? "max-md:flex-1" : "max-md:h-56 max-md:flex-none",
           )}
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}

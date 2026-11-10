@@ -214,7 +214,7 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
           <div className="flex max-w-[880px] flex-col gap-5">
             <Section id="plan" title="Weekly plan" help="Today picks its session from this. A redo of the day's track comes first." refFor={register}>
               <div className="py-4">
-                <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-4 sm:grid-cols-7">
+                <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-4 xl:grid-cols-7">
                   {WEEKDAYS.map((day, index) => (
                     <div key={day} className="rounded-xl bg-sunken p-2.5 ring-1 ring-inset ring-border">
                       <span className="mb-1.5 block text-meta text-muted-foreground">{day}</span>

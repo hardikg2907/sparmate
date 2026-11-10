@@ -457,7 +457,7 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
 ### Main bar and page frame
 
 - **Bar.** "Sparmate" on a filled brand tile, three tabs (Today, Practice, Progress) with a 2 px underline on the
-  current page, a "Jump to…" box with its shortcut, and a Menu button. Practice carries the due-drill count as a small
+  current page, a "Jump to…" box (with its shortcut from lg up), and a Menu button. Practice carries the due-drill count as a small
   amber badge. The Menu lists Settings, Usage and Keyboard shortcuts; when the server runs with the fake agent it also
   shows "Test mode is on" (the mode is set when the server starts, so the Menu has no switch). On a phone the bar keeps
   the logo and the Menu, and a bottom tab bar holds Today, Practice, Progress and Jump.
@@ -586,7 +586,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
 ### Settings
 
 - A left nav on desktop and a scrolling row of buttons on a phone. Raised sections hold label and control pairs, with a
-  hairline between pairs. The weekly plan shows two days per row on a phone, four on a small tablet and seven from 640 px.
+  hairline between pairs. The weekly plan shows two days per row on a phone, four from 480 px and seven from 1280 px.
   One filled "Save changes" button sits at the top right.
 
 ### Drill screen

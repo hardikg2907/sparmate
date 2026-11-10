@@ -71,7 +71,9 @@ export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEv
               aria-label={`${dimension.name}, ${dimension.score} of 4`}
               className="flex min-w-0 flex-col gap-1 bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
             >
-              <span className="text-meta leading-tight text-muted-foreground max-xl:min-h-[2.5em]">{dimension.name}</span>
+              <span className="text-meta leading-tight text-muted-foreground max-xl:min-h-[2.5em] xl:truncate" title={dimension.name}>
+                {dimension.name}
+              </span>
               <span className="flex items-baseline gap-0.5">
                 <span className={cn("text-[20px] font-semibold leading-6 tabular-nums", TONE_TEXT[tone])}>{dimension.score}</span>
                 <span className="text-meta text-muted-foreground">/4</span>
