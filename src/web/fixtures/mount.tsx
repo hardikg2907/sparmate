@@ -34,7 +34,7 @@ export const PAGE_FIXTURES = ["home", "library", "library-new", "progress", "his
 const FIXTURE_PATH: Record<string, string> = {
   home: "/",
   library: "/practice",
-  "library-new": "/library/new",
+  "library-new": "/practice/new",
   progress: "/progress",
   history: "/progress#history",
   settings: "/settings",

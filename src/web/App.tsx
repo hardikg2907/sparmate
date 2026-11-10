@@ -135,7 +135,7 @@ function Shell() {
       <div key={pageKey} className={`${enter}h-full min-h-0`}>
         {route.name === "home" ? <TodayPage ctx={ctx} /> : null}
         {route.name === "practice" || route.name === "practice-drills" ? <PracticePage tab={route.name === "practice" ? "rounds" : "drills"} ctx={ctx} /> : null}
-        {route.name === "library-new" ? <LibraryNewPage ctx={ctx} /> : null}
+        {route.name === "practice-new" ? <LibraryNewPage ctx={ctx} /> : null}
         {route.name === "progress" ? <ProgressPage ctx={ctx} /> : null}
         {route.name === "settings" ? <SettingsPage ctx={ctx} studyRoot={bootstrap.studyRoot} onSave={save} onApplyTheme={applyTheme} /> : null}
         {route.name === "usage" ? <UsagePage /> : null}

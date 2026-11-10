@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useMemo, useR
 import { api } from "../backend";
 import { GROUP_LABEL, buildItems, filterItems, type PaletteAction, type PaletteGroup, type PaletteInput, type PaletteItem } from "../lib/palette";
 import { navigate } from "../router";
-import { CompassIcon, EnterIcon, ListIcon, PauseIcon, PlayFilledIcon, SearchIcon, SlidersIcon } from "./icons";
+import { ClockIcon, CompassIcon, EnterIcon, ListIcon, PauseIcon, PlayFilledIcon, SearchIcon, SlidersIcon } from "./icons";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Kbd } from "./ui/kbd";
 import { scrollToInScroller } from "../lib/scrollInScroller";
@@ -32,7 +32,14 @@ const liveSource: PaletteSource = {
 
 export const PaletteSourceContext = createContext<PaletteSource>(liveSource);
 
-const GROUP_ICON: Record<PaletteGroup, typeof PauseIcon> = { continue: PauseIcon, start: PlayFilledIcon, problems: ListIcon, pages: CompassIcon, settings: SlidersIcon };
+const GROUP_ICON: Record<PaletteGroup, typeof PauseIcon> = {
+  continue: PauseIcon,
+  start: PlayFilledIcon,
+  rounds: ClockIcon,
+  problems: ListIcon,
+  pages: CompassIcon,
+  settings: SlidersIcon,
+};
 
 /** Another dialog (a confirm, the shortcuts list) owns the keyboard while it is open. */
 function otherDialogOpen(): boolean {

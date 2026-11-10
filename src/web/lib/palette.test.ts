@@ -82,6 +82,46 @@ describe("buildItems", () => {
   });
 });
 
+describe("past rounds", () => {
+  const now = new Date("2026-11-10T09:00:00");
+  const done = (id: string, title: string, endedAt: string, extra: Partial<SessionHistoryItem> = {}): SessionHistoryItem => ({
+    id,
+    problemId: "p",
+    title,
+    track: "hld",
+    mode: "guided",
+    createdAt: endedAt,
+    endedAt,
+    status: "debriefed",
+    verdict: null,
+    pause: null,
+    notesSaved: false,
+    ...extra,
+  });
+  const history = [
+    done("a", "Notification System", "2026-11-01T10:00:00.000Z"),
+    done("b", "URL Shortener", "2026-11-08T10:00:00.000Z", { mode: "interview" }),
+    done("c", "Parking Lot", "2026-11-05T10:00:00.000Z", { track: "lld", focus: true }),
+  ];
+
+  it("lists finished rounds, newest first, as links to their debriefs", () => {
+    const rows = buildItems({ now, plan: DEFAULT_WEEKLY_PLAN, problems: [], history }).filter((i) => i.group === "rounds");
+    expect(rows.map((r) => r.label)).toEqual(["URL Shortener", "Parking Lot", "Notification System"]);
+    expect(rows[0]).toMatchObject({ hint: "Interview, 8 Nov 2026", action: { kind: "go", href: "/session/b" } });
+    expect(rows[1]?.hint).toBe("Gap round, 5 Nov 2026");
+  });
+  it("leaves an open round to the Continue group", () => {
+    const rows = buildItems({ now, plan: DEFAULT_WEEKLY_PLAN, problems: [], history: [paused, ...history] });
+    expect(rows.filter((i) => i.group === "rounds").some((r) => r.label === "Elevator Controller")).toBe(false);
+  });
+  it("finds an old round by a search, though the quiet list shows only the newest few", () => {
+    const many = Array.from({ length: 9 }, (_, i) => done(`r${i}`, `Round ${i}`, `2026-11-0${i + 1}T10:00:00.000Z`));
+    const items = buildItems({ now, plan: DEFAULT_WEEKLY_PLAN, problems: [], history: many });
+    expect(filterItems(items, "").filter((i) => i.group === "rounds")).toHaveLength(5);
+    expect(filterItems(items, "round 0").map((i) => i.label)).toContain("Round 0");
+  });
+});
+
 describe("pausedHint", () => {
   it("is null for a round with no clock", () => {
     const { clock: _clock, ...bare } = paused;

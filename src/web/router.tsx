@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEve
 import { flushSync } from "react-dom";
 import { DrillTargetSchema, type DrillTarget } from "../shared/drills";
 
-export type PageName = "home" | "practice" | "practice-drills" | "library-new" | "progress" | "settings" | "usage";
+export type PageName = "home" | "practice" | "practice-drills" | "practice-new" | "progress" | "settings" | "usage";
 
 export type Route =
   { name: PageName } | { name: "session"; id: string } | { name: "drill"; target: DrillTarget } | { name: "drill-detail"; drillId: string } | { name: "not-found" };
@@ -25,7 +25,7 @@ const PAGE_PATHS: Record<string, PageName> = {
   "/": "home",
   "/practice": "practice",
   "/practice/drills": "practice-drills",
-  "/library/new": "library-new",
+  "/practice/new": "practice-new",
   "/progress": "progress",
   "/settings": "settings",
   "/usage": "usage",
@@ -34,6 +34,7 @@ const PAGE_PATHS: Record<string, PageName> = {
 /** Addresses from before the pages were merged. Each one is replaced in place by the page that took over. */
 const LEGACY_PATHS: Record<string, string> = {
   "/library": "/practice",
+  "/library/new": "/practice/new",
   "/gym": "/practice/drills",
   "/dsa": "/progress#dsa",
   "/history": "/progress#history",

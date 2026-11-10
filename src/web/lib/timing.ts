@@ -1,4 +1,6 @@
+import type { Mode } from "../../shared/phases";
 import type { PublicSession } from "../../shared/types";
+import { formatClock } from "./format";
 
 type Clock = PublicSession["clock"];
 
@@ -22,6 +24,16 @@ export function clockOffset(clock: Clock, localNowMs: number): number {
 export function finalRoundMs(session: Pick<PublicSession, "clock" | "endedAt">): number | null {
   if (!session.endedAt) return null;
   return roundMsAt(session.clock, Date.parse(session.endedAt));
+}
+
+/**
+ * The round time in a debrief header. An interview round has a limit and shows the time against it; the checkpoint
+ * that ends a round at time up can fire a little late, and the header never reads past the limit. A guided round has
+ * no limit, so it shows only the time spent.
+ */
+export function debriefClockText(mode: Mode, roundMs: number, durationMs: number): string {
+  if (mode === "guided") return `${formatClock(roundMs)} spent`;
+  return `${formatClock(Math.min(roundMs, durationMs))} of ${formatClock(durationMs)}`;
 }
 
 type PhaseHistory = PublicSession["phaseHistory"];

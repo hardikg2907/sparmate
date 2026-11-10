@@ -9,7 +9,7 @@ import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMe
 
 export const TABS: { href: string; label: string; pages: PageName[]; icon: typeof HomeIcon }[] = [
   { href: "/", label: "Today", pages: ["home"], icon: HomeIcon },
-  { href: "/practice", label: "Practice", pages: ["practice", "practice-drills", "library-new"], icon: ListIcon },
+  { href: "/practice", label: "Practice", pages: ["practice", "practice-drills", "practice-new"], icon: ListIcon },
   { href: "/progress", label: "Progress", pages: ["progress"], icon: TrendIcon },
 ];
 

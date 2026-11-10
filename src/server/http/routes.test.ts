@@ -276,3 +276,13 @@ describe("GET /api/bootstrap setup field", () => {
     expect(res.json().setup).toEqual(checks);
   });
 });
+
+describe("GET /api/sessions/:id", () => {
+  it("says whether the round has a saved board image", async () => {
+    const id = await start();
+    const get = async () => (await app.inject({ method: "GET", url: `/api/sessions/${id}`, headers: { host: HOST } })).json();
+    expect((await get()).boardImage).toBe(false);
+    await stack.store.writeFinalPng(id, Buffer.from("png"));
+    expect((await get()).boardImage).toBe(true);
+  });
+});

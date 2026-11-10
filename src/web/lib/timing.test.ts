@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublicSession } from "../../shared/types";
-import { clockOffset, finalRoundMs, phaseSpentMs, roundMsAt } from "./timing";
+import { clockOffset, debriefClockText, finalRoundMs, phaseSpentMs, roundMsAt } from "./timing";
 
 const MIN = 60_000;
 const T0 = Date.parse("2026-10-30T10:00:00.000Z");
@@ -85,5 +85,18 @@ describe("phaseSpentMs", () => {
     const spent = phaseSpentMs(history, "requirements", "api", 5 * MIN);
     expect(spent.requirements).toBe(4 * MIN);
     expect(spent.entities).toBe(MIN);
+  });
+});
+
+describe("debriefClockText", () => {
+  const hour = 60 * 60_000;
+  it("shows an interview round against its limit", () => {
+    expect(debriefClockText("interview", 44 * 60_000 + 5_000, hour)).toBe("44:05 of 60:00");
+  });
+  it("never reads past the limit when the round ended a little late", () => {
+    expect(debriefClockText("interview", 63 * 60_000 + 7_000, hour)).toBe("60:00 of 60:00");
+  });
+  it("shows only the time spent for a guided round", () => {
+    expect(debriefClockText("guided", 8 * 60_000 + 44_000, hour)).toBe("08:44 spent");
   });
 });
