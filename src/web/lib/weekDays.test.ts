@@ -3,6 +3,8 @@ import { emptyDsa, type DsaResponse } from "../../shared/dsa";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { DayKind } from "../../shared/week";
 import { weekStats } from "../../shared/progress";
+import { selectToday } from "../../shared/today";
+import type { ProblemSummary } from "../../shared/types";
 import { daysUntilNextPlanned, weekDays } from "./weekDays";
 
 // Thursday 12 November 2026; the week starts Monday 9 November.
@@ -130,5 +132,50 @@ describe("the week strip and the weekly counts", () => {
     expect(strip.days.map((d) => d.done)).toEqual([false, false, true, false, false, false, false]);
     expect(weekStats([long], PLAN, NOW).rounds.done).toBe(1);
     expect(weekStats([long], PLAN, new Date(2026, 10, 8, 12)).rounds.done).toBe(0);
+  });
+});
+
+describe("a machine coding round on a system design day", () => {
+  const problem = (id: string, track: "hld" | "lld", extra: Partial<ProblemSummary> = {}): ProblemSummary => ({
+    id,
+    track,
+    title: id,
+    difficulty: "medium",
+    tags: [],
+    trackerMark: "[ ]",
+    lastAttempt: null,
+    summary: "",
+    badge: null,
+    custom: false,
+    ...extra,
+  });
+  const problems = [
+    problem("parking-lot", "lld", { trackerMark: "[~]", lastAttempt: { sessionId: "r12-lld", date: "2026-11-12", mode: "interview", verdict: "hire" }, redoDueOn: "2026-11-19" }),
+    problem("elevator", "lld"),
+    problem("url-shortener", "hld", { badge: "next" }),
+  ];
+  const history = [round(12, { track: "lld", problemId: "parking-lot" })];
+
+  it("keeps the day an HLD day: the hero is a system design problem although a fresh machine coding one exists, and the redo of the round just played only waits", () => {
+    const pick = selectToday({ now: NOW, plan: PLAN, problems, history });
+    expect(pick.dayKind).toBe("hld");
+    expect(pick.hero).toMatchObject({ kind: "problem", reason: "new", problem: { id: "url-shortener" } });
+    expect(pick.moreRedos.map((e) => [e.problem.id, e.due])).toEqual([["parking-lot", false]]);
+  });
+
+  it("leaves the day open on the strip and out of the count, because only a round of the day's kind finishes it", () => {
+    const week = weekDays(PLAN, history, null, NOW);
+    expect(week.days[3]).toMatchObject({ kind: "hld", state: "today", done: false });
+    const withHld = weekDays(PLAN, [...history, round(12, { id: "hld-12", track: "hld", problemId: "url-shortener" })], null, NOW);
+    expect(withHld.days[3]).toMatchObject({ state: "today", done: true });
+    expect(withHld.known).toBe(week.known + 1);
+    expect(withHld.done).toBe(week.done + 1);
+  });
+
+  it("finishes a machine coding day only with a machine coding round that ended that day", () => {
+    const week = weekDays(PLAN, [round(12, { track: "lld" })], null, new Date(2026, 10, 14, 10));
+    expect(week.days[5]).toMatchObject({ kind: "lld", state: "today", done: false });
+    const later = weekDays(PLAN, [round(14, { track: "lld" })], null, new Date(2026, 10, 14, 15));
+    expect(later.days[5]).toMatchObject({ kind: "lld", state: "today", done: true });
   });
 });
