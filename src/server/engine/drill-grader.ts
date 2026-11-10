@@ -144,7 +144,8 @@ export function finishGrade(output: GraderOutput, answer: string, opts: FinishOp
     wentWell,
     improve,
     yourLine: opts.redact(found ? clip(quote, SHOWN_QUOTE_CHARS) : firstLine(answer)),
-    strong: text(output.strong),
+    // The strong line can reach the page once the drill is over, so it gets the same guard as the feedback.
+    strong: dropKeyCopies([text(output.strong)], opts.key)[0] ?? "",
   };
 }
 

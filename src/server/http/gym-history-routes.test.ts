@@ -226,8 +226,25 @@ describe("GET /api/gym/attempts/:attemptId", () => {
 
   it("shows the strong answer of a free drill when no queued drill of that kind is open", async () => {
     const { second } = await playTwo();
+    // The line stays back while a revision is possible, so the attempt's one revision is marked as used.
+    await store.update((draft) => {
+      const row = draft.attempts.find((r) => r.id === second);
+      if (row) row.revised = true;
+      return { save: true, value: null };
+    });
     const body = (await get(`/api/gym/attempts/${second}`)).json<AttemptView>();
     expect(body.grades[0]?.strong).toEqual(expect.stringContaining("Each number or step ends with what it forces"));
+  });
+
+  it("withholds the strong answer while the attempt can still be revised", async () => {
+    const weak = (await post("/api/gym/submit", { drill: "walk", problemId: "c2-url-shortener", answer: "I would just try it and see." })).json<{
+      attemptId: string;
+      canRevise: boolean;
+    }>();
+    expect(weak.canRevise).toBe(true);
+    const body = (await get(`/api/gym/attempts/${weak.attemptId}`)).json<AttemptView>();
+    expect(body.grades.every((g) => !("strong" in g))).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("Each number or step ends with what it forces");
   });
 
   it("shows the strong answer once the queued drill of the kind is closed", async () => {

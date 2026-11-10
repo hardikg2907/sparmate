@@ -274,7 +274,7 @@ export class DrillService {
     const row = state.attempts.find((a) => a.id === attemptId);
     const body = row && row.status === "done" && !row.legacy ? await this.deps.store.readBody(attemptId) : null;
     if (!body) throw new HttpError(404, "No detail was saved for this attempt.");
-    return attemptView(body, state);
+    return attemptView(body, state, this.today());
   }
 
   /**

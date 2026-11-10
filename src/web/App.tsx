@@ -150,12 +150,8 @@ function Shell() {
             <SessionPage key={route.id} id={route.id} theme={theme} studyRoot={bootstrap.studyRoot} />
           </Suspense>
         ) : null}
-<<<<<<< HEAD
         {route.name === "drill" ? <DrillPage key={pageKey} ctx={ctx} target={route.target} /> : null}
-=======
-        {route.name === "drill" ? <DrillPage ctx={ctx} target={route.target} /> : null}
         {route.name === "drill-detail" ? <DrillDetailPage ctx={ctx} drillId={route.drillId} /> : null}
->>>>>>> 8e2d0da (feat(progress): count drills in the skill rows and show their history)
         {route.name === "not-found" ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
             <h1 className="text-lead font-semibold">Page not found</h1>

@@ -110,8 +110,11 @@ export function recentAttempts(state: DrillState, limit: number, ctx: DetailCont
  * kind is open, because that drill would ask the candidate the same question again. Fields are copied by name, so
  * nothing else in the saved file can reach the page.
  */
-export function attemptView(body: AttemptBody, state: DrillState): AttemptView {
-  const showStrong = !state.items.some((i) => i.status === "open" && i.drill === body.drill);
+export function attemptView(body: AttemptBody, state: DrillState, today: string): AttemptView {
+  const row = state.attempts.find((a) => a.id === body.id);
+  // A written attempt can still be revised on its own day, and the line would hand that revision its answer.
+  const revisable = row !== undefined && !DRILL_INFO[body.drill].dialogue && !row.revised && row.outcome !== "ready" && row.day === today;
+  const showStrong = !revisable && !state.items.some((i) => i.status === "open" && i.drill === body.drill);
   return {
     id: body.id,
     drill: body.drill,
