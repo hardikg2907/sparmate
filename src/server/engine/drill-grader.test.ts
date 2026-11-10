@@ -11,6 +11,8 @@ import {
   dropKeyCopies,
   dropKeyReveals,
   finishGrade,
+  toYou,
+  withoutExamples,
   followUpMessage,
   graderMessage,
   type GraderOutput,
@@ -620,5 +622,116 @@ describe("fake interviewer", () => {
     const out = fakeGrade({ drill: { kind: "tradeoff", key, answer: joined } });
     expect(out.scores.map((x) => x.id)).toEqual(DRILL_RUBRIC.tradeoff.criteria.map((k) => k.id));
     expect(out.scores.every((x) => x.score === 3)).toBe(true);
+  });
+});
+
+describe("feedback that keeps the thinking with the candidate", () => {
+  it.each([
+    [
+      "an example list",
+      "Add questions whose answers would change the design, such as who is counted and what happens on a failure.",
+      "Add questions whose answers would change the design.",
+    ],
+    ["for example", "Name the failure cases, for example a slow store.", "Name the failure cases."],
+    ["e.g.", "Name the failure cases, e.g. a slow store and a full disk.", "Name the failure cases."],
+    ["a bracketed list", "Add the questions that change the design (such as who is counted).", "Add the questions that change the design."],
+    [
+      "a colon after a count",
+      "Two behaviours that change the design are never asked: how soon a link works, and what a repeat does.",
+      "Two behaviours that change the design are never asked.",
+    ],
+    ["a dash after a count", "Two questions are missing \u2014 who is counted and what fails.", "Two questions are missing."],
+    ["a closing Also sentence", "Write the questions that change the design. Also say who is counted besides the key.", "Write the questions that change the design."],
+  ])("cuts %s off a line that asks for more", (_n, line, expected) => {
+    expect(withoutExamples(line)).toBe(expected);
+  });
+
+  it.each([
+    [
+      "an aside closed by a comma",
+      "Your storage line, including the replicas you named, multiplies an hourly rate by days.",
+      "Your storage line multiplies an hourly rate by days.",
+    ],
+    ["for example as an aside", "Your second number, for example, multiplies an hourly rate by days.", "Your second number multiplies an hourly rate by days."],
+    ["plus as a sum", "Your estimate counts reads plus writes but forgets the replicas.", "Your estimate counts reads plus writes but forgets the replicas."],
+    [
+      "a colon with no count of missing items",
+      "One thing to check: whether the storage line uses the same unit for time.",
+      "One thing to check: whether the storage line uses the same unit for time.",
+    ],
+    ["a number before a colon", "Your capacity line says 1.2 TB per day: check the unit.", "Your capacity line says 1.2 TB per day: check the unit."],
+    [
+      "a second error after Also",
+      "Your storage line multiplies an hourly rate by days. Also, the read rate uses the peak twice.",
+      "Your storage line multiplies an hourly rate by days. Also, the read rate uses the peak twice.",
+    ],
+  ])("keeps %s", (_n, line, expected) => {
+    expect(withoutExamples(line)).toBe(expected);
+  });
+
+  it("drops a line that a cut leaves too short, so the fallback stands in", () => {
+    expect(withoutExamples("Add, such as who is counted.")).toBeNull();
+    expect(finish({ ...ok, improve: ["Add, such as who is counted."] }, "Reads are high.").improve).toEqual(["Work on this: Picks the numbers that decide."]);
+  });
+
+  it.each([
+    ["a noun that looks like a command", "The write path, including the retry you described, skips the queue; say what happens when it is full."],
+    ["a describing verb before an aside", "You name three boxes, including the cache, but never say what each one reads."],
+    ["like as a comparison", "Your write rate, like your read rate, ignores the evening peak."],
+    ["plus as a sum", "You state the read rate, plus a write rate that is counted twice in the total."],
+    ["a rubric kind in a second entry", "Also name the slowest step."],
+    ["is right with no number", "Check that the order of the boxes is right before you add the cache."],
+  ])("keeps a good improve line with %s", (_n, line) => {
+    const out = finish({ ...ok, improve: ["Tie the last number to a decision.", line] }, "Reads are high.");
+    expect(out.improve).toHaveLength(2);
+    expect((out.improve[1] ?? "").length).toBeGreaterThan(line.length * 0.65);
+  });
+
+  it("keeps a went-well line that says something other than a number is right", () => {
+    expect(finish({ ...ok, wentWell: ["The order of the boxes is right.", "Your choice of a queue is correct for bursty writes."] }, "Reads are high.").wentWell).toHaveLength(2);
+  });
+
+  it("drops a line that rates a number against the key", () => {
+    const out = finish(
+      { ...ok, wentWell: ["Your read rate is about right.", "Your estimate is close to the key.", "You named the right scale problem for one counter."] },
+      "Reads are high.",
+    );
+    expect(out.wentWell).toEqual(["You named the right scale problem for one counter."]);
+    expect(finish({ ...ok, improve: ["Your read rate is close to the right size; tie it to a decision."] }, "Reads are high.").improve).toEqual([
+      "Work on this: Picks the numbers that decide.",
+    ]);
+  });
+
+  it("praises no number when the arithmetic fails", () => {
+    const weak = {
+      ...ok,
+      scores: ok.scores.map((x) => (x.id === "math" ? { ...x, score: 2 } : x)),
+      wentWell: ["Your read rate of 4,000 a second is a good start.", "You tied the read rate to a cache."],
+    };
+    expect(finish(weak, "Reads are high.").wentWell).toEqual([]);
+    expect(finish({ ...ok, wentWell: ["You tied the read rate to a cache."] }, "Reads are high.").wentWell).toEqual(["You tied the read rate to a cache."]);
+  });
+
+  it("speaks to you, not the candidate", () => {
+    expect(toYou("The candidate read time from the clock.")).toBe("Your answer read time from the clock.");
+    expect(toYou("The candidate splits reads from writes, and the candidate keeps a cache.")).toBe("Your answer splits reads from writes, and your answer keeps a cache.");
+    expect(toYou("The candidate\u2019s right that the cache helps.")).toBe("You are right that the cache helps.");
+    expect(toYou("Ask what the candidate means.")).toBe("Ask what the candidate means.");
+    expect(toYou("The candidate's numbers hold. The candidate named the cost, and the candidate is right.")).toBe("Your numbers hold. You named the cost, and you are right.");
+    expect(finish({ ...ok, wentWell: ["The candidate gave each number a decision."] }, "Reads are high.").wentWell).toEqual(["You gave each number a decision."]);
+  });
+
+  it("quotes a real line instead of a non-answer", () => {
+    const answer = "I don't know, I have not thought about that.\nReads go through a cache in front of the store.";
+    expect(finish({ ...ok, yourLine: "I don't know, I have not thought about that." }, answer).yourLine).toBe("Reads go through a cache in front of the store.");
+    expect(finish({ ...ok, yourLine: "I don't know." }, "I don't know.").yourLine).toBe("I don't know.");
+  });
+
+  it("keeps a hedge that goes on to say something", () => {
+    const turns = "Each user gets a counter in memory.\nWe check it on each request.\nI'm not sure, but a per-user counter in the shared store would race on refill.";
+    const quote = "I'm not sure, but a per-user counter in the shared store would race on refill.";
+    expect(finish({ ...ok, yourLine: quote }, turns).yourLine).toBe(quote);
+    const gap = "I have not thought about what happens when the store is down.";
+    expect(finish({ ...ok, yourLine: gap }, `Reads hit a cache first.\n${gap}`).yourLine).toBe(gap);
   });
 });

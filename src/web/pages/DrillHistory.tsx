@@ -88,6 +88,10 @@ function GradeBlock({ grade, heading }: { grade: AttemptView["grades"][number]; 
         <Section title="What a strong answer says">
           <p className="mt-3 text-body">{grade.strong}</p>
         </Section>
+      ) : grade.noStrong ? (
+        <Section title="What a strong answer says">
+          <p className="mt-3 text-body text-muted-foreground">No line was saved for this attempt.</p>
+        </Section>
       ) : null}
     </div>
   );

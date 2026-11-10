@@ -383,11 +383,115 @@ export interface FinishOptions {
   redact: (text: string) => string;
 }
 
+// Feedback lines are model output capped by the schema; each pattern below is linear on them.
+/** A line that tells the candidate to add something, or says something is missing. Only such a line can hand over items. */
+const ASKS_FOR_MORE = /(?:^|[.;]\s+)(?:add|name|give|list|ask|write|include|say|state|cover|mention)\b|\b(?:missing|never asked|left out|not covered)\b/i;
+/** Where an example list starts. */
+const EXAMPLES = /(?:,?\s+|\s*\(\s*)(?:(?:such as|for example|for instance|including|namely)\b|e\.g\.(?=[\s,]|$)|i\.e\.(?=[\s,]|$))/i;
+/** Where the items start after a colon or a dash in a line that asks for more: "Two questions are missing: A and B". */
+const ITEMS_AFTER = /(?::\s|\s[–—-]\s)/;
+/** A later sentence that tells the candidate to add one more thing. */
+const ALSO_ADD = /^also,?\s+(?:add|name|give|list|ask|say|state|cover|mention|include|write)\b/i;
+/** Words that rate a number against the key. */
+const RATES_NUMBER =
+  /\b(?:(?:lands?|sits?|is|are|comes?|falls?|looks?)\s+(?:about\s+|roughly\s+)?(?:near|close to|around|within)\s+(?:the\s+)?(?:right|correct|expected|real|key|reference)\b|(?:right|correct|expected)\s+(?:size|order of magnitude|ballpark|range)\b|close to the (?:key|reference)\b|match(?:es)?\s+the\s+(?:key|reference|expected)\b)/i;
+const ABOUT_NUMBERS = /\d|\b(?:numbers?|figures?|estimates?|totals?|arithmetic|math|sums?|rates?|sizes?)\b/i;
+/** Praise that, said of a number, tells the candidate it is right. */
+const PRAISES = /\b(?:correctly|accurately|spot on|checks? out|holds? up|(?:is|are)\s+(?:about\s+|roughly\s+)?(?:right|correct|accurate|sound|reasonable|sensible|plausible))\b/i;
+/** Phrases that say only that the candidate does not know; a line made of them and little else shows nothing. */
+const HEDGES =
+  /\b(?:i\s+(?:do\s*not|don't|dont)\s+know|i\s+dunno|i'?m\s+not\s+sure|not\s+sure|no\s+idea|i\s+(?:have\s*not|haven't)\s+thought(?:\s+about\s+(?:that|it|this))?|pass)\b/gi;
+const FILLER = new Set(["honestly", "yet", "about", "that", "this", "part", "think", "need", "really", "just", "sure", "here", "it", "to", "the", "a", "i", "but", "so", "and"]);
+const MIN_CONTENT_WORDS = 3;
+const PAST_OR_MODAL =
+  "(?:did|could|would|should|will|can|may|might|must|wrote|said|named|gave|chose|picked|used|missed|left|added|kept|made|put|stated|showed|described|assumed|explained|answered|split)";
+
+/** Feedback speaks to the candidate as "you". The model sometimes writes "the candidate"; each form is turned round so the verb still agrees. */
+export function toYou(raw: string): string {
+  const cap = (m: string, word: string) => (m[0] === "T" ? word[0]?.toUpperCase() + word.slice(1) : word);
+  return raw
+    .replace(/’/g, "'")
+    .replace(/\bthe candidate's (right|wrong|correct|unsure|sure|not)\b(?=\s*(?:that|about|to|on|[.,;]|$)|(?<=not)\s)/gi, (m, adj: string) => `${cap(m, "you")} are ${adj}`)
+    .replace(/\bthe candidate's been\b/gi, (m) => `${cap(m, "you")} have been`)
+    .replace(/\bthe candidate's\b/gi, (m) => cap(m, "your"))
+    .replace(
+      /\bthe candidate (is|was|has|does)\b/gi,
+      (m, verb: string) => `${cap(m, "you")} ${({ is: "are", was: "were", has: "have", does: "do" } as Record<string, string>)[verb.toLowerCase()] ?? verb}`,
+    )
+    .replace(new RegExp(`\\bthe candidate (${PAST_OR_MODAL})\\b`, "gi"), (m, verb: string) => `${cap(m, "you")} ${verb}`)
+    .replace(
+      /(^|[.;:]\s+|,\s+(?:and\s+)?|\b(?:but|so|because|while)\s+)the candidate\b(?=\s+[a-z])/gi,
+      (_m, lead: string) => `${lead}${/^$|[.;:]\s+$/.test(lead) ? "Your answer" : "your answer"}`,
+    );
+}
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w)).length;
+}
+
+/**
+ * An improve line without the items that would hand the revision its answer. Only a line that asks for more loses an
+ * example list (up to a closing ", but ..." that carries on), the items after a colon or a dash, or a later "Also add
+ * ..." sentence. In any other line only an aside closed by a comma goes. Null when a cut leaves too little to read
+ * as a sentence, so the fallback line stands in.
+ */
+export function withoutExamples(raw: string): string | null {
+  const line = raw
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence, i) => i === 0 || !ALSO_ADD.test(sentence))
+    .join(" ");
+  if (!ASKS_FOR_MORE.test(line)) {
+    // "Your storage line, including the replicas you named, multiplies ..." keeps its point without the aside.
+    return line.replace(/,\s+(?:including|for example|for instance|e\.g\.,?)[^,.;]{0,80},\s+/i, " ");
+  }
+  // The items belong to the ask, so only a list after it counts.
+  const askAt = ASKS_FOR_MORE.exec(line)?.index ?? 0;
+  const after = line.slice(askAt);
+  const exampleRel = EXAMPLES.exec(after);
+  const example = exampleRel ? askAt + exampleRel.index : undefined;
+  if (example !== undefined) {
+    const tail = line.slice(example);
+    const goesOn = /,\s+(?:but|so|and then)\b/i.exec(tail);
+    // An aside followed by ", but ..." still has its point after it, so only the aside goes.
+    if (goesOn) return `${line.slice(0, example)}${tail.slice(goesOn.index)}`;
+  }
+  const itemsRel = ITEMS_AFTER.exec(after);
+  const items = itemsRel && askAt + itemsRel.index > 10 ? askAt + itemsRel.index : undefined;
+  const cut = [example, items].filter((at): at is number => at !== undefined).sort((a, b) => a - b)[0];
+  if (cut === undefined) return line;
+  const head = `${line.slice(0, cut).replace(/[\s,;:(–—-]+$/, "")}.`;
+  return wordCount(head) >= 4 ? head : null;
+}
+
+/** Whether a line only says the candidate does not know: what is left without the hedges and filler is a few words at most. */
+function isNonAnswer(raw: string): boolean {
+  const line = raw.replace(/’/g, "'");
+  HEDGES.lastIndex = 0;
+  if (!HEDGES.test(line)) return false;
+  HEDGES.lastIndex = 0;
+  const rest = line
+    .replace(HEDGES, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/);
+  return rest.filter((w) => w !== "" && !FILLER.has(w)).length < MIN_CONTENT_WORDS;
+}
+
+/** The line to quote back: the model's pick, unless it is a non-answer and the candidate also wrote something real. */
+function quotedLine(quote: string, answer: string): string | null {
+  const real = quote !== "" && quoteIn(quote, answer);
+  if (real && !isNonAnswer(quote)) return clip(quote, SHOWN_QUOTE_CHARS);
+  const other = answer.split("\n").find((l) => wordCount(l) >= 4 && !isNonAnswer(l));
+  if (other) return clip(other, SHOWN_QUOTE_CHARS);
+  return real ? clip(quote, SHOWN_QUOTE_CHARS) : null;
+}
+
 /**
  * Turns the grader's reply into what the page shows. It throws, so the caller can ask again, unless the scores name
  * exactly the drill's criteria once each. The outcome comes from the scores in code, never from the model. The quoted
- * line must really be in the answer; when the model misquotes, the first line of the answer stands in, so the page
- * never shows words the candidate did not write. Feedback that copies the key, or gives part of it away, is dropped.
+ * line must really be in the answer and say something; otherwise the first line of four words or more stands in, so
+ * the page never shows words the candidate did not write. Feedback that copies the key, gives part of it away, rates
+ * a number against it, or lists the items a revision must find, is cut or dropped.
  */
 export function finishGrade(output: GraderOutput, answer: string, opts: FinishOptions): GradedAnswer {
   const criteria = DRILL_RUBRIC[opts.drill].criteria;
@@ -398,7 +502,7 @@ export function finishGrade(output: GraderOutput, answer: string, opts: FinishOp
   const scores = criteria.map((k) => ({ id: k.id, score: output.scores.find((s) => s.id === k.id)?.score ?? 1 }));
   // The page shows labels only, so an id the model wrote into a line reads as its label.
   const named = (line: string) => criteria.reduce((out, k) => (k.id.includes("_") ? out.split(k.id).join(`"${k.label}"`) : out), line);
-  const text = (line: string) => opts.redact(clip(named(line), SHOWN_CHARS));
+  const text = (line: string) => opts.redact(clip(toYou(named(line)), SHOWN_CHARS));
   const known = [answer, opts.shown, ...criteria.map((k) => k.label)].join("\n");
   const lines = (list: readonly string[]) =>
     dropKeyReveals(
@@ -409,21 +513,23 @@ export function finishGrade(output: GraderOutput, answer: string, opts: FinishOp
       opts.key,
       known,
     );
-  const wentWell = lines(output.wentWell);
-  let improve = lines(output.improve);
+  // Praise of the numbers on an answer whose arithmetic fails would tell the candidate which numbers to keep.
+  const mathWeak = scores.some((x) => x.id === "math" && x.score < 3);
+  const ratesNumber = (l: string) => RATES_NUMBER.test(l) || (ABOUT_NUMBERS.test(l) && PRAISES.test(l));
+  const wentWell = lines(output.wentWell).filter((l) => !ratesNumber(l) && !(mathWeak && ABOUT_NUMBERS.test(l)));
+  let improve = lines(output.improve.flatMap((l) => withoutExamples(l) ?? [])).filter((l) => !RATES_NUMBER.test(l));
   if (improve.length === 0) {
     const score = new Map(scores.map((x) => [x.id, x.score]));
     const lowest = criteria.reduce((low, k) => ((score.get(k.id) ?? 4) < (score.get(low.id) ?? 4) ? k : low));
     improve = [`Work on this: ${lowest.label}.`];
   }
-  const quote = output.yourLine.trim();
-  const found = quote !== "" && quoteIn(quote, answer);
+  const quote = quotedLine(output.yourLine.trim(), answer);
   return {
     scores,
     outcome: outcomeFor(opts.drill, scores),
     wentWell,
     improve,
-    yourLine: opts.redact(found ? clip(quote, SHOWN_QUOTE_CHARS) : firstLine(answer)),
+    yourLine: opts.redact(quote ?? firstLine(answer)),
     // The strong line can reach the page once the drill is over, so it gets the same guard as the feedback.
     strong: dropKeyCopies([text(output.strong)], opts.key)[0] ?? "",
   };

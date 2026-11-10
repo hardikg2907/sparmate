@@ -632,7 +632,16 @@ export interface AttemptView {
   changed: string | null;
   answers: string[];
   turns: DrillTurn[];
-  grades: { outcome: DrillOutcome; scores: DrillScoreView[]; wentWell: string[]; improve: string[]; yourLine: string; strong?: string }[];
+  grades: {
+    outcome: DrillOutcome;
+    scores: DrillScoreView[];
+    wentWell: string[];
+    improve: string[];
+    yourLine: string;
+    strong?: string;
+    /** True when the strong line may be shown but none was saved: the one the grader wrote repeated the key or held nothing. */
+    noStrong?: boolean;
+  }[];
 }
 
 export const DEFAULT_ATTEMPT_LIMIT = 30;
