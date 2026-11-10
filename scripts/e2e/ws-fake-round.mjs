@@ -748,9 +748,9 @@ async function lldRound(dirs) {
   check("LLD debrief runs the tester", debrief.stages.includes("testing"), debrief.stages.join(","));
   const scen = debrief.scorecard.lldScenarios;
   check(
-    "tester scenarios reach the scorecard (one pass, one fail when the code compiles)",
-    scen.length === 2 && scen.filter((s) => s.pass).length === 1,
-    JSON.stringify(scen.map((s) => s.pass)),
+    "tester scenarios reach the scorecard (one pass, two fails with one cause when the code compiles)",
+    scen.length === 3 && scen.filter((s) => s.pass).length === 1 && scen.filter((s) => !s.pass).every((s) => s.cause === "No rejection result in the API"),
+    JSON.stringify(scen.map((s) => [s.pass, s.cause ?? null])),
   );
   const frozen = await api.get(`/api/sessions/${id}/code`);
   check("after the round, the code endpoint shows the frozen copy", frozen.json?.content === v2);

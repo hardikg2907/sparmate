@@ -417,7 +417,7 @@ export const ScorecardSchema = z.strictObject({
   trackerMark: z.enum(["[~]", "[x]"]),
   trackerMarkReason: z.string(),
   lldScenarios: z
-    .array(z.strictObject({ name: z.string(), pass: z.boolean(), detail: z.string() }))
+    .array(z.strictObject({ name: z.string(), pass: z.boolean(), detail: z.string(), cause: z.string().optional() }))
     .describe("LLD only: the scenario results the tester produced. Empty array for HLD."),
 });
 

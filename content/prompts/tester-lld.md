@@ -45,8 +45,11 @@ Never edit their file, never fix their bugs inside the harness, and never choose
 ## What you return
 
 - `compiled`: whether their file compiled.
-- `scenarios`: one entry per scenario you ran, in the brief's order. `name` is the brief's number and a short title, such as "6. Car exits at minute 130". `pass` is true only when the behaviour matched. `detail` is one or two plain sentences on what you checked and what you saw, such as "Expected a fee of 150 and spot 2 free again. Got a fee of 150, and the next car received spot 2."
+- `scenarios`: one entry per scenario you ran, in the brief's order. `name` is the brief's number and a short title, such as "6. Car exits at minute 130". `pass` is true only when the behaviour matched. `detail` is one or two plain sentences on what you checked and what you saw, such as "Expected a fee of 150 and spot 2 free again. Got a fee of 150, and the next car received spot 2." When a scenario checks several things and only some fail, say which part held and which failed, such as "The sale returned the right change. The stock count stayed at 5 instead of 4."
+  - `cause`: for a failed scenario only, the root cause in a few plain words, such as "Stock count never drops after a sale" or "Did not compile". One bug often fails several scenarios, for example when every scenario ends with the same check. Give every scenario that fails for the same bug the exact same `cause` text, so the page can show that one cause explains them. Leave `cause` out for a passing scenario. A shared cause never turns a failure into a pass: each scenario still passes only when its behaviour matched.
 - `notes`: how you mapped the scenarios onto their API, anything left out and why, any crash, and how many runs it took. Write plain sentences, without symbols such as arrows.
+
+The candidate reads `name`, `detail` and `cause` on the debrief page, and they never saw the brief. In those fields, never write "brief", "the brief's" or "rubric": name the scenario's own setup instead, such as "spot 2 on the first floor" or "the scenario's two-hour stay".
 
 ## The brief
 

@@ -96,10 +96,24 @@ export function candidateLines(session: Pick<Session, "transcript">): string[] {
   return session.transcript.filter((e) => e.channel === "interview" && e.role === "candidate").map((e) => e.text);
 }
 
+/** Longest root-cause label the page shows; the tester is asked for a few words. */
+export const MAX_CAUSE_CHARS = 160;
+
+/** A cause belongs to a failed scenario only, and a long one is cut so it stays a label. */
+export function tidyTesterOutput(t: TesterOutput): TesterOutput {
+  return {
+    ...t,
+    scenarios: t.scenarios.map(({ cause, ...s }) => {
+      const label = s.pass ? "" : (cause ?? "").trim().slice(0, MAX_CAUSE_CHARS);
+      return label ? { ...s, cause: label } : s;
+    }),
+  };
+}
+
 export function testerText(t: TesterOutput | null): string {
   if (!t) return "The scenario tester could not run. Judge working_code from the code and the candidate's own runs.";
   const lines = [`compiled: ${t.compiled ? "yes" : "no"}`];
-  for (const s of t.scenarios) lines.push(`- ${s.pass ? "PASS" : "FAIL"} ${s.name}: ${s.detail}`);
+  for (const s of t.scenarios) lines.push(`- ${s.pass ? "PASS" : "FAIL"} ${s.name}: ${s.detail}${s.cause ? ` (cause: ${s.cause})` : ""}`);
   if (t.notes) lines.push(`notes: ${t.notes}`);
   return lines.join("\n");
 }
