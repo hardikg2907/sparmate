@@ -321,6 +321,15 @@ export class UsageLedger {
     return records;
   }
 
+  /** Cost in US dollars of each drill attempt, summed over its grader calls. An attempt with no recorded call is absent. */
+  async drillCosts(): Promise<Map<string, number>> {
+    const costs = new Map<string, number>();
+    for (const r of await this.readAll()) {
+      if (r.drillAttemptId) costs.set(r.drillAttemptId, (costs.get(r.drillAttemptId) ?? 0) + (r.costUsd ?? 0));
+    }
+    return costs;
+  }
+
   private resolveProblemTitle(problemId: string | null): string {
     if (!problemId) return "General / outside round";
     if (this.problems) {

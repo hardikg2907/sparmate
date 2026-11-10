@@ -193,9 +193,9 @@ const TIMING = [
 ];
 
 const SCORES = (driving: number, depth: number) => [
-  { id: "problem_navigation", name: "Problem navigation", score: 2 },
-  { id: "solution_design", name: "Solution design", score: 2 },
-  { id: "technical_depth", name: "Technical depth", score: depth },
+  { id: "navigation", name: "Problem navigation", score: 2 },
+  { id: "design", name: "Solution design", score: 2 },
+  { id: "depth", name: "Technical depth", score: depth },
   { id: "scale_reliability", name: "Scale and reliability", score: 2 },
   { id: "communication", name: "Communication", score: 3 },
   { id: "driving_time", name: "Driving and time", score: driving },

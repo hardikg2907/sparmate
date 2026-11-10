@@ -6,6 +6,7 @@ import { AppProviders } from "./components/AppProviders";
 import { Button, Spinner } from "./components/ui";
 import { LibraryNewPage } from "./pages/LibraryNew";
 import { DrillPage } from "./pages/DrillPage";
+import { DrillDetailPage } from "./pages/DrillHistory";
 import { PracticePage } from "./pages/Practice";
 import { ProgressPage } from "./pages/Progress";
 import { SettingsPage } from "./pages/Settings";
@@ -123,9 +124,11 @@ function Shell() {
       ? `session:${route.id}`
       : route.name === "drill"
         ? `drill:${route.target.drill}:${route.target.problemId}:${route.target.drillId ?? ""}`
-        : route.name === "practice-drills"
-          ? "practice"
-          : route.name;
+        : route.name === "drill-detail"
+          ? `drill-detail:${route.drillId}`
+          : route.name === "practice-drills"
+            ? "practice"
+            : route.name;
   const enter = route.name === "session" ? "fade-in " : "";
   return (
     <>
@@ -148,6 +151,7 @@ function Shell() {
           </Suspense>
         ) : null}
         {route.name === "drill" ? <DrillPage key={pageKey} ctx={ctx} target={route.target} /> : null}
+        {route.name === "drill-detail" ? <DrillDetailPage ctx={ctx} drillId={route.drillId} /> : null}
         {route.name === "not-found" ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
             <h1 className="text-lead font-semibold">Page not found</h1>

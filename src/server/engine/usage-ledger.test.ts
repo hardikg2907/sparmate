@@ -558,6 +558,23 @@ describe("UsageLedger drill cost", () => {
     expect(drills.byAttempt[0]!.attemptId).toBe((204).toString(16).padStart(16, "0"));
   });
 
+  it("sums the cost of each attempt over its calls and leaves out rows without an attempt id", async () => {
+    const a = "0123456789abcdef";
+    const b = "fedcba9876543210";
+    const costs = await (
+      await ledgerWith([
+        row({ drillAttemptId: a, drillKind: "walk", cost: 0.1, costUsd: 0.1 }),
+        row({ drillAttemptId: a, drillKind: "walk", cost: 0.25, costUsd: 0.25 }),
+        row({ drillAttemptId: b, drillKind: "walk", cost: 0.2, costUsd: 0.2 }),
+        row({ role: "grader", drillAttemptId: null, cost: 9, costUsd: 9 }),
+        row({ sessionId: "s1", role: "judge", cost: 5, costUsd: 5 }),
+      ])
+    ).drillCosts();
+    expect([...costs.keys()].sort()).toEqual([b, a].sort());
+    expect(costs.get(a)).toBeCloseTo(0.35);
+    expect(costs.get(b)).toBeCloseTo(0.2);
+  });
+
   it("reports empty drills when no row is a drill", async () => {
     const ledger = await ledgerWith([row({ sessionId: "s1", role: "judge" })]);
     const { drills, totals } = await ledger.summary({ timeZone: "UTC" });

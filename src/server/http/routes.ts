@@ -1,6 +1,16 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { CreateSessionSchema, PrepareCustomProblemSchema, type BootstrapResponse } from "../../shared/protocol";
-import { DrillAbandonSchema, DrillReplySchema, DrillReviseSchema, DrillSubmitSchema, DrillTargetSchema } from "../../shared/drills";
+import {
+  ATTEMPT_ID,
+  AttemptsQuerySchema,
+  DEFAULT_ATTEMPT_LIMIT,
+  DRILL_ID,
+  DrillAbandonSchema,
+  DrillReplySchema,
+  DrillReviseSchema,
+  DrillSubmitSchema,
+  DrillTargetSchema,
+} from "../../shared/drills";
 import { SettingsSchema } from "../../shared/types";
 import type { ServerConfig } from "../engine/config";
 import type { DrillService } from "../engine/drills";
@@ -141,6 +151,35 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get("/api/gym", async (_req, reply) => {
     if (!deps.drills) return notFound(reply);
     return deps.drills.summary();
+  });
+
+  app.get<{ Params: { drillId: string } }>("/api/gym/drills/:drillId", async (req, reply) => {
+    if (!deps.drills) return notFound(reply);
+    if (!DRILL_ID.test(req.params.drillId)) return badRequest(reply);
+    try {
+      return await deps.drills.detail(req.params.drillId);
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
+  });
+
+  app.get("/api/gym/attempts", async (req, reply) => {
+    const query = AttemptsQuerySchema.safeParse(req.query);
+    if (!query.success) return badRequest(reply);
+    if (!deps.drills) return notFound(reply);
+    return deps.drills.attempts(query.data.limit ?? DEFAULT_ATTEMPT_LIMIT);
+  });
+
+  app.get<{ Params: { attemptId: string } }>("/api/gym/attempts/:attemptId", async (req, reply) => {
+    if (!deps.drills) return notFound(reply);
+    if (!ATTEMPT_ID.test(req.params.attemptId)) return badRequest(reply);
+    try {
+      return await deps.drills.attempt(req.params.attemptId);
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
   });
 
   app.post("/api/gym/prompt", async (req, reply) => {

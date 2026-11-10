@@ -534,7 +534,7 @@ export function ConversationView({
         </p>
       ) : null}
       <div>
-        <Button variant="ghost" size="sm" disabled={busy} onClick={onStartOver}>
+        <Button variant="ghost" size="sm" className="-ml-2.5" disabled={busy} onClick={onStartOver}>
           Start over
         </Button>
       </div>
@@ -556,7 +556,7 @@ export function Thread({ turns }: { turns: readonly DrillTurn[] }) {
   );
 }
 
-function Meter({ score }: { score: number }) {
+export function Meter({ score }: { score: number }) {
   return (
     <span role="img" aria-label={`${score} of 4`} className="inline-flex gap-1">
       {[1, 2, 3, 4].map((step) => (
@@ -566,7 +566,7 @@ function Meter({ score }: { score: number }) {
   );
 }
 
-function CriteriaList({ scores }: { scores: DrillResult["scores"] }) {
+export function CriteriaList({ scores }: { scores: DrillResult["scores"] }) {
   return (
     <ul className="mt-3 divide-y divide-border">
       {scores.map((k) => (
@@ -589,7 +589,7 @@ function CriteriaList({ scores }: { scores: DrillResult["scores"] }) {
   );
 }
 
-function Lines({ lines }: { lines: string[] }) {
+export function Lines({ lines }: { lines: string[] }) {
   return (
     <ul className="mt-3 list-disc space-y-2 pl-5 text-lead">
       {lines.map((line, i) => (

@@ -66,6 +66,11 @@ describe("finishGrade", () => {
     expect(finish(weak, answer).outcome).toBe(outcomeFor("capacity", weak.scores));
   });
 
+  it("empties a strong line that copies the key, and keeps one that does not", () => {
+    expect(finish({ ...ok, strong: "Reads need a cache in front of the database, I think." }, answer).strong).toBe("");
+    expect(finish(ok, answer).strong).toBe("Reads outnumber writes, so a cache.");
+  });
+
   it("puts the scores in the rubric's order", () => {
     const shuffled = { ...ok, scores: [...ok.scores].reverse() };
     expect(finish(shuffled, answer).scores.map((s) => s.id)).toEqual(DRILL_RUBRIC.capacity.criteria.map((k) => k.id));

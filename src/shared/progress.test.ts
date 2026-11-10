@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { focusFigure, focusSkill, gapForSkill, skillRows, stepRows, weekStats } from "./progress";
+import type { DrillAttempt, DrillPoint } from "./drills";
+import { drillKindRows, drillPoints, focusFigure, focusSkill, gapForSkill, skillLevel, skillRows, stepRows, weekStats } from "./progress";
 import type { Mode } from "./phases";
 import type { SessionHistoryItem } from "./types";
 
+const NOW = new Date(2026, 10, 20, 12);
 const iso = (day: number) => new Date(2026, 10, day, 10).toISOString();
 
 function scored(id: string, day: number, scores: Record<string, number>, extra: Partial<SessionHistoryItem> = {}, mode: Mode = "interview"): SessionHistoryItem {
@@ -92,19 +94,19 @@ describe("gapForSkill", () => {
 describe("skillRows", () => {
   it("keeps the modes apart and orders dots oldest to newest", () => {
     const history = [scored("a", 1, { depth: 1, driving: 2 }), scored("b", 3, { depth: 2, driving: 2 }), scored("g", 4, { depth: 4, driving: 4 }, {}, "guided")];
-    const interview = skillRows(history, "interview");
+    const interview = skillRows(history, "interview", [], NOW);
     expect(interview.rounds).toBe(2);
     expect(interview.rows.find((r) => r.id === "depth")).toMatchObject({ scores: [1, 2], latest: 2 });
-    expect(skillRows(history, "guided").rows[0]).toMatchObject({ scores: [4], latest: 4 });
+    expect(skillRows(history, "guided", [], NOW).rows[0]).toMatchObject({ scores: [4], latest: 4 });
   });
 
   it("is empty with no scored round", () => {
-    expect(skillRows([], "interview")).toEqual({ rows: [], rounds: 0 });
+    expect(skillRows([], "interview", [], NOW)).toEqual({ rows: [], rounds: 0 });
   });
 
   it("draws at most six rounds", () => {
     const history = Array.from({ length: 9 }, (_, i) => scored(`r${i}`, i + 1, { depth: (i % 4) + 1 }));
-    expect(skillRows(history, "interview").rows[0]?.scores).toHaveLength(6);
+    expect(skillRows(history, "interview", [], NOW).rows[0]?.scores).toHaveLength(6);
   });
 });
 
@@ -112,7 +114,7 @@ describe("gap rounds are not attempts", () => {
   it("leaves them out of the focus skill and the skill rows", () => {
     const history = [scored("real", 5, { depth: 3, driving: 2 }), scored("gap", 8, { depth: 1, driving: 1 }, { focus: true })];
     expect(focusSkill(history)).toMatchObject({ id: "driving", score: 2, roundsCounted: 1 });
-    expect(skillRows(history, "interview").rounds).toBe(1);
+    expect(skillRows(history, "interview", [], NOW).rounds).toBe(1);
   });
 
   it("does not take a gap from a gap round", () => {
@@ -208,5 +210,178 @@ describe("stepRows", () => {
       [true, 17.8],
       [false, 0],
     ]);
+  });
+});
+
+const point = (day: string, skill: string, score: number, extra: Partial<DrillPoint> = {}): DrillPoint => ({
+  day,
+  kind: "capacity",
+  skill,
+  score,
+  outcome: "getting_there",
+  firstTry: false,
+  ...extra,
+});
+
+describe("skill level", () => {
+  const rounds = [scored("a", 5, { depth: 2 }), scored("b", 6, { depth: 3 }), scored("c", 7, { depth: 3 }), scored("d", 8, { depth: 4 })];
+  const level = (history: SessionHistoryItem[], points: DrillPoint[] = [], skill = "depth", mode: Mode = "interview") =>
+    skillRows(history, mode, points, NOW).rows.find((r) => r.id === skill)?.level;
+
+  it("is the mean of the newest three rounds when there is no drill", () => {
+    expect(level(rounds)).toBe(3.3);
+    expect(skillRows(rounds, "interview", [], NOW).rows[0]?.drills).toEqual([]);
+  });
+
+  it("adds each drill at a quarter of a round", () => {
+    expect(skillLevel([3, 3, 3], [4, 4])).toBe(3.1);
+    expect(level(rounds, [point("2026-11-19", "depth", 4), point("2026-11-19", "depth", 4)])).toBe(3.4);
+  });
+
+  it("weighs all drills as one round together once they pass the cap", () => {
+    expect(skillLevel([2, 2, 2], [4, 4, 4, 4])).toBe(2.5);
+    expect(skillLevel([2, 2, 2], [4, 4, 4, 4, 4, 4, 4, 4])).toBe(2.5);
+    expect(skillLevel([2, 2, 2], [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])).toBe(2.5);
+    expect(skillLevel([2, 2, 2], [4, 4, 4])).toBe(2.4);
+  });
+
+  it("counts only drills of the last 30 days, today included", () => {
+    const inside = point("2026-10-22", "depth", 4);
+    const outside = point("2026-10-21", "depth", 1);
+    expect(level(rounds, [inside])).toBe(3.4);
+    expect(level(rounds, [outside])).toBe(3.3);
+    expect(level(rounds, [inside, outside])).toBe(3.4);
+  });
+
+  it("reads only the newest three rounds that scored the skill", () => {
+    const other = scored("e", 9, { driving: 1 });
+    expect(level([...rounds, other])).toBe(3.3);
+    expect(level([...rounds, other], [], "driving")).toBe(1);
+    expect(level([scored("x", 2, { depth: 1 }), ...rounds])).toBe(3.3);
+  });
+
+  it("rounds to one decimal", () => {
+    expect(level([scored("a", 5, { depth: 1 }), scored("b", 6, { depth: 1 }), scored("c", 7, { depth: 2 })])).toBe(1.3);
+  });
+
+  it("gives no row to a skill that has drills and no scored round", () => {
+    const rows = skillRows(rounds, "interview", [point("2026-11-19", "navigation", 4)], NOW).rows;
+    expect(rows.map((r) => r.id)).toEqual(["depth"]);
+  });
+
+  it("keeps the last eight drills of the skill, oldest first", () => {
+    const points = Array.from({ length: 10 }, (_, i) => point(`2026-11-${String(i + 5).padStart(2, "0")}`, "depth", 3, { score: (i % 4) + 1 }));
+    const drills = skillRows(rounds, "interview", points, NOW).rows[0]?.drills ?? [];
+    expect(drills).toHaveLength(8);
+    expect(drills[0]).toMatchObject({ day: "2026-11-07" });
+    expect(drills.at(-1)).toMatchObject({ day: "2026-11-14", kind: "capacity", outcome: "getting_there" });
+  });
+
+  it("joins drills to interview rows only, and leaves guided rows rounds only", () => {
+    const history = [...rounds, scored("g1", 9, { depth: 1 }, {}, "guided"), scored("g2", 10, { depth: 1 }, {}, "guided")];
+    const drills = [point("2026-11-19", "depth", 4), point("2026-11-19", "depth", 4)];
+    const interview = skillRows(history, "interview", drills, NOW).rows[0];
+    const guided = skillRows(history, "guided", drills, NOW).rows[0];
+    expect(interview).toMatchObject({ level: 3.4 });
+    expect(interview?.drills).toHaveLength(2);
+    expect(guided).toMatchObject({ level: 1, drills: [] });
+  });
+
+  it("joins drills to guided rows when there is no interview round", () => {
+    const guided = [scored("g1", 9, { depth: 2 }, {}, "guided")];
+    expect(level(guided, [point("2026-11-19", "depth", 4)], "depth", "guided")).toBe(2.4);
+  });
+});
+
+describe("drillPoints", () => {
+  const attempt = (extra: Partial<DrillAttempt> = {}): DrillAttempt => ({
+    id: "0123456789abcdef",
+    at: "2026-11-19T10:00:00.000Z",
+    day: "2026-11-19",
+    drill: "capacity",
+    problemId: "c2-url-shortener",
+    variant: null,
+    drillId: null,
+    status: "done",
+    outcome: "ready",
+    firstOutcome: null,
+    revised: false,
+    scores: [
+      { id: "a", score: 4 },
+      { id: "b", score: 3 },
+      { id: "c", score: 3 },
+      { id: "d", score: 2 },
+    ],
+    seconds: 60,
+    legacy: false,
+    ...extra,
+  });
+  const track = () => "hld" as const;
+
+  it("takes the mean of the scores and the skill of the kind", () => {
+    expect(drillPoints([attempt()], "2026-11-20", track)).toEqual([
+      { day: "2026-11-19", kind: "capacity", skill: "scale_reliability", score: 3, outcome: "ready", firstTry: true },
+    ]);
+  });
+
+  it("is not a first try after a revision, or when the result is not ready", () => {
+    const [revised, notReady] = drillPoints([attempt({ revised: true }), attempt({ outcome: "getting_there" })], "2026-11-20", track);
+    expect(revised?.firstTry).toBe(false);
+    expect(notReady?.firstTry).toBe(false);
+  });
+
+  it("skips legacy, open and unscored rows", () => {
+    const rows = [attempt({ legacy: true, scores: [] }), attempt({ status: "open", outcome: null, scores: [] }), attempt({ scores: [] })];
+    expect(drillPoints(rows, "2026-11-20", track)).toEqual([]);
+  });
+
+  it("reads an old deep-dive row with three scores", () => {
+    const old = attempt({
+      drill: "deep_dive",
+      scores: [
+        { id: "naive", score: 3 },
+        { id: "mechanism", score: 3 },
+        { id: "cost", score: 2 },
+      ],
+    });
+    expect(drillPoints([old], "2026-11-20", track)[0]).toMatchObject({ skill: "depth", score: 8 / 3 });
+  });
+
+  it("takes the track of the problem for the trade-off, and skips an attempt whose problem is gone", () => {
+    const rows = [attempt({ drill: "tradeoff", problemId: "lld-1" }), attempt({ drill: "tradeoff", problemId: "hld-1" }), attempt({ drill: "tradeoff", problemId: "gone" })];
+    const of = (id: string) => (id === "lld-1" ? ("lld" as const) : id === "hld-1" ? ("hld" as const) : null);
+    expect(drillPoints(rows, "2026-11-20", of).map((p) => p.skill)).toEqual(["design", "depth"]);
+  });
+
+  it("keeps the last 90 days, at most 500, oldest first", () => {
+    const rows = [attempt({ day: "2026-08-23" }), attempt({ day: "2026-08-22" }), attempt({ day: "2026-11-19" }), attempt({ day: "2026-10-01" })];
+    expect(drillPoints(rows, "2026-11-20", track).map((p) => p.day)).toEqual(["2026-08-23", "2026-10-01", "2026-11-19"]);
+    const many = Array.from({ length: 600 }, (_, i) => attempt({ day: i < 100 ? "2026-10-01" : "2026-11-19" }));
+    const points = drillPoints(many, "2026-11-20", track);
+    expect(points).toHaveLength(500);
+    expect(points.every((p) => p.day === "2026-11-19")).toBe(true);
+  });
+});
+
+describe("drillKindRows", () => {
+  it("has a row for each kind that has attempts, in the order of the kinds", () => {
+    const points = [point("2026-11-19", "design", 3, { kind: "walk" }), point("2026-11-19", "depth", 3, { kind: "capacity" })];
+    expect(drillKindRows(points, "2026-11-20").map((r) => r.kind)).toEqual(["capacity", "walk"]);
+    expect(drillKindRows([], "2026-11-20")).toEqual([]);
+  });
+
+  it("lists the last eight outcomes, oldest first, and counts the last 30 days", () => {
+    const outcomes = ["needs_work", "getting_there", "ready"] as const;
+    const points = Array.from({ length: 10 }, (_, i) =>
+      point(`2026-11-${String(i + 5).padStart(2, "0")}`, "depth", 3, { outcome: outcomes[i % 3] ?? "ready", firstTry: i % 3 === 2 }),
+    );
+    const row = drillKindRows([point("2026-09-01", "depth", 3, { firstTry: true, outcome: "ready" }), ...points], "2026-11-20")[0];
+    expect(row?.outcomes).toEqual(points.slice(-8).map((p) => p.outcome));
+    expect(row?.recent).toBe(10);
+    expect(row?.share).toBeCloseTo(0.3);
+  });
+
+  it("has no share when nothing is recent", () => {
+    expect(drillKindRows([point("2026-09-01", "depth", 3)], "2026-11-20")[0]).toMatchObject({ recent: 0, share: null });
   });
 });

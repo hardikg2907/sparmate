@@ -519,7 +519,12 @@ Today is one page for the whole day, and with data it fills the first screen at 
   different problems close a gap) and one line for the task, then the one primary
   button. A raised "Also due" card lists three more with a drill glyph, the problem of the next attempt, the same tag and
   the due day in amber. "All drills"
-  opens the side panel. A first run with no drills shows "Drills start after your first round".
+  opens the side panel. A first run with no drills shows "Drills start after your first round". The hero carries a quiet
+  outline "History" button beside "Start drill", and each "Also due" row ends in a small "History" link. Below the
+  hero and the card, a "Closed drills" raised card lists the closed drills (a glyph, the drill, the gap, the round it came
+  from and the day it closed; five rows, then "Show all N"). A "Recent attempts" raised card follows, with one row per
+  attempt: the date and the drill, the problem, the outcome badge, a strip of criterion bars, the time and the cost. A row
+  is a full-width button with a chevron that turns; it opens in place and shows the attempt (see Drill history).
 
 ### Progress
 
@@ -529,7 +534,14 @@ Today is one page for the whole day, and with data it fills the first screen at 
   skill, its score, one supporting number, a planned-against-used chart with one bar per step, and one action. Beside it
   are four counters (rounds, redos, drills, DSA mediums) and the next two redos, with a side panel for the full queue.
 - **Skills.** A Guided and Interview switch, a 1 to 4 track per skill with a dashed line at the target bar, a dot per
-  round and the latest number.
+  round and the skill's level as a bold number to one decimal. The tone of the dots follows the level. Under the dots a
+  thinner row of small diamonds marks the last eight drills on the same track, each coloured by its own score and
+  labelled for a screen reader ("Drill, Capacity math, 3.2, Interview-ready"). The info tip beside the title says "Your
+  last 3 rounds, plus drills from the last 30 days at a lower weight." and explains the scale. The footer reads "Dots:
+  rounds. Diamonds: drills. Dashed line: target bar".
+- **Drills by kind.** A raised card under Skills with one row per kind that has an attempt: a glyph, the kind, eight
+  small pips for the last results (green Interview-ready, amber Getting there, red Needs work; each pip has its words
+  for a screen reader), then "N attempts in 30 days" and the first-try share. A row links to Practice, Drills.
 - **DSA.** A raised panel with the amber "Weekly goal" chip, "Mediums this week", a large count with "of N", the one
   primary "Open LeetCode" button and a tile with the Monday-first day strip, beside a 400 px raised card "This pass". The
   strip's cells are 28 px: a solve fills the cell and shows its count, a DSA day in the plan has an outline, today has a
@@ -540,6 +552,23 @@ Today is one page for the whole day, and with data it fills the first screen at 
   unfinished round carries a warn chip and a Finish button.
 - **Empty states.** Each section has its own: the focus card says the focus appears after a scored round, Skills says no
   scored round yet, DSA shows its notice, History says finished rounds appear there.
+
+### Drill history
+
+- Reached from Practice, Drills (the hero, "Also due", "Closed drills" and "Recent attempts"), at `/practice/drills/<id>`.
+  It uses the normal frame with Practice marked in the bar. A ghost back link reads "Practice › Drills". The header is
+  a kicker (the drill glyph, the kind and an "Open" accent or "Closed" green badge), the gap as the title and, while the
+  drill is open, "Start drill" on the right.
+- A raised facts card in four columns on desktop and one on a phone: Interview-ready results with the pips and the info
+  tip, when it comes back, the next problem with the "Changed constraint" tag, and the problems it has used. A hairline
+  and one quiet line name the ready proofs.
+- A raised "Attempts" card: each row is a full-width button with a turning chevron, the date, the outcome badge ("after a
+  revision" beside it in muted text), the problem, a strip of one bar for each criterion (green at 3 or more, amber below;
+  one label for a screen reader), the time and the cost. An open row shows, in this order: "Your task", "What changed", the
+  answers or "The conversation" (the same sunken thread as the result screen), then for each grade "How each part scored",
+  "What went well" beside "What to improve", "Your line" and, when sent, "What a strong answer says". A revised attempt
+  shows "First try" and "After the revision" blocks. An attempt with no saved body says so in one muted line.
+- Loading is two skeleton blocks; an error is an alert with "Try again"; a drill with no attempt says so in one line.
 
 ### Settings
 
@@ -682,7 +711,7 @@ Scripts and tests depend on these, so the revamp keeps them exactly.
   scroller moves (`scripts/e2e/layout-check.mjs`).
 - `window.__irBoard` and `window.__irShell` with `?testhooks=1`, and the `__fixtureLog` in fixture mode.
 - Fixture names: `home` (Today), `library` (Practice, Rounds), `library-new`, `progress`, `history` and `dsa` (Progress,
-  opened at that section), `settings`, `gym` (Practice, Drills), the room and debrief fixtures, and `usage`. URL
+  opened at that section), `settings`, `gym` (Practice, Drills), `drill-detail` (the history of one drill), the room and debrief fixtures, and `usage`. URL
   parameters: `fixture`, `theme`, `mode`, `status`, `error`, `reason`, `offline`, `timeup`, `stale`, `preparing`, `now`
   (a date, for Today and Progress), `unfinished=0`, `username`, `plan`, `testmode=0`, and for Today `today=first` (no
   rounds yet, no drills) and `today=rest` (today's slot of the plan becomes rest). On Today a `username` or a `state`

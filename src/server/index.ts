@@ -124,7 +124,7 @@ async function main(): Promise<void> {
   await manager.init();
   const drillStore = new DrillStore(paths.drills, log);
   await drillStore.load();
-  const drills = new DrillService({ store: drillStore, history: () => manager.history(), problems, driver, settings, prompts, guard, log });
+  const drills = new DrillService({ store: drillStore, history: () => manager.history(), problems, driver, settings, prompts, guard, log, costs: () => usageLedger.drillCosts() });
 
   const kokoro = new KokoroManager({ kokoroHome: config.kokoroHome, appRoot: config.appRoot });
 
