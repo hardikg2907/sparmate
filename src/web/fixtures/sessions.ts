@@ -285,27 +285,23 @@ export interface FixtureChecklist {
   items: Record<string, string[]>;
   /** By item id ("design-2"); an item not listed is missing. */
   cover: Record<string, Cover>;
-  /** By item id ("requirements-3"): the question the server sends in place of an open item's label. */
-  asks?: Record<string, string>;
 }
 
 /**
- * The checklist as the server would send it. A debrief shows every label. A guided round sends only the size of a
- * step nobody has checked, and after a check shows covered labels and the questions for open items.
+ * The checklist as the server would send it: only once the round is over, and then every label. A live round, in any
+ * mode, sends none.
  */
-export function fixtureSteps(list: FixtureChecklist, mode: Mode, status: PublicSession["status"], checkedAtMs: number): Record<string, PublicStepCheck> {
+export function fixtureSteps(list: FixtureChecklist, status: PublicSession["status"], checkedAtMs: number): Record<string, PublicStepCheck> {
   const out: Record<string, PublicStepCheck> = {};
-  const during = ["live", "paused", "ended"].includes(status);
-  if (mode !== "guided" && during) return out;
+  if (!["debriefing", "debriefed", "failed"].includes(status)) return out;
   for (const [phase, labels] of Object.entries(list.items)) {
     const all: PublicStepItem[] = labels.map((label, i) => {
       const id = `${phase}-${i + 1}`;
       const c = list.cover[id];
-      const ask = during && c?.[0] !== "covered" ? list.asks?.[id] : undefined;
       return {
         id,
-        label: ask ?? label,
-        question: ask !== undefined,
+        label,
+        question: false,
         state: c ? c[0] : "missing",
         source: c ? c[1] : null,
         at: c && c[2] !== null ? c[2] * 1000 : null,
@@ -313,10 +309,6 @@ export function fixtureSteps(list: FixtureChecklist, mode: Mode, status: PublicS
       };
     });
     const touched = all.some((i) => i.state !== "missing");
-    if (during && !touched) {
-      out[phase] = { status: "idle", checkedAt: null, usedImage: false, items: [], covered: 0, partial: 0, total: all.length };
-      continue;
-    }
     out[phase] = {
       status: touched ? "done" : "idle",
       checkedAt: touched ? checkedAtMs : null,
@@ -344,10 +336,6 @@ export const HLD_CHECKLIST: FixtureChecklist = {
     api: ["POST /urls", "GET /{code}", "DELETE /urls/{code}"],
     design: ["Walk one redirect through every box", "Walk one create through every box"],
     deep_dives: ["Generating unique short codes", "Fast, highly available redirects", "Counting clicks without slowing redirects", "The curveball handled"],
-  },
-  asks: {
-    "requirements-3": "What happens when a link is no longer wanted?",
-    "requirements-6": "How many redirects does each new link get?",
   },
   cover: {
     "requirements-1": ["covered", "chat", 20],
@@ -378,10 +366,6 @@ export const LLD_CHECKLIST: FixtureChecklist = {
     thin_slice: ["Demo: A car enters at minute 0: it gets spot 2 (floor 1, first car spot)"],
     fill_out: ["Demo: A third truck enters: rejected, no ticket", "Demo: The car exits at minute 130: fee 150", "Demo: Exit with a ticket id that was never issued: rejected"],
     extend: ["The new requirement restated", "The demo runs after the change"],
-  },
-  asks: {
-    "clarify-3": "What happens when a driver leaves?",
-    "clarify-4": "What if someone presents a ticket that is not valid?",
   },
   cover: {
     "clarify-1": ["covered", "chat", 80],

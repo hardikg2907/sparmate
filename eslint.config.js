@@ -27,7 +27,7 @@ export default tseslint.config(
   },
   {
     // These scripts drive a browser and run page code through puppeteer, so they use both sets of globals.
-    files: ["scripts/e2e/**/*.mjs", "scripts/smoke-ui.mjs", "src/web/dev/*.mjs"],
+    files: ["scripts/e2e/**/*.mjs", "scripts/smoke-ui.mjs", "scripts/capture-docs-screens.mjs", "src/web/dev/*.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
