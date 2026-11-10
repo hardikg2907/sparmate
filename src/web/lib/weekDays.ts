@@ -1,5 +1,5 @@
 import type { DsaResponse } from "../../shared/dsa";
-import { isAttempt, isOpenRound, localDay } from "../../shared/today";
+import { isFinishedAttempt, isRedoRound, localDay, roundEndedDay } from "../../shared/today";
 import type { SessionHistoryItem } from "../../shared/types";
 import { WEEKDAYS, planIndex, weekStart, type DayKind } from "../../shared/week";
 
@@ -26,18 +26,6 @@ export interface WeekSummary {
   done: number;
 }
 
-const finished = (h: SessionHistoryItem) => isAttempt(h) && !isOpenRound(h) && h.status !== "failed";
-
-/** The local day a round ended, falling back to its start for a summary saved before the end time existed. */
-function endedDay(h: SessionHistoryItem): string | null {
-  const at = new Date(h.endedAt ?? h.createdAt);
-  return Number.isNaN(at.getTime()) ? null : localDay(at);
-}
-
-function isRedo(h: SessionHistoryItem, history: readonly SessionHistoryItem[]): boolean {
-  return history.some((o) => isAttempt(o) && o.status === "debriefed" && o.problemId === h.problemId && o.id !== h.id && o.createdAt < h.createdAt);
-}
-
 /** The week's own medium count per day, the same one the weekly ring adds up, so no data means no answer. */
 function solvedMedium(dsa: DsaResponse | null, index: number): boolean {
   if (!dsa || (dsa.status !== "ok" && dsa.status !== "stale")) return false;
@@ -47,8 +35,8 @@ function solvedMedium(dsa: DsaResponse | null, index: number): boolean {
 function dayDone(kind: DayKind, index: number, day: string, history: readonly SessionHistoryItem[], dsa: DsaResponse | null): boolean {
   if (kind === "rest") return false;
   if (kind === "dsa") return solvedMedium(dsa, index);
-  const ended = history.filter((h) => finished(h) && endedDay(h) === day);
-  if (kind === "redo") return ended.some((h) => isRedo(h, history));
+  const ended = history.filter((h) => isFinishedAttempt(h) && roundEndedDay(h) === day);
+  if (kind === "redo") return ended.some((h) => isRedoRound(h, history));
   return ended.some((h) => h.track === kind);
 }
 

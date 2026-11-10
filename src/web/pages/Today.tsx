@@ -3,7 +3,7 @@ import type { DsaResponse } from "../../shared/dsa";
 import type { GymDrillRow, GymSummary } from "../../shared/drills";
 import { BASE_MINUTES, phasePlan, type Mode } from "../../shared/phases";
 import { focusSkill } from "../../shared/progress";
-import { REDO_AFTER_DAYS, clockUsedMs, isAttempt, largestOverrun, selectToday, type RedoEntry, type TodayHero, type UnfinishedRound } from "../../shared/today";
+import { clockUsedMs, isAttempt, largestOverrun, selectToday, type RedoEntry, type TodayHero, type UnfinishedRound } from "../../shared/today";
 import type { ProblemSummary, SessionHistoryItem, Settings } from "../../shared/types";
 import { DEFAULT_WEEKLY_PLAN, WEEKDAYS, planIndex, type DayKind } from "../../shared/week";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -19,7 +19,8 @@ import { PlanPreview } from "../components/today/PlanPreview";
 import { SetupChecklist, type SetupStep } from "../components/today/SetupChecklist";
 import { KIND_LABEL, WeekStrip, WeekSummaryText } from "../components/today/WeekStrip";
 import { Alert, Button, Card, Skeleton, cn } from "../components/ui";
-import { dayMonth, longDate, parseDay, shortDay, weekday, wholeMinutes } from "../lib/dates";
+import { longDate, shortDay, weekday, wholeMinutes } from "../lib/dates";
+import { redoDueText, untriedText } from "../lib/redoDue";
 import { focusTrend } from "../lib/focusTrend";
 import { MODE_LABEL, formatDate } from "../lib/format";
 import { startKey, useStudyData, type StudyData } from "../lib/useStudyData";
@@ -150,7 +151,7 @@ export function TodayView({
                 <>
                   <AlsoTodayHeading>Also today</AlsoTodayHeading>
                   <UnfinishedCard rounds={pick.unfinished} data={data} onDiscard={askDiscard} now={now} />
-                  <MoreRedos redos={pick.moreRedos} heroIsRedo={pick.hero.kind === "problem" && pick.hero.reason === "redo"} />
+                  <MoreRedos redos={pick.moreRedos} heroIsRedo={pick.hero.kind === "problem" && pick.hero.reason === "redo"} now={now} />
                   <DrillsDueCard due={due} />
                   <DsaWeekCard username={ctx.settings.leetcodeUsername} dsa={dsa} loading={dsaLoading} />
                 </>
@@ -246,11 +247,7 @@ const HERO_WHY = "mt-2 max-w-[56ch] text-body text-muted-foreground";
 const HERO_ACTIONS = "mt-auto flex flex-wrap items-center gap-3 pt-7";
 
 function dueText(dueOn: string | null, now: Date): string {
-  if (!dueOn) return "A redo is due.";
-  const due = parseDay(dueOn);
-  const days = Math.floor((now.getTime() - due.getTime()) / 86_400_000);
-  if (days <= 0) return "Due today.";
-  return days < REDO_AFTER_DAYS ? `Due since ${weekday(due)}.` : `Due since ${dayMonth(dueOn)}.`;
+  return `${redoDueText(dueOn, now)}.`;
 }
 
 function lastTryText(problem: ProblemSummary): string {
@@ -623,7 +620,7 @@ function UnfinishedCard({ rounds, data, onDiscard, now }: { rounds: UnfinishedRo
   );
 }
 
-function MoreRedos({ redos, heroIsRedo }: { redos: RedoEntry[]; heroIsRedo: boolean }) {
+function MoreRedos({ redos, heroIsRedo, now }: { redos: RedoEntry[]; heroIsRedo: boolean; now: Date }) {
   const next = redos[0];
   if (!next) return null;
   return (
@@ -636,7 +633,7 @@ function MoreRedos({ redos, heroIsRedo }: { redos: RedoEntry[]; heroIsRedo: bool
           <span className="block text-body font-semibold">{redoCardTitle(redos.length, heroIsRedo)}</span>
           <span className="block truncate text-ui text-muted-foreground">
             Next: {next.problem.title}
-            {next.dueOn ? `, ${next.due ? "now" : shortDay(parseDay(next.dueOn))}` : ""}
+            {next.dueOn ? ` · ${redoDueText(next.dueOn, now)}` : ""}
           </span>
         </span>
         <ChevronRightIcon size={18} className="text-faint transition-transform group-hover:translate-x-0.5" />
@@ -756,7 +753,7 @@ function PlanPanel({
             />
           </section>
         ) : (
-          <p className="text-ui text-muted-foreground">No earlier try of this problem.</p>
+          <p className="text-ui text-muted-foreground">{untriedText(problem)}</p>
         )}
       </div>
     </SidePanel>

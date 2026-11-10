@@ -465,7 +465,8 @@ Keep the FakeDriver in its own file so the Claude driver has no test-only branch
 
 `GET /api/problems` builds `ProblemSummary[]` from `content/problems/**` plus `DATA_DIR/custom-problems/`,
 tracker marks (section 10.1) and app history:
-- `badge: "redo"` when the mark is `[~]` and the latest attempt (app history) is 7 or more days old, or there
+- `badge: "redo"` when the mark is `[~]` and the latest attempt (app history, dated by the day it ended, or the day
+  it began when it has no end time) is 7 or more days old, or there
   is no app attempt and the tracker bullet's newest date suffix is 7 or more days old.
 - `badge: "next"` on exactly one problem: the first `[ ]` problem, in tracker order, in the track opposite to
   the most recent session's track (app history first, else the last Session Log row: "B3" means LLD, "C2"
@@ -499,7 +500,10 @@ least 3 minutes and 1.5 times over its plan. With no such step the line is left 
 
 `src/shared/progress.ts` holds the Progress derivations: the focus skill (lowest average score over the newest three
 scored interview rounds, or guided rounds when there is no interview round), the per-skill rows for each mode, and the
-week's counts (a finished round on a problem tried before counts as a redo).
+week's counts. A round counts on the local day it ended (its creation day when it has no end time), the same day the
+week strip on Today uses, so a round that began on a Sunday and ended on a Tuesday belongs to the week of the Tuesday.
+A finished round on a problem tried before counts as a redo on Progress ("Redos"), and the strip still marks a track
+day done by any finished round of that track, so a redo of an HLD problem on an HLD day is both.
 
 ### 5.11 HTTP and WebSocket (ENGINE agent)
 
@@ -978,9 +982,11 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 
 **Practice, Rounds `/practice`**
 - A segmented switch, Rounds and Drills, sits under the title; Drills carries the number due. `/practice` opens Rounds and `/practice/drills` opens Drills.
-- Track switch HLD, LLD and My questions with counts; filter Fresh first (default), Redo due, All. Rows hold a status
-  mark, title, difficulty and the last result on two lines (a coloured result word and a small detail such as "Redo due
-  8 Nov" or "Round open"), grouped Fresh then Tried before. A row has no button: selecting it fills the right panel with
+- Track switch HLD, LLD and My questions with counts; filter Not tried first (default), Redo due, All. Rows hold a status
+  mark, title, difficulty and the state on two lines: the state word (Not tried, Partly done, Redo due, Round open or
+  Done, the same word the Status fact shows in the panel) and a small detail, which is "Due since 8 Nov" for a redo and
+  the last try's result and day (such as "Not yet · 3 Nov") for other tried problems. Rows are grouped Not tried, then
+  Tried before. A row has no button: selecting it fills the right panel with
   the chips, the title, the interviewer's opening line, the Status, Round and Debrief facts, the Interview or Guided
   switch (default from the mode rule), one primary Start button and a small caption. A problem with an open round shows
   "Finish the open round" in place of Start.

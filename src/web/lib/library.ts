@@ -1,10 +1,13 @@
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
 import { isFresh, isOpenRound } from "../../shared/today";
+import { dayMonth } from "./dates";
+import { redoDueText } from "./redoDue";
+import { attemptBadge } from "./verdict";
 
 export type LibraryTab = "hld" | "lld" | "custom";
 export type LibraryFilter = "fresh" | "redo" | "all";
 
-export const FILTER_LABEL: Record<LibraryFilter, string> = { fresh: "Fresh first", redo: "Redo due", all: "All" };
+export const FILTER_LABEL: Record<LibraryFilter, string> = { fresh: "Not tried first", redo: "Redo due", all: "All" };
 
 export { isFresh };
 
@@ -31,7 +34,7 @@ export function libraryGroups(problems: readonly ProblemSummary[], tab: LibraryT
       : filter === "all"
         ? [{ id: "all", label: "All", problems: inThisTab }]
         : [
-            { id: "fresh", label: "Fresh", problems: inThisTab.filter(isFresh) },
+            { id: "fresh", label: "Not tried", problems: inThisTab.filter(isFresh) },
             { id: "tried", label: "Tried before", problems: inThisTab.filter((p) => !isFresh(p)) },
           ];
   return groups.filter((g) => g.problems.length > 0);
@@ -48,9 +51,20 @@ export function problemStatus(problem: ProblemSummary, history: readonly Session
   return isFresh(problem) ? "fresh" : "partly";
 }
 
-export const STATUS_LABEL: Record<ProblemStatus, string> = { fresh: "Fresh", redo: "Redo due", open: "Round open", partly: "Partly done", done: "Done" };
+export const STATUS_LABEL: Record<ProblemStatus, string> = { fresh: "Not tried", redo: "Redo due", open: "Round open", partly: "Partly done", done: "Done" };
+
+export const STATUS_TONE: Record<ProblemStatus, "good" | "warn" | "neutral" | "accent"> = { fresh: "neutral", redo: "warn", open: "accent", partly: "warn", done: "good" };
 
 /** The open round of a problem, newest first. */
 export function openRoundFor(problemId: string, history: readonly SessionHistoryItem[]): SessionHistoryItem | undefined {
   return history.filter((h) => h.problemId === problemId && isOpenRound(h)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+/** The second line of a row: when a redo fell due, or how the last try went. */
+export function rowDetail(problem: Pick<ProblemSummary, "lastAttempt" | "redoDueOn">, status: ProblemStatus, now: Date): string | null {
+  if (status === "redo") return redoDueText(problem.redoDueOn ?? null, now);
+  const last = problem.lastAttempt;
+  if (!last) return null;
+  const badge = attemptBadge(last);
+  return badge ? `${badge.label} · ${dayMonth(last.date)}` : `Tried ${dayMonth(last.date)}`;
 }

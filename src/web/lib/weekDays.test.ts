@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emptyDsa, type DsaResponse } from "../../shared/dsa";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { DayKind } from "../../shared/week";
+import { weekStats } from "../../shared/progress";
 import { daysUntilNextPlanned, weekDays } from "./weekDays";
 
 // Thursday 12 November 2026; the week starts Monday 9 November.
@@ -119,5 +120,15 @@ describe("daysUntilNextPlanned", () => {
   it("skips consecutive rest days and gives null for an all-rest plan", () => {
     expect(daysUntilNextPlanned(["rest", "rest", "rest", "hld", "rest", "rest", "rest"], new Date(2026, 10, 9))).toEqual({ days: 3, kind: "hld" });
     expect(daysUntilNextPlanned(Array<DayKind>(7).fill("rest"), NOW)).toBeNull();
+  });
+});
+
+describe("the week strip and the weekly counts", () => {
+  it("place a round that began in one week and ended in the next in the same week", () => {
+    const long = round(8, { track: "lld", endedAt: new Date(2026, 10, 11, 9).toISOString() });
+    const strip = weekDays(PLAN, [long], null, NOW);
+    expect(strip.days.map((d) => d.done)).toEqual([false, false, true, false, false, false, false]);
+    expect(weekStats([long], PLAN, NOW).rounds.done).toBe(1);
+    expect(weekStats([long], PLAN, new Date(2026, 10, 8, 12)).rounds.done).toBe(0);
   });
 });

@@ -508,8 +508,10 @@ Today is one page for the whole day, and with data it fills the first screen at 
 - **Switch.** A segmented control, Rounds and Drills. Drills carries "N due" in an amber pill. `/practice` opens Rounds and
   `/practice/drills` opens Drills. "Practise any question" sits in the page header and opens its own page with the same
   fields and limits as before.
-- **Rounds.** Track (HLD, LLD, My questions, each with a count) and filter (Fresh first, Redo due, All). One raised list
-  with groups; a row has a mark, title, difficulty and a two-line result, and no button. The detail is a sticky raised
+- **Rounds.** Track (HLD, LLD, My questions, each with a count) and filter (Not tried first, Redo due, All). One raised list
+  with groups; a row has a mark, title, difficulty and a two-line state, and no button. The state word is the same one the detail
+  panel shows under Status: Not tried, Partly done, Redo due, Round open or Done. The second line says how the last try
+  went, or, for a redo, when it fell due. The detail is a sticky raised
   panel: chips, title, the interviewer's opening line, a facts tile, the mode switch with an info tip, one filled Start
   button and a caption. `/practice#<problem id>` opens the list on that problem.
 - **Drills.** A raised panel holds the next drill: an amber "Next drill" pill, the drill name, the problem of its next
@@ -533,6 +535,9 @@ Today is one page for the whole day, and with data it fills the first screen at 
 - **This week.** The focus card is a raised panel with the amber "Focus this week" pill as its only accent: the lowest
   skill, its score, one supporting number, a planned-against-used chart with one bar per step, and one action. Beside it
   are four counters (rounds, redos, drills, DSA mediums) and the next two redos, with a side panel for the full queue.
+  A round counts in the week and on the day it ended, as on Today. A redo says "Due today", "Due since" and its day, or
+  "Due" and a later day, in the same words as Today and Practice. The focus card's action line names the gap it opens,
+  the problem, and why that gap was picked (it is still open and names the lowest skill).
 - **Skills.** A Guided and Interview switch, a 1 to 4 track per skill with a dashed line at the target bar, a dot per
   round and the skill's level as a bold number to one decimal. The tone of the dots follows the level. Under the dots a
   thinner row of small diamonds marks the last eight drills on the same track, each coloured by its own score and

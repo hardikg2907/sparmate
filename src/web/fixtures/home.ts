@@ -47,6 +47,7 @@ export const fixtureProblems: ProblemSummary[] = [
     tags: ["read-heavy", "caching"],
     trackerMark: "[~]",
     lastAttempt: { sessionId: "20261017-0915-c2-url-shortener-k3x9", date: day(12), mode: "guided", verdict: "lean_no_hire", readiness: "not_yet" },
+    redoDueOn: day(5),
     badge: "redo",
     custom: false,
   },
