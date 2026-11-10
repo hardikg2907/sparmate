@@ -8,8 +8,7 @@ import type { Theme } from "../../theme";
 import { Card, Tooltip } from "../ui";
 
 interface JudgeSawProps {
-  /** Null when the round has no saved board image. */
-  imageUrl: string | null;
+  imageUrl: string;
   graphText: string;
   /** Present for LLD rounds. */
   code: CodeState | null;
@@ -31,7 +30,7 @@ export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers
       <div className="space-y-4">
         <Card variant="raised" className="p-4 sm:p-5">
           <h3 className="mb-2 text-ui font-semibold text-muted-foreground">Final board</h3>
-          {imageUrl === null || imageFailed ? (
+          {imageFailed ? (
             <p className="rounded-lg border border-dashed border-input px-3 py-6 text-center text-ui text-muted-foreground">No board image was saved for this round.</p>
           ) : (
             <Tooltip content="Open the full-size image">

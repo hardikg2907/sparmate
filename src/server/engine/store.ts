@@ -197,15 +197,6 @@ export class SessionStore {
     return writeFileAtomic(join(this.dir(id), "board-final.png"), png);
   }
 
-  /** Rounds from before the board image was kept have none. */
-  async hasFinalPng(id: string): Promise<boolean> {
-    try {
-      return (await stat(join(this.dir(id), "board-final.png"))).isFile();
-    } catch {
-      return false;
-    }
-  }
-
   async readFinalPng(id: string): Promise<Buffer | null> {
     try {
       return await readFile(join(this.dir(id), "board-final.png"));

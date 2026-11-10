@@ -518,7 +518,7 @@ REST endpoints (JSON):
 | DELETE | `/api/custom-problems/:jobId` | Cancels a running custom problem preparation job, aborts its model process, and marks the job `cancelled`. Same Host, Origin and CSRF checks as other writes. Answers the updated status, or 404 if not found. |
 | POST | `/api/sessions` | `CreateSessionRequest` -> `{ sessionId }`. Custom prompt runs the brief-writer first (can take a minute). LLD creates the attempt file. A `focus` (gap title and "what good looks like") is allowed only with `problemId` and mode `guided`; it starts a 20-minute guided round and is kept on the session. |
 | GET | `/api/sessions` | history: `SessionHistoryItem[]` (`{ id, problemId, title, track, mode, createdAt, status, verdict, readiness, pause, notesSaved, clock, scores, phaseTiming, gaps }`), newest first. `pause` is `{ reason, pausedAt, timeLeftMs }` while paused (`timeLeftMs` is null in a guided round), else null. `notesSaved` is true once study notes were written. `clock` is the raw round clock (`startedAt`, `pausedMs`, `pauseStartedAt`, `durationMs`). A scored round also carries `scores` (`{ id, name, score }[]`), `phaseTiming` and `gaps` (`{ title, goodLooksLike, severity, done }[]`), so the pages need no per-round fetch. Every field after `notesSaved` is optional, and a round saved by an older version loads without them. |
-| GET | `/api/sessions/:id` | `PublicSession` plus `boardImage`, true when `board-final.png` exists for the round. The debrief asks for the image only when it does. |
+| GET | `/api/sessions/:id` | `PublicSession` |
 | POST | `/api/sessions/:id/end` | Ends a live or paused round that nobody has open and starts its debrief. Answers `{ ok: true }`. `404` for an id that fails the id regex or a round that does not exist; `409` when the round already ended. Same Host, Origin and CSRF checks as every other write. |
 | DELETE | `/api/sessions/:id` | Discard the round (below). Answers `{ ok: true }`. `404` for an id that fails the id regex or a round that does not exist; `409` while the status is `debriefing`. Same Host, Origin and CSRF checks as every other write. |
 | GET | `/api/sessions/:id/board` | `{ version, elements }` |
@@ -962,8 +962,8 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 - "Sparmate" and three links: Today, Practice and Progress. The current page is underlined. A "Jump to…" box opens
   the command palette, and a Menu button holds Settings, Usage and the keyboard shortcuts, with the Test mode pill
   beside it. On a phone the links move to a bottom tab bar with a Jump tab. The Practice link shows the number of
-  due drills, and nothing when none is due. The old addresses `/library`, `/library/new`, `/gym`, `/dsa` and `/history` are replaced
-  in place by `/practice`, `/practice/new`, `/practice/drills`, `/progress#dsa` and `/progress#history`.
+  due drills, and nothing when none is due. The old addresses `/library`, `/library/new`, `/gym`, `/dsa` and `/history`
+  are replaced in place by `/practice`, `/practice/new`, `/practice/drills`, `/progress#dsa` and `/progress#history`.
 
 **Today `/`**
 - Kicker date and the day's title ("System design day", "Machine coding day", "DSA day", "Redo day", "Rest day"). A

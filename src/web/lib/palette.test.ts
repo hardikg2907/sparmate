@@ -117,7 +117,7 @@ describe("past rounds", () => {
   it("finds an old round by a search, though the quiet list shows only the newest few", () => {
     const many = Array.from({ length: 9 }, (_, i) => done(`r${i}`, `Round ${i}`, `2026-11-0${i + 1}T10:00:00.000Z`));
     const items = buildItems({ now, plan: DEFAULT_WEEKLY_PLAN, problems: [], history: many });
-    expect(filterItems(items, "").filter((i) => i.group === "rounds")).toHaveLength(5);
+    expect(filterItems(items, "").filter((i) => i.group === "rounds")).toHaveLength(3);
     expect(filterItems(items, "round 0").map((i) => i.label)).toContain("Round 0");
   });
 });

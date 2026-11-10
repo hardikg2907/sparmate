@@ -29,7 +29,7 @@ interface DebriefViewProps {
   ctl: SessionController;
   session: PublicSession;
   theme: Theme;
-  boardImageUrl: string | null;
+  boardImageUrl: string;
 }
 
 export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewProps) {
@@ -184,7 +184,7 @@ function ScorecardBody({
   session: PublicSession;
   scorecard: Scorecard;
   theme: Theme;
-  boardImageUrl: string | null;
+  boardImageUrl: string;
   marks: ReadonlyMap<string, GapMark>;
 }) {
   const { state, actions } = ctl;

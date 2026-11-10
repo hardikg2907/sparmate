@@ -104,8 +104,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get<{ Params: { id: string } }>("/api/sessions/:id", async (req, reply) => {
     if (!SESSION_ID.test(req.params.id)) return notFound(reply);
     const session = await manager.publicSession(req.params.id);
-    // The page asks for the image only when one was saved, so an older round does not make a request that fails.
-    return session ? { ...session, boardImage: await store.hasFinalPng(req.params.id) } : notFound(reply);
+    return session ?? notFound(reply);
   });
 
   app.delete<{ Params: { id: string } }>("/api/sessions/:id", async (req, reply) => {

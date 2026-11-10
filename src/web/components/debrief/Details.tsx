@@ -24,7 +24,7 @@ interface DetailsProps {
   graphText: string;
   code: CodeState | null;
   theme: Theme;
-  boardImageUrl: string | null;
+  boardImageUrl: string;
 }
 
 /** The detail behind the verdict, one tab at a time: evidence, time, the record the judge read, and the reference answer. */

@@ -4,10 +4,10 @@ import { clockUsedMs, isOpenRound, selectToday } from "../../shared/today";
 import type { DayKind } from "../../shared/week";
 import { MODE_LABEL, TRACK_LABEL, formatDate } from "./format";
 
-export type PaletteGroup = "continue" | "start" | "rounds" | "problems" | "pages" | "settings";
+export type PaletteGroup = "continue" | "start" | "problems" | "rounds" | "pages" | "settings";
 
-export const GROUP_ORDER: readonly PaletteGroup[] = ["continue", "start", "rounds", "problems", "pages", "settings"];
-export const GROUP_LABEL: Record<PaletteGroup, string> = { continue: "Continue", start: "Start", rounds: "Rounds", problems: "Problems", pages: "Pages", settings: "Settings" };
+export const GROUP_ORDER: readonly PaletteGroup[] = ["continue", "start", "problems", "rounds", "pages", "settings"];
+export const GROUP_LABEL: Record<PaletteGroup, string> = { continue: "Continue", start: "Start", problems: "Problems", rounds: "Rounds", pages: "Pages", settings: "Settings" };
 
 /** What Enter does: go to an address, or start a round on a problem. */
 export type PaletteAction = { kind: "go"; href: string } | { kind: "start"; problemId: string; mode: Mode };
@@ -43,7 +43,7 @@ export function matchesQuery(text: string, query: string): boolean {
 }
 
 /** With no query, a group that can grow long shows only its newest rows. Typing searches all of them. */
-const QUIET_LIMIT: Partial<Record<PaletteGroup, number>> = { rounds: 5 };
+const QUIET_LIMIT: Partial<Record<PaletteGroup, number>> = { rounds: 3 };
 
 /** Rows that match, in group order. Inside a group, a label that starts with the query comes first. */
 export function filterItems(items: readonly PaletteItem[], query: string): PaletteItem[] {

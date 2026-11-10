@@ -97,8 +97,7 @@ export interface SessionSource {
   fetchCode(): Promise<CodeSnapshot>;
   createSocket(): SocketLike;
   /** Address of the final board image shown on the debrief. */
-  /** Null when the round has no saved board image. */
-  boardImageUrl(): string | null;
+  boardImageUrl(): string;
 }
 
 export interface SessionActions {
