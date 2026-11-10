@@ -355,6 +355,9 @@ export const EvidenceSchema = z.strictObject({
   polarity: z.enum(["plus", "minus"]),
 });
 
+/** Gaps a scorecard keeps. The judge is asked for at most this many, and the engine keeps the most severe. */
+export const MAX_GAPS = 5;
+
 export const ScorecardSchema = z.strictObject({
   verdict: z.strictObject({
     // The keys are stored in saved sessions: `sde2` is the call at the target level, `senior` the call at the stretch level.
@@ -390,16 +393,19 @@ export const ScorecardSchema = z.strictObject({
     }),
   ),
   strengths: z.array(z.string()),
-  gaps: z.array(
-    z.strictObject({
-      title: z.string(),
-      severity: z.enum(["high", "medium", "low"]),
-      whyItMatters: z.string(),
-      whatGoodLooksLike: z.string(),
-      teachMinutes: z.number().int().min(1).max(60),
-      drill: DrillTypeSchema.optional().describe("The short drill that trains this gap, or leave it out when none fits."),
-    }),
-  ),
+  // No max here: a card over the cap is trimmed after the parse, so one extra gap never fails a whole debrief.
+  gaps: z
+    .array(
+      z.strictObject({
+        title: z.string(),
+        severity: z.enum(["high", "medium", "low"]),
+        whyItMatters: z.string(),
+        whatGoodLooksLike: z.string(),
+        teachMinutes: z.number().int().min(1).max(60),
+        drill: DrillTypeSchema.optional().describe("The short drill that trains this gap, or leave it out when none fits."),
+      }),
+    )
+    .describe(`At most ${MAX_GAPS} gaps, most severe first.`),
   timeline: z.array(z.strictObject({ at: z.string(), note: z.string() })),
   practiceTask: z.string(),
   trackerMark: z.enum(["[~]", "[x]"]),

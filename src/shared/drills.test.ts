@@ -254,6 +254,57 @@ describe("gap to drill", () => {
     expect(drillForGap({ title: "Spent too long on requirements: pacing" }, "hld")).toBeNull();
   });
 
+  it.each([
+    ["Freezing for ten minutes, then staying in the round when stuck", "walk"],
+    ["Staying on the question that was asked", "tradeoff"],
+    ["Leaving spare minutes unspent: using the round's time", "tradeoff"],
+    ["Holding the scoping step to its time box", "requirements"],
+    ["Spending the remaining minutes well after the demo", "deep_dive"],
+    ["Setting a steady pace through the middle steps", "capacity"],
+    ["Unused round time after the extension", "walk"],
+  ] as const)("queues no drill for the round-running gap %s, even when the judge chose %s", (title, drill) => {
+    expect(drillForGap({ title, drill }, "hld")).toBeNull();
+    expect(drillForGap({ title, drill: "tradeoff" }, "lld")).toBeNull();
+  });
+
+  it.each([
+    ["Replying to half of a two-part question, and staying on the question", "Splitting the reply between the cache and the queue left the latency question open."],
+    ["A clear job for each box, then the slowest bottleneck", "The worker box had no job and the queue latency was never named."],
+    ["Payment intake with a durable accept path", "A crash after the reply loses the order, because nothing durable holds it before the queue."],
+    ["Answering all three probes before the clock ran out", "The failover question and the cache question got no answer."],
+  ] as const)("never sends %s to a deep dive the judge did not choose", (title, whyItMatters) => {
+    expect(drillForGap({ title, whyItMatters }, "hld")).not.toBe("deep_dive");
+  });
+
+  it("reads the broad deep-dive words in the title only", () => {
+    expect(drillForGap({ title: "Short reasons for the schema", whyItMatters: "The cache and the shard key were never tied to a number." }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Duplicate sends across a slow provider" }, "hld")).toBe("deep_dive");
+    expect(drillForGap({ title: "Exactly-once billing across a remote call" }, "hld")).toBe("deep_dive");
+  });
+
+  it.each([
+    ["Every box with a purpose in the order flow", "walk"],
+    ["Seat holds and the missing-key path", "walk"],
+    ["Payment intake with a durable accept path", "walk"],
+    ["Asking for the numbers that shape the store", "capacity"],
+    ["Choosing the eviction policy with a reason", "tradeoff"],
+    ["Choosing the matching algorithm by its slowest hour", "tradeoff"],
+  ] as const)("maps %s to %s on system design", (title, drill) => {
+    expect(drillForGap({ title }, "hld")).toBe(drill);
+  });
+
+  it("maps a machine coding gap about the extension or a choice to the trade-off drill", () => {
+    expect(drillForGap({ title: "Refund design choice settled only once the interviewer listed both" }, "lld")).toBe("tradeoff");
+    expect(drillForGap({ title: "Extension handled by a new branch in every method" }, "lld")).toBe("tradeoff");
+  });
+
+  it.each(["Using time windows instead of a sliding log", "Use time-to-live on the dedup key", "Using the clock of one server to order events"])(
+    "keeps the judge's drill for the design gap %s, where time is the topic",
+    (title) => {
+      expect(drillForGap({ title, drill: "deep_dive" }, "hld")).toBe("deep_dive");
+    },
+  );
+
   it("takes the judge's trade-off on both tracks", () => {
     expect(drillForGap({ title: "Anything at all", drill: "tradeoff" }, "hld")).toBe("tradeoff");
     expect(drillForGap({ title: "Anything at all", drill: "tradeoff" }, "lld")).toBe("tradeoff");

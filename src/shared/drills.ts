@@ -57,47 +57,64 @@ interface Rule {
 }
 
 const HLD_RULES: Rule[] = [
-  { drill: "capacity", pattern: /capacity|back[- ]of[- ]the[- ]envelope|estimat|\bqps\b|throughput|sizing|storage (math|numbers)|scale (math|numbers)|numbers?\b.*\bdecision/ },
+  {
+    drill: "capacity",
+    pattern: /capacity|back[- ]of[- ]the[- ]envelope|estimat|\bqps\b|throughput|sizing|storage (math|numbers)|scale (math|numbers)|numbers?\b.*\b(decision|decide|shape|drive)/,
+  },
   { drill: "deep_dive", pattern: /deep[- ]dive/ },
   { drill: "requirements", pattern: /requirement|clarif|scoping|\bscope\b|non-functional|assumption|constraint|ask(ing)? (the )?(right )?questions/ },
-  { drill: "walk", pattern: /walk(ed|ing|s)? (a |one |the |every )?(request|flow)|request (path|flow)|end[- ]to[- ]end|data flow|\b(read|write|miss) path\b|trace (a|the|one) / },
+  {
+    drill: "walk",
+    pattern:
+      /walk(ed|ing|s)? (a |one |the |every )?(request|flow)|request (path|flow)|end[- ]to[- ]end|data flow|\b(read|write|miss|missing[- ]key|accept|send|delivery) path\b|trace (a|the|one) |\b(every|each) box\b/,
+  },
   {
     drill: "tradeoff",
     pattern:
-      /trade-?off|justif|alternative|unreason|rationale|\b(choice|chose|choos\w*|pick\w*) (without|with no|lacking|and no)\b|no (reason|why)|without (a |any |stating )?(reason|why)/,
+      /trade-?off|justif|alternative|unreason|rationale|\bchoos\w*|\bchose\b|\bchoice\b|\bpick\w* (without|with no|lacking|and no)\b|no (reason|why)|without (a |any |stating )?(reason|why)/,
     titleOnly: true,
   },
   {
+    // Words this broad also turn up in the reason of a gap about something else, so only the title counts. A title
+    // that says the answer stayed shallow counts too: its topic is often named only in the reason.
     drill: "deep_dive",
     pattern:
-      /cach|consisten|shard|partition|replica|failure|failover|stampede|hot (key|shard|spot)|idempoten|queue|rate limit|bottleneck|durab|availab|latency|ordering|fan-?out|backpressure|retry|\bttls?\b|click|\bcount|batch|analytics/,
+      /cach|consisten|shard|partition|replica|failure|failover|stampede|hot (key|shard|spot)|idempoten|exactly[- ]once|dedup|duplicat|queue|rate limit|bottleneck|durab|availab|latency|ordering|fan-?out|backpressure|retry|\bttls?\b|click|\bcount|batch|analytics|hard part|first answer|shallow|hand-?wav|one level|deeper/,
+    titleOnly: true,
   },
 ];
 
 const LLD_RULES: Rule[] = [
-  { drill: "tradeoff", pattern: /pattern|strategy|extensib|trade-?off|justif|alternative|unreason|rationale/, titleOnly: true },
+  { drill: "tradeoff", pattern: /pattern|strategy|extens(ib|ion)|trade-?off|justif|alternative|unreason|rationale|\bchoos\w*|\bchose\b|\bchoice\b/, titleOnly: true },
   { drill: "lld_skeleton", pattern: /entit|class|interface|skeleton|model(l)?ing|object|relationship|data shape|abstraction|responsib|encapsulat|\bapi\b|noun/ },
 ];
 
-/** Gaps about how the round was run, not about what was designed. No drill trains them. */
-const ABOUT_THE_ROUND = /pacing|leading the round|time[- ]?(management|box)|drive the (round|interview)|running out of time|phase (timing|pacing)/;
+/**
+ * Gaps about how the round was run, not about what was designed: pace, time, staying in the round, answering what was
+ * asked. No drill trains them, so this check overrules the judge's own choice.
+ */
+const ABOUT_THE_ROUND =
+  /pacing|\bpace\b|leading the round|time[- ]?(management|box)|drive the (round|interview)|running out of time|phase (timing|pacing)|staying in the round|\b(when|while|once) stuck\b|\b(us(e|ed|ing)|spen(d|ds|ding|t)) (the )?(round'?s|remaining|spare|leftover) (time|minutes)\b|unused (round )?time|staying on the question|answering (both|every|all|each)\b/;
 
 /** A gap about getting the idea across is trained by defending a choice aloud. */
 const ABOUT_EXPLAINING = /explain|explanation|communicat|articulat/;
 
+/** Model-written text: a cap keeps the matching cheap whatever the gap holds. */
+const MAX_MATCH_CHARS = 2000;
+
 /**
- * Picks a drill for a scorecard gap. The judge's own choice wins when it fits the track. Otherwise the gap's title is
- * matched first, then its title with the reason it matters; the trade-off rule reads the title only. A gap about
+ * Picks a drill for a scorecard gap. A gap about pacing, time or staying in the round gets none, whatever the judge
+ * chose. Otherwise the judge's own choice wins when it fits the track. Failing that, the gap's title is matched first,
+ * then its title with the reason it matters; the trade-off and broad deep-dive rules read the title only. A gap about
  * explaining or communicating names no topic of its own, so it is the last resort: it gets the trade-off drill only
- * when no topic rule matched, and it reads the title only. A gap about pacing or leading the round gets none, and
- * neither does a gap no rule fits: null queues nothing.
+ * when no topic rule matched, and it reads the title only. A gap no rule fits gets none: null queues nothing.
  */
 export function drillForGap(gap: { title: string; whyItMatters?: string; drill?: DrillType | undefined }, track: Track): DrillType | null {
-  if (gap.drill && drillServesTrack(gap.drill, track)) return gap.drill;
-  const title = gap.title.toLowerCase();
+  const title = gap.title.slice(0, MAX_MATCH_CHARS).toLowerCase();
   if (ABOUT_THE_ROUND.test(title)) return null;
+  if (gap.drill && drillServesTrack(gap.drill, track)) return gap.drill;
   const rules = track === "lld" ? LLD_RULES : HLD_RULES;
-  const full = `${title} ${(gap.whyItMatters ?? "").toLowerCase()}`;
+  const full = `${title} ${(gap.whyItMatters ?? "").slice(0, MAX_MATCH_CHARS).toLowerCase()}`;
   for (const text of [title, full]) {
     const hit = rules.find((r) => (text === title || !r.titleOnly) && r.pattern.test(text));
     if (hit) return hit.drill;

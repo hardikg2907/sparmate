@@ -1,5 +1,5 @@
 import type { Problem } from "../../shared/problem";
-import type { Scorecard, Session } from "../../shared/types";
+import { MAX_GAPS, type Scorecard, type Session } from "../../shared/types";
 import { formatStamp, roundTimeMs } from "./clock";
 import { numberedCode, stepEntries, stepNotesText, transcriptLines } from "./envelope";
 import { codeScopeFor, stepCodeText, unnumberedCode } from "../../shared/stepCode";
@@ -237,6 +237,13 @@ function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions
  * Rules the engine owns regardless of what the judge wrote. Hint caps are not applied: a hint carries free text and
  * no dimension, so which score it caps is a judgement the judge makes.
  */
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const;
+
+/** The judge's gaps cut to the cap, most severe first; a stable sort keeps its own order within one severity. */
+export function mostSevereGaps<G extends { severity: keyof typeof SEVERITY_RANK }>(gaps: readonly G[]): G[] {
+  return [...gaps].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]).slice(0, MAX_GAPS);
+}
+
 export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; track: Session["track"]; tester: TesterOutput | null }): JudgedCard {
   const out: JudgedCard = { ...card };
   if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : out.lldScenarios;
@@ -248,20 +255,21 @@ export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; tra
 
   if (out.trackerMark === "[x]") {
     const reasons: string[] = [];
-    if (ctx.mode === "guided") reasons.push("Guided rounds earn at most [~].");
+    if (ctx.mode === "guided") reasons.push("A guided round is marked partly done at most.");
     if (ctx.track === "lld") {
-      if (!ctx.tester) reasons.push("The scenario tester did not run, so the mark stays [~].");
-      else if (!ctx.tester.compiled) reasons.push("The code did not compile, so the mark stays [~].");
-      else if (ctx.tester.scenarios.length === 0) reasons.push("No scenario ran, so the mark stays [~].");
-      else if (ctx.tester.scenarios.some((s) => !s.pass)) reasons.push("A scenario failed, so the mark stays [~].");
+      if (!ctx.tester) reasons.push("The scenario tester did not run, so the mark stays partly done.");
+      else if (!ctx.tester.compiled) reasons.push("The code did not compile, so the mark stays partly done.");
+      else if (ctx.tester.scenarios.length === 0) reasons.push("No scenario ran, so the mark stays partly done.");
+      else if (ctx.tester.scenarios.some((s) => !s.pass)) reasons.push("A scenario failed, so the mark stays partly done.");
     }
-    if (card.dimensions.some((d) => d.score < 3)) reasons.push("A dimension scored below 3, so the mark stays [~].");
-    if (card.gaps.some((g) => g.severity !== "low")) reasons.push("A high or medium gap remains, so the mark stays [~].");
+    if (card.dimensions.some((d) => d.score < 3)) reasons.push("A dimension scored below 3, so the mark stays partly done.");
+    if (card.gaps.some((g) => g.severity !== "low")) reasons.push("A high or medium gap remains, so the mark stays partly done.");
     if (reasons.length > 0) {
       out.trackerMark = "[~]";
       out.trackerMarkReason = [out.trackerMarkReason, ...reasons].join(" ").trim();
     }
   }
+  out.gaps = mostSevereGaps(card.gaps);
   const validPhases = phasesFor(ctx.track);
   const phaseOrder = new Map(validPhases.map((p, i) => [p.id, i]));
   const seen = new Set<string>();
