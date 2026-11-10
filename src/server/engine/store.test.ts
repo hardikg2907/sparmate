@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
 import { memoryLogger } from "./log";
-import { SessionStore, summarize } from "./store";
+import { SessionStore, scorecardWithCurrentPlan, summarize } from "./store";
 
 const ID = "20261030-0900-c2-url-shortener-abcd";
 const OTHER = "20261030-0901-c2-url-shortener-wxyz";
@@ -263,6 +263,23 @@ describe("fields added later", () => {
     const item = summarize(session({ status: "debriefed", scorecard: card, durationMs: 60 * 60_000 }));
     expect(item.phaseTiming?.map((r) => r.plannedMinutes)).toEqual([7, 2, 7, 17, 27]);
     expect(item.phaseTiming?.map((r) => r.actualMinutes)).toEqual([8, 6, 5, 20, 0]);
+  });
+
+  it("hands the coach, the scribe and the debrief one scorecard, with the saved timing set against today's plan", () => {
+    const card = {
+      verdict: { sde2: "hire" },
+      summary: "kept as saved",
+      phaseTiming: [
+        { phase: "entities", label: "Core entities", plannedMinutes: 3, actualMinutes: 6 },
+        { phase: "api", label: "API", plannedMinutes: 7, actualMinutes: 5 },
+      ],
+    } as unknown as Session["scorecard"];
+    const s = session({ status: "debriefed", scorecard: card, durationMs: 60 * 60_000 });
+    const out = scorecardWithCurrentPlan(s);
+    expect(out).toMatchObject({ summary: "kept as saved" });
+    expect(out?.phaseTiming?.map((r) => r.plannedMinutes)).toEqual([2, 7]);
+    expect(s.scorecard?.phaseTiming?.[0]?.plannedMinutes).toBe(3);
+    expect(scorecardWithCurrentPlan(session())).toBeUndefined();
   });
 
   it("marks a gap round in its summary, and an ordinary or older round as not one", () => {

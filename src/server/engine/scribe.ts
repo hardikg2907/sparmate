@@ -6,6 +6,7 @@ import { sectionText, tableTail } from "../study/tracker";
 import { phasesFor } from "../../shared/phases";
 import { stepChecklistText } from "./checker";
 import { stepNotesText, stepSummariesText, transcriptLines } from "./envelope";
+import { scorecardWithCurrentPlan } from "./store";
 
 const STUDY_READABLE = /^(TRACKER\.md|REVIEW\.md|TEACHING\.md|notes\/[A-Za-z0-9_][A-Za-z0-9_-]*\.md)$/;
 
@@ -66,7 +67,7 @@ export async function buildScribeInput({ studyRoot, problem, session, date }: Sc
   const notes = await readStudyFile(studyRoot, problem.meta.notesFile);
   const section = problem.meta.tracker ? sectionText(tracker, problem.meta.tracker.section) : null;
   const { header, lastEntry } = reviewHeaderAndLastEntry(review);
-  const { quoteChecks: _q, lintIssues: _l, ...card } = session.scorecard ?? ({} as NonNullable<Session["scorecard"]>);
+  const { quoteChecks: _q, lintIssues: _l, ...card } = scorecardWithCurrentPlan(session) ?? ({} as NonNullable<Session["scorecard"]>);
 
   const facts = [
     `date: ${date}`,

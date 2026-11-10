@@ -78,6 +78,14 @@ describe("planCheckpoints", () => {
     const ends = (track: "hld" | "lld", minutes: number) => phaseWindows(phasePlan(track, minutes)).map((w) => w.endMs / MIN);
     expect(ends("hld", 60)).toEqual([7, 9, 16, 33, 60]);
     expect(ends("lld", 120)).toEqual([7, 20, 33, 46, 66, 100, 120]);
+    for (const [track, minutes] of [
+      ["hld", 60],
+      ["lld", 120],
+    ] as const) {
+      const cps = planCheckpoints(track, "interview", minutes * MIN, phasePlan(track, minutes));
+      const extension = cps.find((c) => c.kind === "extension")?.atMs ?? 0;
+      expect(cps.filter((c) => c.kind === "phase_end").every((c) => c.atMs < extension)).toBe(true);
+    }
   });
 
   it("computes planned windows from the scaled plan", () => {

@@ -61,6 +61,8 @@ describe("withCurrentPlan", () => {
     expect(out.map((r) => r.plannedMinutes)).toEqual([7, 2, 7, 17, 27]);
     expect(out.reduce((sum, r) => sum + r.plannedMinutes, 0)).toBe(60);
     expect(out.map((r) => r.actualMinutes)).toEqual(saved.map((r) => r.actualMinutes));
+    expect(saved[1]?.plannedMinutes).toBe(3);
+    expect(out[1]).not.toBe(saved[1]);
   });
 
   it("keeps the saved minutes of a step the plan does not list, and does not change its input", () => {

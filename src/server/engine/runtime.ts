@@ -93,7 +93,7 @@ import { toPublicSession } from "./public";
 import { TesterOutputSchema, toApiSchema, toCompatSchema, type TesterOutput } from "./schemas";
 import { buildScribeInput } from "./scribe";
 import type { SettingsStore } from "./settings";
-import type { SessionStore } from "./store";
+import { scorecardWithCurrentPlan, type SessionStore } from "./store";
 
 export const ATTEMPT_PATH = /^lld\/[a-z0-9][a-z0-9-]*\/attempt-\d{4}-\d{2}-\d{2}(?:-\d+)?\.cpp$/;
 
@@ -1491,7 +1491,7 @@ export class SessionRuntime {
       role: "coach",
       ...this.roleModel("coach"),
       systemPrompt: async () => {
-        const { quoteChecks: _q, lintIssues: _l, ...card } = this.session.scorecard ?? ({} as Scorecard);
+        const { quoteChecks: _q, lintIssues: _l, ...card } = scorecardWithCurrentPlan(this.session) ?? ({} as Scorecard);
         return this.deps.prompts.render("coach", {
           ...(await this.baseVars()),
           problem_brief: this.problem.body,
