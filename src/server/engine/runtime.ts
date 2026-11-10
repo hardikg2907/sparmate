@@ -1083,6 +1083,9 @@ export class SessionRuntime {
     const existing = into ?? this.session.pins;
     const result = validatePin(this.boardElements, existing, { ...req, at: this.roundNow() }, () => randomId(8));
     if ("error" in result) return textOutput(result.error, true);
+    // A guide pin would name what a count-only check must not, so it is refused for the step the element sits in.
+    if (req.by === "guide" && this.countsOnly(result.pin.phase ?? this.session.phase))
+      return textOutput("Checks of that step give only a count of what is open, so pin nothing there.", true);
     if (into) {
       const kept = withPin(into, result.pin, result.replaces);
       into.splice(0, into.length, ...kept);
@@ -1367,15 +1370,7 @@ export class SessionRuntime {
     const events = [...this.pending()];
     const view: ContextView = {
       time: this.timeView(),
-      ...(s.mode === "guided"
-        ? {
-            steps: stepStatusLine(
-              this.phases,
-              s.stepVerdicts,
-              this.phases.filter((p) => this.countsOnly(p.id)).map((p) => p.id),
-            ),
-          }
-        : {}),
+      ...(s.mode === "guided" ? { steps: this.stepsLine() } : {}),
       board: { version: boardVersion, graphText: s.board.graphText, changed: boardVersion !== ch.boardSeen },
       ...(withNotes ? { notes: this.notesView(ch) } : {}),
       code: this.codeView(ch),
@@ -1446,18 +1441,29 @@ export class SessionRuntime {
     };
   }
 
+  private stepsLine(): string {
+    return stepStatusLine(
+      this.phases,
+      this.session.stepVerdicts,
+      this.phases.filter((p) => this.countsOnly(p.id)).map((p) => p.id),
+    );
+  }
+
   private countsOnly(phase: string): boolean {
     return checksCountOnly(this.session, phase, this.session.stepVerdicts?.[phase]);
   }
 
   /**
-   * Items of the step the checker has not read as covered, or null when there is no finished reading. A step that
-   * needs one of its items has one thing open until one is covered, since the others are alternatives.
+   * Items of the step the checker has not read as covered, or null when no finished reading matches his latest work.
+   * A step that needs one of its items has one thing open until one is covered, since the others are alternatives.
    */
   private openCount(phase: string): number | null {
     const items = this.session.checklist[phase] ?? [];
     const check = this.session.stepChecks[phase];
     if (items.length === 0 || check?.checkedAt == null) return null;
+    // A count from before his latest work would be wrong, and a check asked for in the chat runs no new reading.
+    const built = this.stepEvidence(phase);
+    if (built && this.checkRun(phase).lastKey !== evidenceKey(built.evidence)) return null;
     const open = items.filter((i) => check.items[i.id]?.state !== "covered").length;
     if (this.phases.find((p) => p.id === phase)?.passNeeds === "one") return open < items.length ? null : 1;
     return open;
@@ -1499,7 +1505,7 @@ export class SessionRuntime {
             : []),
           ...(given.includes("H3")
             ? [
-                `H3 was given on this step already. Give no model answer: aim an H3 at another open point and record it with note_hint at level 3, or say that "I'm stuck" gives a short model answer.`,
+                `H3 was given on this step already. Give no model answer: start another open point at H1 and record that level with note_hint, or say that "I'm stuck" gives a short model answer.`,
               ]
             : []),
         ].join("\n");
@@ -1759,10 +1765,7 @@ export class SessionRuntime {
           "pin_note",
           "Attach a short note to one box or arrow on the candidate's board, where the remark applies. Use an id from the pin targets that view_whiteboard lists. One plain sentence.",
           { elementId: z.string().min(1).max(64), note: z.string().min(1).max(LIMITS.pinNoteChars) },
-          async ({ elementId, note }) =>
-            this.countsOnly(this.session.phase)
-              ? textOutput("Checks of this step give only a count of what is open, so pin nothing.", true)
-              : this.addPin({ elementId, note, tone: "note", by: "guide" }),
+          async ({ elementId, note }) => this.addPin({ elementId, note, tone: "note", by: "guide" }),
         ),
         defineTool(
           "step_verdict",
@@ -1770,10 +1773,9 @@ export class SessionRuntime {
           StepVerdictShape,
           async (args) => {
             // A count-only "not_yet" stores the count, so a guide that rightly leaves the gap empty is not pushed to name one.
-            const raw = typeof args === "object" && args !== null && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
-            const quietPhase = raw && typeof raw.phase === "string" && raw.verdict === "not_yet" && this.countsOnly(raw.phase) ? raw.phase : null;
+            const quietPhase = args.verdict === "not_yet" && this.countsOnly(args.phase) ? args.phase : null;
             const parsed = parseStepVerdict(
-              quietPhase !== null ? { ...raw, gap: openCountText(this.openCount(quietPhase)) } : args,
+              quietPhase !== null ? { ...args, gap: openCountText(this.openCount(quietPhase)) } : args,
               this.phases.map((p) => p.id),
             );
             if (!parsed.ok) return textOutput(parsed.error, true);
@@ -1798,7 +1800,7 @@ export class SessionRuntime {
             this.sendState();
             if (counted) return textOutput(`Recorded: not yet. The page shows: "${input.gap}" Name nothing that is missing in your reply.`);
             if (verdict === "not_yet") return textOutput("Recorded: not yet.");
-            return textOutput(`Recorded: the step passed. Steps now: ${stepStatusLine(this.phases, this.session.stepVerdicts)}.`);
+            return textOutput(`Recorded: the step passed. Steps now: ${this.stepsLine()}.`);
           },
         ),
         defineTool(

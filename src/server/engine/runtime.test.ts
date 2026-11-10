@@ -1136,6 +1136,24 @@ describe("the step checker in a machine-coding round", () => {
     rt.dispose();
   });
 
+  it("keeps naming the gap on a build step after two 'Not yet' checks, since a code failure is not the answer", async () => {
+    const r = recording();
+    const t = setup(r.driver, "guided", root);
+    const session = lldSession("guided");
+    session.phase = "skeleton";
+    session.phaseHistory.push({ phase: "skeleton", at: 0, by: "candidate" });
+    session.stepVerdicts = { skeleton: { verdict: "not_yet", gap: "The file does not compile yet.", at: 1, misses: 2 } };
+    const rt = await t.start(session, await parkingLot());
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "code.update", version: 1, content: `${HEADER}${CLARIFY}\n` }, t.peer);
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(2_000);
+    const body = r.sent.find((x) => x.meta.kind === "request")?.text ?? "";
+    expect(body).toContain("name the one most important gap");
+    expect(body).not.toContain("names nothing");
+    rt.dispose();
+  });
+
   it("builds the guide's step feedback only once the check has settled, and hands it the checker's reading", async () => {
     let release = () => {};
     const r = recording(new Promise<void>((resolve) => (release = resolve)));
@@ -2102,6 +2120,18 @@ describe("guided step verdicts, assists and move-on offers", () => {
     session.stepVerdicts = { requirements: { verdict: "not_yet", gap: "What latency does a redirect need?", at: 1, misses: 2 } };
     const covered = { state: "covered" as const, source: "notes" as const, at: null, quote: "Draft", detail: "" };
     session.stepChecks = { ...session.stepChecks, requirements: { status: "done", checkedAt: 2, usedImage: false, items: { [items[0]!.id]: covered } } };
+    const frame = (id: string, y: number, name: string, step: string) => ({ id, type: "frame", x: 0, y, width: 1560, height: 440, name, customData: { step }, frameId: null });
+    const box = (id: string, y: number, label: string) => [
+      { id, type: "rectangle", x: 40, y, width: 160, height: 60, frameId: null, boundElements: [{ type: "text", id: `${id}-t` }] },
+      { id: `${id}-t`, type: "text", x: 50, y: y + 20, width: 140, height: 20, text: label, originalText: label, containerId: id, frameId: null },
+    ];
+    const elements = [
+      frame("f-req", 0, "Requirements", "requirements"),
+      frame("f-design", 500, "High-level design", "design"),
+      ...box("note", 60, "Draft note"),
+      ...box("svc", 600, "Service"),
+    ];
+    await rt.handle({ type: "board.update", version: 1, elements }, t.peer);
     await rt.handle({ type: "guided.feedback" }, t.peer);
     await vi.advanceTimersByTimeAsync(2_000);
     const request = w.turns.find((x) => x.meta.request === "feedback")?.text ?? "";
@@ -2112,7 +2142,19 @@ describe("guided step verdicts, assists and move-on offers", () => {
       gap: `${items.length - 1} things are still open. Press Hint for a nudge toward the next one.`,
       misses: 3,
     });
-    expect(await w.tool("pin_note", { elementId: "anything", note: "Say what this box does." })).toMatchObject({ isError: true, text: expect.stringContaining("pin nothing") });
+    expect(session.pins).toEqual([]);
+    expect(await w.tool("pin_note", { elementId: "note", note: "Say how many links a month." })).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("pin nothing there"),
+    });
+    expect((await w.tool("pin_note", { elementId: "svc", note: "Say what this box does." })).isError).toBe(false);
+    session.phase = "design";
+    expect((await w.tool("pin_note", { elementId: "note", note: "Say how many links a month." })).isError).toBe(true);
+    session.phase = "requirements";
+    // Work added after the last reading makes its count stale, so the page gives no number.
+    write(session, "requirements", "Draft and more");
+    await w.tool("step_verdict", { phase: "requirements", verdict: "not_yet" });
+    expect(session.stepVerdicts?.requirements?.gap).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
 
     await rt.handle({ type: "guided.hint" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
@@ -2140,7 +2182,8 @@ describe("guided step verdicts, assists and move-on offers", () => {
     expect((await w.tool("step_verdict", { phase: "deep_dives", verdict: "not_yet", gap: "" })).isError).toBe(false);
     expect(session.stepVerdicts?.deep_dives?.gap).toBe("Some things are still open. Press Hint for a nudge toward the next one.");
 
-    session.stepChecks = { ...session.stepChecks, deep_dives: { status: "done", checkedAt: 3, usedImage: false, items: {} } };
+    write(session, "deep_dives", "Draft");
+    await settled(w.tool("recheck_step", { phase: "deep_dives" }));
     await w.tool("step_verdict", { phase: "deep_dives", verdict: "not_yet" });
     expect(session.stepVerdicts?.deep_dives?.gap).toBe("One thing is still open. Press Hint for a nudge toward it.");
     rt.dispose();
@@ -2172,7 +2215,7 @@ describe("guided step verdicts, assists and move-on offers", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     const hint = w.turns.find((x) => x.meta.request === "hint")?.text ?? "";
     expect(hint).toContain("Rungs already given on this step: H3.");
-    expect(hint).toContain(`Give no model answer`);
+    expect(hint).toContain(`Give no model answer: start another open point at H1`);
     rt.dispose();
   });
 

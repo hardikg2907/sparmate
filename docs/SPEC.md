@@ -220,10 +220,11 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   session saved without it counts a held `not_yet` as one) and the session state is broadcast. After a step's second
   `not_yet` its checks give only a count (`checksCountOnly`), whether he pressed "Check this step" or asked in the
   chat: the request and the `steps:` line ("checks give only a count: Requirements") tell the guide to name nothing
-  that is missing, `pin_note` is refused while the current step is counted, and the server stores the gap as
+  that is missing, a guide `pin_note` on an element of a counted step (or, outside every frame, while the current step is counted) is refused, and the server stores the gap as
   `openCountText` ("3 things are still open. Press Hint for a nudge toward the next one."), whatever gap the guide
   wrote, an empty one included. The count is the items the checker has not read as covered; a step that needs one
-  item (Deep dives) counts one until one is covered, and with no finished reading it reads "Some things". The machine
+  item (Deep dives) counts one until one is covered and "Some things" after that, and the count reads "Some things"
+  when no finished reading matches his latest work (a check asked for in the chat runs no new reading). The machine
   coding build steps (Skeleton on) are never counted, because their checks name the exact cause of a failing compile
   or run. A hint press is then how he hears the next open item. A pass is final: a later
   `not_yet` for a passed step is refused with an error that says the step already passed and must not be raised again.
@@ -1182,8 +1183,8 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   without a frame brings the Code tab forward instead.
 - The work toolbar has "Show this step" (the current step's frame) and "Whole board" while the board is in view.
 - Step verdict (live guided rounds only), a card at the top of the chat column, for the current step: "Passed" with a
-  check, or "Not yet" followed by the guide's one gap (or, after two of them on the step, the server's count of what is
-open), shown as plain text. Before the first check it shows nothing.
+  check, or "Not yet" followed by the guide's one gap (or, after two of them on a step outside the machine coding
+  build steps, the server's count of what is open), shown as plain text. Before the first check it shows nothing.
   The checklist is not shown during the round, in either mode.
 - Guided rounds show the guide's pins on the board.
 - "What the interviewer sees" toggle: shows the current graph text (and its warnings). It makes the board's
@@ -1316,7 +1317,8 @@ Guide (guided mode), modelled on step-by-step guided practice:
   classes do I need") or "no idea" gets one "Give me your first try, even a wrong one", then the next rung of the
   hint ladder; after H3 it points at "I'm stuck". In machine coding a syntax question is answered at once, and a
   design question gets one question, then a hint rung. After a step's second "Not yet" it says how many things are
-  still open and names none. Longer teaching waits for the coach after
+  still open and names none, except on the machine coding build steps, where it still names the exact cause of a
+  failing compile or run. Longer teaching waits for the coach after
   the round (TEACHING.md section 1 and 5). Keeps TEACHING.md section 2's prose rules.
 - Knows how the step checklist works: a separate checker fills it from his chat in the step, the step's frame, his
   written answer for the step and, in LLD, the code he wrote while the step was on the rail (build steps read the
