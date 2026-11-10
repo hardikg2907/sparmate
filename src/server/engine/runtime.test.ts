@@ -1676,6 +1676,87 @@ describe("guided step verdicts, assists and move-on offers", () => {
     rt.dispose();
   });
 
+  it("judges a pass on the reading that just finished, even when he edits while the checker reads", async () => {
+    const w = watched();
+    const session = newSession("guided");
+    const driver: Driver = {
+      ...w.driver,
+      runOnce: async (spec) => {
+        const out = await w.driver.runOnce(spec);
+        if (spec.role === "checker") session.stepNotes = { ...session.stepNotes, requirements: "Draft more" };
+        return out;
+      },
+    };
+    const t = setup(driver, "guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements", "Draft");
+    const out = await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }));
+    expect(out).toMatchObject({ isError: true, text: expect.stringContaining("cannot pass yet") });
+    expect(session.stepVerdicts).toBeUndefined();
+    rt.dispose();
+  });
+
+  it("leaves the pass to the guide when the checker fails on his newest work after an earlier reading refused it", async () => {
+    const w = watched();
+    let down = false;
+    const driver: Driver = { ...w.driver, runOnce: async (spec) => (spec.role === "checker" && down ? Promise.reject(new Error("checker down")) : w.driver.runOnce(spec)) };
+    const t = setup(driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements", "Draft");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(true);
+    down = true;
+    write(session, "requirements", "Draft two");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(false);
+    rt.dispose();
+  });
+
+  it("waits for a check that is already running instead of asking the checker again", async () => {
+    const w = watched();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let checks = 0;
+    const driver: Driver = {
+      ...w.driver,
+      runOnce: async (spec) => {
+        if (spec.role !== "checker") return w.driver.runOnce(spec);
+        checks += 1;
+        await gate;
+        return w.driver.runOnce(spec);
+      },
+    };
+    const t = setup(driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements");
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(checks).toBe(1);
+    const pass = w.tool("step_verdict", { phase: "requirements", verdict: "pass" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    release();
+    expect((await settled(pass)).isError).toBe(false);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(checks).toBe(1);
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("pass");
+    rt.dispose();
+  });
+
+  it("refuses a pass once the room is disposed", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements");
+    rt.dispose();
+    expect(await w.tool("step_verdict", { phase: "requirements", verdict: "pass" })).toMatchObject({ isError: true, text: expect.stringContaining("not live") });
+    expect(session.stepVerdicts).toBeUndefined();
+  });
+
   it("leaves the pass to the guide when the checker cannot read his latest work, and refuses one after the end", async () => {
     const w = watched();
     const driver: Driver = { ...w.driver, runOnce: async (spec) => (spec.role === "checker" ? Promise.reject(new Error("checker down")) : w.driver.runOnce(spec)) };

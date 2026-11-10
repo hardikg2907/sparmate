@@ -214,15 +214,18 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   `not_yet` for a passed step is refused with an error that says the step already passed and must not be raised again.
   A `pass` may replace a `not_yet`. The guide calls it once per step check, and again with `not_yet` after a refused pass. In the reply to "I'm stuck" a `pass` is
   refused, so a model answer never earns one. Each check ends with a verdict. A new `pass` must be supported by the
-  checker's reading of the step (`passCheck`): the server first brings the reading up to date (a check runs only when
-  the evidence changed since the last finished one, and waits at most 60 s), then counts the items read as `covered`.
+  checker's reading of the step (`passCheck`): the server first brings the reading up to date (it waits for a check
+  that is already running, else runs one only when the evidence changed since the last finished reading, and waits at
+  most 60 s), then counts the items read as `covered`. An edit he makes while the checker reads does not void the
+  reading that just finished.
   A pass needs at least half of the step's items, rounded up and at least one (`passNeed`); Deep dives needs one,
   because its level bar asks for one deep dive done properly, and Extension needs both of its items, because it is
   done only when the demo runs after the change. A partial item does not count. A step he has said, drawn and
   written nothing for is refused, and so is a pass after the round ended. Too few covered items refuse the pass with an
   error that gives the count, the items not covered yet, and tells the guide to name the most important one, to keep
   the reading to itself, and to call `recheck_step` once if he covered more than it shows. A step with no checklist,
-  or whose reading does not match his latest work because the checker failed or ran out of time, is left to the guide,
+  or whose reading is out of date because no check finished while the server waited (the checker failed or ran out of
+  time), is left to the guide,
   so a broken checker never locks a step. An accepted pass returns the `steps:` line, so the guide names the steps still open.
 - `recheck_step({ phase })` (guide only) -> the phase must belong to the track, else an error that lists the valid
   ids. Reads that step's checklist again from scratch (section 5.11): it bypasses the unchanged-evidence skip, and its

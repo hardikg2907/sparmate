@@ -125,6 +125,8 @@ interface StepCheckRun {
   imageKey: string | null;
   /** Counts finished re-reads, so a caller can tell whether the one it asked for completed. */
   freshDone: number;
+  /** Counts every finished reading, so a caller can tell whether one finished while it waited. */
+  done: number;
 }
 
 /** Resolves true when `p` settles within `ms`, false after `ms`; it never rejects. */
@@ -811,7 +813,7 @@ export class SessionRuntime {
   private checkRun(phase: string): StepCheckRun {
     let run = this.checkRuns.get(phase);
     if (!run) {
-      run = { settled: null, again: false, againWithImage: false, againFresh: false, lastKey: null, imageKey: null, freshDone: 0 };
+      run = { settled: null, again: false, againWithImage: false, againFresh: false, lastKey: null, imageKey: null, freshDone: 0, done: 0 };
       this.checkRuns.set(phase, run);
     }
     return run;
@@ -884,6 +886,7 @@ export class SessionRuntime {
         s.stepChecks = { ...s.stepChecks, [phase]: { status: "done", checkedAt: this.roundNow(), usedImage: false, items: {} } };
         run.lastKey = key;
         run.freshDone += 1;
+        run.done += 1;
         this.saveSoon();
         this.sendState();
       }
@@ -943,6 +946,7 @@ export class SessionRuntime {
       if (!res.output) throw new DriverError("The checker returned nothing.");
       next = mergeCheck(fresh ? undefined : this.session.stepChecks[phase], res.output, evidence, this.roundNow());
       run.lastKey = key;
+      run.done += 1;
       if (png) run.imageKey = key;
       if (fresh) run.freshDone += 1;
     } catch (err) {
@@ -1644,9 +1648,11 @@ export class SessionRuntime {
 
   /**
    * Refuses a pass the step's reading does not support, after bringing the reading up to date with his latest work.
-   * The checker runs only when the evidence changed since its last reading, so a pass right after "Check this step"
-   * costs no second call. When the checker could not read his latest work (it failed or ran out of time), the call is
-   * left to the guide, so a broken checker never locks a step.
+   * A check that is already running is awaited rather than queued again, and a new one runs only when the evidence
+   * changed since the last reading, so a pass right after "Check this step" costs no second call. When no reading
+   * finished while it waited (the checker failed or ran out of time), the call is left to the guide, so a broken
+   * checker never locks a step. An edit made while the checker reads does not count as a failure: the reading that
+   * just finished decides.
    */
   private async passRefusal(phase: string): Promise<string | null> {
     const notLive = "The round is not live, so no step can pass now.";
@@ -1657,10 +1663,11 @@ export class SessionRuntime {
     if (!built) return null;
     if (built.empty) return emptyStepRefusalText(label);
     const run = this.checkRun(phase);
-    if (run.settled || run.lastKey !== evidenceKey(built.evidence)) await settleWithin(this.checkStep(phase), RECHECK_WAIT_MS);
+    const before = run.done;
+    if (run.settled) await settleWithin(run.settled, RECHECK_WAIT_MS);
+    else if (run.lastKey !== evidenceKey(built.evidence)) await settleWithin(this.checkStep(phase), RECHECK_WAIT_MS);
     if (this.disposed || (this.session.status !== "live" && this.session.status !== "paused")) return notLive;
-    const now = this.stepEvidence(phase);
-    if (!now || run.lastKey !== evidenceKey(now.evidence)) return null;
+    if (run.done === before && run.lastKey !== evidenceKey(built.evidence)) return null;
     const result = passCheck(def ?? {}, this.session.checklist[phase] ?? [], this.session.stepChecks[phase]);
     return result.ok ? null : passRefusalText(label, result);
   }
