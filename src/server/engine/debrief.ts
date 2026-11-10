@@ -99,13 +99,21 @@ export function candidateLines(session: Pick<Session, "transcript">): string[] {
 /** Longest root-cause label the page shows; the tester is asked for a few words. */
 export const MAX_CAUSE_CHARS = 160;
 
-/** A cause belongs to a failed scenario only, and a long one is cut so it stays a label. */
+/** What a failed scenario's cause is when the file did not compile, so the page can say one cause failed them all. */
+export const NOT_COMPILED_CAUSE = "Did not compile";
+
+/**
+ * A cause belongs to a failed scenario only. It is cut to one short line, and a cause with no word in it is dropped,
+ * so the page never shows an empty label.
+ */
 export function tidyTesterOutput(t: TesterOutput): TesterOutput {
   return {
     ...t,
     scenarios: t.scenarios.map(({ cause, ...s }) => {
-      const label = s.pass ? "" : (cause ?? "").trim().slice(0, MAX_CAUSE_CHARS);
-      return label ? { ...s, cause: label } : s;
+      if (s.pass) return s;
+      const label = (cause ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CAUSE_CHARS);
+      if (/[\p{L}\p{N}]/u.test(label)) return { ...s, cause: label };
+      return t.compiled ? s : { ...s, cause: NOT_COMPILED_CAUSE };
     }),
   };
 }
@@ -271,7 +279,8 @@ export function mostSevereGaps<G extends { severity: keyof typeof SEVERITY_RANK 
  */
 export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; track: Session["track"]; tester: TesterOutput | null }): JudgedCard {
   const out: JudgedCard = { ...card };
-  if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : out.lldScenarios;
+  // Scenario results come from the tester alone; without one, a judge's own list would be unchecked model text.
+  if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : [];
   else out.lldScenarios = [];
 
   const verdicts = verdictsFor(ctx.track, card.dimensions);

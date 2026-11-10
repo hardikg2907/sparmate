@@ -34,7 +34,7 @@ So your harness sits after their whole file. It can use every type and function 
 
 ## Telling their failures from yours
 
-- **Their file does not compile.** The errors point into `candidate.cpp`. Do not work around them. Return `compiled: false`, mark every scenario as failed with the detail "Did not compile.", and list the first few errors with their line numbers in `notes`.
+- **Their file does not compile.** The errors point into `candidate.cpp`. Do not work around them. Return `compiled: false`, mark every scenario as failed with the detail "Did not compile." and the cause "Did not compile", and list the first few errors with their line numbers in `notes`.
 - **Your harness does not compile.** The errors point into your own code. Fix them and run again, up to three times.
 - **Their code crashes or hits undefined behaviour.** A sanitizer report, a hardening abort, a signal, a "runtime error" line or a timeout all count. The scenario that printed `BEGIN` without a `RESULT` fails, with the cause and their line number when the report shows it, for example "Crashed: -> on an empty std::optional in exit(), line 88." Then remove that scenario and run again, so the remaining scenarios still get results. Keep the total under about six runs.
 - **Their API cannot express a scenario.** For example, the layout cannot be configured, or the code reads the system clock so a long stay cannot be set up. The scenario fails, and the detail says what is missing. Do not invent a workaround that their own design would not support.

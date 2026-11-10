@@ -537,10 +537,20 @@ async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
         compiled,
         scenarios: [
           { name: "Scenario 1: the first happy path", pass: compiled, detail: compiled ? "The harness ran and printed the expected line." : "The code did not compile." },
-          { name: "Scenario 2: a rejected request", pass: false, detail: "No way to express a rejection through the candidate's API.", cause: "No rejection result in the API" },
-          { name: "Scenario 3: a second rejected request", pass: false, detail: "The second rejection could not be expressed either.", cause: "No rejection result in the API" },
+          {
+            name: "Scenario 2: a rejected request",
+            pass: false,
+            detail: "No way to express a rejection through the candidate's API.",
+            cause: compiled ? "No rejection result in the API" : "Did not compile",
+          },
+          {
+            name: "Scenario 3: a second rejected request",
+            pass: false,
+            detail: "The second rejection could not be expressed either.",
+            cause: compiled ? "No rejection result in the API" : "Did not compile",
+          },
         ],
-        notes: "Fake tester: one harness run, two canned scenarios.",
+        notes: "Fake tester: one harness run, three canned scenarios.",
       };
     }
     case "judge": {

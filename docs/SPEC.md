@@ -181,7 +181,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 |---|---|---|---|---|
 | interviewer | live round, interview mode | streaming, persisted | view_whiteboard, set_phase, note_hint, end_interview; LLD adds read_code, run_code | chat text |
 | guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note, recheck_step and step_verdict | chat text |
-| tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail}], notes }` structured |
+| tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail,cause?}], notes }` structured |
 | judge | after the round (and the tester) | one-shot | pin_element (board PNG attached as an image block) | `ScorecardSchema` structured |
 | coach | after the debrief | streaming, persisted | view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
@@ -392,7 +392,7 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 2. **Test (LLD).** Run the tester with the brief's "Demo scenarios". It reads the code, writes one harness,
    runs it with `run_harness`, fixes its own harness errors up to 3 times, and returns scenario results. A
    failed scenario may carry `cause`, a few words on its root cause, with the same text on every scenario that fails
-   for the same bug; the server drops a cause on a passing scenario and cuts one longer than 160 characters. A
+   for the same bug; the server drops a cause on a passing scenario or one with no word in it, joins its lines and cuts it to 160 characters, and gives every failed scenario without a cause "Did not compile" when the file did not compile. The scorecard's `lldScenarios` are the tester's results, or empty when the tester did not run. A
    compile failure of the candidate's own file is a valid result (`compiled: false`), not an error.
 3. **Judge.** One structured call. User message contains: the transcript (each line `[mm:ss] role: text`,
    hidden system entries included as `[mm:ss] (event) ...`), phase timing (planned vs actual), hints given,
@@ -466,7 +466,7 @@ about 300 ms):
 - interviewer/guide: first reply is the brief's "Opening prompt"; later replies are short phase-aware lines;
   answers `<silent/>` to most clock events; delivers a canned extension at the extension checkpoint; calls
   `set_phase` when the candidate's message contains "let's move to <phase label>".
-- tester: two scenarios, one pass, one fail.
+- tester: three scenarios, one pass and two fails that share one cause (all three fail, with the cause "Did not compile", when the code does not compile).
 - judge: a valid scorecard whose quotes are copied from real candidate lines (so quote checks pass), plus one
   deliberately invented quote (so the UI shows a failed check).
 - coach: canned two-paragraph replies.

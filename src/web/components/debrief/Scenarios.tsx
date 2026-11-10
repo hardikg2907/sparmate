@@ -59,7 +59,10 @@ export function ScenarioTable({ scorecard }: { scorecard: Scorecard }) {
                     </Badge>
                   )}
                 </td>
-                <td className="px-4 py-3 text-ui leading-snug text-muted-foreground">{scenario.detail}</td>
+                <td className="px-4 py-3 text-ui leading-snug text-muted-foreground">
+                  {scenario.detail}
+                  {!scenario.pass && scenario.cause ? <span className="mt-1 block text-foreground">Cause: {scenario.cause}</span> : null}
+                </td>
               </tr>
             ))}
           </tbody>
