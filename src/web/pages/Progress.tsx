@@ -219,7 +219,7 @@ export function ProgressView({
                     <TrackChip track={entry.problem.track} />
                   </span>
                 </span>
-                <span className={cn("shrink-0 text-ui", entry.due ? "font-semibold text-warning" : "text-muted-foreground")}>{redoDueText(entry.dueOn, now)}</span>
+                <span className={cn("shrink-0 text-ui", entry.due ? "font-semibold text-warning" : "text-muted-foreground")}>{redoDueText(entry.dueOn, now, entry.due)}</span>
               </li>
             ))}
           </ul>
@@ -342,14 +342,15 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
               variant="default"
               busy={data.starting === key}
               disabled={data.starting !== null}
+              aria-describedby="gap-why"
               onClick={() => data.start(gap.item.problemId, "guided", { title: gap.gap.title, goodLooksLike: gap.gap.goodLooksLike })}
             >
               <PlayFilledIcon size={14} />
               Practise this gap
             </Button>
-            <p className="max-w-[44ch] text-ui text-muted-foreground">
-              A 20-minute guided round on {gap.item.title}, aimed at &ldquo;{gap.gap.title}&rdquo;. That gap is still open from your round on {shortDay(gap.item.createdAt)}, and it
-              names {focus.name}, your lowest skill.
+            <p id="gap-why" className="max-w-[44ch] text-ui text-muted-foreground">
+              A 20-minute guided round on {gap.item.title}, aimed at &ldquo;{gap.gap.title}&rdquo;. That gap is still open from your round on{" "}
+              {shortDay(gap.item.endedAt ?? gap.item.createdAt)}, and it names {focus.name}, your lowest skill.
             </p>
           </>
         ) : (
@@ -573,10 +574,10 @@ function RedosCard({ queue, now, onSeeAll }: { queue: RedoEntry[]; now: Date; on
               <span className="truncate text-body font-semibold">{entry.problem.title}</span>
               {entry.due ? (
                 <span className="shrink-0 rounded-full bg-primary-soft px-3 py-1 text-meta font-semibold text-primary-soft-foreground ring-1 ring-inset ring-primary/40">
-                  {redoDueText(entry.dueOn, now)}
+                  {redoDueText(entry.dueOn, now, entry.due)}
                 </span>
               ) : (
-                <span className="shrink-0 text-ui text-muted-foreground">{redoDueText(entry.dueOn, now)}</span>
+                <span className="shrink-0 text-ui text-muted-foreground">{redoDueText(entry.dueOn, now, entry.due)}</span>
               )}
             </li>
           ))}

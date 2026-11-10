@@ -508,7 +508,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
 - **Switch.** A segmented control, Rounds and Drills. Drills carries "N due" in an amber pill. `/practice` opens Rounds and
   `/practice/drills` opens Drills. "Practise any question" sits in the page header and opens its own page with the same
   fields and limits as before.
-- **Rounds.** Track (HLD, LLD, My questions, each with a count) and filter (Fresh first, Redo due, All). One raised list
+- **Rounds.** Track (HLD, LLD, My questions, each with a count) and filter (Not tried first, Redo due, All). One raised list
   with groups; a row has a mark, title, difficulty and a two-line state, and no button. The state word is the same one the detail
   panel shows under Status: Not tried, Partly done, Redo due, Round open or Done. The second line says how the last try
   went, or, for a redo, when it fell due. The detail is a sticky raised

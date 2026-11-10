@@ -31,7 +31,6 @@ export function isOpenRound(item: Pick<SessionHistoryItem, "status">): boolean {
   return item.status === "live" || item.status === "paused";
 }
 
-/** A round that finished: it is an attempt, it is not open, and it did not fail. */
 export function isFinishedAttempt(item: SessionHistoryItem): boolean {
   return isAttempt(item) && !isOpenRound(item) && item.status !== "failed";
 }

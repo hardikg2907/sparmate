@@ -11,10 +11,11 @@ function daysSince(day: string, now: Date): number {
 
 /**
  * The one wording for when a redo falls due, on Today, Practice and Progress. An overdue redo names the day it fell
- * due, so a redo that waited ten days does not read like one that is due today.
+ * due, so a redo that waited ten days does not read like one that is due today. `due` is false for a redo that has no
+ * date and was not marked due, which the tracker alone can produce.
  */
-export function redoDueText(dueOn: string | null, now: Date): string {
-  if (!dueOn) return "Due now";
+export function redoDueText(dueOn: string | null, now: Date, due = true): string {
+  if (!dueOn) return due ? "Due now" : "No due date";
   const days = daysSince(dueOn, now);
   if (days < 0) return `Due ${shortDay(parseDay(dueOn))}`;
   if (days === 0) return "Due today";
@@ -25,5 +26,5 @@ export function redoDueText(dueOn: string | null, now: Date): string {
 export function untriedText(problem: Pick<ProblemSummary, "trackerMark" | "redoDueOn">): string {
   if (problem.trackerMark !== "[~]") return "No earlier try of this problem.";
   const marked = problem.redoDueOn ? addDays(problem.redoDueOn, -REDO_AFTER_DAYS) : null;
-  return `No round of it is saved here. Your tracker marks it partly done${marked ? `, last on ${dayMonth(marked)}` : ""}.`;
+  return `No round of it is saved here. Your tracker marks it partly done${marked ? `, dated ${dayMonth(marked)}` : ""}.`;
 }

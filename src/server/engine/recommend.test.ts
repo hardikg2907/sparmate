@@ -45,6 +45,22 @@ describe("last attempt", () => {
   });
 });
 
+describe("last attempt day", () => {
+  const marks = new Map<string, TrackerBullet>([["c2-url", { lineIndex: 10, mark: "[~]", suffix: "" }]]);
+  const summary = (h: SessionSummary) => buildProblemSummaries(problems, { bullets: marks, lastLogTrack: null }, [h], "2026-11-10").find((p) => p.id === "c2-url");
+
+  it("dates a round by the day it ended, so the redo clock starts when the round did not just begin", () => {
+    const began = new Date(2026, 9, 25, 23, 0).toISOString();
+    const ended = new Date(2026, 9, 27, 9, 0).toISOString();
+    expect(summary({ ...session("c2-url", "hld", began), endedAt: ended })).toMatchObject({ lastAttempt: { date: "2026-10-27" }, redoDueOn: "2026-11-03", badge: "redo" });
+  });
+
+  it("falls back to the start day for a round with no end time", () => {
+    const began = new Date(2026, 9, 25, 23, 0).toISOString();
+    expect(summary(session("c2-url", "hld", began))?.lastAttempt?.date).toBe("2026-10-25");
+  });
+});
+
 describe("recommendation", () => {
   const marks = bullets([
     ["b3-lot", { lineIndex: 230, mark: "[~]", suffix: "→ notes/b3-parking-lot.md · 2026-10-25" }],

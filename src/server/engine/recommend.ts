@@ -1,6 +1,7 @@
 import type { Track } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import type { ProblemSummary, TrackerMark } from "../../shared/types";
+import { roundEndedDay } from "../../shared/today";
 import { localDate } from "./fsutil";
 import type { SessionSummary } from "./store";
 
@@ -84,7 +85,13 @@ export function buildProblemSummaries(problems: readonly Problem[], tracker: Tra
     const bullet = p.meta.tracker ? (tracker.bullets.get(p.meta.id) ?? null) : null;
     const latest = latestByProblem.get(p.meta.id) ?? null;
     const lastAttempt = latest
-      ? { sessionId: latest.id, date: localDate(new Date(latest.createdAt)), mode: latest.mode, verdict: latest.verdict, readiness: latest.readiness ?? null }
+      ? {
+          sessionId: latest.id,
+          date: roundEndedDay(latest) ?? localDate(new Date(latest.createdAt)),
+          mode: latest.mode,
+          verdict: latest.verdict,
+          readiness: latest.readiness ?? null,
+        }
       : null;
     let badge: ProblemSummary["badge"] = null;
     let redoDueOn: string | null = null;

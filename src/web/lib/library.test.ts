@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
-import { STATUS_LABEL, libraryGroups, openRoundFor, problemStatus, tabCounts } from "./library";
+import { libraryGroups, openRoundFor, problemStatus, rowDetail, tabCounts } from "./library";
 
 function problem(id: string, extra: Partial<ProblemSummary> = {}): ProblemSummary {
   return { id, track: "hld", title: id, difficulty: "medium", tags: [], trackerMark: "[ ]", lastAttempt: null, summary: "", badge: null, custom: false, ...extra };
@@ -38,7 +38,7 @@ describe("libraryGroups", () => {
   it("puts fresh problems first and the rest under Tried before", () => {
     const groups = libraryGroups(catalog, "hld", "fresh");
     expect(groups.map((g) => [g.label, g.problems.map((p) => p.id)])).toEqual([
-      ["Fresh", ["a", "b"]],
+      ["Not tried", ["a", "b"]],
       ["Tried before", ["c", "d"]],
     ]);
   });
@@ -82,12 +82,20 @@ describe("problemStatus", () => {
   });
 });
 
-describe("STATUS_LABEL", () => {
-  it("gives every state one name", () => {
-    expect(STATUS_LABEL).toEqual({ fresh: "Not tried", redo: "Redo due", open: "Round open", partly: "Partly done", done: "Done" });
+describe("rowDetail", () => {
+  const now = new Date(2026, 10, 12, 10);
+
+  it("names the day an overdue redo fell due", () => {
+    expect(rowDetail(problem("c", { trackerMark: "[~]", badge: "redo", redoDueOn: "2026-10-31", lastAttempt: attempt }), "redo", now)).toBe("Due since 31 Oct");
   });
 
-  it("calls a problem with an earlier try but no tracker mark partly done", () => {
-    expect(problemStatus(problem("x", { trackerMark: "[ ]", lastAttempt: attempt }), [])).toBe("partly");
+  it("gives the last try's own result and day, and a plain line when it has no result", () => {
+    const guided = { ...attempt, mode: "guided" as const, readiness: "not_yet" as const, date: "2026-11-03" };
+    expect(rowDetail(problem("p", { trackerMark: "[~]", lastAttempt: guided }), "partly", now)).toBe("Not yet · 3 Nov");
+    expect(rowDetail(problem("q", { lastAttempt: attempt }), "partly", now)).toBe("Tried 1 Nov");
+  });
+
+  it("has no line for a problem that was never tried", () => {
+    expect(rowDetail(problem("a"), "fresh", now)).toBeNull();
   });
 });

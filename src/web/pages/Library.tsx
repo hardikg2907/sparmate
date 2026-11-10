@@ -4,7 +4,6 @@ import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
 import { ChevronRightIcon, PlayFilledIcon, RedoIcon, WarnIcon } from "../components/icons";
 import { GUIDED_HINT, INTERVIEW_HINT, InfoTip, ModeSwitch, TrackChip, TrackIcon } from "../components/study";
 import { Alert, Badge, Button, Card, EmptyState, Segmented, Skeleton, TONE_TEXT, cn } from "../components/ui";
-import { dayMonth } from "../lib/dates";
 import { MODE_LABEL } from "../lib/format";
 import {
   FILTER_LABEL,
@@ -14,34 +13,24 @@ import {
   libraryGroups,
   openRoundFor,
   problemStatus,
+  rowDetail,
   tabCounts,
   type LibraryFilter,
   type LibraryTab,
   type ProblemStatus,
 } from "../lib/library";
-import { redoDueText } from "../lib/redoDue";
 import { useNow } from "../lib/useNow";
 import { scrollToInScroller } from "../lib/scrollInScroller";
 import { startKey, type StudyData } from "../lib/useStudyData";
-import { attemptBadge } from "../lib/verdict";
 import { modeFor } from "../../shared/today";
 import { Link, useHash } from "../router";
 import type { PageContext } from "./context";
 
 const DEBRIEF_MINUTES = 15;
 
-/** The second line of a row: when the redo fell due, or how the last try went. */
-function detailOf(problem: ProblemSummary, status: ProblemStatus, now: Date): string | null {
-  if (status === "redo") return redoDueText(problem.redoDueOn ?? null, now);
-  const last = problem.lastAttempt;
-  if (!last) return null;
-  const badge = attemptBadge(last);
-  return badge ? `${badge.label} · ${dayMonth(last.date)}` : `Tried ${dayMonth(last.date)}`;
-}
-
 function Mark({ status }: { status: ProblemStatus }) {
   return (
-    <span role="img" aria-label={STATUS_LABEL[status]} className="flex size-6 shrink-0 items-center justify-center">
+    <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center">
       {status === "redo" || status === "open" ? (
         <RedoIcon size={16} className="text-warning" />
       ) : status === "done" ? (
@@ -182,7 +171,7 @@ export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }
 }
 
 function ProblemRow({ problem, status, now, selected, onSelect }: { problem: ProblemSummary; status: ProblemStatus; now: Date; selected: boolean; onSelect: () => void }) {
-  const detail = detailOf(problem, status, now);
+  const detail = rowDetail(problem, status, now);
   return (
     <li>
       <button

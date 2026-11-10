@@ -25,12 +25,13 @@ describe("redoDueText", () => {
 
   it("has a plain fallback for a redo with no date", () => {
     expect(redoDueText(null, NOW)).toBe("Due now");
+    expect(redoDueText(null, NOW, false)).toBe("No due date");
   });
 });
 
 describe("untriedText", () => {
   it("says where a redo with no saved round comes from", () => {
-    expect(untriedText({ trackerMark: "[~]", redoDueOn: "2026-11-07" })).toBe("No round of it is saved here. Your tracker marks it partly done, last on 31 Oct.");
+    expect(untriedText({ trackerMark: "[~]", redoDueOn: "2026-11-07" })).toBe("No round of it is saved here. Your tracker marks it partly done, dated 31 Oct.");
     expect(untriedText({ trackerMark: "[~]", redoDueOn: null })).toBe("No round of it is saved here. Your tracker marks it partly done.");
   });
 
