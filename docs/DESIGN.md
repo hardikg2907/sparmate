@@ -473,7 +473,8 @@ Today is one page for the whole day, and with data it fills the first screen at 
 - **Week strip.** Seven cells under the header, Monday first. Each shows the day name, the plan type (HLD, LLD, DSA,
   Redo or Rest) and a state mark. *Done* is filled with a tick. *Missed* is hollow, muted and dashed, with the type
   struck through. *Today* has the brand fill and a ring. *Planned* is a plain outlined cell, and *Rest* is quiet. An
-  HLD, LLD or Redo day is done when a round of that kind ended that day. A DSA day is done only when the DSA numbers
+  HLD, LLD or Redo day is done when a round of that kind ended that day, so a machine coding round on a system design
+  day leaves that day open, uncounted and with its system design hero. A DSA day is done only when the DSA numbers
   show a medium solved that day, and otherwise stays planned, because missing data is never a missed day. A past
   day of a round kind with no finished round is missed. On a phone the strip scrolls sideways inside its own row,
   with today centred.
