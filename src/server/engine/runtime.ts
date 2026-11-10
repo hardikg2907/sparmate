@@ -33,7 +33,19 @@ import type { CppRunner } from "../runner/cpp";
 import { applyProposal, planProposal } from "../study/bookkeeping";
 import { atomicWrite, resolveInside } from "../study/files";
 import { CheckerOutputSchema, checkerMessage, evidenceKey, mergeCheck, stepReadingText, type CheckerEvidence } from "./checker";
-import { CheckpointScheduler, formatClock, phaseOverCheckpoint, phaseWindows, planCheckpoints, roundTimeMs, type Checkpoint } from "./clock";
+import {
+  CheckpointScheduler,
+  formatClock,
+  phaseOverCheckpoint,
+  phaseWindows,
+  planCheckpoints,
+  roundTimeMs,
+  SILENCE_GAP_MS,
+  SILENCE_SETTLE_MS,
+  SILENCE_WINDOW_MS,
+  silenceCheckpoint,
+  type Checkpoint,
+} from "./clock";
 import type { ServerConfig } from "./config";
 import {
   candidateLines,
@@ -138,6 +150,26 @@ function phaseOverLabel(phase: string): string {
   return `clock: twice the planned time in phase "${phase}"`;
 }
 
+/** The hidden note a clock turn leaves in the transcript. */
+function clockLabel(cp: Checkpoint): string {
+  switch (cp.kind) {
+    case "phase_end":
+      return `clock: planned end of phase "${cp.phase}"`;
+    case "phase_over":
+      return phaseOverLabel(cp.phase ?? "");
+    case "extension":
+      return "clock: extension point";
+    case "five_minutes":
+      return "clock: five minutes left";
+    case "time_up":
+      return "clock: time up";
+    case "silence":
+      return "clock: candidate quiet";
+    case "overtime":
+      return "clock: planned length reached";
+  }
+}
+
 function settleWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), ms);
@@ -191,6 +223,8 @@ interface QueuedTurn {
   /** Built when the turn is sent, so it carries the context of that moment. Null skips the turn. */
   build(): BuiltTurn | null;
   after?(storedText: string): Promise<void> | void;
+  /** For a clock turn: the checkpoint it answers. */
+  checkpoint?: Checkpoint["kind"];
 }
 
 interface ChannelState {
@@ -262,6 +296,12 @@ export class SessionRuntime {
   private readonly pngWaits = new Map<string, { remaining: number; finish: (png: Buffer | null) => void }>();
   private pendingRun: RunView | null = null;
   private lastCandidateAt: number | null = null;
+  /** Round time of his last sign of work: chat, a board, code or notes edit, a run, a button, a step move, a resume. */
+  private activeAt = 0;
+  /** Round time of the interviewer's last shown line. */
+  private spokeAt = 0;
+  /** The start of the quiet stretch that already had its check-in. */
+  private silenceSpentFor: number | null = null;
   private endRequested = false;
   private boardLooksThisTurn = 0;
   private rechecksThisTurn = 0;
@@ -341,6 +381,10 @@ export class SessionRuntime {
     }
     this.checkpoints = planCheckpoints(s.track, s.mode, s.durationMs, this.plan);
     this.firedCheckpoints = CheckpointScheduler.restoreFired(this.checkpoints, this.roundNow(), s.extension !== null);
+    // The planned-length line leaves a hidden note when it is spoken, so a line a restart cut off still comes.
+    if (!s.transcript.some((e) => e.kind === "clock" && e.text === clockLabel({ id: "overtime", kind: "overtime", atMs: 0 }))) {
+      this.firedCheckpoints.delete("overtime");
+    }
     this.scheduler = new CheckpointScheduler({
       checkpoints: this.checkpoints,
       fired: this.firedCheckpoints,
@@ -348,6 +392,9 @@ export class SessionRuntime {
       running: () => this.session.status === "live" && !this.disposed,
       onDue: (cp) => this.onCheckpoint(cp),
     });
+    // What he did before a restart is not all saved, so the quiet window starts again from here.
+    this.activeAt = this.roundNow();
+    this.spokeAt = [...s.transcript].reverse().find((e) => e.channel === "interview" && e.role === "interviewer" && !e.hidden)?.at ?? 0;
     if (s.status === "live" || s.status === "paused") {
       this.startWatcher();
       // A round that stopped before its opening reply still owes him the opening, ahead of anything he said.
@@ -359,6 +406,7 @@ export class SessionRuntime {
         this.interview.error = "The interviewer could not answer. Press Retry to continue.";
       }
       this.armPhaseOver();
+      this.armSilence();
       this.scheduler.reschedule();
       this.syncAwayTimer();
     }
@@ -401,6 +449,8 @@ export class SessionRuntime {
       if (ch.status !== "idle") peer.send({ type: "agent.status", channel: ch.name, state: ch.status, ...(ch.error ? { error: ch.error } : {}) });
     }
     if (this.session.status === "debriefing" && this.lastProgress) peer.send(this.lastProgress);
+    // A check-in that fell while the room was empty was dropped, so one that is now overdue comes back shortly.
+    if (this.session.status === "live" && !this.disposed) this.armSilence();
   }
 
   detach(peer: Peer): void {
@@ -561,6 +611,9 @@ export class SessionRuntime {
           return this.onPngResult(msg.requestId, msg.pngBase64);
         case "code.update":
           return await this.onCodeUpdate(msg.version, msg.content, peer);
+        case "chat.composing":
+          if (this.session.status === "live") this.markActive();
+          return;
         case "code.run":
           await this.onCodeRun();
           return;
@@ -616,6 +669,7 @@ export class SessionRuntime {
     this.requireLiveRound();
     const entry = this.addEntry({ channel: "interview", role: "candidate", text }, clientMsgId);
     this.lastCandidateAt = entry.at;
+    this.markActive();
     this.enqueue(this.interview, this.candidateTurn(text));
   }
 
@@ -636,6 +690,7 @@ export class SessionRuntime {
       this.warnOnce("graph", "Could not build the board graph; keeping the previous text", err);
     }
     s.board = { version, graphText, updatedAt: this.roundNow() };
+    this.markActive();
     this.saveSoon();
     const board = { version, elements };
     this.boardWrites = this.boardWrites
@@ -652,6 +707,7 @@ export class SessionRuntime {
     if (version <= s.stepNotesVersion) return;
     s.stepNotes = { ...s.stepNotes, [phase]: text };
     s.stepNotesVersion = version;
+    this.markActive();
     this.saveSoon();
     for (const p of this.peers) if (p !== from) p.send({ type: "notes.changed", phase, text, version });
   }
@@ -678,6 +734,7 @@ export class SessionRuntime {
   private onGuided(kind: "feedback" | "hint" | "stuck"): void {
     if (this.session.mode !== "guided") throw new UserError("not_guided", "Step checks, hints and model answers are only for guided rounds.");
     this.requireLiveRound();
+    this.markActive();
     const label = this.currentPhase()?.label ?? this.session.phase;
     const noted = kind === "feedback" ? `Asked for a check of ${label}.` : kind === "hint" ? `Asked for a hint on ${label}.` : `Asked for a model answer for ${label}.`;
     this.addEntry({ channel: "interview", role: "system", kind: "note", text: noted });
@@ -725,6 +782,7 @@ export class SessionRuntime {
       s.pauseStartedAt = null;
       s.pauseReason = null;
       s.status = "live";
+      this.markActive();
       await this.saveNow();
       this.sendState();
       this.scheduler?.reschedule();
@@ -785,6 +843,7 @@ export class SessionRuntime {
     const label = this.phases.find((p) => p.id === phase)?.label ?? phase;
     this.addEntry({ channel: "interview", role: "system", kind: "phase", text: by === "candidate" ? `Moved to ${label}.` : `The interviewer moved the round to ${label}.` });
     if (by === "candidate") {
+      this.markActive();
       this.pending().push(`candidate moved to phase "${phase}" at ${formatClock(at)}`);
       this.saveSoon();
     }
@@ -811,6 +870,47 @@ export class SessionRuntime {
       this.checkpoints.push(cp);
       this.scheduler?.setCheckpoints(this.checkpoints);
     }
+  }
+
+  /** Any sign that he is working starts a new quiet stretch, which may earn its own check-in. */
+  private markActive(): void {
+    this.activeAt = this.roundNow();
+  }
+
+  /** The quiet stretch runs from his last activity or the interviewer's last shown line, whichever is later. */
+  private quietSince(): number {
+    return Math.max(this.activeAt, this.spokeAt);
+  }
+
+  private get silenceWindowMs(): number {
+    return SILENCE_WINDOW_MS[this.session.track][this.session.mode];
+  }
+
+  /**
+   * A check-in is due when the round is live with someone in the room, the stretch has had none yet, and it has been
+   * quiet for the whole window. The timer only says when to look; activity is read here, so edits never re-arm it.
+   */
+  private silenceDue(): boolean {
+    return this.session.status === "live" && this.peers.size > 0 && this.silenceSpentFor !== this.quietSince() && this.roundNow() - this.quietSince() >= this.silenceWindowMs;
+  }
+
+  /** Keeps exactly one pending silence check, timed from the current quiet stretch. */
+  private armSilence(): void {
+    const s = this.session;
+    this.checkpoints = this.checkpoints.filter((c) => c.kind !== "silence");
+    if (s.status === "live" || s.status === "paused") {
+      // A step nudge only speaks while he is still in that step, so only those can crowd the check-in.
+      const others = this.checkpoints.filter((c) => c.phase === undefined || c.phase === s.phase);
+      const now = this.roundNow();
+      // A stretch that is already a full window old and never had its check-in (it fell while nobody was in the room)
+      // gets it shortly, once someone is there to see it. One already waiting in the queue needs no second.
+      const queued = this.interview.queue.some((t) => t.checkpoint === "silence");
+      const overdue = this.peers.size > 0 && !queued && this.silenceSpentFor !== this.quietSince() && now - this.quietSince() >= this.silenceWindowMs;
+      const quietFrom = overdue ? now + SILENCE_SETTLE_MS - this.silenceWindowMs : this.quietSince();
+      this.checkpoints.push(silenceCheckpoint(quietFrom, this.silenceWindowMs, now, others, this.firedCheckpoints));
+    }
+    this.scheduler?.setCheckpoints(this.checkpoints);
+    this.scheduler?.reschedule();
   }
 
   private checkRun(phase: string): StepCheckRun {
@@ -987,6 +1087,14 @@ export class SessionRuntime {
 
   private onCheckpoint(cp: Checkpoint): void {
     if (this.session.status !== "live") return;
+    if (cp.kind === "silence") {
+      if (this.silenceDue()) this.enqueue(this.interview, this.clockQueued(cp));
+      // The scheduler is still walking its list, so the next check-in is armed once it has finished.
+      queueMicrotask(() => {
+        if (!this.disposed) this.armSilence();
+      });
+      return;
+    }
     if ((cp.kind === "phase_end" || cp.kind === "phase_over") && this.session.phase !== cp.phase) return;
     if (cp.kind === "time_up") {
       void this.endRound("time");
@@ -1371,32 +1479,40 @@ export class SessionRuntime {
   }
 
   private clockQueued(cp: Checkpoint, onSettled?: () => Promise<void> | void): QueuedTurn {
+    // The stretch this check-in answers, read when it is sent: work he does while it is out starts a new one.
+    let stretch: number | null = null;
     return {
       kind: "clock",
+      checkpoint: cp.kind,
       build: () => {
         const status = this.session.status;
         if (cp.kind === "time_up" ? status !== "ended" : status !== "live") return null;
         if ((cp.kind === "phase_end" || cp.kind === "phase_over") && this.session.phase !== cp.phase) return null;
         // A step that already passed has the "Move on" button; an offer would only nag.
         if (cp.kind === "phase_over" && this.session.stepVerdicts?.[cp.phase ?? ""]?.verdict === "pass") return null;
+        // He may have started work, or the interviewer may have spoken, while this turn waited in line.
+        if (cp.kind === "silence") {
+          if (!this.silenceDue()) return null;
+          stretch = this.quietSince();
+        }
+        // The planned-length line already asks him whether to go on, so a move-on offer next to it would only repeat it.
+        // Its hidden note still marks the step as offered, so a restart does not bring the offer back at once.
+        if (cp.kind === "phase_over" && Math.abs(this.roundNow() - this.session.durationMs) < SILENCE_GAP_MS) {
+          this.addEntry({ channel: "interview", role: "system", kind: "clock", hidden: true, text: clockLabel(cp) });
+          return null;
+        }
         const since = this.lastCandidateAt === null ? null : Math.max(0, this.roundNow() - this.lastCandidateAt);
+        const detail = { quietMs: this.roundNow() - this.quietSince(), plannedMs: this.session.durationMs };
         return {
-          turn: { text: clockTurn(this.timeView(), since, cp.kind, this.session.track), meta: { kind: "clock", checkpoint: cp.kind } },
+          turn: { text: clockTurn(this.timeView(), since, cp.kind, this.session.track, detail), meta: { kind: "clock", checkpoint: cp.kind } },
           commit: () => {},
         };
       },
       after: async (text) => {
-        const label =
-          cp.kind === "phase_end"
-            ? `clock: planned end of phase "${cp.phase}"`
-            : cp.kind === "phase_over"
-              ? phaseOverLabel(cp.phase ?? "")
-              : cp.kind === "extension"
-                ? "clock: extension point"
-                : cp.kind === "five_minutes"
-                  ? "clock: five minutes left"
-                  : "clock: time up";
-        this.addEntry({ channel: "interview", role: "system", kind: "clock", hidden: true, text: label });
+        // Marked only once the turn went through, so a failed send leaves the stretch its check-in. A shown check-in
+        // line belongs to its stretch, so it never opens a new one; after a silent reply the stretch stays as it was sent.
+        if (cp.kind === "silence") this.silenceSpentFor = text ? this.quietSince() : stretch;
+        this.addEntry({ channel: "interview", role: "system", kind: "clock", hidden: true, text: clockLabel(cp) });
         if (cp.kind === "extension" && text) {
           this.session.extension = { at: this.roundNow(), text };
           this.addEntry({ channel: "interview", role: "system", kind: "extension", text: "The interviewer introduced the extension." });
@@ -1873,6 +1989,7 @@ export class SessionRuntime {
     this.creditStepCode(this.codeContent, content);
     this.codeContent = content;
     s.code.version += 1;
+    this.markActive();
     this.saveSoon();
     this.broadcast({ type: "code.external", version: s.code.version, content });
     this.scheduleCheck();
@@ -1890,6 +2007,7 @@ export class SessionRuntime {
     }
     if (Buffer.byteLength(content) > LIMITS.codeBytes) throw new UserError("too_large", "The code is too large to save.");
     s.code.version = version;
+    this.markActive();
     this.creditStepCode(this.codeContent, content);
     this.codeContent = content;
     const hash = sha256Hex(content);
@@ -1937,6 +2055,7 @@ export class SessionRuntime {
     const s = this.session;
     if (s.track !== "lld" || !s.code) throw new UserError("not_lld", "This round has no code file.");
     if (s.status !== "live" && s.status !== "paused") throw new UserError("not_live", "The round is over.");
+    this.markActive();
     await this.runProgram("candidate");
   }
 
@@ -2304,6 +2423,7 @@ export class SessionRuntime {
       ...(e.hidden ? { hidden: true } : {}),
     };
     this.session.transcript.push(entry);
+    if (entry.channel === "interview" && entry.role === "interviewer" && !entry.hidden) this.spokeAt = entry.at;
     void this.saveNow();
     if (!entry.hidden) this.broadcast({ type: "chat.message", entry, ...(clientMsgId ? { clientMsgId } : {}) });
     return entry;

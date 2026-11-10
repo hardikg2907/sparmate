@@ -9,6 +9,8 @@ import {
   phaseWindows,
   planCheckpoints,
   roundTimeMs,
+  SILENCE_GAP_MS,
+  silenceCheckpoint,
   timeInPhase,
   type Checkpoint,
 } from "./clock";
@@ -55,10 +57,15 @@ describe("planCheckpoints", () => {
     expect(cps.at(-1)?.kind).toBe("time_up");
   });
 
-  it("keeps only the phase_end nudges in guided mode, and none of the move-on offers", () => {
+  it("keeps the phase_end nudges and one planned-length line in guided mode, and none of the move-on offers", () => {
     const cps = planCheckpoints("hld", "guided", 45 * MIN, phasePlan("hld", 45));
-    expect(cps.every((c) => c.kind === "phase_end")).toBe(true);
-    expect(cps).toHaveLength(4);
+    expect(cps.filter((c) => c.kind === "phase_end")).toHaveLength(4);
+    expect(cps.at(-1)).toEqual({ id: "overtime", kind: "overtime", atMs: 45 * MIN });
+    expect(cps).toHaveLength(5);
+  });
+
+  it("gives an interview round no planned-length line, because time up ends it", () => {
+    expect(planCheckpoints("lld", "interview", 120 * MIN, phasePlan("lld", 120)).some((c) => c.kind === "overtime")).toBe(false);
   });
 
   it("ends the last planned window exactly at time-up for every round length", () => {
@@ -91,6 +98,34 @@ describe("planCheckpoints", () => {
   it("computes planned windows from the scaled plan", () => {
     const w = phaseWindows(phasePlan("hld", 45));
     expect(w[2]).toEqual({ id: "api", startMs: 7 * MIN, endMs: 12 * MIN });
+  });
+});
+
+describe("silenceCheckpoint", () => {
+  const none = new Set<string>();
+
+  it("falls one window after the round went quiet", () => {
+    expect(silenceCheckpoint(2 * MIN, 4 * MIN, 3 * MIN, [], none)).toEqual({ id: `silence:${6 * MIN}`, kind: "silence", atMs: 6 * MIN });
+  });
+
+  it("waits a full window from now once that moment has passed", () => {
+    expect(silenceCheckpoint(2 * MIN, 4 * MIN, 9 * MIN, [], none).atMs).toBe(13 * MIN);
+  });
+
+  it("steps past a pending clock event next to it, so the two never speak back to back", () => {
+    const others: Checkpoint[] = [
+      { id: "phase_end:api", kind: "phase_end", atMs: 6 * MIN + 20_000, phase: "api" },
+      { id: "phase_end:design", kind: "phase_end", atMs: 6 * MIN + 70_000, phase: "design" },
+    ];
+    expect(silenceCheckpoint(2 * MIN, 4 * MIN, 3 * MIN, others, none).atMs).toBe(6 * MIN + 70_000 + SILENCE_GAP_MS);
+  });
+
+  it("ignores events that already fired and events far from it", () => {
+    const others: Checkpoint[] = [
+      { id: "phase_end:api", kind: "phase_end", atMs: 6 * MIN, phase: "api" },
+      { id: "five_minutes", kind: "five_minutes", atMs: 20 * MIN },
+    ];
+    expect(silenceCheckpoint(2 * MIN, 4 * MIN, 3 * MIN, others, new Set(["phase_end:api"])).atMs).toBe(6 * MIN);
   });
 });
 

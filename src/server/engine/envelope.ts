@@ -156,7 +156,20 @@ export function requestTurn(v: ContextView, body: string): string {
 
 const SILENT_LINE = "Say one short line only if a real interviewer would speak now. Otherwise reply with exactly <silent/>.";
 
-export function clockInstruction(kind: CheckpointKind, track: Track): string {
+/** Facts a clock instruction may need beyond its kind. */
+export interface ClockDetail {
+  /** For silence: how long he has been quiet. */
+  quietMs?: number;
+  /** For overtime: the round's planned length. */
+  plannedMs?: number;
+}
+
+function minutesText(ms: number): string {
+  const min = Math.max(1, Math.round(ms / 60_000));
+  return min === 1 ? "about a minute" : `about ${min} minutes`;
+}
+
+export function clockInstruction(kind: CheckpointKind, track: Track, detail: ClockDetail = {}): string {
   switch (kind) {
     case "phase_end":
       return `The planned time for this phase is over and the candidate is still in it. ${SILENT_LINE}`;
@@ -170,12 +183,18 @@ export function clockInstruction(kind: CheckpointKind, track: Track): string {
       return "Five minutes are left. You may warn the candidate in one short line. Otherwise reply with exactly <silent/>.";
     case "time_up":
       return "Time is up. Close the round in one or two sentences. Give no feedback and no signal about how it went.";
+    case "silence": {
+      const work = track === "lld" ? "the code, the board and the step notes" : "the board and the step notes";
+      return `The candidate has sent nothing, and nothing in ${work} has changed, for ${minutesText(detail.quietMs ?? 0)}. Check in once with one short line that invites them to talk you through where they are. Give no hint, name no concern and point at no area. Reply with exactly <silent/> only if they said they wanted time to work alone.`;
+    }
+    case "overtime":
+      return `The round has reached its planned length of ${minutesText(detail.plannedMs ?? 0)}. Reply with one short line that says so and leaves the choice to the candidate: finish what they are on, or end the round. Give no feedback. This turn is never silent.`;
   }
 }
 
-export function clockTurn(time: TimeView, sinceCandidateMs: number | null, kind: CheckpointKind, track: Track): string {
+export function clockTurn(time: TimeView, sinceCandidateMs: number | null, kind: CheckpointKind, track: Track, detail: ClockDetail = {}): string {
   const last = sinceCandidateMs === null ? "none yet" : `${formatClock(sinceCandidateMs)} ago`;
-  return `<clock>\n${timeLine(time)} · candidate's last message: ${last}\n${clockInstruction(kind, track)}\n</clock>`;
+  return `<clock>\n${timeLine(time)} · candidate's last message: ${last}\n${clockInstruction(kind, track, detail)}\n</clock>`;
 }
 
 const SILENT = /<silent\s*\/>/gi;

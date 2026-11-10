@@ -21,6 +21,9 @@ import {
 import { chatItems, initialState, reducer, type Action } from "./reducer";
 import type { SessionActions, SessionController, SessionSource } from "./types";
 
+/** A long answer takes minutes to write; one signal this often keeps the quiet check from interrupting it. */
+const COMPOSING_EVERY_MS = 30_000;
+
 const SERVER_TYPES = [
   "session.state",
   "chat.delta",
@@ -339,7 +342,15 @@ export function useSessionController(source: SessionSource): SessionController {
       else flushCode(io, socketRef);
     };
 
+    let lastComposing = 0;
+
     return {
+      composing() {
+        const now = Date.now();
+        if (now - lastComposing < COMPOSING_EVERY_MS) return;
+        // Silent on failure: this is a hint for the server's quiet check, and no user action depends on it.
+        if (socketRef.current?.send({ type: "chat.composing" })) lastComposing = now;
+      },
       sendChat(channel: Channel, text: string) {
         const trimmed = text.trim();
         if (!trimmed) return false;

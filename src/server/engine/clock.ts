@@ -11,7 +11,7 @@ export function roundTimeMs(clock: ClockFields, nowMs: number): number {
   return Math.max(0, end - started - clock.pausedMs - currentPause);
 }
 
-export type CheckpointKind = "phase_end" | "phase_over" | "extension" | "five_minutes" | "time_up";
+export type CheckpointKind = "phase_end" | "phase_over" | "extension" | "five_minutes" | "time_up" | "silence" | "overtime";
 
 export interface Checkpoint {
   id: string;
@@ -34,9 +34,10 @@ export function phaseWindows(plan: readonly { id: string; minutes: number }[]): 
 }
 
 /**
- * Every checkpoint of a round. Guided rounds keep only the phase nudges: they count up, have no end and no
- * extension. The last phase's end is left out because time-up (or nothing, in guided mode) covers it. The guided
- * offer to move on depends on where the candidate is, so `phaseOverCheckpoint` builds it when a step is entered.
+ * Every checkpoint of a round. Guided rounds keep the phase nudges and one line at the planned length: they count
+ * up, have no end and no extension. The last phase's end is left out because time-up (or the planned-length line, in
+ * guided mode) covers it. The guided offer to move on depends on where the candidate is, so `phaseOverCheckpoint`
+ * builds it when a step is entered, and the silence check-in depends on his activity, so `silenceCheckpoint` builds it.
  */
 export function planCheckpoints(track: Track, mode: Mode, durationMs: number, plan: readonly { id: string; minutes: number }[]): Checkpoint[] {
   const out: Checkpoint[] = [];
@@ -49,6 +50,8 @@ export function planCheckpoints(track: Track, mode: Mode, durationMs: number, pl
     out.push({ id: "extension", kind: "extension", atMs: durationMs - EXTENSION_LEAD_MINUTES[track] * MINUTE });
     out.push({ id: "five_minutes", kind: "five_minutes", atMs: durationMs - 5 * MINUTE });
     out.push({ id: "time_up", kind: "time_up", atMs: durationMs });
+  } else {
+    out.push({ id: "overtime", kind: "overtime", atMs: durationMs });
   }
   return out.sort((a, b) => a.atMs - b.atMs);
 }
@@ -88,6 +91,40 @@ export function phaseOverCheckpoint(
   if (!step || index === plan.length - 1) return null;
   const left = Math.max(0, 2 * step.minutes * MINUTE - timeInPhase(history, plan[0]?.id, phase, nowMs));
   return { id: `phase_over:${phase}`, kind: "phase_over", atMs: nowMs + left, phase };
+}
+
+/**
+ * How long the candidate may stay quiet (no message, no board, code or notes change) before the interviewer or guide
+ * gets one check-in event. Quiet coding is normal, so machine coding waits longer, and a guided round leaves more room
+ * to think than an interview does.
+ */
+export const SILENCE_WINDOW_MS: Record<Track, Record<Mode, number>> = {
+  hld: { interview: 4 * MINUTE, guided: 6 * MINUTE },
+  lld: { interview: 8 * MINUTE, guided: 10 * MINUTE },
+};
+
+/** How soon an overdue check-in comes once someone is back in the room, so the page has settled first. */
+export const SILENCE_SETTLE_MS = 5_000;
+
+/** A check-in that lands next to another clock event would make two lines in a row, so it keeps this distance. */
+export const SILENCE_GAP_MS = MINUTE;
+
+/**
+ * The next silence check-in: one window after the round went quiet, or one window from now when that moment has
+ * passed (his stretch already had its check-in, or the event found him active). It steps past any pending clock event
+ * that falls within `SILENCE_GAP_MS` of it, so the other event speaks first and resets the quiet if it says anything.
+ */
+export function silenceCheckpoint(quietSinceMs: number, windowMs: number, nowMs: number, others: readonly Checkpoint[], fired: ReadonlySet<string>): Checkpoint {
+  let atMs = quietSinceMs + windowMs;
+  if (atMs <= nowMs) atMs = nowMs + windowMs;
+  const pending = others
+    .filter((c) => c.kind !== "silence" && !fired.has(c.id))
+    .map((c) => c.atMs)
+    .sort((a, b) => a - b);
+  for (const at of pending) {
+    if (Math.abs(at - atMs) < SILENCE_GAP_MS) atMs = at + SILENCE_GAP_MS;
+  }
+  return { id: `silence:${atMs}`, kind: "silence", atMs };
 }
 
 /** Pure: which checkpoints are due now, and when the next one falls. */

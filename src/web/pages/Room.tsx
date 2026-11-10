@@ -306,6 +306,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
               }
               empty={guided ? "The guide starts with the first step in a moment." : "The interviewer opens the conversation in a moment."}
               onSend={(text) => actions.sendChat("interview", text)}
+              onDraft={actions.composing}
               topSlot={!lld ? <StepChecklist step={session.steps[session.phase]} /> : null}
               afterOpening={lld && currentPhase ? <StepNeeds label={currentPhase.label} goal={currentPhase.goal} step={session.steps[session.phase]} /> : null}
               tools={

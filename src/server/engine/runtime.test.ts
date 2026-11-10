@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { teachMessage } from "../../shared/gaps";
+import { phasePlan } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import type { ServerMsg } from "../../shared/protocol";
 import { DEFAULT_SETTINGS, type Proposal, type Session } from "../../shared/types";
@@ -151,7 +152,7 @@ describe("a full interview round on the clock", () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
   afterEach(() => vi.useRealTimers());
 
-  it("nudges silently, delivers the extension, warns quietly, closes at time-up and debriefs", async () => {
+  it("nudges silently, checks in once, delivers the extension, warns quietly, closes at time-up and debriefs", async () => {
     const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
     const session = newSession("interview");
     const rt = await t.start(session);
@@ -159,13 +160,17 @@ describe("a full interview round on the clock", () => {
     expect(interviewerTexts(t.msgs)).toEqual(["Let's design a URL shortener, something like bit.ly. Where would you like to start?"]);
 
     await vi.advanceTimersByTimeAsync(5 * MIN);
-    // The planned end of requirements fired, the fake interviewer chose silence: nothing shown, a hidden note kept.
-    expect(interviewerTexts(t.msgs)).toHaveLength(1);
+    // Four quiet minutes earned one check-in. The planned end of requirements fired after it, and the fake interviewer
+    // chose silence there: nothing shown, a hidden note kept.
+    expect(interviewerTexts(t.msgs)).toEqual(["Let's design a URL shortener, something like bit.ly. Where would you like to start?", "Talk me through where you are."]);
+    expect(session.transcript.find((e) => e.role === "interviewer" && e.text.startsWith("Talk me"))?.at).toBe(4 * MIN);
     expect(session.transcript.some((e) => e.kind === "clock" && e.hidden && e.text.includes("requirements"))).toBe(true);
     expect(t.msgs.some((m) => m.type === "chat.message" && m.entry.hidden)).toBe(false);
 
     await vi.advanceTimersByTimeAsync(30 * MIN);
     const texts = interviewerTexts(t.msgs);
+    // The whole stretch stays quiet, so it never gets a second check-in.
+    expect(texts.filter((x) => x === "Talk me through where you are.")).toHaveLength(1);
     expect(texts.at(-1)).toMatch(/^Let's add something\. A celebrity posts one of our links/);
     expect(session.extension?.text).toBe(texts.at(-1));
     expect(session.extension?.at).toBeGreaterThanOrEqual(35 * MIN);
@@ -197,6 +202,267 @@ describe("a full interview round on the clock", () => {
     expect(session.transcript.some((e) => e.kind === "clock")).toBe(true);
     // Guided rounds never end on the clock.
     await vi.advanceTimersByTimeAsync(120 * MIN);
+    expect(session.status).toBe("live");
+    rt.dispose();
+  });
+});
+
+const CHECK_IN = "Talk me through where you are.";
+const checkIns = (msgs: ServerMsg[]) => interviewerTexts(msgs).filter((x) => x === CHECK_IN);
+
+describe("checking in on a quiet candidate", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("restarts the quiet window when he edits the board", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const rt = await t.start(newSession("interview"));
+    await vi.advanceTimersByTimeAsync(3 * MIN);
+    await rt.handle({ type: "board.update", version: 1, elements: [] }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("checks in once per quiet stretch, and again after he has spoken", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(15 * MIN);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    expect(session.transcript.filter((e) => e.kind === "clock" && e.text === "clock: candidate quiet")).toHaveLength(1);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Sorry, I was thinking about the read path." }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(2);
+    rt.dispose();
+  });
+
+  it("holds the window while paused and starts it again on resume", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    await rt.handle({ type: "session.pause" }, t.peer);
+    await vi.advanceTimersByTimeAsync(30 * MIN);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    expect(session.transcript.find((e) => e.text === CHECK_IN)?.at).toBe(6 * MIN);
+    rt.dispose();
+  });
+
+  it("drops a check-in that fell due while the interviewer was mid-reply, and counts the quiet from that reply", async () => {
+    const t = setup(slowWhen(saidBy("cache"), 5 * MIN));
+    const rt = await t.start(newSession("interview"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "Should I put a cache in front?" }, t.peer);
+    await vi.advanceTimersByTimeAsync(9 * MIN - 10_000);
+    expect(interviewerTexts(t.msgs)).toHaveLength(2);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("counts a written step answer and a message being typed as work", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(3 * MIN);
+    await rt.handle({ type: "chat.composing" }, t.peer);
+    await vi.advanceTimersByTimeAsync(3 * MIN);
+    await rt.handle({ type: "notes.update", phase: "requirements", text: "Short links, fast redirects.", version: 1 }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    expect(session.transcript.find((e) => e.text === CHECK_IN)?.at).toBe(10 * MIN);
+    rt.dispose();
+  });
+
+  it("opens a new stretch after an interviewer line that was not itself a check-in", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(39 * MIN + 1_000);
+    // One check-in at 4:00, then the extension at 35:00 is a question he has not answered for four minutes.
+    expect(checkIns(t.msgs)).toHaveLength(2);
+    expect(session.transcript.filter((e) => e.text === CHECK_IN).map((e) => e.at)).toEqual([4 * MIN, 39 * MIN]);
+    rt.dispose();
+  });
+
+  it("keeps the check-in when its first send fails and the conversation is rebuilt from the transcript", async () => {
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    let failed = false;
+    const driver: Driver = {
+      ...inner,
+      startConversation(s) {
+        const conv = inner.startConversation(s);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          async send(turn, handlers) {
+            if (s.resumeSessionId && turn.meta.checkpoint === "silence" && !failed) {
+              failed = true;
+              throw new DriverError("The model process stopped. Retry.");
+            }
+            if (turn.meta.kind === "replay") return { text: "<silent/>", stats: { durationMs: 1, costUsd: 0 } };
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    // Past the first check-in and the requirements nudge, so the next check-in is the first turn after the resume.
+    await vi.advanceTimersByTimeAsync(5.5 * MIN);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    await rt.handle({ type: "session.pause" }, t.peer);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 1_000);
+    expect(failed).toBe(true);
+    expect(session.status).toBe("live");
+    expect(checkIns(t.msgs)).toHaveLength(2);
+    rt.dispose();
+  });
+
+  it("brings a planned-length line that a restart cut off", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session: Session = {
+      ...newSession("guided"),
+      startedAt: new Date(Date.now() - 46 * MIN).toISOString(),
+      status: "paused",
+      pauseStartedAt: new Date().toISOString(),
+      pauseReason: "restart",
+      transcript: [{ id: "o1", at: 1_000, wall: new Date().toISOString(), channel: "interview", role: "interviewer", text: "Let's begin." }],
+    };
+    const rt = await t.start(session);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(interviewerTexts(t.msgs).filter((x) => x.startsWith("We've reached the planned time"))).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("drops a move-on offer that falls next to the planned-length line", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    const design = phasePlan("hld", 45).find((p) => p.id === "design")?.minutes ?? 0;
+    const enterAt = 45 * MIN - 2 * design * MIN;
+    for (let v = 1; v * 4 * MIN < enterAt; v++) {
+      await vi.advanceTimersByTimeAsync(4 * MIN);
+      await rt.handle({ type: "board.update", version: v, elements: [] }, t.peer);
+    }
+    await vi.advanceTimersByTimeAsync(enterAt - Math.floor(enterAt / (4 * MIN)) * 4 * MIN);
+    await rt.handle({ type: "phase.set", phase: "design" }, t.peer);
+    for (let v = 100; v < 108; v++) {
+      await vi.advanceTimersByTimeAsync(4 * MIN);
+      await rt.handle({ type: "board.update", version: v, elements: [] }, t.peer);
+    }
+    await vi.advanceTimersByTimeAsync(Math.max(0, 45 * MIN + 30_000 - (enterAt + 32 * MIN)));
+    const texts = interviewerTexts(t.msgs);
+    expect(texts.filter((x) => x.startsWith("We've reached the planned time"))).toHaveLength(1);
+    const lateOffers = session.transcript.filter((e) => e.role === "interviewer" && e.at >= enterAt && e.text.startsWith("You are well past the plan"));
+    expect(lateOffers).toHaveLength(0);
+    rt.dispose();
+  });
+
+  it("brings back a check-in that fell while the page was reconnecting", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    // Work at 2:00 puts the check-in at 6:00, clear of the requirements nudge at 5:00.
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    await rt.handle({ type: "board.update", version: 1, elements: [] }, t.peer);
+    await vi.advanceTimersByTimeAsync(3 * MIN + 50_000);
+    rt.detach(t.peer);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    rt.attach(t.peer);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    const at = session.transcript.find((e) => e.text === CHECK_IN)?.at ?? 0;
+    expect(at).toBeGreaterThan(6 * MIN + 10_000);
+    expect(at).toBeLessThan(6 * MIN + 20_000);
+    rt.dispose();
+  });
+
+  it("leaves the new stretch open when he starts work while a check-in turn answers with silence", async () => {
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    let quietTurns = 0;
+    const driver: Driver = {
+      ...inner,
+      startConversation(s) {
+        const conv = inner.startConversation(s);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          async send(turn, handlers) {
+            if (turn.meta.checkpoint === "silence" && quietTurns++ === 0) {
+              await new Promise((resolve) => setTimeout(resolve, 10_000));
+              return { text: "<silent/>", stats: { durationMs: 1, costUsd: 0 } };
+            }
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 5_000);
+    await rt.handle({ type: "board.update", version: 1, elements: [] }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 5_000);
+    expect(quietTurns).toBe(2);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("does not repeat a planned-length line after a restart", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const wall = new Date().toISOString();
+    const session: Session = {
+      ...newSession("guided"),
+      startedAt: new Date(Date.now() - 46 * MIN).toISOString(),
+      status: "paused",
+      pauseStartedAt: wall,
+      pauseReason: "restart",
+      transcript: [
+        { id: "o1", at: 1_000, wall, channel: "interview", role: "interviewer", text: "Let's begin." },
+        { id: "o2", at: 45 * MIN, wall, channel: "interview", role: "interviewer", text: "We've reached the planned time." },
+        { id: "o3", at: 45 * MIN, wall, channel: "interview", role: "system", kind: "clock", hidden: true, text: "clock: planned length reached" },
+      ],
+    };
+    const rt = await t.start(session);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(interviewerTexts(t.msgs).filter((x) => x.startsWith("We've reached the planned time"))).toHaveLength(0);
+    rt.dispose();
+  });
+
+  it("gives a guided round a longer window and one line when it reaches its planned length", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(6 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    // Steady work from here on, so only the planned length speaks.
+    for (let v = 1; v <= 9; v++) {
+      await vi.advanceTimersByTimeAsync(4 * MIN);
+      await rt.handle({ type: "board.update", version: v, elements: [] }, t.peer);
+    }
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    const overtime = interviewerTexts(t.msgs).filter((x) => x.startsWith("We've reached the planned time"));
+    expect(overtime).toHaveLength(1);
+    expect(session.transcript.find((e) => e.kind === "clock" && e.text === "clock: planned length reached")?.at).toBeGreaterThanOrEqual(45 * MIN);
+    expect(checkIns(t.msgs)).toHaveLength(1);
     expect(session.status).toBe("live");
     rt.dispose();
   });
@@ -1190,7 +1456,7 @@ describe("the interviewer queue", () => {
     const t = setup(slowWhen(saidBy("short links"), 2 * MIN));
     const session = newSession("interview");
     const rt = await t.start(session);
-    await vi.advanceTimersByTimeAsync(4 * MIN);
+    await vi.advanceTimersByTimeAsync(3.5 * MIN);
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "c1", text: "We need short links and redirects." }, t.peer);
     // The planned end of requirements passes while that reply streams, so its nudge waits in the queue.
     await vi.advanceTimersByTimeAsync(1.5 * MIN);
@@ -1249,6 +1515,17 @@ describe("freezing the work at the end", () => {
     const rt = await t.start(session, problem);
     return { t, rt, session };
   }
+
+  it("waits longer before a check-in in machine coding, and a code edit restarts the wait", async () => {
+    const { t, rt } = await parkingLotRound();
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    await rt.handle({ type: "code.update", version: 1, content: `${HEADER}class Lot {};\n` }, t.peer);
+    await vi.advanceTimersByTimeAsync(8 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
 
   it("judges the code he typed just before he ended the round", async () => {
     const { t, rt, session } = await parkingLotRound();

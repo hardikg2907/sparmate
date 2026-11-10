@@ -360,13 +360,28 @@ if it is mid-reply, fire right after):
   interviewer to deliver the extension now in one short message, choosing from the brief's Curveballs or
   Extensions section. Store it as `session.extension`.
 - Five minutes left: a `<clock>` event; the interviewer may warn the candidate in one line.
+- Silence (both modes): when the candidate has sent nothing, and the board, the code and the step notes have not
+  changed, for a window (`SILENCE_WINDOW_MS` in `src/server/engine/clock.ts`: HLD 4 minutes in an interview and 6 in
+  a guided round, LLD 8 and 10, because quiet coding is normal), a `<clock>` event asks for one short check-in line
+  with no hint. A message, typing or dictating in the chat box (`chat.composing`), a board, code or notes edit, a
+  code run, a guided button, a step move and a resume each start a new quiet stretch, and so does a shown interviewer
+  line other than the check-in itself; a server start counts as activity too. Each stretch gets at most one
+  check-in, marked once its turn has gone through. The runtime keeps one pending silence checkpoint and reads
+  activity when it falls: if the round was not quiet for the whole window, it re-arms at the end of the new window.
+  It is armed a minute away from the other pending clock events of the current step and of the round, so the two
+  rarely speak back to back. A check-in that falls while the interviewer is mid-reply waits for the reply, and is
+  dropped when that reply was shown; one that falls while nobody is in the room is dropped, and it comes about five
+  seconds after someone is back.
 - Time up: status becomes `ended`; the interviewer gets a `<clock>` event to close in one or two sentences
   with no feedback; then the debrief starts. The page sends its last board and code edits as the clock reaches
   zero, so for 2 seconds after a time-up end the server still takes `board.update` and `code.update`, and the
   debrief waits for the window to close. After it, and after any other end, both are refused with `not_live`.
 
 Guided mode has no extension checkpoint and no time-up end: the clock counts up and the candidate ends it. It keeps
-the `phase_end` checkpoint of every step except the last (`planCheckpoints` in `src/server/engine/clock.ts`). It adds
+the `phase_end` checkpoint of every step except the last (`planCheckpoints` in `src/server/engine/clock.ts`), and one
+`overtime` checkpoint at the planned length: the guide says in one line that the planned time is reached and leaves
+the choice to finish the step or end the round; it is never `<silent/>`. A hidden clock note records it, so a line a
+restart cut off still comes, and a move-on offer that falls within a minute of it is dropped. It adds
 one `phase_over` offer, which depends on time in the step and not on the round clock. The offer for a step falls when
 his total time in that step, summed over every visit from `phaseHistory` with pauses left out, reaches twice the step's
 planned minutes (`phaseOverCheckpoint` and `timeInPhase`). When he enters a step that has not had its offer, the
@@ -470,7 +485,8 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 Same interface as the Claude driver, no network, deterministic, fast (stream a reply in a few chunks over
 about 300 ms):
 - interviewer/guide: first reply is the brief's "Opening prompt"; later replies are short phase-aware lines;
-  answers `<silent/>` to most clock events; delivers a canned extension at the extension checkpoint; calls
+  answers `<silent/>` to most clock events, with a check-in line on silence and a planned-length line in guided
+  mode; delivers a canned extension at the extension checkpoint; calls
   `set_phase` when the candidate's message contains "let's move to <phase label>".
 - tester: three scenarios, one pass and two fails that share one cause (all three fail, with the cause "Did not compile", when the code does not compile).
 - judge: a valid scorecard whose quotes are copied from real candidate lines (so quote checks pass), plus one
@@ -689,6 +705,8 @@ scribe read them.
   version, broadcast `code.external`, run the syntax check.
 - `code.run`: compile and run (section 8), store `code.lastRun`, send `code.run.result`, add a hidden `run`
   note for the next envelope.
+- `chat.composing`: the interview chat box changed, typed or dictated; the page sends it at most every 30 seconds.
+  It only starts a new quiet stretch for the silence check-in (section 5.5).
 - `phase.set`: validate, record, broadcast `phase.changed` and `session.state`; mention in the next envelope.
 - `guided.feedback` / `guided.hint` / `guided.stuck`: guided mode in a live round only (else an error, as for the
   others); send the guide a `<request>` turn naming the step and what is asked (feedback on this step, ending in a
@@ -1256,7 +1274,7 @@ Interviewer (interview mode), from TEACHING.md section 10 and the research:
 - Accepts any valid design: judges against the requirements, not the reference design.
 - Uses the hint ladder only when the candidate is clearly stuck for a while (H1 points at an area, H2 names the
   concern, H3 offers two options) and records each with `note_hint`.
-- Time: nudges at phase overruns via clock events (in a guided round, one offer to move on once his time in a step reaches twice its plan); delivers the extension when told; closes without feedback.
+- Time: nudges at phase overruns via clock events (in a guided round, one offer to move on once his time in a step reaches twice its plan); checks in once, with no hint, when the silence event says he has been quiet; delivers the extension when told; closes without feedback.
 - LLD: answers C++ syntax questions at once with a tiny snippet; never writes the candidate's design or
   code; may ask "run it and show me" and use `run_code`/`read_code` near the end; asks the concurrency
   follow-up if time allows.
@@ -1265,6 +1283,8 @@ Guide (guided mode), modelled on step-by-step guided practice:
 - Works through the phase rail one step at a time. Asks the candidate for the step's output, then gives
   feedback on that step only when asked ("Check this step") or when the candidate says they are done with it:
   one thing that holds, then a `step_verdict`. Gives hints on request, one rung at a time.
+- Checks in once, with no hint, when the silence event says he has been quiet, and says in one line when the round
+  reaches its planned length, leaving him the choice to finish the step or end the round.
 - Checks requirements against the brief's Core items and the Level bar; a missing Extra is never a gap. When a step
   meets the Level bar it calls `step_verdict` with `pass` and says so plainly; it never says "nearly done" or "close to
   done". Otherwise it names exactly one gap, the most important, as a missing question or a missing decision and not

@@ -57,6 +57,8 @@ interface ChatPanelProps {
   topSlot?: ReactNode;
   /** Shown under the conversation while the other side's opening message is the only one. */
   afterOpening?: ReactNode;
+  /** Called whenever the draft changes, typed or dictated. */
+  onDraft?: () => void;
 }
 
 export function ChatPanel({
@@ -74,6 +76,7 @@ export function ChatPanel({
   headerExtra,
   topSlot,
   afterOpening,
+  onDraft,
 }: ChatPanelProps) {
   const panelRef = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -275,6 +278,7 @@ export function ChatPanel({
         tools={tools}
         voiceSettings={voiceSettings}
         onBargeIn={stopSpeaking}
+        onDraft={onDraft}
         onSend={(text) => {
           const sent = onSend(text);
           if (sent) stick.current = true;
@@ -358,6 +362,7 @@ function Composer({
   tools,
   onSend,
   onBargeIn,
+  onDraft,
   voiceSettings,
 }: {
   label: string;
@@ -368,9 +373,16 @@ function Composer({
   tools?: ReactNode;
   onSend: (text: string) => boolean;
   onBargeIn: () => void;
+  onDraft?: () => void;
   voiceSettings: VoiceSettings;
 }) {
   const [draft, setDraft] = useState("");
+  const onDraftRef = useRef(onDraft);
+  onDraftRef.current = onDraft;
+  // Dictation fills the box through setDraft as well, so the draft itself is watched rather than the key presses.
+  useEffect(() => {
+    if (draft) onDraftRef.current?.();
+  }, [draft]);
   const input = useRef<HTMLTextAreaElement>(null);
   // The room stays mounted behind the debrief, so two chat boxes can exist at once and each needs its own id.
   const inputId = useId();
