@@ -51,6 +51,8 @@ export const ClientMsgSchema = z.discriminatedUnion("type", [
     text: z.string().max(LIMITS.stepNoteChars),
     version: z.number().int().positive(),
   }),
+  // The interview chat box changed (typed or dictated). The page throttles it; the server only notes that he is working.
+  z.strictObject({ type: z.literal("chat.composing") }),
   z.strictObject({ type: z.literal("code.run") }),
   z.strictObject({ type: z.literal("phase.set"), phase: z.string().min(1).max(40) }),
   z.strictObject({ type: z.literal("guided.feedback") }), // guided mode: "check my current step"

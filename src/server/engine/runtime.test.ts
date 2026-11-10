@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { teachMessage } from "../../shared/gaps";
+import { phasePlan } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import type { ServerMsg } from "../../shared/protocol";
 import { DEFAULT_SETTINGS, type Proposal, type Session } from "../../shared/types";
@@ -264,6 +265,110 @@ describe("checking in on a quiet candidate", () => {
     expect(checkIns(t.msgs)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(20_000);
     expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("counts a written step answer and a message being typed as work", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(3 * MIN);
+    await rt.handle({ type: "chat.composing" }, t.peer);
+    await vi.advanceTimersByTimeAsync(3 * MIN);
+    await rt.handle({ type: "notes.update", phase: "requirements", text: "Short links, fast redirects.", version: 1 }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN - 1_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    expect(session.transcript.find((e) => e.text === CHECK_IN)?.at).toBe(10 * MIN);
+    rt.dispose();
+  });
+
+  it("opens a new stretch after an interviewer line that was not itself a check-in", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(39 * MIN + 1_000);
+    // One check-in at 4:00, then the extension at 35:00 is a question he has not answered for four minutes.
+    expect(checkIns(t.msgs)).toHaveLength(2);
+    expect(session.transcript.filter((e) => e.text === CHECK_IN).map((e) => e.at)).toEqual([4 * MIN, 39 * MIN]);
+    rt.dispose();
+  });
+
+  it("keeps the check-in when its first send fails and the conversation is rebuilt from the transcript", async () => {
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    let failed = false;
+    const driver: Driver = {
+      ...inner,
+      startConversation(s) {
+        const conv = inner.startConversation(s);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          async send(turn, handlers) {
+            if (s.resumeSessionId && turn.meta.checkpoint === "silence" && !failed) {
+              failed = true;
+              throw new DriverError("The model process stopped. Retry.");
+            }
+            if (turn.meta.kind === "replay") return { text: "<silent/>", stats: { durationMs: 1, costUsd: 0 } };
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    // Past the first check-in and the requirements nudge, so the next check-in is the first turn after the resume.
+    await vi.advanceTimersByTimeAsync(5.5 * MIN);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    await rt.handle({ type: "session.pause" }, t.peer);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 1_000);
+    expect(failed).toBe(true);
+    expect(session.status).toBe("live");
+    expect(checkIns(t.msgs)).toHaveLength(2);
+    rt.dispose();
+  });
+
+  it("brings a planned-length line that a restart cut off", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session: Session = {
+      ...newSession("guided"),
+      startedAt: new Date(Date.now() - 46 * MIN).toISOString(),
+      status: "paused",
+      pauseStartedAt: new Date().toISOString(),
+      pauseReason: "restart",
+      transcript: [{ id: "o1", at: 1_000, wall: new Date().toISOString(), channel: "interview", role: "interviewer", text: "Let's begin." }],
+    };
+    const rt = await t.start(session);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(interviewerTexts(t.msgs).filter((x) => x.startsWith("We've reached the planned time"))).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("drops a move-on offer that falls next to the planned-length line", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    const design = phasePlan("hld", 45).find((p) => p.id === "design")?.minutes ?? 0;
+    const enterAt = 45 * MIN - 2 * design * MIN;
+    for (let v = 1; v * 4 * MIN < enterAt; v++) {
+      await vi.advanceTimersByTimeAsync(4 * MIN);
+      await rt.handle({ type: "board.update", version: v, elements: [] }, t.peer);
+    }
+    await vi.advanceTimersByTimeAsync(enterAt - Math.floor(enterAt / (4 * MIN)) * 4 * MIN);
+    await rt.handle({ type: "phase.set", phase: "design" }, t.peer);
+    for (let v = 100; v < 108; v++) {
+      await vi.advanceTimersByTimeAsync(4 * MIN);
+      await rt.handle({ type: "board.update", version: v, elements: [] }, t.peer);
+    }
+    await vi.advanceTimersByTimeAsync(Math.max(0, 45 * MIN + 30_000 - (enterAt + 32 * MIN)));
+    const texts = interviewerTexts(t.msgs);
+    expect(texts.filter((x) => x.startsWith("We've reached the planned time"))).toHaveLength(1);
+    const lateOffers = session.transcript.filter((e) => e.role === "interviewer" && e.at >= enterAt && e.text.startsWith("You are well past the plan"));
+    expect(lateOffers).toHaveLength(0);
     rt.dispose();
   });
 

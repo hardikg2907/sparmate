@@ -102,6 +102,8 @@ export interface SessionSource {
 
 export interface SessionActions {
   sendChat(channel: Channel, text: string): boolean;
+  /** Tells the server he is writing to the interviewer, at most once per `COMPOSING_EVERY_MS`. */
+  composing(): void;
   setPhase(phase: string): void;
   end(): void;
   pause(): void;
