@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { estimateCostUsd } from "./usage-capture";
-import { calcCacheHitRate, parseUsageRecord, UsageLedger, type UsageRecord } from "./usage-ledger";
+import { calcCacheHitRate, isDrillRecord, parseUsageRecord, UsageLedger, type UsageRecord } from "./usage-ledger";
 
 describe("calcCacheHitRate", () => {
   it("computes cache read / (input + cache read + cache creation)", () => {
@@ -63,6 +63,49 @@ describe("parseUsageRecord", () => {
     expect(rec?.durationMs).toBe(1200);
   });
 
+  describe("drill fields", () => {
+    const line = (extra: Record<string, unknown>) => JSON.stringify({ time: "2026-11-01T10:00:00.000Z", role: "grader", model: "claude-sonnet-5-5", ...extra });
+
+    it("reads a valid attempt id and drill kind", () => {
+      const rec = parseUsageRecord(line({ drillAttemptId: "0123456789abcdef", drillKind: "deep_dive" }));
+      expect(rec?.drillAttemptId).toBe("0123456789abcdef");
+      expect(rec?.drillKind).toBe("deep_dive");
+    });
+
+    it("reads null for rows that have neither field", () => {
+      const rec = parseUsageRecord(line({}));
+      expect(rec?.drillAttemptId).toBeNull();
+      expect(rec?.drillKind).toBeNull();
+    });
+
+    it.each([
+      ["wrong length", "0123456789abcde"],
+      ["upper case", "0123456789ABCDEF"],
+      ["path characters", "../../etc/passwd"],
+      ["not a string", 1234567890123456],
+      ["trailing newline", "0123456789abcdef\n"],
+    ])("drops an attempt id with %s", (_name, value) => {
+      expect(parseUsageRecord(line({ drillAttemptId: value }))?.drillAttemptId).toBeNull();
+    });
+
+    it.each([
+      ["empty", ""],
+      ["upper case", "Capacity"],
+      ["markup", "<b>x</b>"],
+      ["too long", "a".repeat(41)],
+      ["digits", "walk2"],
+      ["not a string", 5],
+    ])("drops a drill kind that is %s", (_name, value) => {
+      expect(parseUsageRecord(line({ drillKind: value }))?.drillKind).toBeNull();
+    });
+
+    it("treats a grader row without an attempt id, and any row with one, as a drill record", () => {
+      expect(isDrillRecord({ role: "grader", drillAttemptId: null })).toBe(true);
+      expect(isDrillRecord({ role: "judge", drillAttemptId: "0123456789abcdef" })).toBe(true);
+      expect(isDrillRecord({ role: "judge", drillAttemptId: null })).toBe(false);
+    });
+  });
+
   it("returns null for non-JSON lines or empty lines", () => {
     expect(parseUsageRecord("")).toBeNull();
     expect(parseUsageRecord("   \n ")).toBeNull();
@@ -105,6 +148,7 @@ describe("UsageLedger file operations and aggregations", () => {
       failedCalls: 0,
       estimatedCalls: 0,
       rounds: 0,
+      drillCost: 0,
     });
     expect(summary.bySession).toEqual([]);
     expect(summary.byProblem).toEqual([]);
@@ -126,6 +170,8 @@ describe("UsageLedger file operations and aggregations", () => {
       problemId: "c2-url-shortener",
       track: "hld",
       mode: "interview",
+      drillAttemptId: null,
+      drillKind: null,
       role: "interviewer",
       model: "claude-opus-5-5",
       effort: "low",
@@ -154,6 +200,8 @@ describe("UsageLedger file operations and aggregations", () => {
       problemId: "c2-url-shortener",
       track: "hld",
       mode: "interview",
+      drillAttemptId: null,
+      drillKind: null,
       role: "judge",
       model: "claude-opus-5-5",
       effort: "high",
@@ -185,6 +233,8 @@ describe("UsageLedger file operations and aggregations", () => {
       problemId: "prob-a",
       track: "hld",
       mode: "interview",
+      drillAttemptId: null,
+      drillKind: null,
       role: "interviewer",
       model: "model-x",
       effort: "low",
@@ -204,6 +254,8 @@ describe("UsageLedger file operations and aggregations", () => {
       problemId: "prob-a",
       track: "hld",
       mode: "interview",
+      drillAttemptId: null,
+      drillKind: null,
       role: "judge",
       model: "model-x",
       effort: "high",
@@ -224,6 +276,8 @@ describe("UsageLedger file operations and aggregations", () => {
       problemId: "prob-b",
       track: "lld",
       mode: "guided",
+      drillAttemptId: null,
+      drillKind: null,
       role: "interviewer",
       model: "model-y",
       effort: "medium",
@@ -244,6 +298,8 @@ describe("UsageLedger file operations and aggregations", () => {
       problemId: "prob-b",
       track: "lld",
       mode: "interview",
+      drillAttemptId: null,
+      drillKind: null,
       role: "brief-writer",
       model: "model-x",
       effort: "high",
@@ -334,6 +390,8 @@ describe("UsageLedger cost honesty and local days", () => {
     problemId: "p1",
     track: "hld" as const,
     mode: "guided" as const,
+    drillAttemptId: null,
+    drillKind: null,
     role: "guide",
     model: "claude-haiku-5-5",
     effort: "low",
@@ -388,5 +446,122 @@ describe("UsageLedger cost honesty and local days", () => {
     expect(s.byDay.at(-1)?.calls).toBe(1);
     expect(s.byDay.at(-2)?.calls).toBe(0);
     expect(s.byDay.reduce((t, d) => t + d.calls, 0)).toBe(1);
+  });
+});
+
+describe("UsageLedger drill cost", () => {
+  let tmpDir: string;
+  let filePath: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "ir-ledger-drills-"));
+    filePath = join(tmpDir, "usage.jsonl");
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const row = (over: Partial<UsageRecord>): UsageRecord => ({
+    time: "2026-11-07T01:00:00.000Z",
+    sessionId: null,
+    problemId: "p1",
+    track: "hld",
+    mode: null,
+    drillAttemptId: null,
+    drillKind: null,
+    role: "grader",
+    model: "claude-sonnet-5-5",
+    effort: "low",
+    inputTokens: 10,
+    outputTokens: 10,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    cost: 0.1,
+    costUsd: 0.1,
+    duration: 100,
+    durationMs: 100,
+    ok: true,
+    ...over,
+  });
+
+  const A1 = "aaaaaaaaaaaaaaaa";
+  const A2 = "bbbbbbbbbbbbbbbb";
+
+  async function ledgerWith(rows: UsageRecord[]): Promise<UsageLedger> {
+    const ledger = new UsageLedger({ filePath });
+    for (const r of rows) ledger.record(r);
+    await ledger.flush();
+    return ledger;
+  }
+
+  it("splits a problem's cost into rounds and drills without touching the rounds count", async () => {
+    const ledger = await ledgerWith([
+      row({ sessionId: "s1", role: "interviewer", cost: 1, costUsd: 1 }),
+      row({ sessionId: "s1", role: "judge", cost: 2, costUsd: 2 }),
+      row({ drillAttemptId: A1, drillKind: "capacity", cost: 0.25, costUsd: 0.25 }),
+      row({ cost: 0.5, costUsd: 0.5 }),
+    ]);
+    const s = await ledger.summary({ timeZone: "UTC" });
+    const p = s.byProblem[0]!;
+    expect(p.roundCost).toBeCloseTo(3);
+    expect(p.drillCost).toBeCloseTo(0.75);
+    expect(p.roundCost + p.drillCost).toBeCloseTo(p.costUsd);
+    expect(p.rounds).toBe(1);
+    expect(s.totals.rounds).toBe(1);
+    expect(s.totals.drillCost).toBeCloseTo(0.75);
+    expect(s.totals.costUsd).toBeCloseTo(3.75);
+  });
+
+  it("totals drills, groups by kind and keeps old grader rows apart as earlier", async () => {
+    const ledger = await ledgerWith([
+      row({ sessionId: "s1", role: "judge", cost: 5, costUsd: 5 }),
+      row({ drillAttemptId: A1, drillKind: "capacity", cost: 0.2, costUsd: 0.2 }),
+      row({ drillAttemptId: A1, drillKind: "capacity", cost: 0.1, costUsd: 0.1, ok: false }),
+      row({ drillAttemptId: A2, drillKind: "walk", cost: 0.05, costUsd: 0.05 }),
+      row({ cost: 0.4, costUsd: 0.4 }),
+    ]);
+    const { drills } = await ledger.summary({ timeZone: "UTC" });
+    expect(drills.cost).toBeCloseTo(0.75);
+    expect(drills.calls).toBe(4);
+    expect(drills.failedCalls).toBe(1);
+    expect(drills.attempts).toBe(2);
+    expect(drills.earlier.calls).toBe(1);
+    expect(drills.earlier.cost).toBeCloseTo(0.4);
+    expect(drills.byKind.map((k) => k.kind)).toEqual([null, "capacity", "walk"]);
+    const capacity = drills.byKind.find((k) => k.kind === "capacity")!;
+    expect(capacity).toMatchObject({ calls: 2, attempts: 1 });
+    expect(capacity.cost).toBeCloseTo(0.3);
+    expect(drills.byKind.find((k) => k.kind === null)).toMatchObject({ calls: 1, attempts: 0 });
+  });
+
+  it("lists attempts newest first with their own cost, calls and failures", async () => {
+    const ledger = await ledgerWith([
+      row({ drillAttemptId: A1, drillKind: "capacity", time: "2026-11-06T01:00:00.000Z", durationMs: 50, cost: 0.2, costUsd: 0.2 }),
+      row({ drillAttemptId: A1, drillKind: "capacity", time: "2026-11-06T01:00:05.000Z", durationMs: 70, cost: 0.1, costUsd: 0.1, ok: false }),
+      row({ drillAttemptId: A2, drillKind: "walk", time: "2026-11-07T01:00:00.000Z", cost: 0.05, costUsd: 0.05 }),
+    ]);
+    const { drills } = await ledger.summary({ timeZone: "UTC" });
+    expect(drills.byAttempt.map((a) => a.attemptId)).toEqual([A2, A1]);
+    const a1 = drills.byAttempt[1]!;
+    expect(a1).toMatchObject({ kind: "capacity", problemId: "p1", problemTitle: "p1", calls: 2, failedCalls: 1, durationMs: 120 });
+    expect(a1.cost).toBeCloseTo(0.3);
+  });
+
+  it("caps the attempt list at 200 and keeps the newest", async () => {
+    const rows = Array.from({ length: 205 }, (_, i) =>
+      row({ drillAttemptId: i.toString(16).padStart(16, "0"), drillKind: "walk", time: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString() }),
+    );
+    const { drills } = await (await ledgerWith(rows)).summary({ timeZone: "UTC" });
+    expect(drills.attempts).toBe(205);
+    expect(drills.byAttempt).toHaveLength(200);
+    expect(drills.byAttempt[0]!.attemptId).toBe((204).toString(16).padStart(16, "0"));
+  });
+
+  it("reports empty drills when no row is a drill", async () => {
+    const ledger = await ledgerWith([row({ sessionId: "s1", role: "judge" })]);
+    const { drills, totals } = await ledger.summary({ timeZone: "UTC" });
+    expect(drills).toMatchObject({ cost: 0, calls: 0, failedCalls: 0, attempts: 0, byKind: [], byAttempt: [], earlier: { cost: 0, calls: 0 } });
+    expect(totals.drillCost).toBe(0);
   });
 });

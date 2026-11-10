@@ -86,4 +86,17 @@ describe("wrapDriverWithLedger", () => {
     await expect(d.runOnce(setup as OneShotSetup<unknown>)).rejects.toThrow("aborted");
     expect(await ledger.readAll()).toHaveLength(0);
   });
+
+  it("copies the drill attempt id and kind into the row, and null when absent", async () => {
+    const d = wrapDriverWithLedger(
+      driverWith(async () => ({ stats: { durationMs: 5, costUsd: 0.01, ...tokens, model: "claude-haiku-5-5" } })),
+      ledger,
+    );
+    const drillSetup = { ...setup, role: "grader", usage: { problemId: "p1", drillAttemptId: "0123456789abcdef", drillKind: "walk" } };
+    await d.runOnce(drillSetup as OneShotSetup<unknown>);
+    await d.runOnce(setup as OneShotSetup<unknown>);
+    const [drill, plain] = await ledger.readAll();
+    expect(drill).toMatchObject({ drillAttemptId: "0123456789abcdef", drillKind: "walk" });
+    expect(plain).toMatchObject({ drillAttemptId: null, drillKind: null });
+  });
 });
