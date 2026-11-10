@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const scripted: { messages: any[][]; hang: Promise<void> | null } = { messages: [], hang: null };
 
@@ -50,6 +50,12 @@ const toolStart = (index: number) => ({
   event: { type: "content_block_start", index, content_block: { type: "tool_use" } },
 });
 const assistant = (...texts: string[]) => ({ type: "assistant", parent_tool_use_id: null, session_id: "s", message: { content: texts.map((text) => ({ type: "text", text })) } });
+const spent = (id: string, input: number, output: number) => ({
+  type: "assistant",
+  parent_tool_use_id: null,
+  session_id: "s",
+  message: { id, usage: { input_tokens: input, output_tokens: output }, content: [{ type: "text", text: "hm" }] },
+});
 const done = (result = "final") => ({
   type: "result",
   subtype: "success",
@@ -118,6 +124,32 @@ describe("a reply the model writes twice", () => {
     expect(reply.text).toBe("Hello there.");
   });
 
+  it("drops the earlier paragraph from a block that repeats it and goes on", async () => {
+    const { reply, streamed } = await runTurn([
+      ...block(0, "Try the sorted array."),
+      toolStart(1),
+      stop(1),
+      ...block(2, "Try the sorted ", "array.", " What does it cost?"),
+      done(),
+    ]);
+    expect(streamed).toBe("Try the sorted array.\n\nWhat does it cost?");
+    expect(reply.text).toBe(streamed);
+  });
+
+  it("drops a repeat that differs only in inner whitespace, and the repeated part of a longer one", async () => {
+    const same = await runTurn([...block(0, "A\nB"), ...block(1, "A\n\nB"), done()]);
+    expect(same.streamed).toBe("A\nB");
+    const longer = await runTurn([...block(0, "A\nB"), ...block(1, "A\n\n", "B C"), done()]);
+    expect(longer.streamed).toBe("A\nB\n\nC");
+    expect(longer.reply.text).toBe(longer.streamed);
+  });
+
+  it("drops a repeat that arrives in a new assistant message with block index 0", async () => {
+    const { reply, streamed } = await runTurn([...block(0, "Same paragraph."), toolStart(1), stop(1), assistant("Same paragraph."), ...block(0, "Same paragraph."), done()]);
+    expect(streamed).toBe("Same paragraph.");
+    expect(reply.text).toBe("Same paragraph.");
+  });
+
   it("drops a repeated block on the non-streamed path", async () => {
     const { reply, streamed } = await runTurn([assistant("Same answer."), assistant("Same answer.", "Extra."), done("ignored")]);
     expect(streamed).toBe("Same answer.\n\nExtra.");
@@ -135,6 +167,8 @@ describe("a model process that stops on its own", () => {
     ledger = new UsageLedger({ filePath: join(dir, "usage.jsonl") });
   });
 
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
   const wrapped = () => wrapDriverWithLedger(driver(), ledger);
 
   it("writes one failed row with zero tokens when the stream ends mid-turn", async () => {
@@ -146,7 +180,6 @@ describe("a model process that stops on its own", () => {
     expect(rows[0]).toMatchObject({ ok: false, costEstimated: false, costUsd: 0, inputTokens: 0, outputTokens: 0, model: "claude-haiku-5-5" });
     expect((await ledger.summary()).totals.failedCalls).toBe(1);
     expect((await ledger.summary()).totals.estimatedCalls).toBe(0);
-    await rm(dir, { recursive: true, force: true });
   });
 
   it("writes one failed row when the stream throws", async () => {
@@ -156,7 +189,6 @@ describe("a model process that stops on its own", () => {
     const rows = await ledger.readAll();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ ok: false, costEstimated: false });
-    await rm(dir, { recursive: true, force: true });
   });
 
   it("writes no row when the conversation was closed during the turn", async () => {
@@ -170,7 +202,6 @@ describe("a model process that stops on its own", () => {
     release();
     await expect(sent).rejects.toThrow("The conversation was closed.");
     expect(await ledger.readAll()).toHaveLength(0);
-    await rm(dir, { recursive: true, force: true });
   });
 
   it("writes one failed row when a one-shot ends without a result", async () => {
@@ -190,7 +221,6 @@ describe("a model process that stops on its own", () => {
     const rows = await ledger.readAll();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ ok: false, costEstimated: false, outputTokens: 0 });
-    await rm(dir, { recursive: true, force: true });
   });
 
   it("writes no row when a one-shot was aborted by its signal", async () => {
@@ -216,6 +246,58 @@ describe("a model process that stops on its own", () => {
     release();
     await expect(run).rejects.toThrow();
     expect(await ledger.readAll()).toHaveLength(0);
-    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("keeps the tokens of assistant messages seen before the process died, once per message id, and prices them", async () => {
+    scripted.messages = [[spent("m1", 10, 20), spent("m1", 10, 20), spent("m2", 5, 7)]];
+    const conv = wrapped().startConversation(setup);
+    await expect(conv.send({ text: "q", meta: {} } as any, { onTextDelta() {} })).rejects.toThrow("The model process stopped.");
+    const [row] = await ledger.readAll();
+    expect(row).toMatchObject({ ok: false, inputTokens: 15, outputTokens: 27, costEstimated: true });
+    expect(row!.costUsd).toBeGreaterThan(0);
+  });
+
+  it("keeps the tokens seen before a one-shot died", async () => {
+    scripted.messages = [[spent("m1", 4, 6)]];
+    const base = {
+      role: "judge",
+      model: "claude-haiku-5-5",
+      effort: "low",
+      fake: {},
+      systemPrompt: async () => "s",
+      tools: [],
+      turn: { text: "q", meta: {} },
+      maxTurns: 1,
+      output: null,
+    } as any;
+    await expect(wrapped().runOnce(base)).rejects.toThrow("stopped early");
+    expect((await ledger.readAll())[0]).toMatchObject({ ok: false, inputTokens: 4, outputTokens: 6, costEstimated: true });
+  });
+
+  it("writes no row for a process that dies after the driver was told it is stopping", async () => {
+    let release = () => {};
+    scripted.hang = new Promise<void>((r) => (release = r));
+    scripted.messages = [["hang"], ["hang"]];
+    const d = wrapped();
+    const conv = d.startConversation(setup);
+    const turn = conv.send({ text: "q", meta: {} } as any, { onTextDelta() {} });
+    const base = {
+      role: "judge",
+      model: "claude-haiku-5-5",
+      effort: "low",
+      fake: {},
+      systemPrompt: async () => "s",
+      tools: [],
+      turn: { text: "q", meta: {} },
+      maxTurns: 1,
+      output: null,
+    } as any;
+    const once = d.runOnce(base);
+    await new Promise((r) => setTimeout(r, 20));
+    d.markStopping();
+    release();
+    await expect(turn).rejects.toThrow();
+    await expect(once).rejects.toThrow();
+    expect(await ledger.readAll()).toHaveLength(0);
   });
 });

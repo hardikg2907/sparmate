@@ -229,7 +229,8 @@ function newChannel(name: Channel): ChannelState {
 export function channelErrorText(message: string): string {
   const text = message
     .replace(/,\s*then retry\.\s*$/, ".")
-    .replace(/\s*\bRetry(?: in a moment)?\.\s*$/, "")
+    .replace(/\bRetry in a moment\.\s*$/, "Wait a moment.")
+    .replace(/\s*\bRetry\.\s*$/, "")
     .trim();
   return text || message;
 }

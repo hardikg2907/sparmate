@@ -1,4 +1,4 @@
-import type { Driver, OneShotSetup, TurnStats, UsageContext } from "./driver";
+import type { ManagedDriver, OneShotSetup, TurnStats, UsageContext } from "./driver";
 import { estimateCostUsd, failureStats } from "./usage-capture";
 import type { UsageLedger, UsageRecord } from "./usage-ledger";
 
@@ -41,7 +41,7 @@ function toRecord(setup: UsageSetup, stats: TurnStats, ok: boolean): UsageRecord
   };
 }
 
-export function wrapDriverWithLedger(driver: Driver & { closeAll(): void }, ledger: UsageLedger): Driver & { closeAll(): void } {
+export function wrapDriverWithLedger(driver: ManagedDriver, ledger: UsageLedger): ManagedDriver {
   // A failure writes a row when the driver attached stats: a model result, or a process that stopped on its own.
   // A call we closed or aborted ourselves carries none, so it writes no row.
   const recordFailure = (setup: UsageSetup, err: unknown) => {
@@ -77,6 +77,7 @@ export function wrapDriverWithLedger(driver: Driver & { closeAll(): void }, ledg
         throw err;
       }
     },
+    markStopping: () => driver.markStopping(),
     closeAll: () => driver.closeAll(),
   };
 }

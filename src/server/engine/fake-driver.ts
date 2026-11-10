@@ -7,8 +7,8 @@ import {
   DriverError,
   type Conversation,
   type ConversationSetup,
-  type Driver,
   type FakeFacts,
+  type ManagedDriver,
   type OneShotResult,
   type OneShotSetup,
   type RoleSetup,
@@ -597,7 +597,7 @@ function fakeOneShotStats(setup: OneShotSetup<unknown>, durationMs: number): Tur
   }
 }
 
-export function createFakeDriver(options: { chunkDelayMs?: number } = {}): Driver & { closeAll(): void } {
+export function createFakeDriver(options: { chunkDelayMs?: number } = {}): ManagedDriver {
   const chunkDelayMs = options.chunkDelayMs ?? 75;
   return {
     kind: "fake",
@@ -615,6 +615,7 @@ export function createFakeDriver(options: { chunkDelayMs?: number } = {}): Drive
       if (!parsed.success) throw new DriverError("The fake model produced invalid data.", parsed.error.message);
       return { text: JSON.stringify(parsed.data), output: parsed.data, stats };
     },
+    markStopping() {},
     closeAll() {},
   };
 }

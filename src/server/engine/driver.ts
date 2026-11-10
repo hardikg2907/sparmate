@@ -168,6 +168,13 @@ export interface Driver {
   runOnce<T>(setup: OneShotSetup<T>): Promise<OneShotResult<T>>;
 }
 
+/** A driver the server can stop: it closes every live model process, and it can be told ahead of time that a stop is coming. */
+export type ManagedDriver = Driver & {
+  /** Every process that ends from now on counts as cancelled, not failed. Call it before anything else awaits during shutdown. */
+  markStopping(): void;
+  closeAll(): void;
+};
+
 /** A failure the user can act on. The message is plain and safe to show. */
 export class DriverError extends Error {
   override name = "DriverError";

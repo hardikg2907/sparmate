@@ -2,14 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DriverError, type Driver, type OneShotSetup, type TurnStats } from "./driver";
+import { DriverError, type Driver, type ManagedDriver, type OneShotSetup, type TurnStats } from "./driver";
 import { attachFailureStats } from "./usage-capture";
 import { UsageLedger } from "./usage-ledger";
 import { wrapDriverWithLedger } from "./usage-driver";
 
 const tokens = { inputTokens: 2, outputTokens: 1000, cacheReadTokens: 10_000, cacheCreationTokens: 1000 };
 
-function driverWith(outcome: () => Promise<{ stats: TurnStats }>): Driver & { closeAll(): void } {
+function driverWith(outcome: () => Promise<{ stats: TurnStats }>): ManagedDriver {
   return {
     kind: "fake",
     startConversation: () => ({
@@ -18,6 +18,7 @@ function driverWith(outcome: () => Promise<{ stats: TurnStats }>): Driver & { cl
       close: () => {},
     }),
     runOnce: (async () => ({ text: "x", output: null, ...(await outcome()) })) as Driver["runOnce"],
+    markStopping: () => {},
     closeAll: () => {},
   };
 }
