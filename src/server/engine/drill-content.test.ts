@@ -73,6 +73,21 @@ describe("drill content from the shipped briefs", () => {
     expect(built?.key).toContain("100 million");
   });
 
+  it("requirements sprint says nobody answers the questions in a drill", () => {
+    const built = buildDrill(hld, "requirements");
+    expect(built?.prompt.task).toBe(
+      "Nobody answers here, so write each question with the answer or number you would assume. Split the requirements into what it does and how well it must do it, with the scale as numbers.",
+    );
+    expect(built?.prompt.answerHint).toContain("answer or number you would assume");
+  });
+
+  it("deep dive rebuilds the same topic from its title, whatever the rotation", () => {
+    const first = buildDrill(hld, "deep_dive", { rotation: 0 });
+    const topic = first?.prompt.topic ?? "";
+    for (const rotation of [0, 1, 2, 3]) expect(buildDrill(hld, "deep_dive", { rotation, topic })?.key).toBe(first?.key);
+    expect(buildDrill(hld, "deep_dive", { rotation: 1, topic: "No such topic" })?.prompt.topic).toBe(buildDrill(hld, "deep_dive", { rotation: 1 })?.prompt.topic);
+  });
+
   it("deep dive keys on one entry with its levels, matched to the gap", () => {
     const built = buildDrill(hld, "deep_dive", { gapTitle: "Counting clicks slows down every redirect" });
     expect(built?.prompt.task).toContain("Counting clicks without slowing redirects");

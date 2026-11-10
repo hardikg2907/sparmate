@@ -288,8 +288,9 @@ The senior bar uses the same labels. Tones are unchanged: good for both passes, 
   meter grow from their left edge in 500 ms, in 45 ms steps; the daily cost bars grow from the bottom in 550 ms,
   in 18 ms steps. The large numbers count up once from zero in 700 to 1100 ms with an ease-out: the progress
   counts and the total cost; the debrief has no count-up. A later change to a number shows the new value at once.
-- **A drill result** answers the submit: the "Pass" mark settles in (scale 1.06 to 1, 200 ms), and on "Not yet" the
-  one-fix line slides in 8 px (200 ms). Both wait for the page's own sequence to arrive.
+- **A drill result** answers the submit: the outcome title settles in on "Interview-ready" (scale 1.06 to 1, 200 ms),
+  and on "Getting there" or "Needs work" the "What to improve" card slides in 8 px (200 ms). Both wait for the page's own
+  sequence to arrive.
 - **The week strip's tick** fills from the bottom in 300 ms when today's round finishes. Earlier days show their tick at once.
 - **The plan needle** moves with the clock. When the phase changes, the current segment's fill slides to the next
   segment in 200 ms.
@@ -511,7 +512,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   panel: chips, title, the interviewer's opening line, a facts tile, the mode switch with an info tip, one filled Start
   button and a caption. `/practice#<problem id>` opens the list on that problem.
 - **Drills.** A raised panel holds the next drill: an amber "Next drill" pill, the drill name, the problem, a tile of three
-  facts (length, due, passes in a row with three pips and an info tip) and one line for the task, then the one primary
+  facts (length, due, Interview-ready results with three pips and an info tip) and one line for the task, then the one primary
   button. A raised "Also due" card lists three more with a drill glyph, the problem and the due day in amber. "All drills"
   opens the side panel. A first run with no drills shows "Drills start after your first round".
 
@@ -543,11 +544,17 @@ Today is one page for the whole day, and with data it fills the first screen at 
 ### Drill screen
 
 - The drill screen is full screen with a slim bar: Back to Practice, the drill name and a soft countdown that turns amber
-  and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (Pass
-  or Not yet, the schedule tile, the one fix) with two cards below: "Your line" and "What a pass sounds like". Each quote
-  sits in a quiet sunken block with a 1 px hairline all round. On a pass, the "Pass" mark settles in (scale 1.06 to 1,
-  200 ms); on "Not yet", the one-fix line slides in (8 px, 200 ms). Reduced motion and `?testhooks=1` show the final state
-  at once. In the console, a warning or an error shows a small status icon and a coloured label, never a coloured edge.
+  and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (the
+  outcome as the title, the schedule tile, then "Revise your answer" as the primary button when a
+  revision is allowed) with cards below: the criteria list, "What went well" beside "What to improve", and "Your line".
+  Each criterion is a row with its label, a four-step meter (green at 3 or more, amber below) and "n of 4"; a core
+  criterion carries a small "Core" tag that screen readers read too. The quote sits in a quiet sunken block with a 1 px
+  hairline all round. Revising shows two columns: the feedback on the left, the answer box with the first answer in it on
+  the right, and "Submit revision" as its button; the timer is hidden. "Interview-ready" takes the success tone and the
+  mark settles in (scale 1.06 to 1, 200 ms); "Getting there" and "Needs work" take the amber tone and the "What to improve"
+  card slides in (8 px, 200 ms). After a revision one line reads "After a revision. First try: <outcome>.". Reduced motion and
+  `?testhooks=1` show the final state at once. In the console, a warning or an error shows a small status icon and a
+  coloured label, never a coloured edge.
 
 ### Room
 

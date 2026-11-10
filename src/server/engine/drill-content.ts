@@ -14,6 +14,8 @@ export interface DrillContext {
   hint?: string;
   /** How many drills of this kind the candidate already tried on the problem, so a free drill moves on to the next topic. */
   rotation?: number;
+  /** A deep dive's title, to rebuild the same topic a saved attempt used. */
+  topic?: string;
 }
 
 const BULLET = /^\s*[-*]\s+(.+)$/;
@@ -193,9 +195,9 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
       return {
         prompt: {
           ...base,
-          task: "Write the questions you would ask and the requirements you would settle, split into what it does and how well it must do it, with the scale stated as numbers.",
+          task: "Nobody answers here, so write each question with the answer or number you would assume. Split the requirements into what it does and how well it must do it, with the scale as numbers.",
           material: [problemBlock],
-          answerHint: "Write each question with the answer you would assume. Numbers help.",
+          answerHint: "Write each question and the answer or number you would assume. Say why when it changes the design.",
         },
         key: [
           section(problem, "Expected requirements"),
@@ -206,7 +208,8 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
         ].join("\n\n"),
       };
     case "deep_dive": {
-      const entry = pickDeepDive(deepDiveEntries(problem), ctx.gapTitle, ctx.hint, ctx.rotation);
+      const entries = deepDiveEntries(problem);
+      const entry = (ctx.topic ? entries.find((e) => e.title === ctx.topic) : undefined) ?? pickDeepDive(entries, ctx.gapTitle, ctx.hint, ctx.rotation);
       if (!entry) return null;
       return {
         prompt: {

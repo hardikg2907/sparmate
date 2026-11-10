@@ -1,5 +1,15 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { DRILL_INFO, dueStatus, DRILL_TYPES, PASSES_TO_CLOSE, PASS_INTERVAL_DAYS, type DrillType, type GymDrillRow, type GymSummary } from "../../shared/drills";
+import {
+  DRILL_INFO,
+  dueStatus,
+  DRILL_TYPES,
+  READY_INTERVAL_DAYS,
+  READY_TO_CLOSE,
+  REVISED_INTERVAL_DAYS,
+  type DrillType,
+  type GymDrillRow,
+  type GymSummary,
+} from "../../shared/drills";
 import { DrillIcon, DumbbellIcon } from "../components/DrillIcon";
 import { ArrowLeftIcon, ChevronRightIcon, ListIcon, PlayFilledIcon, WarnIcon } from "../components/icons";
 import { SidePanel } from "../components/SidePanel";
@@ -9,7 +19,7 @@ import { parseDay, shortDay } from "../lib/dates";
 import type { GymData } from "../lib/useGym";
 import { Link, drillPath } from "../router";
 
-export const HOW_A_GAP_CLOSES = `Three passes in a row close the gap. After a pass the next drill comes ${PASS_INTERVAL_DAYS[0]} days later, then ${PASS_INTERVAL_DAYS[1]}. A Not yet starts again tomorrow.`;
+export const HOW_A_GAP_CLOSES = `Three interview-ready results in a row close the gap. After a first-try ready result the next drill comes ${READY_INTERVAL_DAYS[0]} days later, then ${READY_INTERVAL_DAYS[1]}. Getting there, or ready only after a revision, brings it back in ${REVISED_INTERVAL_DAYS} days. Needs work starts again tomorrow.`;
 /** How many drills the "Also due" card lists before it says how many more wait. */
 const ALSO_DUE_SHOWN = 3;
 
@@ -37,8 +47,8 @@ function rowPath(row: GymDrillRow): string {
 
 export function Pips({ filled, onMesh }: { filled: number; onMesh?: boolean }) {
   return (
-    <span className="inline-flex gap-1" role="img" aria-label={`${filled} of ${PASSES_TO_CLOSE} passes`}>
-      {Array.from({ length: PASSES_TO_CLOSE }, (_, i) => (
+    <span className="inline-flex gap-1" role="img" aria-label={`${filled} of ${READY_TO_CLOSE} interview-ready results`}>
+      {Array.from({ length: READY_TO_CLOSE }, (_, i) => (
         <b key={i} className={cn("h-1.5 w-[18px] rounded-sm", i < filled ? "bg-success-fill" : onMesh ? "bg-white/25" : "bg-border-strong/60")} />
       ))}
     </span>
@@ -115,14 +125,14 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
         <Fact
           label={
             <span className="inline-flex items-center gap-1">
-              Passes in a row
+              Interview-ready results
               <InfoTip label="How a gap closes">{HOW_A_GAP_CLOSES}</InfoTip>
             </span>
           }
           value={
             <>
               <span className="whitespace-nowrap">
-                {row.passes} of {PASSES_TO_CLOSE}
+                {row.passes} of {READY_TO_CLOSE}
               </span>
               <Pips filled={row.passes} />
             </>

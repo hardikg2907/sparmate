@@ -3,11 +3,16 @@ import {
   DRILL_INFO,
   dueStatus,
   DRILL_TYPES,
+  DrillReviseSchema,
   DrillSubmitSchema,
   DrillTargetSchema,
-  PASSES_TO_CLOSE,
+  DRILL_RUBRIC,
+  OUTCOME_LABEL,
+  READY_TO_CLOSE,
+  betterOutcome,
+  outcomeFor,
   addDays,
-  applyVerdict,
+  applyOutcome,
   drillForGap,
   drillsForTrack,
   firstDueDay,
@@ -64,28 +69,45 @@ describe("schedule", () => {
     expect(firstDueDay("2026-12-31")).toBe("2027-01-01");
   });
 
-  it("a first pass comes back in 3 days", () => {
-    expect(applyVerdict({ passes: 0 }, "pass", today)).toEqual({ passes: 1, dueOn: "2026-11-13", status: "open" });
+  const base = { passes: 0, readyOn: [] as string[], problemId: "p1", today };
+
+  it("a first-try ready result comes back in 3 days", () => {
+    expect(applyOutcome({ ...base, outcome: "ready", revised: false })).toEqual({ passes: 1, readyOn: ["p1"], dueOn: "2026-11-13", status: "open" });
   });
 
-  it("a second pass comes back in 7 days", () => {
-    expect(applyVerdict({ passes: 1 }, "pass", today)).toEqual({ passes: 2, dueOn: "2026-11-17", status: "open" });
+  it("a second first-try ready result comes back in 7 days", () => {
+    expect(applyOutcome({ ...base, passes: 1, readyOn: ["p1"], outcome: "ready", revised: false })).toEqual({ passes: 2, readyOn: ["p1"], dueOn: "2026-11-17", status: "open" });
   });
 
-  it("three passes in a row close the gap", () => {
-    const closed = applyVerdict({ passes: 2 }, "pass", today);
-    expect(closed.passes).toBe(PASSES_TO_CLOSE);
+  it("the third first-try ready result closes the gap", () => {
+    const closed = applyOutcome({ ...base, passes: 2, outcome: "ready", revised: false });
+    expect(closed.passes).toBe(READY_TO_CLOSE);
     expect(closed.status).toBe("closed");
   });
 
-  it.each([0, 1, 2])("a Not yet after %s passes resets the count and returns tomorrow", (passes) => {
-    expect(applyVerdict({ passes }, "not_yet", today)).toEqual({ passes: 0, dueOn: "2026-11-11", status: "open" });
+  it("remembers each problem once on the ready list", () => {
+    expect(applyOutcome({ ...base, passes: 1, readyOn: ["p0"], outcome: "ready", revised: false }).readyOn).toEqual(["p0", "p1"]);
+    expect(applyOutcome({ ...base, passes: 1, readyOn: ["p1"], outcome: "ready", revised: false }).readyOn).toEqual(["p1"]);
+  });
+
+  it("a ready result after a revision counts, comes back in 2 days and stops at 2", () => {
+    expect(applyOutcome({ ...base, outcome: "ready", revised: true })).toEqual({ passes: 1, readyOn: ["p1"], dueOn: "2026-11-12", status: "open" });
+    expect(applyOutcome({ ...base, passes: 1, outcome: "ready", revised: true }).passes).toBe(2);
+    expect(applyOutcome({ ...base, passes: 2, outcome: "ready", revised: true })).toMatchObject({ passes: 2, status: "open", dueOn: "2026-11-12" });
+  });
+
+  it.each([0, 1, 2])("getting there after %s ready results keeps the count and returns in 2 days", (passes) => {
+    expect(applyOutcome({ ...base, passes, readyOn: ["p0"], outcome: "getting_there", revised: false })).toEqual({ passes, readyOn: ["p0"], dueOn: "2026-11-12", status: "open" });
+  });
+
+  it.each([0, 1, 2])("needs work after %s ready results resets the count, empties the list and returns tomorrow", (passes) => {
+    expect(applyOutcome({ ...base, passes, readyOn: ["p0"], outcome: "needs_work", revised: false })).toEqual({ passes: 0, readyOn: [], dueOn: "2026-11-11", status: "open" });
   });
 
   it("counts from the day of the attempt, in local time, across a month end", () => {
-    expect(applyVerdict({ passes: 0 }, "pass", "2026-10-30").dueOn).toBe("2026-11-02");
-    expect(applyVerdict({ passes: 1 }, "pass", "2026-12-28").dueOn).toBe("2027-01-04");
-    expect(applyVerdict({ passes: 0 }, "not_yet", "2026-12-31").dueOn).toBe("2027-01-01");
+    expect(applyOutcome({ ...base, today: "2026-10-30", outcome: "ready", revised: false }).dueOn).toBe("2026-11-02");
+    expect(applyOutcome({ ...base, today: "2026-12-28", passes: 1, outcome: "ready", revised: false }).dueOn).toBe("2027-01-04");
+    expect(applyOutcome({ ...base, today: "2026-12-31", outcome: "needs_work", revised: false }).dueOn).toBe("2027-01-01");
   });
 
   it("a drill is due on its day and after, never when closed", () => {
@@ -154,7 +176,7 @@ describe("gap to drill", () => {
 
 describe("week stats", () => {
   const now = new Date(2026, 10, 11, 10, 0, 0); // Wednesday
-  it("counts passed of attempted in the local week, Monday first", () => {
+  it("counts interview-ready of attempted in the local week, Monday first", () => {
     const attempts = [
       { day: "2026-11-08", status: "done" as const, outcome: "ready" as const }, // Sunday before
       { day: "2026-11-09", status: "done" as const, outcome: "ready" as const },
@@ -163,10 +185,10 @@ describe("week stats", () => {
       { day: "2026-11-15", status: "done" as const, outcome: "ready" as const },
       { day: "2026-11-16", status: "done" as const, outcome: "ready" as const }, // next Monday
     ];
-    expect(weekDrillStats(attempts, now)).toEqual({ passed: 2, attempted: 3 });
+    expect(weekDrillStats(attempts, now)).toEqual({ ready: 2, attempted: 3 });
   });
   it("is zero with no attempts", () => {
-    expect(weekDrillStats([], now)).toEqual({ passed: 0, attempted: 0 });
+    expect(weekDrillStats([], now)).toEqual({ ready: 0, attempted: 0 });
   });
 });
 
@@ -226,5 +248,79 @@ describe("due wording", () => {
     expect(dueStatus("2026-11-09", today)).toEqual({ label: "Tomorrow", tone: "later" });
     expect(dueStatus("2026-11-12", today)).toEqual({ label: "2026-11-12", tone: "later" });
     expect(dueStatus("2027-01-01", "2026-12-31").label).toBe("Tomorrow");
+  });
+});
+
+describe("revise schema", () => {
+  const good = { attemptId: "0123456789abcdef", answer: "better" };
+  it("accepts a revision with or without the time", () => {
+    expect(DrillReviseSchema.safeParse(good).success).toBe(true);
+    expect(DrillReviseSchema.safeParse({ ...good, elapsedSeconds: 30 }).success).toBe(true);
+  });
+  it.each([
+    ["an unknown key", { ...good, extra: 1 }],
+    ["a path in the id", { ...good, attemptId: "../../x" }],
+    ["a short id", { ...good, attemptId: "abc" }],
+    ["a blank answer", { ...good, answer: "  " }],
+    ["an answer over 8000 characters", { ...good, answer: "x".repeat(8001) }],
+    ["a negative time", { ...good, elapsedSeconds: -1 }],
+    ["a time over two hours", { ...good, elapsedSeconds: 7201 }],
+    ["a missing id", { answer: "x" }],
+  ])("rejects %s", (_n, body) => {
+    expect(DrillReviseSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe("rubric and outcome", () => {
+  it("names the criteria and the skill of every kind", () => {
+    expect(DRILL_TYPES.map((d) => [DRILL_RUBRIC[d].skill, DRILL_RUBRIC[d].criteria.length, DRILL_RUBRIC[d].criteria.filter((k) => k.core).length])).toEqual([
+      ["scale_reliability", 4, 3],
+      ["design", 4, 2],
+      ["navigation", 4, 3],
+      ["depth", 3, 2],
+      ["design", 5, 3],
+    ]);
+    expect(OUTCOME_LABEL).toEqual({ ready: "Interview-ready", getting_there: "Getting there", needs_work: "Needs work" });
+  });
+
+  describe.each(DRILL_TYPES)("%s", (drill) => {
+    const criteria = DRILL_RUBRIC[drill].criteria;
+    const core = criteria.filter((k) => k.core);
+    const noncore = criteria.filter((k) => !k.core);
+    const set = (base: number, change: Record<string, number>) => criteria.map((k) => ({ id: k.id, score: change[k.id] ?? base }));
+    const c0 = core[0]?.id ?? "";
+    const c1 = core[1]?.id ?? "";
+
+    it("is ready when every core criterion is 3 or more and none is 1", () => {
+      expect(outcomeFor(drill, set(3, {}))).toBe("ready");
+      expect(outcomeFor(drill, set(4, {}))).toBe("ready");
+      for (const k of noncore) expect(outcomeFor(drill, set(3, { [k.id]: 2 }))).toBe("ready");
+    });
+
+    it("is getting there when a non-core criterion is 1 and the core ones are fine", () => {
+      for (const k of noncore) expect(outcomeFor(drill, set(3, { [k.id]: 1 }))).toBe("getting_there");
+    });
+
+    it("is getting there when exactly one core criterion is 2", () => {
+      expect(outcomeFor(drill, set(3, { [c0]: 2 }))).toBe("getting_there");
+    });
+
+    it("needs work when a core criterion is 1", () => {
+      expect(outcomeFor(drill, set(4, { [c0]: 1 }))).toBe("needs_work");
+    });
+
+    it("needs work when two core criteria are below 3", () => {
+      expect(outcomeFor(drill, set(4, { [c0]: 2, [c1]: 2 }))).toBe("needs_work");
+    });
+
+    it("counts a missing score as 1", () => {
+      expect(outcomeFor(drill, [])).toBe("needs_work");
+    });
+  });
+
+  it("picks the better outcome and keeps the first on a tie", () => {
+    expect(betterOutcome("needs_work", "getting_there")).toBe("getting_there");
+    expect(betterOutcome("ready", "needs_work")).toBe("ready");
+    expect(betterOutcome("getting_there", "getting_there")).toBe("getting_there");
   });
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { DrillType } from "../../shared/drills";
 import type { Mode, PhaseDef, Track } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import type { PinTarget } from "../../shared/graph/frames";
@@ -110,7 +111,7 @@ export interface FakeFacts {
   imageAttached?: boolean;
   pinTargets?: () => PinTarget[];
   /** The grader's input: the drill's answer key and the candidate's answer. */
-  drill?: { key: string; answer: string };
+  drill?: { kind: DrillType; key: string; answer: string };
 }
 
 export interface UsageContext {

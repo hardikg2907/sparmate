@@ -219,13 +219,15 @@ function WeekStats({
   stats: ReturnType<typeof weekStats>;
   dsa: DsaResponse | null;
   username: string | undefined;
-  drills: { passed: number; attempted: number } | null;
+  drills: { ready: number; attempted: number } | null;
 }) {
   const read = dsa !== null && (dsa.status === "ok" || dsa.status === "stale");
   const items: { label: string; value: string; note?: string }[] = [
     { label: "Rounds", value: `${stats.rounds.done}`, note: `of ${stats.rounds.planned}` },
     { label: "Redos", value: `${stats.redos.done}`, note: `of ${stats.redos.planned}` },
-    drills ? { label: "Drills", value: `${drills.passed}`, note: `of ${drills.attempted}` } : { label: "Drills", value: "—", note: "The drill count could not be loaded." },
+    drills
+      ? { label: "Drills", value: `${drills.ready}`, note: `interview-ready of ${drills.attempted}` }
+      : { label: "Drills", value: "—", note: "The drill count could not be loaded." },
     { label: "DSA mediums", value: read ? `${dsa.week.mediums}` : "—", note: read ? `of ${dsa.weeklyGoal}` : mediumsTip(username, dsa) },
   ];
   return (

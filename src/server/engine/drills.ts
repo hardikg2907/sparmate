@@ -1,9 +1,13 @@
 import { randomBytes } from "node:crypto";
 import {
   DRILL_INFO,
-  MAX_READY_ON,
   addDays,
-  applyVerdict,
+  DRILL_RUBRIC,
+  MAX_ELAPSED_SECONDS,
+  ATTEMPT_ID,
+  applyOutcome,
+  betterOutcome,
+  isBetterOutcome,
   byDueDay,
   drillForGap,
   drillsForTrack,
@@ -11,8 +15,9 @@ import {
   isDue,
   localDay,
   weekDrillStats,
+  type DrillAttempt,
   type DrillItem,
-  type DrillOutcome,
+  type DrillType,
   type DrillPrompt,
   type DrillResult,
   type DrillTarget,
@@ -23,7 +28,7 @@ import type { Problem } from "../../shared/problem";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { PrivacyGuard } from "../guard/privacy";
 import { buildDrill, drillFits, drillsAvailable, type DrillContent } from "./drill-content";
-import { GraderOutputSchema, finishGrade, graderMessage } from "./drill-grader";
+import { GraderOutputSchema, finishGrade, graderMessage, type GradedAnswer } from "./drill-grader";
 import type { Driver } from "./driver";
 import { DriverError } from "./driver";
 import type { DrillState, DrillStore } from "./drill-store";
@@ -54,9 +59,9 @@ export const BACKFILL_DAYS = 14;
 /** A round counts as played once it has ended, because until then its hidden facts are still in use. */
 const OVER: ReadonlySet<SessionHistoryItem["status"]> = new Set(["ended", "debriefing", "debriefed", "failed"]);
 
-/** The grader's verdict as it is stored. */
-function outcomeOf(verdict: "pass" | "not_yet"): DrillOutcome {
-  return verdict === "pass" ? "ready" : "needs_work";
+/** The criteria of a grade with their labels, for the page. */
+function describeScores(drill: DrillType, scores: readonly { id: string; score: number }[]): DrillResult["scores"] {
+  return DRILL_RUBRIC[drill].criteria.map((k) => ({ id: k.id, label: k.label, core: k.core, score: scores.find((s) => s.id === k.id)?.score ?? 1 }));
 }
 
 /** The id of a queued drill. It comes from the round and the gap, so the same gap is never queued twice. */
@@ -263,10 +268,9 @@ export class DrillService {
       return { save: true, value: null };
     });
 
-    let graded: Awaited<ReturnType<DrillService["grade"]>>;
+    let graded: GradedAnswer;
     try {
       graded = await this.grade(problem, content, answer, attemptId, target.drill);
-      const gradedAt = clock().toISOString();
       await this.deps.store.writeBody({
         version: 1,
         id: attemptId,
@@ -277,50 +281,183 @@ export class DrillService {
         topic: content.prompt.topic?.slice(0, 300) ?? null,
         answers: [{ at: opened.toISOString(), text: answer }],
         turns: [],
-        grades: [{ at: gradedAt, outcome: outcomeOf(graded.verdict), scores: [], wentWell: [], improve: [graded.fix], yourLine: graded.yourLine, strong: graded.passSounds }],
+        grades: [
+          {
+            at: clock().toISOString(),
+            outcome: graded.outcome,
+            scores: graded.scores,
+            wentWell: graded.wentWell,
+            improve: graded.improve,
+            yourLine: graded.yourLine,
+            strong: graded.strong,
+          },
+        ],
       });
     } catch (err) {
       await this.dropOpen(attemptId);
       throw err;
     }
-    const now = clock();
-    const today = localDay(now);
-    const outcome = outcomeOf(graded.verdict);
+    const today = localDay(clock());
 
     return this.deps.store.update((draft) => {
       // The queue may have changed while the grader worked, so the match is made again on the saved state.
       const item = this.matchLive(draft, target, today);
-      let passesInRow: number | null = null;
+      let readyCount: number | null = null;
       let closed = false;
       let nextDueOn: string | null = null;
+      let itemBefore: DrillAttempt["itemBefore"];
       // An attempt before the drill's day is practice: it is logged and changes nothing.
       const counts = item !== null && isDue(item, today);
       if (item && counts) {
-        const next = applyVerdict(item, graded.verdict, today);
+        itemBefore = { passes: item.passes, readyOn: [...item.readyOn] };
+        const next = applyOutcome({ passes: item.passes, readyOn: item.readyOn, outcome: graded.outcome, revised: false, problemId: target.problemId, today });
         item.passes = next.passes;
+        item.readyOn = next.readyOn;
         item.dueOn = next.dueOn;
         item.status = next.status;
-        if (next.passes === 0) item.readyOn = [];
-        else if (outcome === "ready" && !item.readyOn.includes(target.problemId)) item.readyOn = [...item.readyOn, target.problemId].slice(-MAX_READY_ON);
-        passesInRow = next.passes;
+        readyCount = next.passes;
         closed = next.status === "closed";
         nextDueOn = closed ? null : next.dueOn;
       }
       const row = draft.attempts.find((a) => a.id === attemptId);
       if (row) {
         row.status = "done";
-        row.outcome = outcome;
+        row.outcome = graded.outcome;
+        row.scores = graded.scores;
         row.drillId = counts ? (item?.id ?? null) : null;
         row.seconds = elapsedSeconds ?? null;
+        if (itemBefore) row.itemBefore = itemBefore;
       }
-      const other = draft.items.filter((i) => i.id !== (counts ? item?.id : undefined) && isDue(i, today) && problems.has(i.problemId)).sort(byDueDay)[0];
       const result: DrillResult = {
-        ...graded,
         attemptId,
-        passesInRow,
+        outcome: graded.outcome,
+        firstOutcome: null,
+        revised: false,
+        scores: describeScores(target.drill, graded.scores),
+        wentWell: graded.wentWell,
+        improve: graded.improve,
+        yourLine: graded.yourLine,
+        canRevise: graded.outcome !== "ready",
+        readyCount,
         closed,
         nextDueOn,
-        next: other ? { drill: other.drill, problemId: other.problemId, drillId: other.id } : null,
+        next: this.nextDue(draft, problems, today, counts ? item?.id : undefined),
+      };
+      return { save: true, value: result };
+    });
+  }
+
+  private nextDue(draft: DrillState, problems: ReadonlyMap<string, Problem>, today: string, exceptId?: string): DrillTarget | null {
+    const other = draft.items.filter((i) => i.id !== exceptId && isDue(i, today) && problems.has(i.problemId)).sort(byDueDay)[0];
+    return other ? { drill: other.drill, problemId: other.problemId, drillId: other.id } : null;
+  }
+
+  /**
+   * Grades one revised answer for a finished attempt. The attempt keeps its first scores; the final outcome is the
+   * better of the two, and a better one moves the queued drill's schedule as if the revised answer had come first,
+   * with the ready count capped so a revision never closes a drill.
+   */
+  async revise(attemptId: string, answer: string, elapsedSeconds?: number): Promise<DrillResult> {
+    if (answer.trim() === "") throw new HttpError(400, "Write an answer first.");
+    if (!ATTEMPT_ID.test(attemptId)) throw new HttpError(404, "That attempt was not found.");
+    const key = `revise:${attemptId}`;
+    if (this.grading.has(key)) throw new HttpError(409, "This answer is already being graded. Wait for the result.");
+    this.grading.add(key);
+    try {
+      return await this.reviseNow(attemptId, answer, elapsedSeconds);
+    } finally {
+      this.grading.delete(key);
+    }
+  }
+
+  private checkRevisable(row: DrillAttempt | undefined, today: string): DrillAttempt {
+    if (!row) throw new HttpError(404, "That attempt was not found.");
+    if (row.status !== "done" || row.legacy) throw new HttpError(409, "This attempt cannot be revised.");
+    if (row.revised) throw new HttpError(409, "This attempt was already revised.");
+    if (row.outcome === "ready" || row.outcome === null) throw new HttpError(409, "This answer is already interview-ready, so there is nothing to revise.");
+    if (row.day !== today) throw new HttpError(409, "A revision must come on the same day as the attempt.");
+    return row;
+  }
+
+  private async reviseNow(attemptId: string, answer: string, elapsedSeconds?: number): Promise<DrillResult> {
+    const clock = this.deps.now ?? (() => new Date());
+    const problems = await this.playable();
+    const state = await this.sync(problems);
+    this.checkRevisable(
+      state.attempts.find((a) => a.id === attemptId),
+      localDay(clock()),
+    );
+    const body = await this.deps.store.readBody(attemptId);
+    const firstGrade = body?.grades[0];
+    const firstAnswer = body?.answers[0];
+    if (!body || !firstGrade || !firstAnswer) throw new HttpError(409, "This attempt cannot be revised.");
+    const problem = problems.get(body.problemId);
+    if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
+    const content = buildDrill(problem, body.drill, { ...(body.topic ? { topic: body.topic } : {}) });
+    if (!content) throw new HttpError(400, "This problem has no material for that drill.");
+
+    const opened = clock();
+    const graded = await this.grade(problem, content, answer, attemptId, body.drill);
+    const better = isBetterOutcome(graded.outcome, firstGrade.outcome);
+    const finalOutcome = betterOutcome(firstGrade.outcome, graded.outcome);
+    await this.deps.store.writeBody({
+      ...body,
+      answers: [firstAnswer, { at: opened.toISOString(), text: answer }],
+      grades: [
+        firstGrade,
+        {
+          at: clock().toISOString(),
+          outcome: graded.outcome,
+          scores: graded.scores,
+          wentWell: graded.wentWell,
+          improve: graded.improve,
+          yourLine: graded.yourLine,
+          strong: graded.strong,
+        },
+      ],
+    });
+    const today = localDay(clock());
+
+    return this.deps.store.update((draft) => {
+      const live = this.checkRevisable(
+        draft.attempts.find((a) => a.id === attemptId),
+        today,
+      );
+      let readyCount: number | null = null;
+      let closed = false;
+      let nextDueOn: string | null = null;
+      const item = live.drillId ? draft.items.find((i) => i.id === live.drillId) : undefined;
+      if (item && item.status === "open" && live.itemBefore && better) {
+        const next = applyOutcome({ ...live.itemBefore, outcome: finalOutcome, revised: true, problemId: live.problemId, today });
+        item.passes = next.passes;
+        item.readyOn = next.readyOn;
+        item.dueOn = next.dueOn;
+        item.status = next.status;
+      }
+      if (item) {
+        readyCount = item.passes;
+        closed = item.status === "closed";
+        nextDueOn = closed ? null : item.dueOn;
+      }
+      live.revised = true;
+      live.firstOutcome = live.outcome;
+      live.outcome = finalOutcome;
+      if (elapsedSeconds !== undefined || live.seconds !== null) live.seconds = Math.min(MAX_ELAPSED_SECONDS, (live.seconds ?? 0) + (elapsedSeconds ?? 0));
+      const shown = graded.outcome === finalOutcome ? graded : firstGrade;
+      const result: DrillResult = {
+        attemptId,
+        outcome: finalOutcome,
+        firstOutcome: live.firstOutcome,
+        revised: true,
+        scores: describeScores(body.drill, shown.scores),
+        wentWell: shown.wentWell,
+        improve: shown.improve,
+        yourLine: shown.yourLine,
+        canRevise: false,
+        readyCount,
+        closed,
+        nextDueOn,
+        next: this.nextDue(draft, problems, today, item?.id),
       };
       return { save: true, value: result };
     });
@@ -346,7 +483,7 @@ export class DrillService {
     }
   }
 
-  private async grade(problem: Problem, content: DrillContent, answer: string, attemptId: string, drill: DrillTarget["drill"]) {
+  private async grade(problem: Problem, content: DrillContent, answer: string, attemptId: string, drill: DrillTarget["drill"]): Promise<GradedAnswer> {
     const settings = this.deps.settings.get();
     const text = graderMessage(content.prompt, content.key, answer);
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -368,15 +505,14 @@ export class DrillService {
               }),
             ),
           tools: [],
-          fake: { problem, track: problem.meta.track, drill: { key: content.key, answer } },
+          fake: { problem, track: problem.meta.track, drill: { kind: drill, key: content.key, answer } },
           usage: { sessionId: null, problemId: problem.meta.id, track: problem.meta.track, mode: null, drillAttemptId: attemptId, drillKind: drill },
           turn: { text, meta: { kind: "oneshot", candidateText: answer } },
           output: { schema: GraderOutputSchema, jsonSchema: toApiSchema(GraderOutputSchema), fallbackJsonSchema: toCompatSchema(GraderOutputSchema) },
           maxTurns: 3,
         });
         if (!res.output) throw new DriverError("The grader returned nothing.");
-        const done = finishGrade(res.output, answer);
-        return { ...done, fix: this.deps.guard.redact(done.fix), passSounds: this.deps.guard.redact(done.passSounds) };
+        return finishGrade(res.output, answer, { drill, key: content.key, redact: (text) => this.deps.guard.redact(text) });
       } catch (err) {
         this.deps.log.warn(`Drill grader attempt ${attempt + 1} failed for ${problem.meta.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);
       }

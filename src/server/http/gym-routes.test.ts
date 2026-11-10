@@ -70,7 +70,7 @@ describe("GET /api/gym", () => {
     expect(body.dueCount).toBe(1);
     expect(body.queue[0]).toMatchObject({ drill: "capacity", problemId: "c2-url-shortener", due: true, passes: 0, minutes: 10 });
     expect(body.problems.map((p) => p.id)).toEqual(["c2-url-shortener"]);
-    expect(body.week).toEqual({ passed: 0, attempted: 0 });
+    expect(body.week).toEqual({ ready: 0, attempted: 0 });
   });
 
   it("is a 404 when the server has no drill service", async () => {
@@ -127,21 +127,31 @@ describe("POST /api/gym/submit", () => {
   it("grades the answer and moves the queued drill", async () => {
     const res = await post("/api/gym/submit", { drill: "capacity", problemId: "c2-url-shortener", answer: ANSWER });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ verdict: "pass", passesInRow: 1, closed: false, nextDueOn: "2026-11-06" });
+    expect(res.json()).toMatchObject({ outcome: "ready", readyCount: 1, closed: false, nextDueOn: "2026-11-06", canRevise: false, revised: false, firstOutcome: null });
     const after = (await app.inject({ method: "GET", url: "/api/gym", headers: { host: HOST } })).json<GymSummary>();
     expect(after.dueCount).toBe(0);
-    expect(after.week).toEqual({ passed: 1, attempted: 1 });
+    expect(after.week).toEqual({ ready: 1, attempted: 1 });
   });
 
-  it("returns Not yet for a thin answer, with the fix, the quoted line and what a pass sounds like", async () => {
+  it("returns needs work for a thin answer, with the criteria, feedback and the quoted line, and no answer-key text", async () => {
     const res = await post("/api/gym/submit", { drill: "capacity", problemId: "c2-url-shortener", answer: "It is big." });
     const body = res.json();
-    expect(body.verdict).toBe("not_yet");
-    expect(body.passesInRow).toBe(0);
+    expect(body.outcome).toBe("needs_work");
+    expect(body.canRevise).toBe(true);
+    expect(body.readyCount).toBe(0);
     expect(body.nextDueOn).toBe("2026-11-04");
-    expect(body.fix.length).toBeGreaterThan(0);
+    expect(body.improve.length).toBeGreaterThan(0);
     expect(body.yourLine).toBe("It is big.");
-    expect(body.passSounds.length).toBeGreaterThan(0);
+    expect(body.scores).toEqual([
+      { id: "picks_numbers", label: "Picks the numbers that decide", core: true, score: 1 },
+      { id: "math", label: "Math is about right", core: true, score: 1 },
+      { id: "decisions", label: "Each number ends in a decision", core: true, score: 1 },
+      { id: "assumptions", label: "States its assumptions", core: false, score: 2 },
+    ]);
+    expect(Object.keys(body).sort()).toEqual(
+      ["attemptId", "canRevise", "closed", "firstOutcome", "improve", "next", "nextDueOn", "outcome", "readyCount", "revised", "scores", "wentWell", "yourLine"].sort(),
+    );
+    expect(JSON.stringify(body)).not.toContain("strong");
   });
 
   it("puts the grader call on the usage ledger as the grader role", async () => {
@@ -154,7 +164,7 @@ describe("POST /api/gym/submit", () => {
       effort: "medium",
       systemPrompt: async () => "",
       tools: [],
-      fake: { drill: { key: "alpha beta gamma delta", answer: "x" } },
+      fake: { drill: { kind: "capacity", key: "alpha beta gamma delta", answer: "x" } },
       turn: { text: "x", meta: { kind: "oneshot" } },
       output: null,
       maxTurns: 1,
@@ -167,7 +177,7 @@ describe("POST /api/gym/submit", () => {
     ["a blank answer", { drill: "capacity", problemId: "c2-url-shortener", answer: "   " }],
     ["a missing answer", { drill: "capacity", problemId: "c2-url-shortener" }],
     ["an answer over 8000 characters", { drill: "capacity", problemId: "c2-url-shortener", answer: "x".repeat(8001) }],
-    ["an unknown key", { drill: "capacity", problemId: "c2-url-shortener", answer: "x", verdict: "pass" }],
+    ["an unknown key", { drill: "capacity", problemId: "c2-url-shortener", answer: "x", outcome: "ready" }],
     ["a path in the problem id", { drill: "capacity", problemId: "../x", answer: "x" }],
   ])("rejects %s with 400", async (_n, payload) => {
     expect((await post("/api/gym/submit", payload)).statusCode).toBe(400);
@@ -188,5 +198,63 @@ describe("POST /api/gym/submit", () => {
 
   it("refuses an answer for a problem that was never played", async () => {
     expect((await post("/api/gym/submit", { drill: "capacity", problemId: "c2-rate-limiter", answer: "x" })).statusCode).toBe(404);
+  });
+});
+
+describe("POST /api/gym/revise", () => {
+  const submit = async (answer: string) => (await post("/api/gym/submit", { drill: "capacity", problemId: "c2-url-shortener", answer })).json<{ attemptId: string }>();
+
+  it("grades one revision and returns the final outcome", async () => {
+    const first = await submit("It is big.");
+    const res = await post("/api/gym/revise", { attemptId: first.attemptId, answer: ANSWER, elapsedSeconds: 20 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      attemptId: first.attemptId,
+      outcome: "ready",
+      firstOutcome: "needs_work",
+      revised: true,
+      canRevise: false,
+      readyCount: 1,
+      nextDueOn: "2026-11-05",
+    });
+    expect(JSON.stringify(res.json())).not.toContain("strong");
+  });
+
+  it("answers 404 for an unknown attempt and 409 for one that cannot be revised", async () => {
+    expect((await post("/api/gym/revise", { attemptId: "0123456789abcdef", answer: ANSWER })).statusCode).toBe(404);
+    const ready = await submit(ANSWER);
+    expect((await post("/api/gym/revise", { attemptId: ready.attemptId, answer: ANSWER })).statusCode).toBe(409);
+    const thin = await submit("It is big.");
+    expect((await post("/api/gym/revise", { attemptId: thin.attemptId, answer: ANSWER })).statusCode).toBe(200);
+    const again = await post("/api/gym/revise", { attemptId: thin.attemptId, answer: ANSWER });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error).toBe("This attempt was already revised.");
+  });
+
+  it("answers 409 to a second revision sent while the first is being graded", async () => {
+    const first = await submit("It is big.");
+    const codes = (
+      await Promise.all([post("/api/gym/revise", { attemptId: first.attemptId, answer: ANSWER }), post("/api/gym/revise", { attemptId: first.attemptId, answer: ANSWER })])
+    ).map((r) => r.statusCode);
+    expect(codes.sort()).toEqual([200, 409]);
+  });
+
+  it.each([
+    ["an empty answer", { attemptId: "0123456789abcdef", answer: "" }],
+    ["a blank answer", { attemptId: "0123456789abcdef", answer: "  " }],
+    ["a missing answer", { attemptId: "0123456789abcdef" }],
+    ["a missing id", { answer: "x" }],
+    ["an answer over 8000 characters", { attemptId: "0123456789abcdef", answer: "x".repeat(8001) }],
+    ["an unknown key", { attemptId: "0123456789abcdef", answer: "x", drill: "capacity" }],
+    ["a path in the id", { attemptId: "../../x", answer: "x" }],
+    ["a time over two hours", { attemptId: "0123456789abcdef", answer: "x", elapsedSeconds: 7201 }],
+    ["no body", undefined],
+  ])("rejects %s with 400", async (_n, payload) => {
+    expect((await post("/api/gym/revise", payload)).statusCode).toBe(400);
+  });
+
+  it("rejects a request without the CSRF token", async () => {
+    const res = await post("/api/gym/revise", { attemptId: "0123456789abcdef", answer: "x" }, { host: HOST, origin: `http://${HOST}` });
+    expect(res.statusCode).toBe(403);
   });
 });

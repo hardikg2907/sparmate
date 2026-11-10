@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { DRILL_RUBRIC } from "../../shared/drills";
 import type { PhaseDef } from "../../shared/phases";
 import type { BookkeepingOp, Scorecard } from "../../shared/types";
+import type { GraderOutput } from "./drill-grader";
 import {
   DriverError,
   type Conversation,
@@ -453,25 +455,36 @@ function longWords(text: string): string[] {
 }
 
 /**
- * A scripted grader: an answer that uses at least three of the key's longer words passes. It stands in for a model
- * so the whole drill flow can run without one.
+ * A scripted grader that stands in for a model so the whole drill flow runs without one. An answer that uses at least
+ * three of the key's longer words scores every criterion 3. One or two words lift the first core criterion to 2 and
+ * leave the rest at 3. No word scores every core criterion 1 and the others 2.
  */
-export function fakeGrade(facts: FakeFacts): { verdict: "pass" | "not_yet"; fix: string; yourLine: string; passSounds: string } {
+export function fakeGrade(facts: FakeFacts): GraderOutput {
   const key = facts.drill?.key ?? "";
   const answer = facts.drill?.answer ?? "";
+  const kind = facts.drill?.kind ?? "capacity";
   const lines = answer.split("\n").filter((l) => l.trim() !== "");
   const present = new Set(longWords(answer));
   const keyWords = longWords(key);
-  const hits = keyWords.filter((w) => present.has(w));
-  const pass = hits.length >= 3;
+  const hits = keyWords.filter((w) => present.has(w)).length;
   const missing = keyWords.find((w) => !present.has(w));
+  const criteria = DRILL_RUBRIC[kind].criteria;
+  const firstCore = criteria.find((k) => k.core)?.id;
+  const score = (id: string, core: boolean): number => {
+    if (hits >= 3) return 3;
+    if (hits >= 1) return id === firstCore ? 2 : 3;
+    return core ? 1 : 2;
+  };
   return {
-    verdict: pass ? "pass" : "not_yet",
-    fix: pass
-      ? "Tie your last point to a decision in the design, so each claim ends in something you would build."
-      : `Say what ${missing ?? "the key point"} means for the design, and end with the decision it forces.`,
+    scores: criteria.map((k) => ({ id: k.id, score: score(k.id, k.core) })),
+    wentWell: hits >= 1 ? ["The answer names ideas that matter for this problem."] : [],
+    improve: [
+      hits >= 3
+        ? "Tie your last point to a decision in the design, so each claim ends in something you would build."
+        : `Say what ${missing ?? "the key point"} means for the design, and end with the decision it forces.`,
+    ],
     yourLine: (lines[0] ?? "").slice(0, 200),
-    passSounds: "Each number or step ends with what it forces: a cache in front of the database, because reads outnumber writes by a hundred to one.",
+    strong: "Each number or step ends with what it forces: a cache in front of the database, because reads outnumber writes by a hundred to one.",
   };
 }
 

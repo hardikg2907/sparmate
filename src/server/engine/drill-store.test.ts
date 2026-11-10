@@ -127,6 +127,41 @@ describe("DrillStore", () => {
     expect(again.snapshot().items).toEqual([itemV2]);
   });
 
+  it("saves the item state kept on an attempt row, and rejects unknown or oversized values in it", async () => {
+    const row = {
+      id: "aaaaaaaaaaaaaaaa",
+      at: "2026-11-03T10:00:00.000Z",
+      day: "2026-11-03",
+      drill: "capacity" as const,
+      problemId: "c2-url-shortener",
+      variant: null,
+      drillId: item.id,
+      status: "done" as const,
+      outcome: "needs_work" as const,
+      firstOutcome: null,
+      revised: false,
+      scores: [{ id: "math", score: 1 }],
+      seconds: 30,
+      legacy: false,
+    };
+    const state = (attempt: object) => ({ version: 2, items: [], attempts: [attempt] });
+    const kept = { ...row, itemBefore: { passes: 1, readyOn: ["c2-url-shortener"] } };
+    expect(DrillStateSchema.safeParse(state(row)).success).toBe(true);
+    expect(DrillStateSchema.safeParse(state(kept)).success).toBe(true);
+    expect(DrillStateSchema.safeParse(state({ ...row, itemBefore: { passes: 1, readyOn: [], extra: 1 } })).success).toBe(false);
+    expect(DrillStateSchema.safeParse(state({ ...row, itemBefore: { passes: 4, readyOn: [] } })).success).toBe(false);
+    expect(DrillStateSchema.safeParse(state({ ...row, itemBefore: { passes: 1, readyOn: Array.from({ length: 51 }, () => "p") } })).success).toBe(false);
+    const store = new DrillStore(path, memoryLogger());
+    await store.load();
+    await store.update((draft) => {
+      draft.attempts.push(kept);
+      return { save: true, value: null };
+    });
+    const again = new DrillStore(path, memoryLogger());
+    await again.load();
+    expect(again.snapshot().attempts[0]?.itemBefore).toEqual({ passes: 1, readyOn: ["c2-url-shortener"] });
+  });
+
   it("does not write when a change says not to, and keeps the old state when the draft is invalid", async () => {
     const store = new DrillStore(path, memoryLogger());
     await store.load();
