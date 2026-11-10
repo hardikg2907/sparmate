@@ -355,16 +355,19 @@ export class DrillService {
   async prompt(target: DrillTarget): Promise<DrillPrompt> {
     const problems = await this.playable();
     const state = await this.sync(problems);
-    const { problem, content, variant } = await this.resolve(target, state);
-    if (!isDialogue(target.drill)) return content.prompt;
+    const { problem, item, content, variant } = await this.resolve(target, state);
+    // A queued drill opened before its day is graded but counts for nothing, so the page says so before the answer.
+    const today = this.today();
+    const early = item && !isDue(item, today) ? { early: { dueOn: item.dueOn, today } } : {};
+    if (!isDialogue(target.drill)) return { ...content.prompt, ...early };
     const row = this.findOpen(state, target, variant);
-    if (!row) return content.prompt;
+    if (!row) return { ...content.prompt, ...early };
     const body = await this.deps.store.readBody(row.id);
     const conversation = this.conversationOf(body);
-    if (!body || !conversation) return content.prompt;
+    if (!body || !conversation) return { ...content.prompt, ...early };
     const saved = buildDrill(problem, target.drill, { ...(body.topic ? { topic: body.topic } : {}), ...(variant ? { variant } : {}) });
     const shown = saved && (body.topic === null || saved.prompt.topic === body.topic) ? saved : content;
-    return { ...shown.prompt, open: { attemptId: row.id, openedAt: row.at, turns: conversation.turns, asked: conversation.asked, of: MAX_FOLLOW_UPS } };
+    return { ...shown.prompt, ...early, open: { attemptId: row.id, openedAt: row.at, turns: conversation.turns, asked: conversation.asked, of: MAX_FOLLOW_UPS } };
   }
 
   /** The open attempt of today for exactly this target: same kind, problem, changed constraint and queued drill. */

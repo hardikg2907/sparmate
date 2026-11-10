@@ -526,7 +526,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   outline "History" button beside "Start drill", and each "Also due" row ends in a small "History" link. Below the
   hero and the card, a "Closed drills" raised card lists the closed drills (a glyph, the drill, the gap, the round it came
   from and the day it closed; five rows, then "Show all N"). A "Recent attempts" raised card follows, with one row per
-  attempt: the date and the drill, the problem, the outcome badge, a strip of criterion bars, the time and the cost. A row
+  attempt: the date and the drill, the problem, the outcome badge, a strip of criterion bars, the time and the cost (one "No scores, time or cost recorded" line when none was kept). A row
   is a full-width button with a chevron that turns; it opens in place and shows the attempt (see Drill history).
 
 ### Progress
@@ -570,7 +570,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   and one quiet line name the ready proofs.
 - A raised "Attempts" card: each row is a full-width button with a turning chevron, the date, the outcome badge ("after a
   revision" beside it in muted text), the problem, a strip of one bar for each criterion (green at 3 or 4, amber at 2, red at 1;
-  one label for a screen reader), the time and the cost. An open row shows, in this order: "Your task", "What changed", the
+  one label for a screen reader), the time and the cost (one "No scores, time or cost recorded" line when none was kept). An open row shows, in this order: "Your task", "What changed", the
   answers or "The conversation" (the same sunken thread as the result screen), then for each grade "How each part scored",
   "What went well" beside "What to improve", "Your line" and, when sent, "What a strong answer says". A revised attempt
   shows "First try" and "After the revision" blocks. An attempt with no saved body says so in one muted line.
@@ -584,7 +584,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
 ### Drill screen
 
 - The drill screen is full screen with a slim bar: Back to Practice, the drill name and a soft countdown that turns amber
-  and counts up in overtime. Two columns hold the prompt cards and one raised answer card. A changed-constraint drill
+  and counts up in overtime. It starts with the first change to an answer and reads "starts when you type" until then. A queued drill opened before its day says "Due tomorrow. An early try is practice only." in a muted line under the problem name, and so does the drill history page under "Start drill". Two columns hold the prompt cards and one raised answer card. A changed-constraint drill
   shows the accent "Changed constraint" tag beside the problem name, and a "What changed" card with the other material.
   The result shows the same tag beside the problem. A dialogue drill (the deep dive and the trade-off) says in a quiet
   line under the answer box that one or two follow-up questions come before the result. After the opening answer the

@@ -16,6 +16,7 @@ import { PageHeader, PageShell } from "../components/PageShell";
 import { ArrowLeftIcon, ChevronRightIcon, WarnIcon } from "../components/icons";
 import { InfoTip } from "../components/study";
 import { Alert, Badge, Button, Card, Skeleton, cn } from "../components/ui";
+import { earlyNote } from "../lib/drillStart";
 import { formatDateTime } from "../lib/format";
 import { scoreFill } from "../lib/scoreTone";
 import { useHistorySource, useLoaded } from "../lib/useDrillHistory";
@@ -195,9 +196,15 @@ function AttemptItem({ row, showKind }: { row: DrillAttemptRow | RecentAttemptRo
             <ChangedTag row={row} />
           </span>
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-muted-foreground">
-            <ScoreStrip scores={row.scores} />
-            <span>{row.seconds === null ? "Time not recorded" : formatSeconds(row.seconds)}</span>
-            <span>{row.costUsd === null ? "Cost not recorded" : formatCost(row.costUsd)}</span>
+            {row.scores.length === 0 && row.seconds === null && row.costUsd === null ? (
+              <span className="text-faint">No scores, time or cost recorded</span>
+            ) : (
+              <>
+                <ScoreStrip scores={row.scores} />
+                {row.seconds === null ? null : <span>{formatSeconds(row.seconds)}</span>}
+                {row.costUsd === null ? null : <span>{formatCost(row.costUsd)}</span>}
+              </>
+            )}
           </span>
         </span>
       </button>
@@ -324,9 +331,12 @@ function DrillDetailBody({ detail }: { detail: DrillDetail }) {
         title={item.gapTitle}
         aside={
           open ? (
-            <Button asChild size="lg" variant="default">
-              <Link href={drillPath({ drill: item.drill, problemId: item.problemId, drillId: item.id })}>Start drill</Link>
-            </Button>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <Button asChild size="lg" variant="default">
+                <Link href={drillPath({ drill: item.drill, problemId: item.problemId, drillId: item.id })}>Start drill</Link>
+              </Button>
+              {item.dueOn > today ? <p className="text-ui text-muted-foreground">{earlyNote(item.dueOn, today)}</p> : null}
+            </div>
           ) : null
         }
       />
