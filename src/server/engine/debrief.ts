@@ -96,10 +96,32 @@ export function candidateLines(session: Pick<Session, "transcript">): string[] {
   return session.transcript.filter((e) => e.channel === "interview" && e.role === "candidate").map((e) => e.text);
 }
 
+/** Longest root-cause label the page shows; the tester is asked for a few words. */
+export const MAX_CAUSE_CHARS = 160;
+
+/** What a failed scenario's cause is when the file did not compile, so the page can say one cause failed them all. */
+export const NOT_COMPILED_CAUSE = "Did not compile";
+
+/**
+ * A cause belongs to a failed scenario only. It is cut to one short line, and a cause with no word in it is dropped,
+ * so the page never shows an empty label. A file that did not compile fails every scenario for that one cause.
+ */
+export function tidyTesterOutput(t: TesterOutput): TesterOutput {
+  if (!t.compiled) return { ...t, scenarios: t.scenarios.map(({ cause: _cause, ...s }) => ({ ...s, pass: false, cause: NOT_COMPILED_CAUSE })) };
+  return {
+    ...t,
+    scenarios: t.scenarios.map(({ cause, ...s }) => {
+      if (s.pass) return s;
+      const label = (cause ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CAUSE_CHARS);
+      return /[\p{L}\p{N}]/u.test(label) ? { ...s, cause: label } : s;
+    }),
+  };
+}
+
 export function testerText(t: TesterOutput | null): string {
   if (!t) return "The scenario tester could not run. Judge working_code from the code and the candidate's own runs.";
   const lines = [`compiled: ${t.compiled ? "yes" : "no"}`];
-  for (const s of t.scenarios) lines.push(`- ${s.pass ? "PASS" : "FAIL"} ${s.name}: ${s.detail}`);
+  for (const s of t.scenarios) lines.push(`- ${s.pass ? "PASS" : "FAIL"} ${s.name}: ${s.detail}${s.cause ? ` (cause: ${s.cause})` : ""}`);
   if (t.notes) lines.push(`notes: ${t.notes}`);
   return lines.join("\n");
 }
@@ -257,7 +279,8 @@ export function mostSevereGaps<G extends { severity: keyof typeof SEVERITY_RANK 
  */
 export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; track: Session["track"]; tester: TesterOutput | null }): JudgedCard {
   const out: JudgedCard = { ...card };
-  if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : out.lldScenarios;
+  // Scenario results come from the tester alone; without one, a judge's own list would be unchecked model text.
+  if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : [];
   else out.lldScenarios = [];
 
   const verdicts = verdictsFor(ctx.track, card.dimensions);

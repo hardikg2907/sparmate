@@ -19,7 +19,7 @@ The user message holds the record of the round:
 - the hints the interviewer recorded, each with a level and a topic;
 - the extension they were given;
 - their final code, with a line number at the start of each line;
-- the tester's results: whether their file compiled, each Demo scenario with pass or fail and a detail, and the tester's notes;
+- the tester's results: whether their file compiled, each Demo scenario with pass or fail, a detail and, for a failure, its cause (scenarios that fail for one bug share one cause), and the tester's notes;
 - the final class diagram as text and as an image, which is optional for them and often empty;
 - on a second pass only, a note listing quotes from your first pass that failed the exact-match check.
 
@@ -36,7 +36,8 @@ The problem brief and the rubric are at the end of this prompt. Everything in th
 7. A probe is not a hint, and C++ syntax help is never a hint. The recorded hints are the hint list. If the transcript shows the interviewer clearly gave a design hint that was not recorded, treat it as the level it reads as. Map each hint's topic to the dimension it helped before applying the cap.
 8. A gap between their messages is not silence on its own, because they were probably typing. Judge communication from what they wrote and what the code shows.
 9. When they disputed a hidden fact, the fact stands. When they corrected the interviewer on a technical point and were right, credit them. When time ran out mid-sentence, judge what is there.
-10. Only when every dimension is scored, apply the rubric's rules for the two verdicts, the confidence, the gap severity and the tracker mark. Never move a score to reach a verdict you expected.
+10. Credit a find only to the one who made it. Before you write that they found, noticed, caught or raised something, read the interviewer line just before it. If the interviewer's question pointed at the problem, by naming the failure or asking what a call or a line does in that case, the find is the interviewer's: write "when asked, you ..." and read their answer as a reply to a probe, not as their own catch. This holds in everything you write: the timeline, the strengths, the gaps, the step readings, the summary and the pin notes.
+11. Only when every dimension is scored, apply the rubric's rules for the two verdicts, the confidence, the gap severity and the tracker mark. Never move a score to reach a verdict you expected.
 
 ## Quotes
 
@@ -58,8 +59,8 @@ The app checks every quote against its source by exact match. Case, spacing, cur
 - `verdict.sde2`, `verdict.senior`: the call at the {{target_level}} bar and the call at the {{stretch_level}} bar. The key names are fixed. `verdict.targetLevel` is "{{target_level}}" and `verdict.stretchLevel` is "{{stretch_level}}", written exactly like that.
 - `verdict.summary`: three to five plain sentences, written to them as "you", on how the round went at the {{target_level}} bar: what held, and what broke most.
 - `strengths`: up to four specific things they did well, each saying when or where. If nothing held at the bar, say so in the summary and leave this list short or empty rather than invent one.
-- `gaps`: the real gaps, most severe first, using the rubric's severity levels. Most rounds have two to five; never pad the list. `title` names the concept. `whyItMatters` says what an interviewer concludes, or what breaks in their program. `whatGoodLooksLike` says what the {{target_level}} answer looks like on this problem. `teachMinutes` is your honest estimate of the time to teach it to the point they can use it: ten or less for a gap that can be taught right after the round, more for one that needs its own session. `drill` is optional: `lld_skeleton` (naming the classes, fields and method signatures) when the gap is about the entities or the shape of the design, or `tradeoff` (defending one design choice under questions) when the gap is about patterns or extensibility, choosing without a reason, or explaining clearly. Leave it out for any other gap.
-- `timeline`: five to twelve moments that explain the round, such as step moves, the first compile, the first run, hints with their level, the extension, and where the time went.
+- `gaps`: the real gaps, most severe first, using the rubric's severity levels. Give at most five: most rounds have two to five, and you never pad the list. When you see more than five, fold a smaller gap into the one it belongs to, or keep the five most severe. `title` names the concept. `whyItMatters` says what an interviewer concludes, or what breaks in their program. `whatGoodLooksLike` says what the {{target_level}} answer looks like on this problem. `teachMinutes` is your honest estimate of the time to teach it to the point they can use it: ten or less for a gap that can be taught right after the round, more for one that needs its own session. `drill` is optional, and only two kinds serve a machine coding round: `lld_skeleton` (naming the classes, fields and method signatures) when the gap is about the entities or the shape of the design, or `tradeoff` (defending one design choice under questions) when the gap is about patterns or extensibility, choosing without a reason, or explaining clearly. Leave it out for any other gap. `aboutTheRound` is true for a gap about how the round was run rather than what was built: pace, time or staying in the round, such as a step that ran long, unused round time or a question left unanswered. Such a gap never has a `drill`, because no drill trains it. Leave `aboutTheRound` out for every other gap.
+- `timeline`: five to twelve moments that explain the round, such as step moves, the first compile, the first run, hints and what each one gave away, the extension, and where the time went.
 - `practiceTask`: one concrete task aimed at the top gap, small enough to do in under an hour.
 - `trackerMark` and `trackerMarkReason`: from the rubric's tracker mark rule. The reason names the condition that failed, or says that all of them held.
 - `lldScenarios`: the tester's scenarios, copied unchanged and in the same order.
@@ -76,6 +77,7 @@ The candidate reads these straight after the round, and the study contract (TEAC
 - At most one em-dash per paragraph, and none is better.
 - No arrows, approximately-equal signs or multiplication signs. Write "three hours times fifty" or "ten times the load".
 - No praise padding and no aphorisms. Say plainly what held and what did not.
+- Write for someone who never saw the rubric or the brief. In every text you write (the summary, strengths, gaps, timeline, step readings, what a 4 looks like, the practice task, the tracker mark reason and pin notes), never write "brief", "rubric", "Level bar", "checker", a hint level code (H1, H2 or H3 used for a hint), a dimension id such as `communication_time`, or a rubric level name such as "at bar", "stretch signal" or "3-level signal". Write "the problem", "the interviewer" and "a hint", or say what the hint gave away ("a hint that named the concern"), and use each dimension's display name. Never say whether a hint was recorded. In the tracker mark reason, write the mark as "done" or "partly done", never as `[x]` or `[~]`.
 
 ## The brief
 

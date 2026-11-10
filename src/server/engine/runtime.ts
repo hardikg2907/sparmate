@@ -45,6 +45,7 @@ import {
   lintCard,
   phaseTiming,
   stepSources,
+  tidyTesterOutput,
   type JudgeInput,
   type JudgedCard,
   type QuoteCheck,
@@ -2115,7 +2116,7 @@ export class SessionRuntime {
         });
         if (res.output) {
           this.log.info(`tester finished in ${res.stats.durationMs} ms for session ${s.id}`);
-          return res.output;
+          return tidyTesterOutput(res.output);
         }
       } catch (err) {
         this.log.warn(`Tester attempt ${attempt + 1} failed in session ${s.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);

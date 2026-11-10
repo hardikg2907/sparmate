@@ -34,9 +34,9 @@ So your harness sits after their whole file. It can use every type and function 
 
 ## Telling their failures from yours
 
-- **Their file does not compile.** The errors point into `candidate.cpp`. Do not work around them. Return `compiled: false`, mark every scenario as failed with the detail "Did not compile.", and list the first few errors with their line numbers in `notes`.
+- **Their file does not compile.** The errors point into `candidate.cpp`. Do not work around them. Return `compiled: false`, mark every scenario as failed with the detail "Did not compile." and the cause "Did not compile", and list the first few errors with their line numbers in `notes`.
 - **Your harness does not compile.** The errors point into your own code. Fix them and run again, up to three times.
-- **Their code crashes or hits undefined behaviour.** A sanitizer report, a hardening abort, a signal, a "runtime error" line or a timeout all count. The scenario that printed `BEGIN` without a `RESULT` fails, with the cause and their line number when the report shows it, for example "Crashed: -> on an empty std::optional in exit(), line 88." Then remove that scenario and run again, so the remaining scenarios still get results. Keep the total under about six runs.
+- **Their code crashes or hits undefined behaviour.** A sanitizer report, a hardening abort, a signal, a "runtime error" line or a timeout all count. The scenario that printed `BEGIN` without a `RESULT` fails. Its detail names the crash and their line number when the report shows it, and its `cause` stays short, such as "Crashes on an empty optional in exit()". An example detail: "Crashed: -> on an empty std::optional in exit(), line 88." Then remove that scenario and run again, so the remaining scenarios still get results. Keep the total under about six runs.
 - **Their API cannot express a scenario.** For example, the layout cannot be configured, or the code reads the system clock so a long stay cannot be set up. The scenario fails, and the detail says what is missing. Do not invent a workaround that their own design would not support.
 - **A scenario is conditional**, such as "only if the candidate made it thread-safe", and the condition does not hold. Leave it out of the list, and say why in `notes`.
 
@@ -45,8 +45,11 @@ Never edit their file, never fix their bugs inside the harness, and never choose
 ## What you return
 
 - `compiled`: whether their file compiled.
-- `scenarios`: one entry per scenario you ran, in the brief's order. `name` is the brief's number and a short title, such as "6. Car exits at minute 130". `pass` is true only when the behaviour matched. `detail` is one or two plain sentences on what you checked and what you saw, such as "Expected a fee of 150 and spot 2 free again. Got a fee of 150, and the next car received spot 2."
+- `scenarios`: one entry per scenario you ran, in the brief's order. `name` is the brief's number and a short title, such as "6. Car exits at minute 130". `pass` is true only when the behaviour matched. `detail` is one or two plain sentences on what you checked and what you saw, such as "Expected a fee of 150 and spot 2 free again. Got a fee of 150, and the next car received spot 2." When a scenario checks several things and only some fail, say which part held and which failed, such as "The sale returned the right change. The stock count stayed at 5 instead of 4."
+  - `cause`: for a failed scenario only, the root cause in a few plain words, such as "Stock count never drops after a sale" or "Did not compile". One bug often fails several scenarios, for example when every scenario ends with the same check. Give every scenario that fails for the same bug the exact same `cause` text, so the page can show that one cause explains them. Leave `cause` out for a passing scenario. A shared cause never turns a failure into a pass: each scenario still passes only when its behaviour matched.
 - `notes`: how you mapped the scenarios onto their API, anything left out and why, any crash, and how many runs it took. Write plain sentences, without symbols such as arrows.
+
+The candidate reads `name`, `detail` and `cause` on the debrief page, and they never saw the brief. In those fields, never write "brief", "the brief's" or "rubric": name the scenario's own setup instead, such as "spot 2 on the first floor" or "the scenario's two-hour stay".
 
 ## The brief
 

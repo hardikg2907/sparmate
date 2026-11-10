@@ -181,7 +181,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 |---|---|---|---|---|
 | interviewer | live round, interview mode | streaming, persisted | view_whiteboard, set_phase, note_hint, end_interview; LLD adds read_code, run_code | chat text |
 | guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note, recheck_step and step_verdict | chat text |
-| tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail}], notes }` structured |
+| tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail,cause?}], notes }` structured |
 | judge | after the round (and the tester) | one-shot | pin_element (board PNG attached as an image block) | `ScorecardSchema` structured |
 | coach | after the debrief | streaming, persisted | view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
@@ -391,6 +391,8 @@ On end: status `debriefing`, `debrief.progress` updates, then:
    (copy to the session folder as `final.cpp`).
 2. **Test (LLD).** Run the tester with the brief's "Demo scenarios". It reads the code, writes one harness,
    runs it with `run_harness`, fixes its own harness errors up to 3 times, and returns scenario results. A
+   failed scenario may carry `cause`, a few words on its root cause, with the same text on every scenario that fails
+   for the same bug; the server drops a cause on a passing scenario or one with no word in it, joins its lines and cuts it to 160 characters, and gives every failed scenario without a cause "Did not compile" when the file did not compile. The scorecard's `lldScenarios` are the tester's results, or empty when the tester did not run. A
    compile failure of the candidate's own file is a valid result (`compiled: false`), not an error.
 3. **Judge.** One structured call. User message contains: the transcript (each line `[mm:ss] role: text`,
    hidden system entries included as `[mm:ss] (event) ...`), phase timing (planned vs actual), hints given,
@@ -464,7 +466,7 @@ about 300 ms):
 - interviewer/guide: first reply is the brief's "Opening prompt"; later replies are short phase-aware lines;
   answers `<silent/>` to most clock events; delivers a canned extension at the extension checkpoint; calls
   `set_phase` when the candidate's message contains "let's move to <phase label>".
-- tester: two scenarios, one pass, one fail.
+- tester: three scenarios, one pass and two fails that share one cause (all three fail, with the cause "Did not compile", when the code does not compile).
 - judge: a valid scorecard whose quotes are copied from real candidate lines (so quote checks pass), plus one
   deliberately invented quote (so the UI shows a failed check).
 - coach: canned two-paragraph replies.
@@ -1167,7 +1169,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   "Teach me this", "Finish the lesson" and "Restart lesson" send the same teach message. "Practise this gap" starts a 20-minute guided round on the same problem, aimed at that gap. The gaps step is complete only when every gap is done or for later. A session with no records at all (saved before the field existed) is read from its coach chat instead: a "Teach me this" message marks a gap "with the coach".
 - Study notes: a short hint, "Draft once the gaps are done. You can draft any time." Drafting is never blocked.
 - Summary: the judge's summary, the strengths and the practice task in one card.
-- Details, as tabs. Evidence has a "By step" and "By score" toggle plus the tracker mark with its reason and, for LLD, the demo scenario table (pass or fail with detail). By score shows each dimension with its score, evidence quotes with time and a check mark or a "not found in transcript" warning from `quoteChecks`, and "what a 4 looks like" behind a disclosure. By step shows one card per step that the judge read, that has coverage, pins or notes: the step's frame as an image (exported in the browser from the saved board, cropped to the frame) with every pin numbered at its element, the checklist count with a ring, "What held", "What's missing", "Pinned on the board" and "Your notes from the round". Time shows planned against actual minutes per phase as horizontal bars, then the key moments. "What the judge saw" shows the final board PNG, the graph text, any written step text (read-only, one card per phase with text), LLD final code (read-only Monaco) and the judge's writing checks. "Reference" is closed by default and renders `reference.sections`.
+- Details, as tabs. Evidence has a "By step" and "By score" toggle plus the tracker mark with its reason and, for LLD, the demo scenario table (pass or fail with detail). Above the table, each cause that two or more failed scenarios share gets one line, "N of M scenarios fail for one cause: <cause>.", with the scenario names, and a failed row shows its own cause under the detail; a scorecard saved without causes shows the table alone. By score shows each dimension with its score, evidence quotes with time and a check mark or a "not found in transcript" warning from `quoteChecks`, and "what a 4 looks like" behind a disclosure. By step shows one card per step that the judge read, that has coverage, pins or notes: the step's frame as an image (exported in the browser from the saved board, cropped to the frame) with every pin numbered at its element, the checklist count with a ring, "What held", "What's missing", "Pinned on the board" and "Your notes from the round". Time shows planned against actual minutes per phase as horizontal bars, then the key moments. "What the judge saw" shows the final board PNG, the graph text, any written step text (read-only, one card per phase with text), LLD final code (read-only Monaco) and the judge's writing checks. "Reference" is closed by default and renders `reference.sections`.
 - The coach chat on the right (same chat component, coach channel).
 - "Study notes": "Draft study notes" -> the proposal, grouped by file, each op with a checkbox (blocked ops
   shown disabled with the reason), the unified diff per file (green and red lines, monospace), and "Save
@@ -1284,7 +1286,8 @@ Guide (guided mode), modelled on step-by-step guided practice:
 
 Tester (LLD): adapts each "Demo scenarios" item to the candidate's real classes and method names, writes one
 harness, runs it, and reports per scenario. Never edits the candidate's file. If the candidate's API cannot
-express a scenario, the scenario fails with the reason ("no way to exit with a ticket id").
+express a scenario, the scenario fails with the reason ("no way to exit with a ticket id"). Scenarios that fail for one
+bug share one `cause` text.
 
 Judge: scores strictly from evidence against `{{rubric}}` and the brief's "Level bar". Every score cites
 verbatim quotes. Default to 2 until the evidence shows each 3-level signal, or all but one with the rest clear and

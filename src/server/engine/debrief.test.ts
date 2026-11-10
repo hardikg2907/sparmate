@@ -1,9 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { phasePlan } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
-import type { Session } from "../../shared/types";
+import { ScorecardSchema, type Session } from "../../shared/types";
 import { checkStepQuotes } from "../../shared/quotes";
-import { enforceRules, failedQuoteNote, failedRatio, judgeMessage, lintCard, phaseTiming, stepSources, type JudgedCard } from "./debrief";
+import {
+  enforceRules,
+  failedQuoteNote,
+  failedRatio,
+  judgeMessage,
+  lintCard,
+  MAX_CAUSE_CHARS,
+  NOT_COMPILED_CAUSE,
+  phaseTiming,
+  stepSources,
+  testerText,
+  tidyTesterOutput,
+  type JudgedCard,
+} from "./debrief";
 
 const MIN = 60_000;
 
@@ -396,5 +409,71 @@ describe("stepSources", () => {
     const by = stepSources(session, null, { endMs: 20 * MIN });
     const stepCard = { steps: [{ phase: "api", took: [{ evidence: { quote: "latency under 50 ms", source: "candidate" as const } }] }] };
     expect(checkStepQuotes(stepCard, (phase) => by[phase] ?? { candidate: "", board: "", code: "" })).toEqual([{ phase: "api", index: 0, verified: false }]);
+  });
+});
+
+describe("tester causes", () => {
+  it("keeps a cause on a failed scenario only, trimmed and capped", () => {
+    const out = tidyTesterOutput({
+      compiled: true,
+      scenarios: [
+        { name: "1", pass: true, detail: "d", cause: "Should not stay" },
+        { name: "2", pass: false, detail: "d", cause: "  Stock never drops  " },
+        { name: "3", pass: false, detail: "d", cause: "x".repeat(400) },
+        { name: "4", pass: false, detail: "d", cause: "   " },
+        { name: "5", pass: false, detail: "d" },
+      ],
+      notes: "",
+    });
+    expect(out.scenarios.map((s) => s.cause)).toEqual([undefined, "Stock never drops", "x".repeat(MAX_CAUSE_CHARS), undefined, undefined]);
+    expect("cause" in out.scenarios[0]!).toBe(false);
+  });
+
+  it("joins a cause onto one line and drops one with no word in it", () => {
+    const out = tidyTesterOutput({
+      compiled: true,
+      scenarios: [
+        { name: "1", pass: false, detail: "d", cause: "Stock\nnever drops" },
+        { name: "2", pass: false, detail: "d", cause: " . " },
+      ],
+      notes: "",
+    });
+    expect(out.scenarios.map((s) => s.cause)).toEqual(["Stock never drops", undefined]);
+  });
+
+  it("fails every scenario for one cause when the file did not compile", () => {
+    const out = tidyTesterOutput({
+      compiled: false,
+      scenarios: [
+        { name: "1", pass: false, detail: "Did not compile." },
+        { name: "2", pass: false, detail: "Did not compile.", cause: "Missing semicolon on line 12" },
+        { name: "3", pass: true, detail: "ok" },
+      ],
+      notes: "",
+    });
+    expect(out.scenarios.map((s) => [s.pass, s.cause])).toEqual([
+      [false, NOT_COMPILED_CAUSE],
+      [false, NOT_COMPILED_CAUSE],
+      [false, NOT_COMPILED_CAUSE],
+    ]);
+  });
+
+  it("accepts a judge scorecard that copies the tester's causes", () => {
+    expect(ScorecardSchema.shape.lldScenarios.parse([{ name: "1", pass: false, detail: "d", cause: "Stock never drops" }])).toHaveLength(1);
+  });
+
+  it("keeps no judge-written scenarios when the tester did not run", () => {
+    const judged = card({ lldScenarios: [{ name: "invented", pass: true, detail: "d" }] });
+    expect(enforceRules(judged, { mode: "interview", track: "lld", tester: null }).lldScenarios).toEqual([]);
+  });
+
+  it("shows the cause to the judge next to the failed scenario", () => {
+    const text = testerText({ compiled: true, scenarios: [{ name: "2. Sell out", pass: false, detail: "Stock stayed at 1.", cause: "Stock never drops" }], notes: "" });
+    expect(text).toContain("- FAIL 2. Sell out: Stock stayed at 1. (cause: Stock never drops)");
+  });
+
+  it("copies the tester's causes onto an LLD scorecard", () => {
+    const tester = { compiled: true, scenarios: [{ name: "1", pass: false, detail: "d", cause: "Stock never drops" }], notes: "" };
+    expect(enforceRules(card(), { mode: "interview", track: "lld", tester }).lldScenarios).toEqual(tester.scenarios);
   });
 });

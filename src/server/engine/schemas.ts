@@ -8,6 +8,7 @@ export const TesterOutputSchema = z.strictObject({
         name: z.string().describe("The demo scenario, short, in the brief's order."),
         pass: z.boolean(),
         detail: z.string().describe("What happened, or why the candidate's API could not express the scenario."),
+        cause: z.string().optional().describe("Failed scenarios only: the root cause in a few plain words. Scenarios that fail for the same bug carry the exact same text."),
       }),
     )
     .max(40),
