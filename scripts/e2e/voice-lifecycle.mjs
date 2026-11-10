@@ -161,7 +161,7 @@ try {
     throw new Error(`Expected 1 active recognizer in room, found ${activeBefore}`);
   }
 
-  // Navigate back to Home using in-app back button.
+  // Navigate back to Today using in-app back button.
   const backClicked = await page.evaluate(() => {
     const btn = document.querySelector('a[aria-label="Back to Today"]');
     if (!btn) return false;

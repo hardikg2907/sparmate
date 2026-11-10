@@ -337,7 +337,7 @@ page that has the main bar.
 ```
  Today ──(Start)──► Room ──(End interview / time up)──► Debrief
   │  ▲                    │ ▲                                │
-  │  └── Back to Today ◄───┘ │                                ├─ Gaps ──► Coach chat
+  │  └── Back to Today ◄──┘ │                                ├─ Gaps ──► Coach chat
   │                         │                                └─ Study notes ──► Save
   ├─ Unfinished card ──(Finish)──────────┘
   ├─ Unfinished card ──(End and debrief)──► Debrief
