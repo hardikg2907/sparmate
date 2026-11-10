@@ -107,10 +107,23 @@ export const PASS_INTERVAL_DAYS = [3, 7] as const;
 export type DrillStatus = "open" | "closed";
 export type DrillVerdict = "pass" | "not_yet";
 
+export const DRILL_OUTCOMES = ["ready", "getting_there", "needs_work"] as const;
+export type DrillOutcome = (typeof DRILL_OUTCOMES)[number];
+
+/** Most problem ids one item remembers a ready result on. */
+export const MAX_READY_ON = 50;
+
 export interface DrillItem {
   id: string;
   sessionId: string;
+  /** The problem of the next attempt. */
   problemId: string;
+  /** The problem of the round that showed the gap. It never changes. */
+  originProblemId: string;
+  /** Null until a drill asks the same gap on a changed scenario. */
+  variant: string | null;
+  /** Problems that gave a ready result for this item, without duplicates. Emptied when the count starts again. */
+  readyOn: string[];
   gapTitle: string;
   /** What the judge said good looks like; it helps pick the deep dive that matches the gap. */
   gapHint: string;
@@ -155,21 +168,37 @@ export function byDueDay<T extends Pick<DrillItem, "dueOn" | "id">>(a: T, b: T):
   return a.dueOn.localeCompare(b.dueOn) || a.id.localeCompare(b.id);
 }
 
+/** One row of the attempt index. The full answer and grade live in a body file named by `id`. */
 export interface DrillAttempt {
+  id: string;
+  /** When the attempt was opened. */
   at: string;
   day: string;
   drill: DrillType;
   problemId: string;
+  variant: string | null;
+  /** The queued item the attempt counted for. */
   drillId: string | null;
-  verdict: DrillVerdict;
+  status: "open" | "done";
+  /** Null while the attempt is open. */
+  outcome: DrillOutcome | null;
+  /** The outcome before a revision changed it. */
+  firstOutcome: DrillOutcome | null;
+  revised: boolean;
+  /** Rubric scores from 1 to 4. */
+  scores: { id: string; score: number }[];
+  /** Time taken as the browser measured it. */
+  seconds: number | null;
+  /** True for a row that came from the first file format and has no body file. */
+  legacy: boolean;
 }
 
-/** Passed and attempted drills in the local week that holds `now`. Free drills count too. */
-export function weekDrillStats(attempts: readonly Pick<DrillAttempt, "day" | "verdict">[], now: Date): { passed: number; attempted: number } {
+/** Ready and finished drills in the local week that holds `now`. Free drills count too; an open attempt does not. */
+export function weekDrillStats(attempts: readonly Pick<DrillAttempt, "day" | "status" | "outcome">[], now: Date): { passed: number; attempted: number } {
   const first = localDay(weekStart(now));
   const next = addDays(first, 7);
-  const mine = attempts.filter((a) => a.day >= first && a.day < next);
-  return { passed: mine.filter((a) => a.verdict === "pass").length, attempted: mine.length };
+  const mine = attempts.filter((a) => a.status === "done" && a.day >= first && a.day < next);
+  return { passed: mine.filter((a) => a.outcome === "ready").length, attempted: mine.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +206,8 @@ export function weekDrillStats(attempts: readonly Pick<DrillAttempt, "day" | "ve
 
 export const PROBLEM_ID = /^[a-z0-9][a-z0-9-]{1,80}$/;
 export const DRILL_ID = /^[a-f0-9]{16}$/;
+export const ATTEMPT_ID = /^[a-f0-9]{16}$/;
+export const MAX_ELAPSED_SECONDS = 7200;
 export const MAX_ANSWER_CHARS = 8000;
 
 /** Names one drill to run. `drillId` is set when it comes from the queue. */
@@ -193,6 +224,7 @@ export const DrillSubmitSchema = z.strictObject({
     .string()
     .max(MAX_ANSWER_CHARS)
     .refine((text) => text.trim().length > 0, "Write an answer first."),
+  elapsedSeconds: z.number().int().min(0).max(MAX_ELAPSED_SECONDS).optional(),
 });
 export type DrillSubmit = z.infer<typeof DrillSubmitSchema>;
 
@@ -238,6 +270,7 @@ export interface DrillPrompt {
 }
 
 export interface DrillResult {
+  attemptId: string;
   verdict: DrillVerdict;
   fix: string;
   yourLine: string;

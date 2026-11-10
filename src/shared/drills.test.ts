@@ -156,11 +156,12 @@ describe("week stats", () => {
   const now = new Date(2026, 10, 11, 10, 0, 0); // Wednesday
   it("counts passed of attempted in the local week, Monday first", () => {
     const attempts = [
-      { day: "2026-11-08", verdict: "pass" as const }, // Sunday before
-      { day: "2026-11-09", verdict: "pass" as const },
-      { day: "2026-11-10", verdict: "not_yet" as const },
-      { day: "2026-11-15", verdict: "pass" as const },
-      { day: "2026-11-16", verdict: "pass" as const }, // next Monday
+      { day: "2026-11-08", status: "done" as const, outcome: "ready" as const }, // Sunday before
+      { day: "2026-11-09", status: "done" as const, outcome: "ready" as const },
+      { day: "2026-11-10", status: "done" as const, outcome: "needs_work" as const },
+      { day: "2026-11-10", status: "open" as const, outcome: null },
+      { day: "2026-11-15", status: "done" as const, outcome: "ready" as const },
+      { day: "2026-11-16", status: "done" as const, outcome: "ready" as const }, // next Monday
     ];
     expect(weekDrillStats(attempts, now)).toEqual({ passed: 2, attempted: 3 });
   });

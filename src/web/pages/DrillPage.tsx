@@ -73,7 +73,8 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
     if (!typed || busy) return;
     setBusy(true);
     setSubmitError(null);
-    api.gymSubmit(target, answer).then(
+    const elapsed = startedAt === null ? undefined : Math.min(7200, Math.max(0, Math.round((Date.now() - startedAt) / 1000)));
+    api.gymSubmit(target, answer, elapsed).then(
       (r) => {
         setResult(r);
         setBusy(false);
