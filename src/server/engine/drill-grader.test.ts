@@ -7,6 +7,7 @@ import {
   NextQuestionSchema,
   cleanQuestion,
   dropKeyCopies,
+  dropKeyReveals,
   finishGrade,
   followUpMessage,
   graderMessage,
@@ -27,7 +28,7 @@ const ok: GraderOutput = {
 const KEY =
   "Writes: about forty per second, which means one primary database handles them with room to spare. Reads: four thousand per second, which means a cache in front of the database.";
 const finish = (output: GraderOutput, answer: string, over: { key?: string; redact?: (t: string) => string } = {}) =>
-  finishGrade(output, answer, { drill: "capacity", key: over.key ?? KEY, redact: over.redact ?? ((t) => t) });
+  finishGrade(output, answer, { drill: "capacity", key: over.key ?? KEY, shown: "", redact: over.redact ?? ((t) => t) });
 
 describe("GraderOutputSchema", () => {
   it("accepts a well formed reply", () => {
@@ -69,6 +70,13 @@ describe("finishGrade", () => {
   it("empties a strong line that copies the key, and keeps one that does not", () => {
     expect(finish({ ...ok, strong: "Reads need a cache in front of the database, I think." }, answer).strong).toBe("");
     expect(finish(ok, answer).strong).toBe("Reads outnumber writes, so a cache.");
+  });
+
+  it("replaces feedback that gives the key away with the fixed line for the weakest criterion", () => {
+    const key = "Writes: 40 per second. Reads: 4000 per second, which means a cache.";
+    const leaky = { ...ok, scores: ok.scores.map((s) => (s.id === "assumptions" ? { ...s, score: 1 } : s)), improve: ["Use 4000 reads a second to size it."] };
+    expect(finish(leaky, "It is big.", { key }).improve).toEqual(["Work on this: States its assumptions."]);
+    expect(finish(leaky, "Reads are 4000 a second.", { key }).improve).toEqual(["Use 4000 reads a second to size it."]);
   });
 
   it("puts the scores in the rubric's order", () => {
@@ -149,6 +157,29 @@ describe("finishGrade", () => {
   it("names the first of the lowest criteria on a tie, and works when every line was empty", () => {
     const scores = ok.scores.map((s) => (s.id === "math" || s.id === "assumptions" ? { ...s, score: 2 } : s));
     expect(finish({ ...ok, scores, improve: ["   "] }, answer).improve).toEqual(["Work on this: Math is about right."]);
+  });
+});
+
+describe("dropKeyReveals", () => {
+  const key = "Great: each write server leases a block of counter values, encodes and scrambles them. At about 500 bytes a row that is 3 TB.";
+  const known = "I would use one counter and encode it. Your task: say what breaks.";
+
+  it("drops a line that states a number from the key the candidate never wrote", () => {
+    expect(dropKeyReveals(["State your assumptions, such as 500 bytes a row."], key, known)).toEqual([]);
+  });
+
+  it("drops a line that names three longer key words the candidate never wrote", () => {
+    expect(dropKeyReveals(["Say how each server leases blocks and scrambles the values."], key, known)).toEqual([]);
+  });
+
+  it("keeps a line that points at the gap without the answer", () => {
+    const line = "Say what happens to the counter at a high write rate, and name the cost of your fix.";
+    expect(dropKeyReveals([line], key, known)).toEqual([line]);
+  });
+
+  it("never counts what the candidate wrote or the drill showed", () => {
+    const wrote = `${known} It leases a block per server, scrambles the values, and a row is 500 bytes.`;
+    expect(dropKeyReveals(["Your point that each server leases a block and scrambles values at 500 bytes holds."], key, wrote)).toHaveLength(1);
   });
 });
 
@@ -251,7 +282,7 @@ describe("fake grader", () => {
   it.each(DRILL_TYPES)("returns something the schema and the finish step accept (%s)", (kind) => {
     const out = grade(kind, "x");
     expect(GraderOutputSchema.safeParse(out).success).toBe(true);
-    expect(() => finishGrade(out, "x", { drill: kind, key, redact: (t) => t })).not.toThrow();
+    expect(() => finishGrade(out, "x", { drill: kind, key, shown: "", redact: (t) => t })).not.toThrow();
   });
 });
 

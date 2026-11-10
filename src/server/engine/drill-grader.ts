@@ -93,6 +93,29 @@ export function dropKeyCopies(lines: readonly string[], key: string, run = KEY_C
   });
 }
 
+/** Key-only words a feedback line may hold before it counts as handing over the answer. */
+export const KEY_REVEAL_WORDS = 3;
+const REVEAL_WORD_CHARS = 6;
+
+/**
+ * Drops every line that gives away part of the answer key in its own words: a number from the key, or
+ * `KEY_REVEAL_WORDS` longer words from it, that the candidate did not write and the drill did not show. Feedback may
+ * point at a gap, but the candidate must still do the thinking, because one revision follows the feedback.
+ */
+export function dropKeyReveals(lines: readonly string[], key: string, known: string): string[] {
+  const inKey = new Set(tokens(key));
+  const seen = new Set(tokens(known));
+  return lines.filter((line) => {
+    const fresh = new Set(tokens(line).filter((w) => inKey.has(w) && !seen.has(w)));
+    let words = 0;
+    for (const w of fresh) {
+      if (/[0-9]/.test(w)) return false;
+      if (w.length >= REVEAL_WORD_CHARS) words++;
+    }
+    return words < KEY_REVEAL_WORDS;
+  });
+}
+
 /**
  * Cleans a follow-up question from the model. Control characters go, the length is capped, private names are redacted,
  * and a question that shares `KEY_COPY_WORDS` or more words in a row with the answer key is replaced by a fixed one, so
@@ -107,6 +130,8 @@ export function cleanQuestion(raw: string, key: string, redact: (text: string) =
 export interface FinishOptions {
   drill: DrillType;
   key: string;
+  /** What the drill showed the candidate: the task and the material. Words from it are never a giveaway. */
+  shown: string;
   redact: (text: string) => string;
 }
 
@@ -114,7 +139,7 @@ export interface FinishOptions {
  * Turns the grader's reply into what the page shows. It throws, so the caller can ask again, unless the scores name
  * exactly the drill's criteria once each. The outcome comes from the scores in code, never from the model. The quoted
  * line must really be in the answer; when the model misquotes, the first line of the answer stands in, so the page
- * never shows words the candidate did not write. Feedback that copies the key is dropped.
+ * never shows words the candidate did not write. Feedback that copies the key, or gives part of it away, is dropped.
  */
 export function finishGrade(output: GraderOutput, answer: string, opts: FinishOptions): GradedAnswer {
   const criteria = DRILL_RUBRIC[opts.drill].criteria;
@@ -124,10 +149,15 @@ export function finishGrade(output: GraderOutput, answer: string, opts: FinishOp
   }
   const scores = criteria.map((k) => ({ id: k.id, score: output.scores.find((s) => s.id === k.id)?.score ?? 1 }));
   const text = (line: string) => opts.redact(clip(line, SHOWN_CHARS));
+  const known = [answer, opts.shown, ...criteria.map((k) => k.label)].join("\n");
   const lines = (list: readonly string[]) =>
-    dropKeyCopies(
-      list.map(text).filter((l) => l !== ""),
+    dropKeyReveals(
+      dropKeyCopies(
+        list.map(text).filter((l) => l !== ""),
+        opts.key,
+      ),
       opts.key,
+      known,
     );
   const wentWell = lines(output.wentWell);
   let improve = lines(output.improve);
