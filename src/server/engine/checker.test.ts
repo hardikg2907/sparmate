@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { stepCodeText } from "../../shared/stepCode";
 import type { Session, TranscriptEntry } from "../../shared/types";
-import { checkerMessage, mergeCheck, stepChecklistText, stepReadingText, type CheckerEvidence, type CheckerOutput } from "./checker";
+import { checkerMessage, evidenceKey, mergeCheck, stepChecklistText, stepReadingText, type CheckerEvidence, type CheckerOutput } from "./checker";
 import { publicPins, publicSteps } from "./public";
 
 const entry = (id: string, at: number, role: TranscriptEntry["role"], text: string): TranscriptEntry => ({
@@ -14,6 +14,7 @@ const entry = (id: string, at: number, role: TranscriptEntry["role"], text: stri
 });
 
 const evidence = (over: Partial<CheckerEvidence> = {}): CheckerEvidence => ({
+  notesText: "",
   stepLabel: "Requirements",
   goal: "3-4 functional and 3-4 non-functional requirements",
   items: [
@@ -28,7 +29,7 @@ const evidence = (over: Partial<CheckerEvidence> = {}): CheckerEvidence => ({
   ...over,
 });
 
-const claim = (id: string, state: "covered" | "partial" | "missing", source: "chat" | "board" | "code" | "none", quote: string, detail = "") => ({
+const claim = (id: string, state: "covered" | "partial" | "missing", source: "chat" | "board" | "code" | "notes" | "none", quote: string, detail = "") => ({
   id,
   state,
   source,
@@ -104,6 +105,22 @@ describe("mergeCheck", () => {
     // A line written in another step, and a quote that copies a line number, are not his code for this step.
     expect(check.items["requirements-2"]).toBeUndefined();
     expect(check.items["requirements-3"]).toBeUndefined();
+  });
+
+  it("reads his written answer as evidence, and refuses a written-answer quote he never wrote", () => {
+    const e = evidence({ notesText: "Requirements:\n- 99.99% availability for redirects, creating can be lower" });
+    expect(checkerMessage(e)).toContain("<written_answer>\nRequirements:\n- 99.99% availability for redirects");
+    expect(checkerMessage(evidence())).not.toContain("<written_answer>");
+    const out = mergeCheck(
+      undefined,
+      { items: [claim("requirements-3", "covered", "notes", "99.99% availability for redirects"), claim("requirements-1", "covered", "notes", "Create a short link")] },
+      e,
+      300_000,
+    );
+    expect(out.items["requirements-3"]).toMatchObject({ state: "covered", source: "notes", at: null });
+    expect(out.items["requirements-1"]).toBeUndefined();
+    expect(stepReadingText(e.items, out)).toContain("- requirements-3: 99.99% availability for redirects — covered, in the written answer");
+    expect(evidenceKey(e)).not.toBe(evidenceKey(evidence()));
   });
 
   it("gives the guide each item with its state, where it was found and what a partial lacks", () => {

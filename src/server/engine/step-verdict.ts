@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Session, StepVerdict } from "../../shared/types";
+import type { PhaseDef } from "../../shared/phases";
+import type { ChecklistItem, Session, StepCheck, StepVerdict } from "../../shared/types";
 
 export const MAX_GAP_CHARS = 200;
 
@@ -43,4 +44,44 @@ export function recordStepVerdict(session: Pick<Session, "stepVerdicts">, input:
   const entry: StepVerdict = input.verdict === "pass" ? { verdict: "pass", at } : { verdict: "not_yet", gap: input.gap ?? "", at };
   session.stepVerdicts = { ...session.stepVerdicts, [input.phase]: entry };
   return { ok: true };
+}
+
+/** The fewest covered checklist items a guided pass needs on this step. */
+export function passNeed(phase: Pick<PhaseDef, "passNeeds">, total: number): number {
+  if (total === 0) return 0;
+  return phase.passNeeds === "one" ? 1 : Math.max(1, Math.ceil(total / 2));
+}
+
+export type PassCheck = { ok: true } | { ok: false; covered: number; total: number; need: number; open: string[] };
+
+/**
+ * Whether the checker's reading supports a pass, so "Passed" in the room means what the debrief's step card shows.
+ * A step with no checklist, or with no finished reading (the checker failed or never ran), is left to the guide:
+ * a broken checker must not lock a step.
+ */
+export function passCheck(phase: Pick<PhaseDef, "passNeeds">, items: readonly ChecklistItem[], check: StepCheck | undefined): PassCheck {
+  if (items.length === 0 || check?.checkedAt == null) return { ok: true };
+  const covered = items.filter((i) => check.items[i.id]?.state === "covered").length;
+  const need = passNeed(phase, items.length);
+  if (covered >= need) return { ok: true };
+  const open = items.filter((i) => check.items[i.id]?.state !== "covered").map((i) => i.label);
+  return { ok: false, covered, total: items.length, need, open };
+}
+
+/** The refusal the guide gets for an unsupported pass. It lists the open items so the guide can pick the one to name. */
+export function passRefusalText(label: string, refused: Extract<PassCheck, { ok: false }>): string {
+  return [
+    `${label} cannot pass yet. The latest reading of his work covers ${refused.covered} of ${refused.total} checklist items, and a pass needs at least ${refused.need}.`,
+    `Items not covered yet: ${refused.open.join("; ")}.`,
+    `Call step_verdict with "not_yet" and name the most important one as a missing question or a missing decision. Do not list the others, and do not mention this reading to him.`,
+    `If he covered more than this reading shows, call recheck_step for this step once, then decide.`,
+  ].join("\n");
+}
+
+/** Which steps have a pass and which do not, in rail order, so the guide never has to recall it. */
+export function stepStatusLine(phases: readonly { id: string; label: string }[], verdicts: Session["stepVerdicts"]): string {
+  const passed = phases.filter((p) => verdicts?.[p.id]?.verdict === "pass").map((p) => p.label);
+  const open = phases.filter((p) => verdicts?.[p.id]?.verdict !== "pass").map((p) => p.label);
+  if (open.length === 0) return "every step has passed";
+  return `passed: ${passed.length > 0 ? passed.join(", ") : "none yet"} · not passed yet: ${open.join(", ")}`;
 }

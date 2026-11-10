@@ -87,7 +87,7 @@ import { decodePng, localDate, randomId, sha256Hex } from "./fsutil";
 import { describeError, type Logger } from "./log";
 import { validatePin, withPin } from "./pins";
 import { computeReadiness } from "./readiness";
-import { parseStepVerdict, recordStepVerdict, StepVerdictShape } from "./step-verdict";
+import { parseStepVerdict, passCheck, passNeed, passRefusalText, recordStepVerdict, stepStatusLine, StepVerdictShape } from "./step-verdict";
 import { PromptError, commonVars, extensionMinute, focusText, formatPhasePlan, type PromptLoader, type PromptName } from "./prompts";
 import { toPublicSession } from "./public";
 import { TesterOutputSchema, toApiSchema, toCompatSchema, type TesterOutput } from "./schemas";
@@ -829,7 +829,7 @@ export class SessionRuntime {
     return out;
   }
 
-  /** What the checker reads for a step: its chat, its frame on the board, and the code in a machine-coding round. */
+  /** What the checker reads for a step: its chat, its frame on the board, his written answer, and the code in a machine-coding round. */
   private stepEvidence(phase: string): { evidence: CheckerEvidence; frameId: string | null; needsImage: boolean; drawn: boolean; empty: boolean } | null {
     const s = this.session;
     const def = this.phases.find((p) => p.id === phase);
@@ -844,10 +844,11 @@ export class SessionRuntime {
     const scope = codeScopeFor(s.track, phase);
     const codeText =
       scope === "step" ? stepCodeText(this.codeContent, s.stepCode[phase] ?? []) : scope === "file" && this.codeContent.trim() !== "" ? numberedCode(this.codeContent) : "";
-    const said = chat.some((e) => e.role === "candidate");
+    const notesText = (s.stepNotes[phase] ?? "").trim();
+    const said = chat.some((e) => e.role === "candidate") || notesText !== "";
     const drawn = unframed ? s.board.graphText.trim() !== "" : frame !== null && !frame.empty;
     return {
-      evidence: { stepLabel: def.label, goal: def.goal, items, chat, boardText, codeText, imageAttached: false },
+      evidence: { stepLabel: def.label, goal: def.goal, items, chat, boardText, codeText, notesText, imageAttached: false },
       frameId: unframed ? null : (frame?.frameId ?? null),
       needsImage: frame?.needsImage ?? false,
       drawn,
@@ -927,6 +928,7 @@ export class SessionRuntime {
           candidateLines: evidence.chat.filter((e) => e.role === "candidate").map((e) => e.text),
           frameText: evidence.boardText,
           codeText: unnumberedCode(evidence.codeText),
+          notesText: evidence.notesText,
           imageAttached: evidence.imageAttached,
         },
         usage: { sessionId: s.id, problemId: s.problemId, track: s.track, mode: s.mode },
@@ -1237,6 +1239,7 @@ export class SessionRuntime {
     const events = [...this.pending()];
     const view: ContextView = {
       time: this.timeView(),
+      ...(s.mode === "guided" ? { steps: stepStatusLine(this.phases, s.stepVerdicts) } : {}),
       board: { version: boardVersion, graphText: s.board.graphText, changed: boardVersion !== ch.boardSeen },
       ...(withNotes ? { notes: this.notesView(ch) } : {}),
       code: this.codeView(ch),
@@ -1338,6 +1341,12 @@ export class SessionRuntime {
     };
   }
 
+  private passRuleText(phase: string): string {
+    const items = this.session.checklist[phase] ?? [];
+    const need = passNeed(this.phases.find((p) => p.id === phase) ?? {}, items.length);
+    return `A pass needs at least ${need} of these ${items.length} items covered, and the server refuses a pass this reading does not support. If he covered more than the reading shows, call recheck_step before you decide.`;
+  }
+
   /** The checker's last finished reading of a step. It is evidence for the guide; the candidate never sees the list in a live round. */
   private checklistBlock(phase: string): string {
     const items = this.session.checklist[phase] ?? [];
@@ -1349,7 +1358,7 @@ export class SessionRuntime {
       "<checklist>",
       stepReadingText(items, check),
       "</checklist>",
-      "Use it as evidence. Your step_verdict is the call he sees, so base it on what he has said and drawn.",
+      this.passRuleText(phase),
     ].join("\n");
   }
 
@@ -1584,13 +1593,19 @@ export class SessionRuntime {
               this.phases.map((p) => p.id),
             );
             if (!parsed.ok) return textOutput(parsed.error, true);
-            if (parsed.value.verdict === "pass" && this.passBarredThisTurn)
+            const { phase, verdict } = parsed.value;
+            if (verdict === "pass" && this.passBarredThisTurn)
               return textOutput("This reply gives a model answer, so the step cannot pass now. Ask him to redo the step; judge it on his next check.", true);
+            if (verdict === "pass" && this.session.stepVerdicts?.[phase]?.verdict !== "pass") {
+              const refused = await this.passRefusal(phase);
+              if (refused) return textOutput(refused, true);
+            }
             const done = recordStepVerdict(this.session, parsed.value, this.roundNow());
             if (!done.ok) return textOutput(done.error, true);
             this.saveSoon();
             this.sendState();
-            return textOutput(parsed.value.verdict === "pass" ? "Recorded: the step passed." : "Recorded: not yet.");
+            if (verdict === "not_yet") return textOutput("Recorded: not yet.");
+            return textOutput(`Recorded: the step passed. Steps now: ${stepStatusLine(this.phases, this.session.stepVerdicts)}.`);
           },
         ),
         defineTool(
@@ -1624,6 +1639,18 @@ export class SessionRuntime {
       );
     }
     return tools;
+  }
+
+  /**
+   * Brings the step's reading up to date with his latest work, then refuses a pass it does not support. The check
+   * runs only when the evidence changed since the last reading, so a pass right after "Check this step" costs nothing.
+   */
+  private async passRefusal(phase: string): Promise<string | null> {
+    await settleWithin(this.checkStep(phase), RECHECK_WAIT_MS);
+    if (this.disposed) return null;
+    const def = this.phases.find((p) => p.id === phase);
+    const result = passCheck(def ?? {}, this.session.checklist[phase] ?? [], this.session.stepChecks[phase]);
+    return result.ok ? null : passRefusalText(def?.label ?? phase, result);
   }
 
   private async recheckStep(phase: string): Promise<ToolOutput> {

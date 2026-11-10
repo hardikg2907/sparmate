@@ -147,7 +147,7 @@ export type CoverageState = "covered" | "partial" | "missing";
 /** The checker's verified reading of one checklist item. Its quote was found in his chat or on the board. */
 export interface StepCheckItem {
   state: CoverageState;
-  source: "chat" | "board" | "code";
+  source: "chat" | "board" | "code" | "notes";
   /** Round time of the chat line the quote came from; null for the board and the code. */
   at: number | null;
   quote: string;

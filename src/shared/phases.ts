@@ -8,6 +8,11 @@ export interface PhaseDef {
   baseMinutes: number;
   /** One line shown under the phase on the rail. */
   goal: string;
+  /**
+   * How many checklist items a guided pass needs covered. Most steps need half, so a pass means what the debrief's
+   * step card will show; a step whose level bar asks for one of several items needs one.
+   */
+  passNeeds?: "one";
 }
 
 // The five-step HLD delivery order: requirements first, numbers only inside the deep dives where one decides something.
@@ -21,7 +26,13 @@ export const HLD_PHASES: readonly PhaseDef[] = [
     baseMinutes: 13,
     goal: "Boxes and arrows that meet the functional requirements; walk one request through every box, cache miss included",
   },
-  { id: "deep_dives", label: "Deep dives", baseMinutes: 20, goal: "One per hard non-functional requirement; math only where a number decides something; then the curveball" },
+  {
+    id: "deep_dives",
+    label: "Deep dives",
+    baseMinutes: 20,
+    goal: "One per hard non-functional requirement; math only where a number decides something; then the curveball",
+    passNeeds: "one",
+  },
 ];
 
 // The candidate's own seven-step machine-coding method.

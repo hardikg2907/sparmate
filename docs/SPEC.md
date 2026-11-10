@@ -213,12 +213,20 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   `{ verdict, gap?, at }` (`at` is round time in ms) and the session state is broadcast. A pass is final: a later
   `not_yet` for a passed step is refused with an error that says the step already passed and must not be raised again.
   A `pass` may replace a `not_yet`. The guide calls it once per step check. In the reply to "I'm stuck" a `pass` is
-  refused, so a model answer never earns one. Each check ends with a verdict.
+  refused, so a model answer never earns one. Each check ends with a verdict. A new `pass` must be supported by the
+  checker's reading of the step (`passCheck`): the server first brings the reading up to date (a check runs only when
+  the evidence changed since the last one, and waits at most 60 s), then counts the items read as `covered`. A pass
+  needs at least half of the step's items, rounded up and at least one; Deep dives needs one, because its level bar
+  asks for one deep dive done properly. A partial item does not count. Too few covered items refuse the pass with an
+  error that gives the count, the items not covered yet, and tells the guide to name the most important one, to keep
+  the reading to itself, and to call `recheck_step` once if he covered more than it shows. A step with no checklist,
+  or with no finished reading (the checker failed or never ran), is left to the guide, so a broken checker never locks
+  a step. An accepted pass returns the `steps:` line, so the guide names the steps still open.
 - `recheck_step({ phase })` (guide only) -> the phase must belong to the track, else an error that lists the valid
   ids. Reads that step's checklist again from scratch (section 5.11): it bypasses the unchanged-evidence skip, and its
   result replaces the step's items. Any step, not only the current one. It waits for a check of that step that is
   already running, waits for the result for at most 60 s, and returns one line per item (id, label, state, and where:
-  said at mm:ss, on the board or in the code; a partial item adds what it lacks), or says the check did not finish. At
+  said at mm:ss, on the board, in the code or in the written answer; a partial item adds what it lacks), or says the check did not finish. At
   most 3 calls per guide reply.
 - `read_code()` -> the current file with line numbers, plus the last syntax-check summary.
 - `run_code()` -> compile and run the candidate's program (section 8) and return the result as text.
@@ -264,6 +272,7 @@ wrapped by the engine:
 <context>
 time: 12:34 of 45:00 · phase: api (planned 7:00–11:00)
 behind plan: 1:34 past the planned end of this phase          (interview mode, only from 30 s past the planned end)
+steps: passed: Requirements · not passed yet: Core entities, API, High-level design, Deep dives   (guided mode only)
 board: changed since you last looked (version 14)
 <board>
 (graph text from graphToText)
@@ -283,7 +292,9 @@ events: candidate moved to phase "design" at 12:10                  (only if any
 ```
 
 `board:` says `unchanged (version 14)` and omits the `<board>` block when nothing changed since the
-interviewer's previous envelope. The coach envelope has no `time:` line.
+interviewer's previous envelope. The coach envelope has no `time:` line. `steps:` (`stepStatusLine` in
+`src/server/engine/step-verdict.ts`) lists the guided steps that have a pass and those that do not, in rail order, or
+reads `every step has passed`; it is on every guide turn, so the guide never states the steps from memory.
 
 `<notes>` holds written step text a session holds (`Session.stepNotes`, set through `notes.update`), one labelled part
 per phase that has text. It appears only when it changed since the interviewer's previous envelope, and the models
@@ -591,7 +602,7 @@ reading per step is all the debrief and the study notes need.
 A step where he said nothing, drew nothing in its frame and (LLD) has no step code is skipped, so a step he only passes
 through runs no check. A check asked for while one runs for the same step becomes one follow-up with the newest
 evidence, and a caller that waits for the check also waits for that follow-up. A check whose evidence (his chat lines,
-the frame text, the step's code) did not change since the last finished check is skipped, unless an image is due.
+the frame text, the step's code, his written answer) did not change since the last finished check is skipped, unless an image is due.
 
 A re-read (`recheck_step`) reads the step from scratch. It runs even when the evidence did not change, it attaches the
 frame image when the frame has content, and its result replaces the step's items instead of adding to them. When the
@@ -614,14 +625,15 @@ Its input is the step's label, goal and checklist, the step's interview chat (ev
 `phaseHistory`; hidden and phase-change entries left out), the frame text (`frameEvidence` in
 `src/shared/graph/frames.ts`: the frame's nodes, free text and drawings, and every edge with an end in the frame, from a
 graph of the whole scene so an arrow to another frame still counts as joined), and in an LLD round the step's code
-(each line with its number in the file, capped at 60,000 characters). An HLD board with no step frames is read whole for
+(each line with its number in the file, capped at 60,000 characters), and his written answer for the step
+(`Session.stepNotes[phase]`) when he wrote one. An HLD board with no step frames is read whole for
 every step. A PNG of the step's frame (`board.png.request` with `frameId`) is attached only when the frame holds
 freehand strokes or images, an arrow not joined at both ends, or a shape with no label, once when he leaves the step,
 and on a re-read when the frame has content. The judge still gets the whole board image.
 
 The answer is untrusted. For each item claimed `covered` or `partial`, the quote must be found (the quote-check
 folding of section 9.2) in one of his own chat lines of the step (the line's round time becomes "said at mm:ss"), in
-the frame text, or in the step's code without its line numbers. A board claim with an empty quote counts only when the
+the frame text, in the step's code without its line numbers, or in his written answer for the step (source `notes`). A board claim with an empty quote counts only when the
 image was attached. Anything else is dropped. Across the automatic checks, coverage only rises: a covered item keeps
 where it was first covered. The entry in `Session.stepChecks[phase]` becomes `checking` while a call runs, then `done`
 (with `checkedAt` and `usedImage`) or back to its earlier state, and each change is sent as `session.state`. A
@@ -634,9 +646,9 @@ check to settle before it builds that turn, for at most 30 s; after that it goes
 While it waits, the channel reports `agent.status` `thinking`, the state in which the page disables its buttons. A pause
 during the wait leaves the turn queued until he resumes; an end or a discard drops it. The request body carries the
 step's checklist as the checker last read it, after a line that gives the round time of that reading: one line per item
-with its id, label, state, where it was found (said at mm:ss, on the board, in the code) and what a partial item lacks.
-It tells the guide that the list is evidence that may lag his latest work, and that its own `step_verdict` is the call he
-sees. The request tells the guide to call `step_verdict` once for the step, with one gap on `not_yet`. When no check of
+with its id, label, state, where it was found (said at mm:ss, on the board, in the code, in the written answer) and what
+a partial item lacks. It tells the guide that the list is evidence that may lag his latest work, how many items a pass
+needs, and that the server refuses a pass the reading does not support. The request tells the guide to call `step_verdict` once for the step, with one gap on `not_yet`. When no check of
 the step has finished, the body says so instead.
 
 `session.state` carries the checklist as `steps` (`publicSteps` in `src/server/engine/public.ts`), never `checklist` or
@@ -1242,11 +1254,20 @@ Guide (guided mode), modelled on step-by-step guided practice:
   the gap with no tables or quizzes, then the step goes back to him. An "I'm stuck" request gets the same answer plus
   a line asking him to redo the step, never a `pass` and never a `note_hint`. Longer teaching waits for the coach after
   the round (TEACHING.md section 1 and 5). Keeps TEACHING.md section 2's prose rules.
-- Knows how the step checklist works: a separate checker fills it from his chat in the step, the step's frame and, in
-  LLD, the code he wrote while the step was on the rail (build steps read the whole file); every tick needs a quote the
+- Knows how the step checklist works: a separate checker fills it from his chat in the step, the step's frame, his
+  written answer for the step and, in LLD, the code he wrote while the step was on the rail (build steps read the
+  whole file); every tick needs a quote the
   app finds there; it is evidence for the guide and feeds the debrief's step cards and the study-notes draft; he does
-  not see it during the round; nobody ticks an item by hand. The guide's `step_verdict` is the call he sees. When it
-  doubts the reading, the guide calls `recheck_step` for that step and never moves the rail to refresh it.
+  not see it during the round; nobody ticks an item by hand. The guide's `step_verdict` is the call he sees, and the
+  server refuses a pass the reading does not support. When the reading lags his work, the guide calls `recheck_step`
+  for that step and never moves the rail to refresh it.
+- Passes a step only on evidence: what he said in the step's chat, drew in its frame or wrote in its written answer
+  (and, in LLD, typed and ran). A promise ("I will rename it") is not evidence, and a verdict changes only when the
+  evidence changes. Chat counts as much as the frame, so it never asks him to copy a line onto the board. Before the
+  last step's pass and before "press End" it names the steps not passed yet, from the `steps:` line.
+- Answers an off-topic question with one line (after the round), then asks the open question again. After a right
+  answer it says what holds and asks the next question, without adding the next level of the answer. It never writes
+  the app's inner words: "the brief", "the checker", "the checklist", "the level bar", a level name or a hint name.
 - The candidate moves the rail. The guide never calls `set_phase` in a reply to "Check this step"; it says the step
   passed and lets him move. It calls `set_phase` only when he says he is moving on or asks it to move the rail, or
   when his work has clearly sat in another step for a few minutes while the rail lags.

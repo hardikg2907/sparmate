@@ -17,7 +17,9 @@ export const CheckerOutputSchema = z.strictObject({
       z.strictObject({
         id: z.string().min(1).max(40).describe("The checklist item id, exactly as given."),
         state: z.enum(["covered", "partial", "missing"]),
-        source: z.enum(["chat", "board", "code", "none"]).describe("Where the evidence is: his chat lines, the board, or his code. 'none' when missing."),
+        source: z
+          .enum(["chat", "board", "code", "notes", "none"])
+          .describe("Where the evidence is: his chat lines, the board, his code, or his written answer. 'none' when missing."),
         quote: z.string().max(MAX_QUOTE).describe("His exact words from that source, copied verbatim. Empty only for a drawing seen in the image."),
         detail: z.string().max(200).describe("For a partial item, what it still lacks in a few plain words. Empty otherwise."),
       }),
@@ -39,6 +41,8 @@ export interface CheckerEvidence {
    * he wrote during it, for a build step the whole file. "" when there are none, and always in a design round.
    */
   codeText: string;
+  /** His written answer for this step, or "" when he wrote none. */
+  notesText: string;
   imageAttached: boolean;
 }
 
@@ -54,15 +58,16 @@ export function checkerMessage(e: CheckerEvidence): string {
     "</chat>",
     ...(e.boardText ? ["<frame>", e.boardText, "</frame>"] : []),
     ...(e.codeText ? ["<code>", e.codeText.slice(0, MAX_CODE_CHARS), "</code>"] : []),
+    ...(e.notesText ? ["<written_answer>", e.notesText, "</written_answer>"] : []),
     e.imageAttached ? "An image of the step's frame is attached." : "No image is attached.",
     "Return one entry for every checklist item.",
   ].join("\n");
 }
 
 /** A stable fingerprint of what the checker would read, so an unchanged step is not checked twice. */
-export function evidenceKey(e: Pick<CheckerEvidence, "chat" | "boardText" | "codeText">): string {
+export function evidenceKey(e: Pick<CheckerEvidence, "chat" | "boardText" | "codeText" | "notesText">): string {
   const lines = e.chat.filter((c) => c.role === "candidate").map((c) => `${c.id}`);
-  return JSON.stringify([lines, e.boardText, e.codeText]);
+  return JSON.stringify([lines, e.boardText, e.codeText, e.notesText]);
 }
 
 const RANK: Record<StepCheckItem["state"], number> = { missing: 0, partial: 1, covered: 2 };
@@ -74,7 +79,7 @@ function clip(text: string, max: number): string {
 
 /**
  * Turns the checker's answer into what the app stores. Model output is untrusted, so every claim must carry a quote
- * that is really in the step's chat, the frame text or the step's code; a claim that cannot be found counts as not
+ * that is really in the step's chat, the frame text, the step's code or his written answer; a claim that cannot be found counts as not
  * covered, and the time shown next to a chat claim comes from the matched line, never from the model. Given the
  * previous check, coverage only rises: what he said cannot be unsaid, and a routine check that misses a point it saw
  * before must not take it away. Given none, the result stands alone, which is how a re-read clears a wrong tick.
@@ -111,6 +116,8 @@ function verify(claim: CheckerOutput["items"][number], e: CheckerEvidence): { so
       return quoteIn(claim.quote, e.boardText) ? { source: "board", at: null } : null;
     case "code":
       return e.codeText !== "" && quoteIn(claim.quote, unnumberedCode(e.codeText)) ? { source: "code", at: null } : null;
+    case "notes":
+      return e.notesText !== "" && quoteIn(claim.quote, e.notesText) ? { source: "notes", at: null } : null;
     default:
       return null;
   }
@@ -131,7 +138,7 @@ export function stepChecklistText(
       const rows = items.map((i) => {
         const got = check.items[i.id];
         if (!got) return `- missing: ${i.label}`;
-        const where = got.source === "chat" ? `said "${got.quote}"` : got.source === "board" ? "on the board" : "in the code";
+        const where = got.source === "chat" ? `said "${got.quote}"` : whereText(got);
         return `- ${got.state}: ${i.label} (${where}${got.detail ? `; lacks ${got.detail}` : ""})`;
       });
       return [[`[${p.label}]`, ...rows].join("\n")];
@@ -142,6 +149,7 @@ export function stepChecklistText(
 function whereText(item: StepCheckItem): string {
   if (item.source === "board") return "on the board";
   if (item.source === "code") return "in the code";
+  if (item.source === "notes") return "in the written answer";
   return item.at !== null ? `said at ${formatClock(item.at)}` : "said in the chat";
 }
 

@@ -856,7 +856,7 @@ describe("the step checker in a machine-coding round", () => {
     expect(body).toMatch(/- clarify-2: Entry: assign the first free fitting spot and return a ticket; reject if nothing fits — (covered|partial), in the code/);
     expect(body).toContain("- clarify-1: Configure floors, spots per floor with sizes, gates and rates at setup — missing");
     expect(body).toContain("- clarify-5: Safe under concurrent entry and exit calls — partial, in the code; lacks only part of it is stated");
-    expect(body).toContain("Your step_verdict is the call he sees");
+    expect(body).toContain("A pass needs at least 3 of these 5 items covered");
     expect(body).toContain("call step_verdict exactly once");
     rt.dispose();
   });
@@ -1614,6 +1614,71 @@ describe("guided step verdicts, assists and move-on offers", () => {
     expect(refused.text).toContain("already passed");
     expect(lastState(t.msgs).stepVerdicts?.requirements?.verdict).toBe("pass");
     rt.dispose();
+  });
+
+  it("refuses a pass the step's reading does not support, and names the open items to the guide", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const items = session.checklist.requirements ?? [];
+    expect(items.length).toBeGreaterThanOrEqual(4);
+    const covered = { state: "covered" as const, source: "chat" as const, at: 1_000, quote: "create a short link", detail: "" };
+    session.stepChecks = { ...session.stepChecks, requirements: { status: "done", checkedAt: 2_000, usedImage: false, items: { [items[0]!.id]: covered } } };
+
+    const refused = await w.tool("step_verdict", { phase: "requirements", verdict: "pass" });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain(`covers 1 of ${items.length} checklist items, and a pass needs at least ${Math.ceil(items.length / 2)}`);
+    expect(refused.text).toContain(items[1]!.label);
+    expect(refused.text).not.toContain(`${items[0]!.label};`);
+    expect(refused.text).toContain("recheck_step");
+    expect(session.stepVerdicts).toBeUndefined();
+
+    const enough = Object.fromEntries(items.slice(0, Math.ceil(items.length / 2)).map((i) => [i.id, covered]));
+    session.stepChecks = { ...session.stepChecks, requirements: { status: "done", checkedAt: 3_000, usedImage: false, items: enough } };
+    const passed = await w.tool("step_verdict", { phase: "requirements", verdict: "pass" });
+    expect(passed.isError).toBe(false);
+    expect(passed.text).toContain("Steps now: passed: Requirements · not passed yet: Core entities, API, High-level design, Deep dives.");
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("pass");
+    rt.dispose();
+  });
+
+  it("passes Deep dives on one covered item, and leaves a step with no finished reading to the guide", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const dives = session.checklist.deep_dives ?? [];
+    expect(dives.length).toBeGreaterThanOrEqual(3);
+    const covered = { state: "covered" as const, source: "chat" as const, at: 1_000, quote: "allocate code ranges", detail: "" };
+    session.stepChecks = { ...session.stepChecks, deep_dives: { status: "done", checkedAt: 2_000, usedImage: false, items: {} } };
+    expect((await w.tool("step_verdict", { phase: "deep_dives", verdict: "pass" })).text).toContain("a pass needs at least 1");
+    session.stepChecks = { ...session.stepChecks, deep_dives: { status: "done", checkedAt: 3_000, usedImage: false, items: { [dives[0]!.id]: covered } } };
+    expect((await w.tool("step_verdict", { phase: "deep_dives", verdict: "pass" })).isError).toBe(false);
+
+    session.stepChecks = { ...session.stepChecks, api: { status: "failed", checkedAt: null, usedImage: false, items: {} } };
+    expect((await w.tool("step_verdict", { phase: "api", verdict: "pass" })).isError).toBe(false);
+    rt.dispose();
+  });
+
+  it("tells the guide on every turn which steps passed, and tells an interviewer nothing of the kind", async () => {
+    for (const mode of ["guided", "interview"] as const) {
+      const w = watched();
+      const t = setup(w.driver, mode);
+      const session = newSession(mode);
+      session.stepVerdicts = mode === "guided" ? { entities: { verdict: "pass", at: 1 } } : undefined;
+      const rt = await t.start(session);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "s1", text: "Are we done?" }, t.peer);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const said = w.turns.find((x) => x.meta.kind === "candidate")?.text ?? "";
+      expect(said).toContain("Are we done?");
+      if (mode === "guided") expect(said).toContain("steps: passed: Core entities · not passed yet: Requirements, API, High-level design, Deep dives");
+      else expect(said).not.toContain("steps:");
+      rt.dispose();
+    }
   });
 
   it("asks the guide for a verdict on a step check, and never sends the checklist to the room", async () => {
