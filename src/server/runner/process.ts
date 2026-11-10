@@ -151,8 +151,10 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
       exited = true;
       exitCode = code;
       signal = sig;
+      // The program is over, so no limit may fire while its pipes drain and report a time-out it never had.
+      clearTimeout(timeout);
       killGroup();
-      grace = setTimeout(() => finish(null), DRAIN_GRACE_MS);
+      grace ??= setTimeout(() => finish(null), DRAIN_GRACE_MS);
     });
     child.on("close", () => finish(null));
 

@@ -259,6 +259,33 @@ describe("timeouts", () => {
     expect(ran!.durationMs).toBeLessThan(250);
   });
 
+  it("counts the user's own initializers against the limit, because the start report runs before them", async () => {
+    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 500 });
+    const source =
+      "#include <chrono>\n#include <cstdio>\n" +
+      "static int spun = [] {\n  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(1);\n" +
+      "  while (std::chrono::steady_clock::now() < end) {\n  }\n  return 1;\n}();\n" +
+      'int main() { std::puts("main"); return spun - 1; }\n';
+    const { run: ran } = await quick.compileAndRun(await program("slow_initializer.cpp", source));
+    expect(ran).toMatchObject({ timedOut: true, signal: "SIGKILL", stdout: "" });
+  });
+
+  it("lets main() end with pthread_exit() and exits as the last thread would", async () => {
+    const source = '#include <cstdio>\n#include <pthread.h>\nint main() {\n  std::puts("bye");\n  pthread_exit(nullptr);\n}\n';
+    const { run: ran } = await runner.compileAndRun(await program("pthread_exit.cpp", source));
+    expect(ran).toMatchObject({ exitCode: 0, signal: null, timedOut: false, stdout: "bye\n", stderr: "" });
+  });
+
+  it("is not confused by a program that writes to fd 3 or opens a file there", async () => {
+    const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 1000 });
+    const source =
+      "#include <cstdio>\n#include <fcntl.h>\n#include <unistd.h>\n" +
+      'int main() {\n  bool wrote = write(3, "m", 1) == 1;\n  int fd = open("mine.txt", O_CREAT | O_WRONLY, 0600);\n' +
+      '  std::printf("wrote %d fd %d\\n", wrote, fd);\n  std::fflush(stdout);\n  usleep(300000);\n  return 0;\n}\n';
+    const { run: ran } = await quick.compileAndRun(await program("fd_three.cpp", source));
+    expect(ran).toMatchObject({ exitCode: 0, signal: null, timedOut: false, stdout: "wrote 0 fd 3\n", stderr: "" });
+  });
+
   it("stops a program that hangs before it reports its start, at the start-up limit, and says so", async () => {
     // The program's own write() replaces the one the start report calls, so it hangs where loading would.
     const quick = createCppRunnerWithLimits({ tmpRoot }, { runTimeoutMs: 100, runStartupTimeoutMs: 2000 });
@@ -637,7 +664,8 @@ describe("process and resource limits", () => {
     const reached = Number(ran!.stdout.trim().split("\n").at(-1));
     // The cap is passed during the step after 112 MB at the earliest, so less would mean no progress was read.
     expect(reached).toBeGreaterThanOrEqual(112);
-    expect(reached).toBeLessThanOrEqual(256);
+    // The rss poll alone lets this program reach 288 MB or more, so this bound needs the program's own watch.
+    expect(reached).toBeLessThanOrEqual(160);
   });
 
   it.skipIf(process.platform !== "darwin")("stops a compiler that passes its memory cap", async () => {

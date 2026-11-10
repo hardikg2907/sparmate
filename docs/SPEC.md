@@ -804,15 +804,22 @@ normal file the user can open in an editor at the same time (`lld/compile_flags.
   shows the toolchain's AddressSanitizer works; Apple clang 16 on macOS 27 aborts every ASan program before
   `main()`, so it is off there); run with a 10 s time limit.
 - Start report: every built program (a run, a harness run and the sanitizer probe) links `runner_hook.cpp`, which
-  the runner writes into the build folder and puts before the user's sources, so its initializer runs before any
-  user code. It writes one byte to fd 3, a pipe from the runner. A program's time limit starts at that byte, not
-  at the spawn: loading a fresh binary goes through the system's first-launch checks, which take about 0.3 s and
-  queue past a second when several programs start at once. The run's `durationMs` counts from the byte as well.
+  the runner writes into the build folder and puts before the user's sources. Its report runs before any user code:
+  on macOS it is the first initializer, because initializers run in link order; on Linux it is the first
+  `.preinit_array` entry, so it runs before a user pre-initializer or `constructor(0)` too. It writes one byte to
+  fd 3, a pipe from the runner. A program's time limit starts at that byte, not at the spawn: loading a fresh binary
+  goes through the system's first-launch checks, which took about 0.3 s on the machine this was measured on and
+  queued past a second when several programs started at once. The run's `durationMs` counts from the byte as well.
   A program that has not reported within 10 s is stopped, `timedOut` is set, and stderr says it did not start in
-  time. The pipe is untrusted: a later byte changes nothing, and closing the pipe starts the limit at once, so a
-  program can only shorten or end its own run, never pass 10 s plus its limit. The hook has internal linkage only
-  and compiles without warnings, so it never shows in the user's diagnostics. The compiler keeps its limit from
-  the spawn.
+  time. A program that defines its own version of a C library call the hook makes (such as `write()`) takes over
+  that call and can delay its report, but only up to the 10 s start-up limit. The pipe is untrusted: a later byte
+  changes nothing, and closing the pipe starts the limit at once. So a program can delay its own start or end its
+  own run, but the run never passes 10 s plus its limit, and the CPU rlimit still applies. On macOS the hook moves
+  the pipe from fd 3 to a free descriptor from 100 up (close-on-exec), so a program's own writes to fd 3, or a file
+  it opens there, are never read as a report. When `main()` ends with `pthread_exit()` and the hook's thread is the
+  last one left, the hook calls `exit(0)`, as the last thread would. The hook has internal linkage only and
+  compiles without warnings, so it never shows in the user's diagnostics. The compiler keeps its limit from the
+  spawn.
 - Diagnostics: `parseClangDiagnostics(stderr, filePath)` in `src/shared/clang.ts`, keeping only lines for the
   compiled file (skip notes inside system headers). Regex on lines of at most 2,000 characters.
 - Sandbox: the compiler and every produced binary run in an isolated sandbox with no network access and no file
