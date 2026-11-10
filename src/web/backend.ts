@@ -277,8 +277,8 @@ export interface DrillUsageSummary {
     durationMs: number;
   }[];
   earlier: { cost: number; calls: number };
-  /** Drills the user started over: they spent calls but are not attempts on record. */
-  startedOver?: { attempts: number; cost: number; calls: number };
+  /** Drills with calls that never became a graded attempt on record (started over, failed or still open). */
+  unfinished?: { attempts: number; cost: number; calls: number };
   /** Attempts saved before calls were recorded per attempt; they have no cost row. */
   legacyAttempts?: number;
 }

@@ -153,7 +153,7 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                 </dd>
               </div>
               <div>
-                <dt className="text-hero-muted">Rounds saved</dt>
+                <dt className="text-hero-muted">Rounds tracked</dt>
                 <dd className="font-bold tabular-nums">
                   {totals.rounds.toLocaleString()}
                   {discardedRounds > 0 && <span className="ml-2 text-meta font-normal text-hero-muted">{discardedRounds.toLocaleString()} discarded, cost kept</span>}
@@ -226,9 +226,9 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                   </tr>
                 ))}
                 {[
-                  { row: data.unassigned?.preparation, title: "Preparing your own questions" },
-                  { row: data.unassigned?.other, title: "Other calls" },
-                ].flatMap(({ row, title }) =>
+                  { row: data.unassigned?.preparation, title: "Preparing your own questions", split: false },
+                  { row: data.unassigned?.other, title: "Other calls", split: true },
+                ].flatMap(({ row, title, split }) =>
                   row ? (
                     <tr key={title} className="transition-colors hover:bg-accent/40">
                       <td className="px-5 py-3 font-semibold text-foreground">{title}</td>
@@ -237,8 +237,8 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                       <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{row.inputTokens.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{row.outputTokens.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{(row.cacheHitRate * 100).toFixed(1)}%</td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{usd(row.roundCost)}</td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{usd(row.drillCost)}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{split ? usd(row.roundCost) : "—"}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{split ? usd(row.drillCost) : "—"}</td>
                       <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">{usd(row.costUsd)}</td>
                     </tr>
                   ) : (
@@ -484,16 +484,11 @@ function DrillsSection({ drills }: { drills: UsageSummaryResponse["drills"] }) {
             </>
           ) : null}
 
-          {drills.startedOver && drills.startedOver.attempts > 0 ? (
+          {drills.unfinished && drills.unfinished.attempts > 0 ? (
             <p className="text-meta text-muted-foreground">
-              {drills.startedOver.attempts.toLocaleString()} {drills.startedOver.attempts === 1 ? "drill was" : "drills were"} started over ({usd(drills.startedOver.cost)},{" "}
-              {drills.startedOver.calls.toLocaleString()} {drills.startedOver.calls === 1 ? "call" : "calls"}). The cost is in the total, but they are not attempts.
-            </p>
-          ) : null}
-          {drills.legacyAttempts ? (
-            <p className="text-meta text-muted-foreground">
-              {drills.legacyAttempts.toLocaleString()} earlier {drills.legacyAttempts === 1 ? "attempt was" : "attempts were"} saved before drill costs were recorded, so{" "}
-              {drills.legacyAttempts === 1 ? "it has" : "they have"} no cost. They still count on Progress and in the drill history.
+              {drills.unfinished.attempts.toLocaleString()} {drills.unfinished.attempts === 1 ? "drill was" : "drills were"} not finished: started over, failed or still open (
+              {usd(drills.unfinished.cost)}, {drills.unfinished.calls.toLocaleString()} {drills.unfinished.calls === 1 ? "call" : "calls"}). The cost is in the total, but they are
+              not attempts.
             </p>
           ) : null}
           {drills.earlier.calls > 0 ? (
@@ -504,6 +499,12 @@ function DrillsSection({ drills }: { drills: UsageSummaryResponse["drills"] }) {
           ) : null}
         </>
       )}
+      {drills.legacyAttempts ? (
+        <p className="text-meta text-muted-foreground">
+          {drills.legacyAttempts.toLocaleString()} earlier {drills.legacyAttempts === 1 ? "attempt was" : "attempts were"} saved before drill costs were recorded, so{" "}
+          {drills.legacyAttempts === 1 ? "it has" : "they have"} no cost. They stay in the drill history and in the week count on Progress.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -573,8 +574,8 @@ function UsageNotes({ trackingSince }: { trackingSince: string | null }) {
     <div className="surface-flat space-y-1.5 rounded-xl bg-card p-5 text-ui text-muted-foreground">
       <p>Cost is what the same calls would cost on the API. On a Claude plan you pay by plan limits, not by this amount.</p>
       <p>
-        A failed call counts in every total. A model process that stops before it reports its usage counts with the tokens seen until then. So does a round you discarded or a drill
-        you started over.
+        A failed call counts in every total. A model process that stops before it reports its usage counts with the tokens seen until then. A discarded round and a drill you
+        started over count too.
       </p>
       <p>
         {dateFormatted

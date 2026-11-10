@@ -600,12 +600,23 @@ describe("UsageLedger drill cost", () => {
     expect(rows).toBeCloseTo(s.totals.costUsd);
   });
 
+  it("splits the cost of calls with no problem into rounds and drills, like a problem row", async () => {
+    const ledger = await ledgerWith([
+      row({ problemId: null, sessionId: "s9", role: "interviewer", cost: 1, costUsd: 1 }),
+      row({ problemId: null, role: "grader", cost: 0.4, costUsd: 0.4 }),
+    ]);
+    const other = (await ledger.summary({ timeZone: "UTC" })).unassigned?.other;
+    expect(other?.roundCost).toBeCloseTo(1);
+    expect(other?.drillCost).toBeCloseTo(0.4);
+    expect((other?.roundCost ?? 0) + (other?.drillCost ?? 0)).toBeCloseTo(other?.costUsd ?? -1);
+  });
+
   it("has no preparation row when no custom question was prepared", async () => {
     const s = await (await ledgerWith([row({ sessionId: "s1", role: "judge" })])).summary({ timeZone: "UTC" });
     expect(s.unassigned).toEqual({ preparation: null, other: null });
   });
 
-  it("does not count a drill the user started over as an attempt, and keeps its cost apart", async () => {
+  it("does not count a drill that never became a graded attempt, and keeps its cost apart", async () => {
     const ledger = await ledgerWith([
       row({ drillAttemptId: A1, drillKind: "walk", cost: 0.2, costUsd: 0.2 }),
       row({ drillAttemptId: A1, drillKind: "walk", cost: 0.1, costUsd: 0.1 }),
@@ -615,8 +626,8 @@ describe("UsageLedger drill cost", () => {
     expect(drills.attempts).toBe(1);
     expect(drills.byAttempt.map((a) => a.attemptId)).toEqual([A1]);
     expect(drills.byKind.find((k) => k.kind === "tradeoff")).toMatchObject({ attempts: 0, calls: 1 });
-    expect(drills.startedOver).toMatchObject({ attempts: 1, calls: 1 });
-    expect(drills.startedOver?.cost).toBeCloseTo(0.05);
+    expect(drills.unfinished).toMatchObject({ attempts: 1, calls: 1 });
+    expect(drills.unfinished?.cost).toBeCloseTo(0.05);
     expect(drills.legacyAttempts).toBe(3);
     expect(drills.cost).toBeCloseTo(0.35);
   });

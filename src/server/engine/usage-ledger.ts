@@ -155,8 +155,8 @@ export interface DrillUsageSummary {
   byAttempt: DrillAttemptUsage[];
   /** Grader calls recorded before attempts had ids. */
   earlier: { cost: number; calls: number };
-  /** Drills the user started over: their calls cost money, but the drill is not an attempt on record. */
-  startedOver?: { attempts: number; cost: number; calls: number };
+  /** Drills with calls that never became a graded attempt on record (started over, failed or still open). Their cost is in `cost`. */
+  unfinished?: { attempts: number; cost: number; calls: number };
   /** Attempts saved before model calls were recorded per attempt; they have no cost row. */
   legacyAttempts?: number;
 }
@@ -283,7 +283,7 @@ export function dayInZone(instant: Date, timeZone: string): string {
 export interface UsageKnown {
   /** Ids of the rounds still saved. Leave out to count every round in the ledger as kept. */
   rounds?: ReadonlySet<string>;
-  /** Ids of the drill attempts still on record. Leave out to count every attempt as kept. */
+  /** Ids of the drill attempts that were graded and are still on record. Leave out to count every attempt as kept. */
   attempts?: ReadonlySet<string>;
   legacyAttempts?: number;
 }
@@ -425,12 +425,13 @@ export class UsageLedger {
       }
     >();
 
-    type Bucket = { cost: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; calls: number };
-    const emptyBucket = (): Bucket => ({ cost: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, calls: 0 });
+    type Bucket = { cost: number; drillCost: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; calls: number };
+    const emptyBucket = (): Bucket => ({ cost: 0, drillCost: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, calls: 0 });
     const preparation = emptyBucket();
     const otherCalls = emptyBucket();
-    const addToBucket = (b: Bucket, r: UsageRecord, cost: number) => {
+    const addToBucket = (b: Bucket, r: UsageRecord, cost: number, isDrill: boolean) => {
       b.cost += cost;
+      if (isDrill) b.drillCost += cost;
       b.inputTokens += r.inputTokens;
       b.outputTokens += r.outputTokens;
       b.cacheReadTokens += r.cacheReadTokens;
@@ -571,7 +572,7 @@ export class UsageLedger {
         if (!p.track && r.track) p.track = r.track;
         problemMap.set(r.problemId, p);
       } else {
-        addToBucket(isPreparationRole(r.role) ? preparation : otherCalls, r, cost);
+        addToBucket(isPreparationRole(r.role) ? preparation : otherCalls, r, cost, isDrill);
       }
 
       const roleEntry = roleMap.get(r.role) ?? {
@@ -683,8 +684,8 @@ export class UsageLedger {
             cacheHitRate: calcCacheHitRate(b.inputTokens, b.cacheReadTokens, b.cacheCreationTokens),
             calls: b.calls,
             rounds: 0,
-            roundCost: b.cost,
-            drillCost: 0,
+            roundCost: b.cost - b.drillCost,
+            drillCost: b.drillCost,
           };
 
     const byRole: RoleUsageSummary[] = Array.from(roleMap.entries())
@@ -715,18 +716,18 @@ export class UsageLedger {
       }))
       .sort((a, b) => b.cost - a.cost);
 
-    const startedOver = { attempts: 0, cost: 0, calls: 0 };
+    const unfinished = { attempts: 0, cost: 0, calls: 0 };
     for (const [attemptId, a] of attemptMap) {
       if (keptAttempt(attemptId)) continue;
-      startedOver.attempts += 1;
-      startedOver.cost += a.cost;
-      startedOver.calls += a.calls;
+      unfinished.attempts += 1;
+      unfinished.cost += a.cost;
+      unfinished.calls += a.calls;
     }
     const drills: DrillUsageSummary = {
       cost: drillCostTotal,
       calls: drillCalls,
       failedCalls: drillFailedCalls,
-      attempts: attemptMap.size - startedOver.attempts,
+      attempts: attemptMap.size - unfinished.attempts,
       byKind: Array.from(kindMap.entries())
         .map(([kind, k]) => ({ kind, cost: k.cost, calls: k.calls, attempts: [...k.attempts].filter(keptAttempt).length }))
         .sort((a, b) => b.cost - a.cost),
@@ -746,7 +747,7 @@ export class UsageLedger {
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, MAX_DRILL_ATTEMPTS_LISTED),
       earlier: { cost: earlierCost, calls: earlierCalls },
-      ...(known?.attempts ? { startedOver } : {}),
+      ...(known?.attempts ? { unfinished } : {}),
       ...(known?.legacyAttempts !== undefined ? { legacyAttempts: known.legacyAttempts } : {}),
     };
 

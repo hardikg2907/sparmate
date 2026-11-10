@@ -684,7 +684,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
 
 ### Usage
 
-- **Cost panel.** The deep panel holds the total cost at 48 px, the call count, the saved round count (with the discarded rounds beside it) and the daily cost
+- **Cost panel.** The deep panel holds the total cost at 48 px, the call count, the tracked round count (with the discarded rounds beside it) and the daily cost
   chart for 30 days with bars in a light-to-violet gradient.
 - **Token strip.** One raised panel with input tokens, output tokens and the cache hit rate, with a meter,
   separated by hairlines.

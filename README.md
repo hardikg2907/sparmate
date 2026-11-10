@@ -216,7 +216,7 @@ Rounds use your Claude plan, like any Claude Code session. The default models ar
 
 To spend less, open Settings and switch the interviewer and the coach to Claude Sonnet 5.5. Keep the judge on Opus if you want the sharpest scoring.
 
-The **Usage** page (`/usage`, linked in the header) shows tokens, cost, duration and role for every model call, with daily charts and breakdowns by problem, round, role and model. A Drills section shows what grading cost, and each problem splits round cost from drill cost. Each round has its own row, with its cost, and the row links to its debrief. Costs are API-equivalent prices. When the SDK does not report a cost, the app prices the call from its tokens, and the page shows a "≈" next to totals that include such estimates.
+The **Usage** page (`/usage`, linked in the header) shows tokens, cost, duration and role for every model call, with daily charts and breakdowns by problem, round, role and model. A Drills section shows what grading cost, and each problem splits round cost from drill cost. Each round has its own row, with its cost, and the row links to its debrief. A discarded round keeps its row and cost, marked as discarded, with no link. Costs are API-equivalent prices. When the SDK does not report a cost, the app prices the call from its tokens, and the page shows a "≈" next to totals that include such estimates.
 
 ## Problems
 
