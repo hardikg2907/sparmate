@@ -1272,6 +1272,12 @@ describe("dialogue drills", () => {
       expect(sent[1]).toContain(QUESTION_PROBLEMS[problem]);
     });
 
+    it("falls back to the first reply's first part when the second reply cannot be cut down", async () => {
+      const { svc, sent } = scripted(["Which store would you pick, and why?", "Your plan is a cache. Why?"]);
+      expect(question(await svc.submit(free, OPEN)).question).toBe("Which store would you pick?");
+      expect(sent).toHaveLength(2);
+    });
+
     it("counts words the candidate wrote in a reply as theirs", async () => {
       const { svc, sent } = scripted(["Why that store?", "What does each insert of a fresh random code cost at peak?"], true);
       const q1 = question(await svc.submit(free, OPEN));
@@ -1951,10 +1957,10 @@ describe("dialogue drills", () => {
       });
       const q1 = question(await leaky.submit(free, OPEN));
       expect(q1.question).toBe(FALLBACK_QUESTION);
-      const q2 = question(await leaky.reply(q1.attemptId, 1, LONG_REPLY));
-      expect(q2.question).toBe(FALLBACK_QUESTION);
-      const done = result(await leaky.reply(q1.attemptId, 2, LONG_REPLY));
-      const shown = JSON.stringify([q1, q2, done]);
+      // The fixed question is never asked twice, so a second leaky question ends the conversation.
+      const done = result(await leaky.reply(q1.attemptId, 1, LONG_REPLY));
+      expect(done.turns).toHaveLength(3);
+      const shown = JSON.stringify([q1, done]);
       const built = (await import("./drill-content")).buildDrill(problem, "tradeoff", { rotation: 0 });
       for (const line of (built?.key ?? "").split("\n").filter((l) => l.trim().length > 30)) expect(shown).not.toContain(line.trim());
       expect(shown).not.toContain(copy);

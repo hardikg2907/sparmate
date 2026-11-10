@@ -39,6 +39,7 @@ import { attemptView, buildDetail, gymExtras, recentAttempts, type DetailContext
 import { buildDrill, drillFits, drillsAvailable, topicTitles, variantEntries, type DrillContent } from "./drill-content";
 import { canVaryFrom, pickNext, repickStale } from "./drill-pick";
 import {
+  FALLBACK_QUESTION,
   FirstQuestionSchema,
   GraderOutputSchema,
   NextQuestionSchema,
@@ -919,6 +920,16 @@ export class DrillService {
     const known = [shownText(content), ...turns.filter((t) => t.role === "candidate").map((t) => t.text)].join("\n");
     const fake: FakeFacts = { problem, track: problem.meta.track, drillFollowUp: { kind: drill, key: content.key, turns: [...turns], asked } };
     let rejected: RejectedQuestion | undefined;
+    // The second reply is cut down first; the first reply is the next best, and the fixed question comes last.
+    const salvage = (raw: string) => {
+      const kept = salvageQuestion(raw, content.key, known, redact);
+      const earlier = rejected && kept === FALLBACK_QUESTION ? salvageQuestion(rejected.question, content.key, known, redact) : kept;
+      this.deps.log.warn(`Drill interviewer question cut down for ${problem.meta.id}: ${earlier === FALLBACK_QUESTION ? "fixed question" : "first part"}`);
+      return earlier;
+    };
+    // The fixed question is asked once per conversation; a second time would read as the interviewer repeating itself.
+    const settle = (question: string) =>
+      question === FALLBACK_QUESTION && turns.some((t) => t.role === "grader" && t.text === FALLBACK_QUESTION) ? { another: false, question: "" } : { another: true, question };
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const text = followUpMessage(content.prompt, content.key, turns, asked, rejected);
@@ -934,14 +945,14 @@ export class DrillService {
           return { another: false, question: "" };
         }
         if (review.problem === null) return { another: true, question: review.question };
-        if (attempt === 1) return { another: true, question: salvageQuestion(raw, content.key, known, redact) };
+        if (attempt === 1) return settle(salvage(raw));
         this.deps.log.warn(`Drill interviewer question not used for ${problem.meta.id}: ${review.problem}`);
         rejected = { question: raw, problem: review.problem };
       } catch (err) {
         this.deps.log.warn(`Drill interviewer attempt ${attempt + 1} failed for ${problem.meta.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);
       }
     }
-    if (rejected) return { another: true, question: salvageQuestion(rejected.question, content.key, known, redact) };
+    if (rejected) return settle(salvage(rejected.question));
     throw new HttpError(502, "The interviewer did not answer. Your answer is still in the box. Try again.");
   }
 }

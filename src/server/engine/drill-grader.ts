@@ -120,11 +120,12 @@ export function dropKeyReveals(lines: readonly string[], key: string, known: str
   });
 }
 
-export type QuestionProblem = "two" | "opener" | "statement" | "key";
+export type QuestionProblem = "two" | "long" | "opener" | "statement" | "key";
 
 /** Why a question was not used, in words the model reads when it is asked again. */
 export const QUESTION_PROBLEMS: Record<QuestionProblem, string> = {
   two: 'it asks two things at once. Ask one question with one question mark, no second clause joined by "and", and nothing after the question mark.',
+  long: "it is too long for the page. Ask one short question in one or two sentences.",
   opener: "it opens by telling the candidate what the hard part of the problem is. Ask about what the candidate wrote.",
   statement: "it tells the candidate what their design is. Quote or name only what the candidate wrote, then ask.",
   key: "it names something from the reference that the candidate did not write. Ask what happens, what it costs or why, in the candidate's own terms.",
@@ -140,11 +141,11 @@ const QUESTION_START = new RegExp(
 );
 /** A second question joined to the first: ", and what ...", "and why?", "; how ...". */
 const SECOND = new RegExp(
-  `(?:,\\s+and\\s+(?:what|which|who|whose|how|why|where|when|if|whether|${AUX})\\b|\\s+and\\s+(?:what|which|how|why|where|when)\\b(?=\\s*\\?|\\s+${AUX}\\b)|;\\s*(?:what|which|who|how|why|where|when|${AUX})\\b)`,
+  `(?:,\\s+and\\s+(?:what|which|who|whose|how|why|where|when|if|whether|${AUX})\\b|\\s+and\\s+(?:what|which|how|why|where|when)\\b(?=\\s*\\?|\\s+${AUX}\\b|\\s+(?:happens|many|much|long|often)\\b)|,\\s+(?:and\\s+)?(?:then|also)\\s+(?:what|which|how|why|where|when)\\b|,\\s+or\\s+(?:what|which|how|why|where|when)\\b|\\(and\\s+(?:what|which|how|why|where|when)\\b|;\\s*(?:and\\s+)?(?:what|which|who|how|why|where|when|${AUX})\\b)`,
   "i",
 );
 const OPENER =
-  /^(?:(?:so|now|well|here|okay|ok),?\s+)?the\s+(?:(?:hardest|hard|trickiest|tricky|key|main|real|core|central|biggest)\s+(?:part|problem|challenge|issue|difficulty|question|risk|catch)|crux)\b/i;
+  /^(?:(?:so|now|well|here|okay|ok|i think|i'd say)[,\u2013\u2014-]?\s+(?:[\u2013\u2014-]\s+)?)?the\s+(?:(?:hardest|hard|trickiest|tricky|difficult|challenging|key|main|real|core|central|biggest)\s+(?:part|problem|challenge|issue|difficulty|question|risk|catch|thing|bit|aspect)|crux|challenge\s+(?:here|in this))\b/i;
 const STATEMENT = /\byour\s+((?:[a-z-]+\s+){0,2})is\s+(?:a|an|just|really|actually|basically|essentially)\s+([a-z-]+(?:\s+[a-z-]+){0,2})/i;
 /** A subject that is the candidate's whole design, so naming what it "is" tells them their design. */
 const DESIGN_WORDS = new Set(["design", "approach", "plan", "solution", "system", "architecture", "answer", "idea", "model", "scheme", "strategy"]);
@@ -200,11 +201,36 @@ const PAIR_FILLER = new Set([
 const QUESTION_NUMBER_DIGITS = 3;
 const QUESTION_WORD_CHARS = 6;
 const STATEMENT_WORD_CHARS = 7;
+/** Words every capacity or failure question uses, so finding them in the key gives nothing away. */
+const PLAIN_STEMS = new Set([
+  ...["second", "minute", "hour", "write", "read", "request", "client", "server", "user", "traffic", "peak"],
+  ...["retri", "retry", "timeout", "failure", "fail", "succeed", "crash", "restart", "delay", "slow", "wait"],
+]);
+const CONDITION = /\b(?:if|when|since|because|once|while)\s+$/i;
 /** A question builds on the candidate's own words, so fewer key words than in a feedback line already give it away. */
 export const QUESTION_REVEAL_WORDS = 2;
 
 function numbers(text: string): Set<string> {
   return new Set((text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => n.replace(/,/g, "").replace(/\.$/, "")));
+}
+
+/** A light stem, so "write" in the answer covers "writes" in a question. */
+function stem(word: string): string {
+  return word.replace(/(?:ing|ed|es|s)$/, "") || word;
+}
+
+/** Six words in a row from the key, unless the candidate wrote them or the drill showed them (a topic title). */
+function copiesKey(text: string, key: string, known: string): boolean {
+  const runs = (line: string) => {
+    const words = tokens(line);
+    const out = new Set<string>();
+    for (let i = 0; i + KEY_COPY_WORDS <= words.length; i++) out.add(words.slice(i, i + KEY_COPY_WORDS).join(" "));
+    return out;
+  };
+  const inKey = runs(key);
+  const seen = runs(known);
+  for (const run of runs(text)) if (inKey.has(run) && !seen.has(run)) return true;
+  return false;
 }
 
 function pairs(words: readonly string[]): Set<string> {
@@ -224,21 +250,27 @@ function questionReveals(text: string, key: string, known: string): boolean {
   for (const n of numbers(text)) {
     if (n.replace(/\D/g, "").length >= QUESTION_NUMBER_DIGITS && keyNumbers.has(n) && !seenNumbers.has(n)) return true;
   }
+  // Words are compared on a light stem, so "refill" meets "refills" in the key and "count" in the answer covers "counts".
   const words = (line: string) => tokens(line).filter((w) => !/[0-9]/.test(w));
-  const keyWords = words(key);
-  const inKey = new Set(keyWords);
-  const seen = new Set(tokens(known));
+  const keyStems = words(key).map(stem);
+  const inKey = new Set(keyStems);
+  const seen = new Set(tokens(known).map(stem));
   const asked = words(text);
-  const fresh = new Set(asked.filter((w) => inKey.has(w) && !seen.has(w) && w.length >= QUESTION_WORD_CHARS));
+  const fresh = new Set(asked.filter((w) => w.length >= QUESTION_WORD_CHARS && inKey.has(stem(w)) && !seen.has(stem(w)) && !PLAIN_STEMS.has(stem(w))).map(stem));
   if (fresh.size >= QUESTION_REVEAL_WORDS) return true;
-  const keyPairs = pairs(keyWords);
+  const keyPairs = pairs(keyStems);
   for (let i = 0; i + 1 < asked.length; i++) {
     const a = asked[i] ?? "";
     const b = asked[i + 1] ?? "";
-    if (a.length < 4 || b.length < 4 || PAIR_FILLER.has(a) || PAIR_FILLER.has(b)) continue;
-    if ((!seen.has(a) || !seen.has(b)) && keyPairs.has(`${a} ${b}`)) return true;
+    if (a.length < 4 || b.length < 4 || PAIR_FILLER.has(a) || PAIR_FILLER.has(b) || PLAIN_STEMS.has(stem(a)) || PLAIN_STEMS.has(stem(b))) continue;
+    if ((!seen.has(stem(a)) || !seen.has(stem(b))) && keyPairs.has(`${stem(a)} ${stem(b)}`)) return true;
   }
   return false;
+}
+
+/** Whether every quote that opens also closes. */
+function quotesBalanced(text: string): boolean {
+  return (text.match(/"/g) ?? []).length % 2 === 0 && (text.match(/\u201c/g) ?? []).length === (text.match(/\u201d/g) ?? []).length;
 }
 
 /** The positions of the question marks that are not inside a quote, so a quoted question is the candidate's own words. */
@@ -270,8 +302,10 @@ function secondAt(ask: string): number {
 function statesDesign(text: string, key: string, known: string): boolean {
   const m = STATEMENT.exec(text);
   if (!m) return false;
+  // "If your plan is to retry, ..." sets up a case; it does not tell the candidate what the plan is.
+  const condition = CONDITION.test(text.slice(Math.max(0, m.index - 12), m.index));
   const subject = (m[1] ?? "").toLowerCase().split(/\s+/);
-  if (subject.some((w) => DESIGN_WORDS.has(w))) return true;
+  if (!condition && subject.some((w) => DESIGN_WORDS.has(w))) return true;
   // Otherwise the statement names a mechanism only when its words come from the key: one long word, or two side by side.
   const keyWords = tokens(key);
   const inKey = new Set(keyWords);
@@ -279,19 +313,29 @@ function statesDesign(text: string, key: string, known: string): boolean {
   const seen = new Set(tokens(known));
   const named = tokens(m[2] ?? "");
   if (named.some((w) => w.length >= STATEMENT_WORD_CHARS && inKey.has(w) && !seen.has(w))) return true;
-  return named.some((w, i) => i + 1 < named.length && (!seen.has(w) || !seen.has(named[i + 1] ?? "")) && keyPairs.has(`${w} ${named[i + 1]}`));
+  return named.some((w, i) => {
+    const next = named[i + 1] ?? "";
+    if (next === "" || w.length < 4 || next.length < 4 || PAIR_FILLER.has(w) || PAIR_FILLER.has(next)) return false;
+    return (!seen.has(w) || !seen.has(next)) && keyPairs.has(`${w} ${next}`);
+  });
 }
 
 /** The first rule a question breaks, checked in this order, or null. */
 function problemOf(text: string, key: string, known: string): QuestionProblem | null {
-  if (dropKeyCopies([text], key).length === 0 || questionReveals(text, key, known)) return "key";
+  if (copiesKey(text, key, known) || questionReveals(text, key, known)) return "key";
   if (OPENER.test(text)) return "opener";
   if (statesDesign(text, key, known)) return "statement";
-  const marks = marksOutsideQuotes(text);
+  if (text.length > SHOWN_QUESTION_CHARS) return "long";
+  // A quote around the whole question is not the candidate's words, and an open quote can hide a second question.
+  const bare = /^["\u201c][^"\u201c\u201d]*["\u201d]$/.test(text) ? text.slice(1, -1) : text;
+  if (!quotesBalanced(bare)) return "two";
+  const marks = marksOutsideQuotes(bare);
   const first = marks[0] ?? -1;
-  const after = first >= 0 ? text.slice(first + 1).replace(/^["')\]”\s]+/, "") : "";
+  const after = first >= 0 ? bare.slice(first + 1).replace(/^["')\]\u201d\s]+/, "") : "";
   if (marks.length > 1 || after !== "") return "two";
-  const ask = sentences(first >= 0 ? text.slice(0, first + 1) : text).at(-1) ?? "";
+  // With no question mark, the line is a request such as "Walk me through it.", and a second sentence is a second ask.
+  if (first < 0 && sentences(bare).length > 1) return "two";
+  const ask = sentences(first >= 0 ? bare.slice(0, first + 1) : bare).at(-1) ?? "";
   return secondAt(ask) >= 0 ? "two" : null;
 }
 
@@ -325,10 +369,9 @@ export function salvageQuestion(raw: string, key: string, known: string, redact:
   const parts = sentences(first >= 0 ? flat.slice(0, first + 1) : flat);
   const ask = parts.at(-1) ?? "";
   const cut = secondAt(ask);
-  if (cut >= 0) parts[parts.length - 1] = `${ask.slice(0, cut).trimEnd()}?`;
+  if (cut >= 0) parts[parts.length - 1] = `${ask.slice(0, cut).replace(/[\s,;:(\u2013\u2014-]+$/, "")}?`;
   const text = parts.join(" ");
-  const quotes = (text.match(/"/g) ?? []).length % 2 === 0 && (text.match(/“/g) ?? []).length === (text.match(/”/g) ?? []).length;
-  if (!text.endsWith("?") || !quotes || !QUESTION_START.test(parts.at(-1) ?? "") || problemOf(text, key, known) !== null) return FALLBACK_QUESTION;
+  if (!text.endsWith("?") || !quotesBalanced(text) || !QUESTION_START.test(parts.at(-1) ?? "") || problemOf(text, key, known) !== null) return FALLBACK_QUESTION;
   return clip(text, SHOWN_QUESTION_CHARS);
 }
 

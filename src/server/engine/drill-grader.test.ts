@@ -472,6 +472,64 @@ describe("reviewQuestion", () => {
     expect(review("What happens past 4000 writes a second?", k, "I said 4,000 writes a second for a node.")?.problem).toBeNull();
   });
 
+  it("flags a quote that hides a second question", () => {
+    expect(review('"What happens on failover? How do you recover?"')?.problem).toBe("two");
+    expect(review('What does "fast mean? What would you pick?')?.problem).toBe("two");
+    expect(review('"What happens on failover?"')?.problem).toBeNull();
+  });
+
+  it("flags a request with no question mark that runs on into a second sentence", () => {
+    expect(review("Walk me through failover. Think about a lease.")?.problem).toBe("two");
+    expect(review("Walk me through one write from start to end.")?.problem).toBeNull();
+  });
+
+  it.each([
+    ["and what happens", "Where does the write go and what happens to the reader?"],
+    ["and how many", "What breaks first and how many users notice?"],
+    ["or what", "What breaks first, or what would you watch?"],
+    ["and then what", "What happens on failover, and then what does the reader see?"],
+    ["also how", "What breaks first, and also how would you see it?"],
+    ["a bracketed and", "What breaks first (and how would you notice)?"],
+  ])("flags a second question joined by %s", (_n, q) => {
+    expect(review(q)?.problem).toBe("two");
+  });
+
+  it.each([
+    "The hardest thing about this problem is the fan-out. How would you size it?",
+    "The tricky bit is the fan-out. How would you size it?",
+    "The challenge here is the fan-out. How would you size it?",
+    "I think the hardest part is the fan-out. How would you size it?",
+    "Okay \u2014 the hardest part is the fan-out. How would you size it?",
+  ])("flags the opener %s", (q) => {
+    expect(review(q)?.problem).toBe("opener");
+  });
+
+  it("still passes a question that asks about the main problem", () => {
+    expect(review("What is the main problem with that?")?.problem).toBeNull();
+  });
+
+  it("does not count a topic title the drill showed as a copy of the key", () => {
+    const k = "### Real-time delivery, routing and presence for every user\nFan out through gateways.";
+    const kn = "Take Real-time delivery, routing and presence for every user: say what goes wrong.";
+    expect(review("For real-time delivery, routing and presence for every user, what happens when the database is slow?", k, kn)?.problem).toBeNull();
+  });
+
+  it("does not count plain words, or a word form the candidate wrote, as key words", () => {
+    const k = "Writes reach about 12,000 per second at peak, and clients retry after a timeout.";
+    expect(review("How many writes per second does that one database take at peak?", k, "")?.problem).toBeNull();
+    expect(review("What happens when a client retries after a timeout?", k, "")?.problem).toBeNull();
+    expect(review("What happens to the replicas?", "Replicas lag and replication stalls.", "my replica lags")?.problem).toBeNull();
+  });
+
+  it("does not read a case set up with if as a statement of the design", () => {
+    expect(review("If your plan is just to retry, what happens on the third failure?")?.problem).toBeNull();
+    expect(review("Your cache is a layer in front of the database. What happens on a miss?", "A layer sits in front of the store.", "")?.problem).toBeNull();
+  });
+
+  it("flags a question too long for the page", () => {
+    expect(review(`What happens when ${"the load grows ".repeat(25)}?`)?.problem).toBe("long");
+  });
+
   it("redacts before it clips, so a cut never shows part of a name", () => {
     const raw = `${"x".repeat(292)} Alexandria knows?`;
     const out = reviewQuestion(raw, key, known, (t) => t.replace("Alexandria", "[name]"))?.question ?? "";
@@ -492,6 +550,12 @@ describe("salvageQuestion", () => {
   it("cuts only the sentence that asks, never a setup sentence", () => {
     const q = "Orders come from web and phone, and where they land matters for refunds. Which store would you choose, and why?";
     expect(salvageQuestion(q, key, known, same)).toBe("Orders come from web and phone, and where they land matters for refunds. Which store would you choose?");
+  });
+
+  it("never leaves a dash, a semicolon or a bracket before the question mark", () => {
+    expect(salvageQuestion("What breaks first \u2014 and how would you notice?", key, known, same)).toBe("What breaks first?");
+    expect(salvageQuestion("What does it cost; and why?", key, known, same)).toBe("What does it cost?");
+    expect(salvageQuestion("What breaks first (and how would you notice)?", key, known, same)).toBe("What breaks first?");
   });
 
   it("redacts the salvaged question", () => {
