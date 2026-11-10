@@ -182,7 +182,7 @@ export function clockInstruction(kind: CheckpointKind, track: Track, detail: Clo
     case "five_minutes":
       return "Five minutes are left. You may warn the candidate in one short line. Otherwise reply with exactly <silent/>.";
     case "time_up":
-      return "Time is up. Close the round in one or two sentences. Give no feedback and no signal about how it went.";
+      return "Time is up. Close the round in one or two sentences. Give no feedback and no signal about how it went. If your last reply already closed the round, reply with exactly <silent/>.";
     case "silence": {
       const work = track === "lld" ? "the code, the board and the step notes" : "the board and the step notes";
       return `The candidate has sent nothing, and nothing in ${work} has changed, for ${minutesText(detail.quietMs ?? 0)}. Check in once with one short line that invites them to talk you through where they are. Give no hint, name no concern and point at no area. Reply with exactly <silent/> only if they said they wanted time to work alone.`;

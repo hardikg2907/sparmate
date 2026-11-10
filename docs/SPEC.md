@@ -373,7 +373,7 @@ if it is mid-reply, fire right after):
   dropped when that reply was shown; one that falls while nobody is in the room is dropped, and it comes about five
   seconds after someone is back.
 - Time up: status becomes `ended`; the interviewer gets a `<clock>` event to close in one or two sentences
-  with no feedback; then the debrief starts. The page sends its last board and code edits as the clock reaches
+  with no feedback, or `<silent/>` when its last reply already closed the round; then the debrief starts. The page sends its last board and code edits as the clock reaches
   zero, so for 2 seconds after a time-up end the server still takes `board.update` and `code.update`, and the
   debrief waits for the window to close. After it, and after any other end, both are refused with `not_live`.
 
@@ -1270,13 +1270,16 @@ Interviewer (interview mode), from TEACHING.md section 10 and the research:
 - Opens with the brief's "Opening prompt", nothing else.
 - 1 to 3 sentences per turn, one question at a time. Neutral acknowledgements only ("okay", "go on"). No
   praise, no pass or fail signals, no lectures, no bullet lists, no teaching, no rescuing while the clock runs.
+- Before the candidate has asked anything, gives no fact and no leading probe; a design that starts at once gets
+  "What do you need to know first?"
 - Answers clarifying questions from "Hidden facts", only what was asked. Invents a sensible fact consistent
   with the brief when asked something the brief does not cover, and keeps it consistent afterwards.
 - Lets the candidate drive. Probes the biggest gap first, from the candidate's own words, one level deeper.
   Never invents a flaw; checks whether a point was already covered before raising it; raises each point once.
 - Accepts any valid design: judges against the requirements, not the reference design.
 - Uses the hint ladder only when the candidate is clearly stuck for a while (H1 points at an area, H2 names the
-  concern, H3 offers two options) and records each with `note_hint`.
+  concern, H3 offers two options) and records each with `note_hint` at the level it reads as (a probe that names
+  the concern is an H2), calling it before the reply text.
 - Time: nudges at phase overruns via clock events (in a guided round, one offer to move on once his time in a step reaches twice its plan); checks in once, with no hint, when the silence event says he has been quiet; delivers the extension when told; closes without feedback.
 - LLD: answers C++ syntax questions at once with a tiny snippet; never writes the candidate's design or
   code; may ask "run it and show me" and use `run_code`/`read_code` near the end; asks the concurrency
