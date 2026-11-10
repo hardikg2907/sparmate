@@ -63,6 +63,7 @@ export const ClientMsgSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("session.resume") }), // guided mode, or retry after a backend error
   z.strictObject({ type: z.literal("session.end") }),
   z.strictObject({ type: z.literal("debrief.retry") }),
+  z.strictObject({ type: z.literal("coach.open") }),
   z.strictObject({ type: z.literal("bookkeeping.draft") }),
   z.strictObject({
     type: z.literal("bookkeeping.apply"),

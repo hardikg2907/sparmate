@@ -14,7 +14,7 @@ import { ScoreRow, VerdictCard, jumpTo } from "../components/debrief/Verdict";
 import { sortedGaps } from "../components/debrief/Gaps";
 import { ArrowLeftIcon, WarnIcon } from "../components/icons";
 import { ConnectionBanner, MessageBanners } from "../components/Notices";
-import { Banner, Badge, Card, SectionTitle } from "../components/ui";
+import { Banner, Badge, Button, Card, SectionTitle } from "../components/ui";
 import { currentGap, gapCounts, gapMarks, gapState, type GapMark } from "../lib/gapMarks";
 import { nextAction } from "../lib/debriefNext";
 import { gapDividerText, teachMessage } from "../../shared/gaps";
@@ -106,7 +106,18 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
               disabled={!debriefed || !connected}
               inputLabel="Message to the coach"
               placeholder={debriefed ? "Ask the coach about a gap…" : "Waiting for the scorecard…"}
-              empty={debriefed ? "The coach opens with a short summary and the first gap to work on." : "The coach joins when the scorecard is ready."}
+              empty={
+                debriefed ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <p>The coach sums up the round and teaches the gaps, starting with the one you pick. Press Teach me this on a gap, ask a question, or start here.</p>
+                    <Button variant="outline" disabled={!connected || coach.state === "thinking"} onClick={() => actions.openCoach()}>
+                      Start with the coach
+                    </Button>
+                  </div>
+                ) : (
+                  "The coach joins when the scorecard is ready."
+                )
+              }
               onSend={(text) => actions.sendChat("coach", text)}
             />
           </div>

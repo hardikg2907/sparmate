@@ -431,11 +431,6 @@ export class SessionRuntime {
       this.scheduler.reschedule();
       this.syncAwayTimer();
     }
-    // A divider written by the opening turn must not count as the opening itself.
-    if (s.status === "debriefed" && !s.transcript.some((e) => e.channel === "coach" && e.role !== "system")) {
-      this.coach.queue.push(this.coachOpenTurn());
-      void this.pump(this.coach);
-    }
     this.syncCoachAwayTimer();
   }
 
@@ -657,6 +652,8 @@ export class SessionRuntime {
           return await this.onEnd();
         case "debrief.retry":
           return await this.onDebriefRetry();
+        case "coach.open":
+          return this.onCoachOpen();
         case "bookkeeping.draft":
           return await this.onDraft();
         case "bookkeeping.apply":
@@ -1638,6 +1635,15 @@ export class SessionRuntime {
     };
   }
 
+  /** Sends the coach's opening once, when the candidate starts the chat; a later press, or a chat already started, changes nothing. */
+  private onCoachOpen(): void {
+    if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
+    // A divider written by the opening turn must not count as the opening itself.
+    const started = this.session.transcript.some((e) => e.channel === "coach" && e.role !== "system");
+    if (started || this.coach.busy || this.coach.queue.length > 0) return;
+    this.enqueue(this.coach, this.coachOpenTurn());
+  }
+
   private coachOpenTurn(): QueuedTurn {
     return {
       kind: "request",
@@ -2297,8 +2303,8 @@ export class SessionRuntime {
       this.progress("done");
       this.broadcast({ type: "debrief.ready", scorecard });
       this.sendState();
+      // The coach waits for the candidate: an opening nobody reads still costs a model turn.
       this.coach.closed = false;
-      this.enqueue(this.coach, this.coachOpenTurn());
     } catch (err) {
       this.log.error(`Debrief failed in session ${s.id}`, err instanceof DriverError ? err.detail : err);
       s.status = "failed";

@@ -458,8 +458,11 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 
 ### 5.8 Coach and bookkeeping
 
-- The coach starts when the debrief is ready, with one opening message written from the scorecard (summary in
-  two or three sentences, then "let's start with <top gap>"), following TEACHING.md section 2 and the problem
+- The coach waits for the candidate, because an opening nobody reads still costs a model turn. It starts when they
+  press "Start with the coach" in the empty coach panel (`coach.open`, which sends the opening once and only while the
+  chat has no coach or candidate line), press "Teach me this" or send a first message. Its first reply is the opening,
+  written from the scorecard (summary in two or three sentences, then "let's start with" the gap the first message
+  names, or the top gap), following TEACHING.md section 2 and the problem
   session step 6 (teach each gap directly, about ten minutes each). While
   the room has no connected sockets, the idle coach conversation process is closed after one minute and resumes
   from `session.sdk.coachSessionId` when activity continues.
@@ -753,6 +756,8 @@ scribe read them.
 - `session.discard`: discards the round (below). A refusal arrives as an `error` message with code `discard_refused`.
 - `session.end`: interview mode skips the closing line and starts the debrief at once.
 - `debrief.retry`, `bookkeeping.draft`, `bookkeeping.apply`: as in sections 5.7 and 10.
+- `coach.open`: asks for the coach's opening (section 5.8). Before the debrief it is refused; once the coach chat has
+  started, it changes nothing.
 
 **Discard** (`session.discard` over the socket, `DELETE /api/sessions/:id` over REST; both call
 `SessionManager.discard`). It is refused while the status is `debriefing`, because the judge is running. Otherwise:

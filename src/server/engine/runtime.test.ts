@@ -182,8 +182,8 @@ describe("a full interview round on the clock", () => {
     expect(session.endedAt).not.toBeNull();
     expect(session.scorecard?.phaseTiming?.find((p) => p.phase === "requirements")?.actualMinutes).toBe(45);
     expect(t.msgs.some((m) => m.type === "debrief.ready")).toBe(true);
-    // The coach opened after the debrief.
-    expect(t.msgs.some((m) => m.type === "chat.message" && m.entry.channel === "coach")).toBe(true);
+    // The coach waits until the candidate starts the chat.
+    expect(t.msgs.some((m) => m.type === "chat.message" && m.entry.channel === "coach")).toBe(false);
     expect(t.store.saved?.status).toBe("debriefed");
     rt.dispose();
   });
@@ -1301,7 +1301,7 @@ describe("the coach and the scorecard gaps", () => {
   const GAPS = ["Hot keys", "Cache stampede", "Retry storms"].map((title) => ({ title, severity: "major", whyItMatters: "x", whatGoodLooksLike: "y", teachMinutes: 8 }));
 
   /** A debriefed round whose coach has already opened, with the coach's tools and the turns it receives captured. */
-  async function coachRoom() {
+  async function coachRoom({ started = true }: { started?: boolean } = {}) {
     const inner = createFakeDriver({ chunkDelayMs: 0 });
     let tools: RoomTool[] = [];
     const turns: UserTurn[] = [];
@@ -1325,7 +1325,7 @@ describe("the coach and the scorecard gaps", () => {
     const session = newSession("interview");
     session.status = "debriefed";
     session.scorecard = { gaps: GAPS, verdict: { sde2: "hire", senior: "lean_no_hire", summary: "ok" } } as unknown as Session["scorecard"];
-    session.transcript.push({ id: "c0", at: 0, wall: new Date().toISOString(), channel: "coach", role: "coach", text: "Let's start." });
+    if (started) session.transcript.push({ id: "c0", at: 0, wall: new Date().toISOString(), channel: "coach", role: "coach", text: "Let's start." });
     const rt = new SessionRuntime(t.deps, session, await urlShortener());
     await rt.init();
     rt.attach(t.peer);
@@ -1338,6 +1338,29 @@ describe("the coach and the scorecard gaps", () => {
     const dividers = () => session.transcript.filter((e) => e.channel === "coach" && e.role === "system");
     return { t, rt, session, turns, say, tool, dividers };
   }
+
+  it("sends no coach opening on its own, and one when the candidate starts the chat", async () => {
+    const { rt, turns, t } = await coachRoom({ started: false });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(turns).toHaveLength(0);
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    expect(turns[0]?.meta).toMatchObject({ kind: "request", request: "coach_open" });
+    await vi.waitFor(() => expect(t.msgs.some((m) => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach")).toBe(true));
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(turns).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("makes the candidate's first message the coach's first turn when the chat was never started", async () => {
+    const { rt, turns, say } = await coachRoom({ started: false });
+    await say("Teach me this gap: Hot keys");
+    expect(turns).toHaveLength(1);
+    expect(turns[0]?.meta).toMatchObject({ kind: "candidate" });
+    rt.dispose();
+  });
 
   it("records a gap the coach opens as the coach's, with one divider", async () => {
     const { rt, session, say, tool, dividers, t } = await coachRoom();
@@ -1450,7 +1473,7 @@ describe("the coach and the scorecard gaps", () => {
     rt.dispose();
   });
 
-  it("opens the coach again after a restart when only a divider was saved", async () => {
+  it("still opens the coach after a restart when only a divider was saved", async () => {
     const { rt, session } = await coachRoom();
     rt.dispose();
     session.transcript.splice(0, session.transcript.length, {
@@ -1466,6 +1489,7 @@ describe("the coach and the scorecard gaps", () => {
     const again = new SessionRuntime(t.deps, session, await urlShortener());
     await again.init();
     again.attach(t.peer);
+    await again.handle({ type: "coach.open" }, t.peer);
     await vi.waitFor(() => expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true));
     again.dispose();
   });
@@ -1478,6 +1502,7 @@ describe("the coach and the scorecard gaps", () => {
     const rt = new SessionRuntime(t.deps, session, await urlShortener());
     await rt.init();
     rt.attach(t.peer);
+    await rt.handle({ type: "coach.open" }, t.peer);
     await vi.waitFor(() => expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true));
     expect(session.gapProgress["Hot keys"]).toMatchObject({ by: "coach", state: "started" });
     rt.dispose();
@@ -1758,7 +1783,7 @@ describe("dropping an idle round from memory", () => {
     await rt.handle({ type: "session.end" }, t.peer);
     await vi.waitFor(async () => {
       await vi.advanceTimersByTimeAsync(1_000);
-      expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true);
+      expect(session.status).toBe("debriefed");
     });
     rt.detach(t.peer);
     expect(rt.isDormant()).toBe(true);
