@@ -1,4 +1,6 @@
-import { stat } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PORT, makeStack, recordingPeer, type Stack } from "../engine/__fixtures__/stack";
@@ -6,6 +8,7 @@ import type { Session } from "../../shared/types";
 import { buildApp } from "./app";
 import { newCsrfToken } from "./security";
 import { SetupStatus } from "../setup/checks";
+import { UsageLedger, type UsageRecord } from "../engine/usage-ledger";
 
 const TOKEN = newCsrfToken();
 const HOST = `127.0.0.1:${PORT}`;
@@ -227,6 +230,60 @@ describe("Usage routes", () => {
     expect(Array.isArray(body.byRole)).toBe(true);
     expect(Array.isArray(body.byModel)).toBe(true);
     expect(Array.isArray(body.byDay)).toBe(true);
+  });
+
+  it("GET /api/usage counts only the rounds still saved and marks a discarded one", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ir-usage-route-"));
+    const ledger = new UsageLedger({ filePath: join(dir, "usage.jsonl") });
+    const keep = await start();
+    const gone = await start();
+    const row = (sessionId: string): UsageRecord => ({
+      time: "2026-11-07T01:00:00.000Z",
+      sessionId,
+      problemId: "c2-url-shortener",
+      track: "hld",
+      mode: "interview",
+      drillAttemptId: null,
+      drillKind: null,
+      role: "interviewer",
+      model: "claude-opus-5-5",
+      effort: "low",
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      cost: 1,
+      costUsd: 1,
+      duration: 1,
+      durationMs: 1,
+    });
+    ledger.record(row(keep));
+    ledger.record(row(gone));
+    await ledger.flush();
+    const withLedger = await buildApp({
+      config: stack.config,
+      csrfToken: TOKEN,
+      manager: stack.manager,
+      settings: stack.settings,
+      store: stack.store,
+      log: stack.log,
+      usageLedger: ledger,
+    });
+    await withLedger.ready();
+    try {
+      expect((await del(gone, GOOD)).statusCode).toBe(200);
+      const body = (await withLedger.inject({ method: "GET", url: "/api/usage", headers: { host: HOST } })).json();
+      expect(body.totals).toMatchObject({ rounds: 1, discardedRounds: 1 });
+      expect(body.totals.costUsd).toBeCloseTo(2);
+      expect(body.byProblem[0].rounds).toBe(1);
+      expect(body.bySession.map((s: { sessionId: string; discarded?: boolean }) => [s.sessionId === gone, s.discarded === true]).sort()).toEqual([
+        [false, false],
+        [true, true],
+      ]);
+    } finally {
+      await withLedger.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("GET /api/sessions/:id/usage answers 404 on malformed id", async () => {

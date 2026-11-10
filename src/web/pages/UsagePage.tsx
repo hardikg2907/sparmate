@@ -121,6 +121,7 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
   const { totals } = data;
   const failedCalls = totals.failedCalls ?? 0;
   const estimatedCalls = totals.estimatedCalls ?? 0;
+  const discardedRounds = totals.discardedRounds ?? 0;
   const cost = useCountUp(totals.costUsd, { duration: 1100, delay: 200 });
 
   return (
@@ -139,7 +140,7 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
               </p>
               <p className="mt-1 text-meta text-hero-muted">
                 {estimatedCalls > 0
-                  ? `Calculated from API rates; ${estimatedCalls.toLocaleString()} ${estimatedCalls === 1 ? "call is" : "calls are"} estimated from tokens`
+                  ? `≈ because ${estimatedCalls.toLocaleString()} ${estimatedCalls === 1 ? "call is" : "calls are"} priced from token counts, as the model gave no figure`
                   : "Calculated from API rates"}
               </p>
             </div>
@@ -152,8 +153,11 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                 </dd>
               </div>
               <div>
-                <dt className="text-hero-muted">Rounds</dt>
-                <dd className="font-bold tabular-nums">{totals.rounds.toLocaleString()}</dd>
+                <dt className="text-hero-muted">Rounds tracked</dt>
+                <dd className="font-bold tabular-nums">
+                  {totals.rounds.toLocaleString()}
+                  {discardedRounds > 0 && <span className="ml-2 text-meta font-normal text-hero-muted">{discardedRounds.toLocaleString()} discarded, cost kept</span>}
+                </dd>
               </div>
             </dl>
           </div>
@@ -221,6 +225,26 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                     <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">{usd(p.costUsd)}</td>
                   </tr>
                 ))}
+                {[
+                  { row: data.unassigned?.preparation, title: "Preparing your own questions", split: false },
+                  { row: data.unassigned?.other, title: "Other calls", split: true },
+                ].flatMap(({ row, title, split }) =>
+                  row ? (
+                    <tr key={title} className="transition-colors hover:bg-accent/40">
+                      <td className="px-5 py-3 font-semibold text-foreground">{title}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-faint">—</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{row.calls}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{row.inputTokens.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{row.outputTokens.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{(row.cacheHitRate * 100).toFixed(1)}%</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{split ? usd(row.roundCost) : "—"}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{split ? usd(row.drillCost) : "—"}</td>
+                      <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">{usd(row.costUsd)}</td>
+                    </tr>
+                  ) : (
+                    []
+                  ),
+                )}
               </tbody>
             </table>
           </div>
@@ -250,12 +274,18 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                   <tr key={s.sessionId} className="transition-colors hover:bg-accent/40">
                     <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{formatDate(s.date)}</td>
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/session/${s.sessionId}`}
-                        className="rounded font-mono font-medium text-primary-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      >
-                        {s.sessionId.slice(0, 18)}…
-                      </Link>
+                      {s.discarded ? (
+                        <span className="font-mono text-muted-foreground">
+                          {s.sessionId.slice(0, 18)}… <span className="font-sans text-meta">discarded</span>
+                        </span>
+                      ) : (
+                        <Link
+                          href={`/session/${s.sessionId}`}
+                          className="rounded font-mono font-medium text-primary-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          {s.sessionId.slice(0, 18)}…
+                        </Link>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="font-medium text-foreground">{s.problemTitle}</span>
@@ -377,7 +407,7 @@ function DrillsSection({ drills }: { drills: UsageSummaryResponse["drills"] }) {
         <>
           <Card variant="raised" className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <StatCell index={0} label="Drill cost" value={usd(drills.cost)} subtext="Spent grading answers" />
-            <StatCell index={1} label="Attempts" value={drills.attempts.toLocaleString()} subtext="Drills sent for grading" />
+            <StatCell index={1} label="Attempts" value={drills.attempts.toLocaleString()} subtext="Drills graded and kept" />
             <StatCell
               index={2}
               label="Grader calls"
@@ -454,6 +484,13 @@ function DrillsSection({ drills }: { drills: UsageSummaryResponse["drills"] }) {
             </>
           ) : null}
 
+          {drills.unfinished && drills.unfinished.attempts > 0 ? (
+            <p className="text-meta text-muted-foreground">
+              {drills.unfinished.attempts.toLocaleString()} {drills.unfinished.attempts === 1 ? "drill was" : "drills were"} not finished: started over, failed or still open (
+              {usd(drills.unfinished.cost)}, {drills.unfinished.calls.toLocaleString()} {drills.unfinished.calls === 1 ? "call" : "calls"}). The cost is in the total, but they are
+              not attempts.
+            </p>
+          ) : null}
           {drills.earlier.calls > 0 ? (
             <p className="text-meta text-muted-foreground">
               {drills.earlier.calls.toLocaleString()} grader {drills.earlier.calls === 1 ? "call" : "calls"} ({usd(drills.earlier.cost)}) were recorded before drills had ids, so
@@ -462,6 +499,12 @@ function DrillsSection({ drills }: { drills: UsageSummaryResponse["drills"] }) {
           ) : null}
         </>
       )}
+      {drills.legacyAttempts ? (
+        <p className="text-meta text-muted-foreground">
+          {drills.legacyAttempts.toLocaleString()} earlier {drills.legacyAttempts === 1 ? "attempt was" : "attempts were"} saved before drill costs were recorded, so{" "}
+          {drills.legacyAttempts === 1 ? "it has" : "they have"} no cost. They stay in the drill history and in the week count on Progress.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -531,8 +574,8 @@ function UsageNotes({ trackingSince }: { trackingSince: string | null }) {
     <div className="surface-flat space-y-1.5 rounded-xl bg-card p-5 text-ui text-muted-foreground">
       <p>Cost is what the same calls would cost on the API. On a Claude plan you pay by plan limits, not by this amount.</p>
       <p>
-        A failed call counts in every total. A model process that stops before it reports its usage counts with the tokens seen until then. A cost marked ≈ is priced from token
-        counts because the model gave no figure.
+        A failed call counts in every total. A model process that stops before it reports its usage counts with the tokens seen until then. A discarded round and a drill you
+        started over count too.
       </p>
       <p>
         {dateFormatted

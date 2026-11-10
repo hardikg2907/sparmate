@@ -253,6 +253,12 @@ export class DrillService {
     return this.deps.store.snapshot();
   }
 
+  /** The graded attempts still on record, so the usage page can tell them from a drill that was started over, failed or is still open. */
+  attemptsOnRecord(): { ids: Set<string>; legacy: number } {
+    const attempts = this.deps.store.snapshot().attempts;
+    return { ids: new Set(attempts.filter((a) => a.status === "done" && !a.legacy).map((a) => a.id)), legacy: attempts.filter((a) => a.legacy).length };
+  }
+
   async summary(): Promise<GymSummary> {
     const problems = await this.playable();
     const state = await this.sync(problems);

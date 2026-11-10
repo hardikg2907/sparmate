@@ -43,7 +43,10 @@ export interface UsageTotals {
   failedCalls: number;
   /** Calls whose cost is priced from tokens, not reported by the SDK. */
   estimatedCalls: number;
+  /** Rounds that are still saved. A discarded round keeps its calls in every cost but is not counted here. */
   rounds: number;
+  /** Rounds that have calls in the ledger but were discarded since. */
+  discardedRounds?: number;
   /** Part of `cost` that drill grading spent. */
   drillCost: number;
 }
@@ -64,6 +67,8 @@ export interface SessionUsageSummary {
   cacheHitRate: number;
   calls: number;
   durationMs: number;
+  /** True when the round was discarded after it spent these calls. */
+  discarded?: boolean;
 }
 
 export interface ProblemUsageSummary {
@@ -150,12 +155,21 @@ export interface DrillUsageSummary {
   byAttempt: DrillAttemptUsage[];
   /** Grader calls recorded before attempts had ids. */
   earlier: { cost: number; calls: number };
+  /** Drills with calls that never became a graded attempt on record (started over, failed or still open). Their cost is in `cost`. */
+  unfinished?: { attempts: number; cost: number; calls: number };
+  /** Attempts saved before model calls were recorded per attempt; they have no cost row. */
+  legacyAttempts?: number;
 }
 
 export const MAX_DRILL_ATTEMPTS_LISTED = 200;
 
 const DRILL_ATTEMPT_ID = /^[a-f0-9]{16}$/;
 const DRILL_KIND = /^[a-z_]{1,40}$/;
+
+/** The two roles that prepare a custom question; their calls belong to no round and no problem. */
+export function isPreparationRole(role: string): boolean {
+  return role === "brief-writer" || role === "brief-checker";
+}
 
 /** Grader calls are drill calls even on old rows that carry no attempt id. */
 export function isDrillRecord(r: Pick<UsageRecord, "role" | "drillAttemptId">): boolean {
@@ -167,6 +181,8 @@ export interface UsageSummaryResponse {
   drills: DrillUsageSummary;
   bySession: SessionUsageSummary[];
   byProblem: ProblemUsageSummary[];
+  /** Calls that no problem owns: the preparation of custom questions, and anything else with no problem. Rows by problem plus these add up to the total. */
+  unassigned?: { preparation: ProblemUsageSummary | null; other: ProblemUsageSummary | null };
   byRole: RoleUsageSummary[];
   byModel: ModelUsageSummary[];
   byDay: DayUsageSummary[];
@@ -263,9 +279,20 @@ export function dayInZone(instant: Date, timeZone: string): string {
   return f.format(instant);
 }
 
+/** What still exists on disk, so the summary can tell a kept round or attempt from one that was removed. */
+export interface UsageKnown {
+  /** Ids of the rounds still saved. Leave out to count every round in the ledger as kept. */
+  rounds?: ReadonlySet<string>;
+  /** Ids of the drill attempts that were graded and are still on record. Leave out to count every attempt as kept. */
+  attempts?: ReadonlySet<string>;
+  legacyAttempts?: number;
+}
+
 export interface UsageSummaryOptions {
   /** IANA zone that decides where one day ends and the next begins. Defaults to this machine's zone. */
   timeZone?: string;
+  /** Without it every round and attempt in the ledger counts as kept. */
+  known?: UsageKnown;
 }
 
 export interface UsageLedgerOptions {
@@ -341,6 +368,7 @@ export class UsageLedger {
 
   async summary(options: UsageSummaryOptions = {}): Promise<UsageSummaryResponse> {
     const timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const known = options.known;
     const records = await this.readAll();
     let trackingSince: string | null = null;
     for (const r of records) {
@@ -396,6 +424,20 @@ export class UsageLedger {
         sessions: Set<string>;
       }
     >();
+
+    type Bucket = { cost: number; drillCost: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; calls: number };
+    const emptyBucket = (): Bucket => ({ cost: 0, drillCost: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, calls: 0 });
+    const preparation = emptyBucket();
+    const otherCalls = emptyBucket();
+    const addToBucket = (b: Bucket, r: UsageRecord, cost: number, isDrill: boolean) => {
+      b.cost += cost;
+      if (isDrill) b.drillCost += cost;
+      b.inputTokens += r.inputTokens;
+      b.outputTokens += r.outputTokens;
+      b.cacheReadTokens += r.cacheReadTokens;
+      b.cacheCreationTokens += r.cacheCreationTokens;
+      b.calls += 1;
+    };
 
     const roleMap = new Map<
       string,
@@ -529,6 +571,8 @@ export class UsageLedger {
         if (r.sessionId) p.sessions.add(r.sessionId);
         if (!p.track && r.track) p.track = r.track;
         problemMap.set(r.problemId, p);
+      } else {
+        addToBucket(isPreparationRole(r.role) ? preparation : otherCalls, r, cost, isDrill);
       }
 
       const roleEntry = roleMap.get(r.role) ?? {
@@ -581,8 +625,12 @@ export class UsageLedger {
       dayMap.set(dayKey, dayEntry);
     }
 
+    const keptRound = (id: string) => known?.rounds === undefined || known.rounds.has(id);
+    const keptAttempt = (id: string) => known?.attempts === undefined || known.attempts.has(id);
+
     const bySession: SessionUsageSummary[] = Array.from(sessionMap.entries())
       .map(([sessionId, s]) => ({
+        ...(keptRound(sessionId) ? {} : { discarded: true }),
         sessionId,
         problemId: s.problemId,
         problemTitle: this.resolveProblemTitle(s.problemId),
@@ -614,11 +662,31 @@ export class UsageLedger {
         cacheCreationTokens: p.cacheCreationTokens,
         cacheHitRate: calcCacheHitRate(p.inputTokens, p.cacheReadTokens, p.cacheCreationTokens),
         calls: p.calls,
-        rounds: p.sessions.size,
+        rounds: [...p.sessions].filter(keptRound).length,
         roundCost: p.roundCost,
         drillCost: p.drillCost,
       }))
       .sort((a, b) => b.cost - a.cost);
+
+    const bucketRow = (b: Bucket): ProblemUsageSummary | null =>
+      b.calls === 0
+        ? null
+        : {
+            problemId: "",
+            problemTitle: "",
+            track: null,
+            cost: b.cost,
+            costUsd: b.cost,
+            inputTokens: b.inputTokens,
+            outputTokens: b.outputTokens,
+            cacheReadTokens: b.cacheReadTokens,
+            cacheCreationTokens: b.cacheCreationTokens,
+            cacheHitRate: calcCacheHitRate(b.inputTokens, b.cacheReadTokens, b.cacheCreationTokens),
+            calls: b.calls,
+            rounds: 0,
+            roundCost: b.cost - b.drillCost,
+            drillCost: b.drillCost,
+          };
 
     const byRole: RoleUsageSummary[] = Array.from(roleMap.entries())
       .map(([role, ro]) => ({
@@ -648,15 +716,23 @@ export class UsageLedger {
       }))
       .sort((a, b) => b.cost - a.cost);
 
+    const unfinished = { attempts: 0, cost: 0, calls: 0 };
+    for (const [attemptId, a] of attemptMap) {
+      if (keptAttempt(attemptId)) continue;
+      unfinished.attempts += 1;
+      unfinished.cost += a.cost;
+      unfinished.calls += a.calls;
+    }
     const drills: DrillUsageSummary = {
       cost: drillCostTotal,
       calls: drillCalls,
       failedCalls: drillFailedCalls,
-      attempts: attemptMap.size,
+      attempts: attemptMap.size - unfinished.attempts,
       byKind: Array.from(kindMap.entries())
-        .map(([kind, k]) => ({ kind, cost: k.cost, calls: k.calls, attempts: k.attempts.size }))
+        .map(([kind, k]) => ({ kind, cost: k.cost, calls: k.calls, attempts: [...k.attempts].filter(keptAttempt).length }))
         .sort((a, b) => b.cost - a.cost),
       byAttempt: Array.from(attemptMap.entries())
+        .filter(([attemptId]) => keptAttempt(attemptId))
         .map(([attemptId, a]) => ({
           attemptId,
           kind: a.kind,
@@ -671,6 +747,8 @@ export class UsageLedger {
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, MAX_DRILL_ATTEMPTS_LISTED),
       earlier: { cost: earlierCost, calls: earlierCalls },
+      ...(known?.attempts ? { unfinished } : {}),
+      ...(known?.legacyAttempts !== undefined ? { legacyAttempts: known.legacyAttempts } : {}),
     };
 
     // Walk back through calendar dates, not 24-hour steps, so a DST change cannot repeat or skip a day.
@@ -718,12 +796,14 @@ export class UsageLedger {
         calls: records.length,
         failedCalls,
         estimatedCalls,
-        rounds: sessionIds.size,
+        rounds: [...sessionIds].filter(keptRound).length,
+        ...(known?.rounds ? { discardedRounds: [...sessionIds].filter((id) => !keptRound(id)).length } : {}),
         drillCost: drillCostTotal,
       },
       drills,
       bySession,
       byProblem,
+      unassigned: { preparation: bucketRow(preparation), other: bucketRow(otherCalls) },
       byRole,
       byModel,
       byDay,

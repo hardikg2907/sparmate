@@ -25,7 +25,7 @@ const DAILY = [0, 0, 0.42, 1.18, 0, 0, 0.9, 2.35, 0.31, 0, 0, 0, 1.64, 0.77, 0, 
 /** A month of rounds, so the usage page can be checked without a server or a ledger. */
 export const fixtureUsage: UsageSummaryResponse = {
   trackingSince: day(34),
-  totals: { ...cost(17.55, 214, 640_000, 182_000, 4_900_000), rounds: 11, drillCost: 0.62 },
+  totals: { ...cost(17.55, 214, 640_000, 182_000, 4_900_000), rounds: 11, discardedRounds: 2, drillCost: 0.62 },
   drills: {
     cost: 0.62,
     calls: 14,
@@ -104,8 +104,12 @@ export const fixtureUsage: UsageSummaryResponse = {
     { problemId: "c2-url-shortener", problemTitle: "URL Shortener", track: "hld", rounds: 3, roundCost: 5.5, drillCost: 0.32, ...cost(5.82, 71, 210_000, 61_000, 1_650_000) },
     { problemId: "c2-rate-limiter", problemTitle: "Rate Limiter", track: "hld", rounds: 2, roundCost: 4.03, drillCost: 0.07, ...cost(4.1, 49, 150_000, 42_000, 1_120_000) },
     { problemId: "l1-parking-lot", problemTitle: "Parking Lot", track: "lld", rounds: 4, roundCost: 5.73, drillCost: 0.17, ...cost(5.9, 71, 220_000, 62_000, 1_700_000) },
-    { problemId: "l1-vending", problemTitle: "Vending Machine", track: "lld", rounds: 2, roundCost: 1.73, drillCost: 0, ...cost(1.73, 23, 60_000, 17_000, 430_000) },
+    { problemId: "l1-vending", problemTitle: "Vending Machine", track: "lld", rounds: 2, roundCost: 0.82, drillCost: 0, ...cost(0.82, 17, 45_000, 13_000, 330_000) },
   ],
+  unassigned: {
+    preparation: { problemId: "", problemTitle: "", track: null, rounds: 0, roundCost: 0.91, drillCost: 0, ...cost(0.91, 6, 15_000, 4_000, 100_000) },
+    other: null,
+  },
   bySession: [
     {
       sessionId: "2026-10-30-parking-lot-a1b2c3",
@@ -139,6 +143,7 @@ export const fixtureUsage: UsageSummaryResponse = {
     },
     {
       sessionId: "2026-10-10-notification-svc-aabbcc",
+      discarded: true,
       problemId: "c2-notification",
       problemTitle: "Notification Service",
       date: day(21),

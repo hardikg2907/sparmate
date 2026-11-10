@@ -684,14 +684,14 @@ Today is one page for the whole day, and with data it fills the first screen at 
 
 ### Usage
 
-- **Cost panel.** The deep panel holds the total cost at 48 px, the call and round counts, and the daily cost
+- **Cost panel.** The deep panel holds the total cost at 48 px, the call count, the tracked round count (with the discarded rounds beside it) and the daily cost
   chart for 30 days with bars in a light-to-violet gradient.
 - **Token strip.** One raised panel with input tokens, output tokens and the cache hit rate, with a meter,
   separated by hairlines.
 - **Drills.** Between the token strip and the tables: a raised panel of three figures (drill cost, attempts, grader
   calls) separated by hairlines, then a "By drill kind" table and a "By attempt" table in raised panels. The attempt
   table shows 20 rows and a button that shows the rest. With no drill call the section is one muted line.
-- **Tables.** Usage by problem (rounds cost, drills cost and total cost as three columns), round, role and model sit in raised panels with a muted header row, under
+- **Tables.** Usage by problem (rounds cost, drills cost and total cost as three columns, then a row for preparing your own questions), round, role and model sit in raised panels with a muted header row, under
   sentence-case section headings.
 
 ### Settings
