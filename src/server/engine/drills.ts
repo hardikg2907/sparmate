@@ -28,7 +28,7 @@ import {
 import type { Problem } from "../../shared/problem";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { PrivacyGuard } from "../guard/privacy";
-import { buildDrill, drillFits, drillsAvailable, type DrillContent } from "./drill-content";
+import { buildDrill, drillFits, drillsAvailable, variantEntries, type DrillContent } from "./drill-content";
 import { canVaryFrom, pickNext, repickStale } from "./drill-pick";
 import { GraderOutputSchema, finishGrade, graderMessage, type GradedAnswer } from "./drill-grader";
 import type { Driver } from "./driver";
@@ -54,6 +54,8 @@ export interface DrillDeps {
   /** Replaceable so a test can pin the day. */
   now?: () => Date;
 }
+
+const MOVED = "This drill moved to another problem. Open it again from Practice.";
 
 /** On the first build only, debriefs older than this many days queue no drills. */
 export const BACKFILL_DAYS = 14;
@@ -195,10 +197,22 @@ export class DrillService {
   }
 
   /** Finds the problem and checks the drill fits it. Throws a 404 for anything the candidate may not drill. */
-  private async resolve(target: DrillTarget, state: DrillState): Promise<{ problem: Problem; item: DrillItem | null; content: DrillContent; variant: string | null }> {
+  private async resolve(
+    target: DrillTarget,
+    state: DrillState,
+    requested?: { variant: string | null },
+  ): Promise<{ problem: Problem; item: DrillItem | null; content: DrillContent; variant: string | null }> {
     const problems = await this.playable();
     // The queue answers first: a stale problem on a queued drill is a conflict, not a missing problem.
     const item = this.matchItem(state, target, this.today());
+    if (requested) {
+      // The answer is graded on the item's pick, so a tab that saw another changed constraint must open the drill again.
+      if (target.drillId) {
+        if (item && requested.variant !== item.variant) throw new HttpError(409, MOVED);
+      } else if (requested.variant !== null) {
+        throw new HttpError(400, "A free drill has no changed constraint.");
+      }
+    }
     const problem = problems.get(target.problemId);
     if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
     if (!drillsForTrack(problem.meta.track).includes(target.drill)) throw new HttpError(400, "That drill does not fit this problem.");
@@ -214,7 +228,7 @@ export class DrillService {
     if (target.drillId) {
       const named = state.items.find((i) => i.id === target.drillId);
       if (!named || named.status !== "open" || named.drill !== target.drill) throw new HttpError(404, "That drill is no longer in the queue.");
-      if (named.problemId !== target.problemId) throw new HttpError(409, "This drill moved to another problem. Open it again from Practice.");
+      if (named.problemId !== target.problemId) throw new HttpError(409, MOVED);
       return named;
     }
     // A free drill counts only for a queued one that is due and asks the same plain problem, so practising early cannot rush a gap to closed.
@@ -231,22 +245,22 @@ export class DrillService {
   /** Drills being graded right now, so a second submit for the same drill cannot score it twice. */
   private readonly grading = new Set<string>();
 
-  async submit(target: DrillTarget, answer: string, elapsedSeconds?: number): Promise<DrillResult> {
+  async submit(target: DrillTarget, answer: string, elapsedSeconds?: number, variant?: string | null): Promise<DrillResult> {
     if (answer.trim() === "") throw new HttpError(400, "Write an answer first.");
     const key = target.drillId ?? `${target.drill}:${target.problemId}`;
     if (this.grading.has(key)) throw new HttpError(409, "This drill is already being graded. Wait for the result.");
     this.grading.add(key);
     try {
-      return await this.submitNow(target, answer, elapsedSeconds);
+      return await this.submitNow(target, answer, elapsedSeconds, variant ?? null);
     } finally {
       this.grading.delete(key);
     }
   }
 
-  private async submitNow(target: DrillTarget, answer: string, elapsedSeconds?: number): Promise<DrillResult> {
+  private async submitNow(target: DrillTarget, answer: string, elapsedSeconds: number | undefined, requestedVariant: string | null): Promise<DrillResult> {
     const problems = await this.playable();
     const state = await this.sync(problems);
-    const { problem, content, variant } = await this.resolve(target, state);
+    const { problem, content, variant } = await this.resolve(target, state, { variant: requestedVariant });
     const clock = this.deps.now ?? (() => new Date());
     const opened = clock();
     const attemptId = randomBytes(8).toString("hex");
@@ -303,6 +317,8 @@ export class DrillService {
       throw err;
     }
     const today = localDay(clock());
+    // The briefs may have changed while the grader worked, and the next pick must come from what is playable now.
+    const latest = await this.playable();
 
     return this.deps.store.update((draft) => {
       // The queue may have changed while the grader worked, so the match is made again on the saved state.
@@ -324,14 +340,15 @@ export class DrillService {
       if (item && counts) {
         itemBefore = { passes: item.passes, readyOn: [...item.readyOn] };
         // The pick is made with this attempt in the history, and saved with the schedule in the same update.
-        const pick = pickNext(item, problems, draft.attempts);
+        const pick = pickNext(item, latest, draft.attempts);
+        const proof = proofKey(target.problemId, variant);
         const next = applyOutcome({
           passes: item.passes,
           readyOn: item.readyOn,
           outcome: graded.outcome,
           revised: false,
-          proof: proofKey(target.problemId, variant),
-          canVary: canVaryFrom(pick, target.problemId),
+          proof,
+          canVary: canVaryFrom(pick, [...item.readyOn, proof]),
           today,
         });
         item.passes = next.passes;
@@ -360,7 +377,7 @@ export class DrillService {
         readyCount,
         closed,
         nextDueOn,
-        next: this.nextDue(draft, problems, today, counts ? item?.id : undefined),
+        next: this.nextDue(draft, latest, today, counts ? item?.id : undefined),
       };
       return { save: true, value: result };
     });
@@ -412,6 +429,8 @@ export class DrillService {
     if (!body || !firstGrade || !firstAnswer) throw new HttpError(409, "This attempt cannot be revised.");
     const problem = problems.get(body.problemId);
     if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
+    // A changed constraint that left the brief cannot be rebuilt, and grading it on another key would be wrong.
+    if (saved.variant && !variantEntries(problem).some((e) => e.id === saved.variant)) throw new HttpError(409, "This attempt cannot be revised.");
     const content = buildDrill(problem, body.drill, { ...(body.topic ? { topic: body.topic } : {}), ...(saved.variant ? { variant: saved.variant } : {}) });
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
 

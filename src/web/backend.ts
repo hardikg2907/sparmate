@@ -114,8 +114,8 @@ export const api = {
   boardPngUrl: (id: string) => `/api/sessions/${enc(id)}/board-final.png`,
   gym: () => request<GymSummary>("GET", "/api/gym"),
   gymPrompt: (target: DrillTarget) => request<DrillPrompt>("POST", "/api/gym/prompt", target),
-  gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number) =>
-    request<DrillResult>("POST", "/api/gym/submit", { ...target, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
+  gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number, variant: string | null = null) =>
+    request<DrillResult>("POST", "/api/gym/submit", { ...target, variant, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
   gymRevise: (attemptId: string, answer: string, elapsedSeconds?: number) =>
     request<DrillResult>("POST", "/api/gym/revise", { attemptId, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
   settings: () => request<Settings>("GET", "/api/settings"),

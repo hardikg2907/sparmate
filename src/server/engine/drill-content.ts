@@ -40,19 +40,23 @@ export interface DeepDiveEntry {
   text: string;
 }
 
+const MAX_DEEP_DIVE_SECTION = 40_000;
+const MAX_DEEP_DIVE_TITLE = 200;
+const HEADING = "### ";
+
 /** Each "### " entry of the Deep dives section, with its Bad, Good and Great levels. */
 export function deepDiveEntries(problem: Problem): DeepDiveEntry[] {
-  const text = section(problem, "Deep dives");
+  const text = section(problem, "Deep dives").slice(0, MAX_DEEP_DIVE_SECTION);
   const entries: DeepDiveEntry[] = [];
   let current: { title: string; lines: string[] } | null = null;
   const flush = () => {
     if (current) entries.push({ title: current.title, text: current.lines.join("\n").trim() });
   };
   for (const line of text.split("\n")) {
-    const heading = /^###\s+(.+?)\s*$/.exec(line);
-    if (heading?.[1]) {
+    const heading = line.startsWith(HEADING) ? line.slice(HEADING.length).trim() : "";
+    if (heading !== "") {
       flush();
-      current = { title: heading[1].replace(/`/g, ""), lines: [] };
+      current = { title: heading.replace(/`/g, "").slice(0, MAX_DEEP_DIVE_TITLE), lines: [] };
     } else if (current) {
       current.lines.push(line);
     }
@@ -98,8 +102,9 @@ function stems(text: string): Set<string> {
 }
 
 /**
- * The deep dive that shares the most words with the gap, counting its whole text and its title three times over.
- * Null when no entry shares a word with the gap.
+ * The deep dive for a gap. An entry is a candidate only when its title shares a word stem with the gap's title: a word
+ * anywhere in a long entry, or in the gap's reason, is too weak a sign of the same topic. Among the candidates the
+ * shared title words decide, then the gap's words in the entry's text, then the reason's. Null when no title matches.
  */
 export function matchDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", reason = ""): DeepDiveEntry | null {
   const fromTitle = stems(gapTitle);
@@ -108,13 +113,16 @@ export function matchDeepDive(entries: readonly DeepDiveEntry[], gapTitle = "", 
   let score = 0;
   for (const entry of entries) {
     const title = stems(entry.title);
-    let total = 0;
-    for (const s of stems(`${entry.title} ${entry.text}`)) {
-      const weight = title.has(s) ? 3 : 1;
-      // The gap's own title decides the topic; the longer reason only breaks ties.
-      if (fromTitle.has(s)) total += weight * 2;
-      else if (fromReason.has(s)) total += weight * 0.5;
+    let shared = 0;
+    for (const s of fromTitle) if (title.has(s)) shared++;
+    if (shared === 0) continue;
+    let total = shared * 10;
+    for (const s of stems(entry.text)) {
+      if (title.has(s)) continue;
+      if (fromTitle.has(s)) total += 2;
+      else if (fromReason.has(s)) total += 0.5;
     }
+    for (const s of fromReason) if (title.has(s) && !fromTitle.has(s)) total += 1;
     if (total > score) {
       score = total;
       best = entry;
@@ -193,6 +201,24 @@ function expectIndex(text: string): number {
   }
 }
 
+/** Cuts a closing parenthetical, which is a note about the entry and not its name. */
+function withoutTrailingNote(title: string): string {
+  if (!title.endsWith(")")) return title;
+  let depth = 0;
+  for (let i = title.length - 1; i >= 0; i--) {
+    if (title[i] === ")") depth++;
+    else if (title[i] === "(" && --depth === 0) return title.slice(0, i).trim() || title;
+  }
+  return title;
+}
+
+function cleanTitle(lead: string): string {
+  const trimmed = lead.trim().replace(/[:.\s]+$/, "");
+  return withoutTrailingNote(trimmed)
+    .replace(/[:.\s]+$/, "")
+    .slice(0, MAX_VARIANT_TITLE);
+}
+
 function parseVariantEntry(raw: string): Omit<VariantEntry, "id"> | null {
   const text = raw.trim();
   if (!text.startsWith("**")) return null;
@@ -200,11 +226,15 @@ function parseVariantEntry(raw: string): Omit<VariantEntry, "id"> | null {
   if (close < 3) return null;
   const lead = text.slice(2, close);
   if (lead.includes("\n") || lead.length > 300) return null;
-  const title = lead
-    .trim()
-    .replace(/[:.\s]+$/, "")
-    .slice(0, MAX_VARIANT_TITLE);
-  if (title === "") return null;
+  const title = cleanTitle(lead);
+  if (
+    title === "" ||
+    title
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .includes("expect")
+  )
+    return null;
   const lower = text.toLowerCase();
   if (SEEN_MARKERS.some((m) => lower.includes(m))) return null;
   let rest = text.slice(close + 2);
@@ -246,13 +276,32 @@ export function variantEntries(problem: Problem): VariantEntry[] {
   return entries;
 }
 
+const INTERVIEWER_NOTES = ["the candidate", "is also accepted", "are accepted", "pick another", "state this when", "they saw"];
+
+/** Phrases that belong to the interviewer's notes, found in a question the candidate would read. */
+export function interviewerNotesIn(question: string): string[] {
+  const lower = question.toLowerCase();
+  return INTERVIEWER_NOTES.filter((phrase) => lower.includes(phrase));
+}
+
 const VARIANT_TASK: Record<DrillType, string> = {
-  capacity: "The load changed as below. Redo only the numbers that change, and say what each new number forces.",
+  capacity: "The situation changed as below. Work out the numbers that matter now, and say what each one forces.",
   walk: "Walk one request through your design after the change below. Say which boxes change and why.",
   requirements: "The interviewer adds the change below. Say which requirements move and what you ask again, with the numbers you would assume.",
   deep_dive: "Take the change below: say what breaks first, what you would build instead, and what it costs.",
   lld_skeleton: "The requirement below is new. Write the classes that change or are added, with fields and signatures, and say which class stays untouched.",
 };
+
+/**
+ * The entries a drill may ask. A capacity drill needs numbers to work with, so it prefers entries whose question holds
+ * a digit and falls back to all of them.
+ */
+export function variantsFor(problem: Problem, drill: DrillType): VariantEntry[] {
+  const entries = variantEntries(problem);
+  if (drill !== "capacity") return entries;
+  const numeric = entries.filter((e) => /\d/.test(e.question));
+  return numeric.length > 0 ? numeric : entries;
+}
 
 /** Hidden-fact bullets that carry a number: the scale facts a capacity estimate starts from. */
 export function scaleFacts(problem: Problem): string[] {
@@ -294,7 +343,7 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
       ...base.prompt,
       task: VARIANT_TASK[drill],
       ...(drill === "deep_dive" ? { topic: entry.title } : {}),
-      variant: { title: entry.title },
+      variant: { id: entry.id, title: entry.title },
       material: [...material, { heading: "What changed", markdown: entry.question }],
     },
     key: `${base.key}\n\nAfter the change, a strong answer covers:\n${entry.expect}`,

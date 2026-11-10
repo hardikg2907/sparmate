@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { DrillAttempt, DrillItem, DrillType } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
-import { canVaryFrom, isPickValid, pickNext, pickPool, pickVariant, repickStale } from "./drill-pick";
+import { migrateV1 } from "./drill-store";
+import { canVaryFrom, isPickValid, pickNext, pickPool, repickStale } from "./drill-pick";
 import { playableProblems } from "./drills";
 
 const CURVEBALLS = (names: string[]) => names.map((n, i) => `${i + 1}. **${n}:** What now for ${n}? Expect: a plan for ${n}.`).join("\n");
@@ -67,7 +68,7 @@ describe("pickPool", () => {
     ).toEqual(["a", "b"]);
   });
 
-  it("needs a deep dive that shares a word with the gap", () => {
+  it("needs a deep dive whose title shares a word with the gap's title", () => {
     const problems = mapOf(brief("a", { deepDives: ["Caching redirects"] }), brief("b", { deepDives: ["Sharding the counter"] }), brief("c"));
     const gap = item({ drill: "deep_dive", gapTitle: "Cache stampede on a viral link", gapHint: "Coalesce misses." });
     expect(pickPool(gap, problems).map((p) => p.meta.id)).toEqual(["a"]);
@@ -138,18 +139,45 @@ describe("pickNext", () => {
     const third = pickNext(item(), problems, [done("a"), done("a", { variant: "region" }), done("a", { variant: "outage" })]);
     expect(third).toEqual({ problemId: "a", variant: "spike" });
     const again = pickNext(item(), problems, [done("a", { variant: "region" }), done("a", { variant: "outage" }), done("a", { variant: "spike" })]);
-    expect(again).toEqual({ problemId: "a", variant: "region" });
+    expect(again).toEqual({ problemId: "a", variant: null });
   });
 
-  it("asks a variant when the only other problem is the last used one, and counts variants per problem", () => {
+  it("alternates the plain problem and its one changed constraint, never the proof of the last attempt", () => {
     const problems = mapOf(brief("a", { curveballs: ["Spike"] }));
-    expect(pickNext(item({ originProblemId: "a" }), problems, [done("a", { variant: "spike" })])).toEqual({ problemId: "a", variant: "spike" });
+    expect(pickNext(item(), problems, [done("a")])).toEqual({ problemId: "a", variant: "spike" });
+    expect(pickNext(item(), problems, [done("a"), done("a", { variant: "spike" })])).toEqual({ problemId: "a", variant: null });
+    expect(pickNext(item(), problems, [done("a"), done("a", { variant: "spike" }), done("a")])).toEqual({ problemId: "a", variant: "spike" });
+  });
+
+  it("counts the proofs per problem and ignores attempts on other problems", () => {
+    const problems = mapOf(brief("a", { curveballs: ["Spike", "Outage"] }));
+    const other = done("zzz", { variant: "outage" });
+    expect(pickNext(item(), problems, [other, other, done("a")])).toEqual({ problemId: "a", variant: "outage" });
+  });
+
+  it("prefers a capacity variant whose question holds a number", () => {
+    const base = brief("a", { curveballs: [] });
+    const withNumber = {
+      ...base,
+      sections: {
+        ...base.sections,
+        "Capacity math": "x",
+        "Hidden facts": "- 5 per second",
+        Curveballs: "1. **Wordy:** Is it slow? Expect: yes.\n2. **Numbers:** Load is 10x. Expect: more shards.\n3. **Also wordy:** What now? Expect: plan.",
+      },
+    } as Problem;
+    expect(pickNext(item({ drill: "capacity" }), mapOf(withNumber), [done("a", { drill: "capacity" })])).toEqual({ problemId: "a", variant: "numbers" });
+    const noNumber = {
+      ...withNumber,
+      sections: { ...withNumber.sections, Curveballs: "1. **Wordy:** Is it slow? Expect: yes.\n2. **Plain:** What now? Expect: plan." },
+    } as Problem;
+    expect(pickNext(item({ drill: "capacity" }), mapOf(noNumber), [done("a", { drill: "capacity" })])).toEqual({ problemId: "a", variant: "plain" });
   });
 
   it("repeats the same problem when the brief has no usable variant", () => {
     const problems = mapOf(brief("a", { curveballs: [] }));
     expect(pickNext(item(), problems, [done("a")])).toEqual({ problemId: "a", variant: null });
-    expect(canVaryFrom(pickNext(item(), problems, [done("a")]), "a")).toBe(false);
+    expect(canVaryFrom(pickNext(item(), problems, [done("a")]), ["a"])).toBe(false);
   });
 
   it("stays on the origin with a variant when the item has no attempt and the pool holds nothing else", () => {
@@ -157,6 +185,7 @@ describe("pickNext", () => {
     const gap = item({ drill: "deep_dive", gapTitle: "Cache stampede" });
     expect(pickNext(gap, problems, [])).toEqual({ problemId: "a", variant: null });
     expect(pickNext(gap, problems, [done("a", { drill: "deep_dive" })])).toEqual({ problemId: "a", variant: "outage" });
+    expect(pickNext(gap, problems, [done("a", { drill: "deep_dive" }), done("a", { drill: "deep_dive", variant: "outage" })])).toEqual({ problemId: "a", variant: "spike" });
   });
 
   it("returns null when no playable problem fits at all", () => {
@@ -164,21 +193,12 @@ describe("pickNext", () => {
     expect(pickNext(item(), mapOf(brief("a", { walk: false })), [done("a")])).toBeNull();
   });
 
-  it("can vary when another problem or a variant exists", () => {
-    expect(canVaryFrom({ problemId: "b", variant: null }, "a")).toBe(true);
-    expect(canVaryFrom({ problemId: "a", variant: "x" }, "a")).toBe(true);
-    expect(canVaryFrom({ problemId: "a", variant: null }, "a")).toBe(false);
-    expect(canVaryFrom(null, "a")).toBe(false);
-  });
-});
-
-describe("pickVariant", () => {
-  const entries = ["a", "b", "c"].map((id) => ({ id, title: id, question: id, expect: id }));
-  it("takes the least used entry and gives a tie to the last one", () => {
-    expect(pickVariant(entries, [])?.id).toBe("c");
-    expect(pickVariant(entries, ["c"])?.id).toBe("b");
-    expect(pickVariant(entries, ["c", "b", "a", "b"])?.id).toBe("c");
-    expect(pickVariant([], [])).toBeNull();
+  it("can vary only when the next pick asks a proof not yet earned", () => {
+    expect(canVaryFrom({ problemId: "b", variant: null }, ["a"])).toBe(true);
+    expect(canVaryFrom({ problemId: "a", variant: "x" }, ["a"])).toBe(true);
+    expect(canVaryFrom({ problemId: "a", variant: "x" }, ["a", "a#x"])).toBe(false);
+    expect(canVaryFrom({ problemId: "a", variant: null }, ["a"])).toBe(false);
+    expect(canVaryFrom(null, ["a"])).toBe(false);
   });
 });
 
@@ -205,6 +225,39 @@ describe("saved picks that go stale", () => {
     expect(fine.variant).toBe("spike");
     expect(closed.problemId).toBe("gone");
     expect(repickStale(items, [], mapOf(brief("a")))).toBe(false);
+  });
+
+  it("moves an item off the proof of its last counted attempt when another can be offered", () => {
+    const migrated = migrateV1({
+      version: 1,
+      items: [
+        {
+          id: "aaaaaaaaaaaaaaaa",
+          sessionId: "s",
+          problemId: "a",
+          gapTitle: "Walking one request",
+          gapHint: "",
+          drill: "walk",
+          createdOn: "2026-11-01",
+          dueOn: "2026-11-01",
+          passes: 1,
+          status: "open",
+        },
+      ],
+      attempts: [{ at: "2026-11-01T10:00:00.000Z", day: "2026-11-01", drill: "walk", problemId: "a", drillId: "aaaaaaaaaaaaaaaa", verdict: "pass" }],
+    } as unknown as Parameters<typeof migrateV1>[0]);
+    const problems = mapOf(brief("a"), brief("b"));
+    expect(migrated.items[0]).toMatchObject({ problemId: "a", variant: null });
+    expect(repickStale(migrated.items, migrated.attempts, problems)).toBe(true);
+    expect(migrated.items[0]?.problemId).toBe("b");
+    expect(repickStale(migrated.items, migrated.attempts, problems)).toBe(false);
+  });
+
+  it("leaves a pick on the last proof when nothing else can be offered", () => {
+    const single = mapOf(brief("a", { curveballs: [] }));
+    const items = [item()];
+    expect(repickStale(items, [done("a")], single)).toBe(false);
+    expect(items[0]).toMatchObject({ problemId: "a", variant: null });
   });
 
   it("keeps an item as it is when nothing playable fits", () => {

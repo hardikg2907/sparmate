@@ -80,7 +80,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
     setSubmitError(null);
     const elapsed = startedAt === null ? undefined : Math.min(7200, Math.max(0, Math.round((Date.now() - startedAt) / 1000)));
     const sent = answer;
-    const call = revising && result ? api.gymRevise(result.attemptId, sent, elapsed) : api.gymSubmit(target, sent, elapsed);
+    const call = revising && result ? api.gymRevise(result.attemptId, sent, elapsed) : api.gymSubmit(target, sent, elapsed, prompt?.variant?.id ?? null);
     call.then(
       (r) => {
         setResult(r);

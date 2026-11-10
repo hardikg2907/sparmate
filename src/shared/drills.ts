@@ -348,6 +348,8 @@ export type DrillTarget = z.infer<typeof DrillTargetSchema>;
 
 export const DrillSubmitSchema = z.strictObject({
   ...DrillTargetSchema.shape,
+  /** The changed constraint the prompt named, sent back so a tab that opened an older prompt is never graded on another one. */
+  variant: z.string().max(MAX_VARIANT_ID).regex(VARIANT_ID).nullable().optional(),
   answer: z
     .string()
     .max(MAX_ANSWER_CHARS)
@@ -407,8 +409,8 @@ export interface DrillPrompt {
   /** The deep-dive topic, for a deep dive. */
   topic?: string;
   problem: { id: string; title: string; track: Track };
-  /** Set when the drill asks the problem with one changed constraint. */
-  variant?: { title: string };
+  /** Set when the drill asks the problem with one changed constraint. The browser sends `id` back with its answer. */
+  variant?: { id: string; title: string };
   material: { heading: string; markdown: string }[];
   /** Short line under the answer box. */
   answerHint: string;

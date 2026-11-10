@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DRILL_TYPES, localDay } from "../../shared/drills";
+import { DRILL_TYPES, localDay, type DrillItem } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
 import type { SessionHistoryItem } from "../../shared/types";
 import { makeStack, type Stack } from "./__fixtures__/stack";
@@ -43,6 +43,15 @@ function round(over: Partial<SessionHistoryItem> = {}): SessionHistoryItem {
 const ANSWER_READY =
   "Writes are about forty per second on average, which means one primary database handles them easily.\nReads reach four thousand per second, which means a cache in front of the database.\nStorage is about three terabytes, which means one large primary with replicas.";
 const target = { drill: "capacity" as const, problemId: "c2-url-shortener" };
+
+/** Sends an answer the way the page does: with the changed constraint the saved pick asks. */
+const sendOn = (
+  svc: DrillService,
+  t: { drill: "capacity" | "walk" | "deep_dive" | "requirements" | "lld_skeleton"; problemId: string; drillId?: string },
+  answer: string,
+  seconds?: number,
+) => svc.submit(t, answer, seconds, store.snapshot().items.find((i) => i.id === t.drillId)?.variant ?? null);
+const send = (t: Parameters<typeof sendOn>[1], answer: string, seconds?: number) => sendOn(service, t, answer, seconds);
 
 beforeEach(async () => {
   stack = await makeStack();
@@ -294,28 +303,28 @@ describe("running a drill", () => {
     expect(queued).toBeDefined();
     const t = { ...target, drillId: queued?.id };
 
-    const first = await service.submit(t, ANSWER_READY);
+    const first = await send(t, ANSWER_READY);
     expect(first).toMatchObject({ outcome: "ready", readyCount: 1, closed: false, nextDueOn: "2026-11-06" });
     expect(first.next?.drill).toBe("deep_dive");
 
     clock = new Date(2026, 10, 6, 9, 0);
-    const second = await service.submit(t, ANSWER_READY);
+    const second = await send(t, ANSWER_READY);
     expect(second).toMatchObject({ readyCount: 2, nextDueOn: "2026-11-13" });
 
     clock = new Date(2026, 10, 13, 9, 0);
-    const third = await service.submit(t, ANSWER_READY);
+    const third = await send(t, ANSWER_READY);
     expect(third).toMatchObject({ readyCount: 3, closed: true, nextDueOn: null });
     expect(new Set(store.snapshot().items.find((i) => i.id === queued?.id)?.readyOn).size).toBe(3);
     expect((await service.summary()).queue.map((r) => r.drill)).toEqual(["deep_dive"]);
-    await expect(service.submit(t, ANSWER_READY)).rejects.toMatchObject({ status: 404 });
+    await expect(send(t, ANSWER_READY)).rejects.toMatchObject({ status: 404 });
   });
 
   it("a needs-work result resets the count and brings the drill back tomorrow", async () => {
     const queued = (await service.summary()).queue.find((r) => r.drill === "capacity");
     const t = { ...target, drillId: queued?.id };
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     clock = new Date(2026, 10, 6, 23, 30);
-    const failed = await service.submit(t, "It is a big system.");
+    const failed = await send(t, "It is a big system.");
     expect(failed).toMatchObject({ outcome: "needs_work", readyCount: 0, closed: false, nextDueOn: "2026-11-07" });
     const row = (await service.summary()).queue.find((r) => r.id === queued?.id);
     expect(row).toMatchObject({ passes: 0, dueOn: "2026-11-07" });
@@ -346,11 +355,11 @@ describe("running a drill", () => {
   it("an attempt before the drill's day is logged and changes nothing, so a gap cannot close in one day", async () => {
     const queued = (await service.summary()).queue.find((r) => r.drill === "capacity");
     const t = { ...target, drillId: queued?.id };
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     const after = (await service.summary()).queue.find((r) => r.id === queued?.id);
     expect(after).toMatchObject({ passes: 1, dueOn: "2026-11-06", due: false });
     for (const again of [t, target]) {
-      const early = await service.submit(again, ANSWER_READY);
+      const early = await send(again, ANSWER_READY);
       expect(early).toMatchObject({ outcome: "ready", readyCount: null, closed: false, nextDueOn: null });
     }
     expect((await service.summary()).queue.find((r) => r.id === queued?.id)).toMatchObject({ passes: 1, dueOn: "2026-11-06" });
@@ -370,13 +379,13 @@ describe("running a drill", () => {
   it("rejects a second submit for a drill that is still being graded", async () => {
     const queued = (await service.summary()).queue.find((r) => r.drill === "capacity");
     const t = { ...target, drillId: queued?.id };
-    const [a, b] = await Promise.allSettled([service.submit(t, ANSWER_READY), service.submit(t, ANSWER_READY)]);
+    const [a, b] = await Promise.allSettled([send(t, ANSWER_READY), send(t, ANSWER_READY)]);
     const statuses = [a, b].map((r) => (r.status === "rejected" ? (r.reason as HttpError).status : 200));
     expect(statuses.sort()).toEqual([200, 409]);
     expect((await service.summary()).queue.find((r) => r.id === queued?.id)?.passes).toBe(1);
     // The guard lifts once the grading ends.
     clock = new Date(2026, 10, 6, 9, 0);
-    await expect(service.submit(t, ANSWER_READY)).resolves.toMatchObject({ readyCount: 2 });
+    await expect(send(t, ANSWER_READY)).resolves.toMatchObject({ readyCount: 2 });
   });
 
   it("refuses a blank answer with a clear message", async () => {
@@ -523,13 +532,13 @@ describe("running a drill", () => {
     const t = { ...target, drillId: queued?.id };
     const readyOn = () => store.snapshot().items.find((i) => i.id === queued?.id)?.readyOn;
     expect(readyOn()).toEqual([]);
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     expect(readyOn()).toEqual(["c2-url-shortener"]);
     // An early attempt is practice and changes nothing.
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     expect(readyOn()).toEqual(["c2-url-shortener"]);
     clock = new Date(2026, 10, 6, 9, 0);
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     expect(readyOn()).toHaveLength(2);
     expect(readyOn()?.[0]).toBe("c2-url-shortener");
     expect(readyOn()?.[1]).toMatch(/^c2-url-shortener#[a-z0-9-]+$/);
@@ -538,7 +547,7 @@ describe("running a drill", () => {
     expect(readyOn()).toHaveLength(2);
     const item = store.snapshot().items.find((i) => i.id === queued?.id);
     expect(item?.passes).toBe(2);
-    await service.submit(t, "It is a big system.");
+    await send(t, "It is a big system.");
     expect(readyOn()).toEqual([]);
     expect(store.snapshot().items.find((i) => i.id === queued?.id)).toMatchObject({ passes: 0, originProblemId: "c2-url-shortener" });
   });
@@ -565,7 +574,7 @@ describe("revising a drill", () => {
 
   it("grades one revision, keeps the first scores and counts the better outcome", async () => {
     const t = await queuedTarget();
-    const first = await service.submit(t, THIN, 40);
+    const first = await send(t, THIN, 40);
     expect(first).toMatchObject({ outcome: "needs_work", canRevise: true, revised: false, firstOutcome: null, readyCount: 0, nextDueOn: "2026-11-04" });
     const firstScores = store.snapshot().attempts[0]?.scores;
 
@@ -595,7 +604,7 @@ describe("revising a drill", () => {
 
   it("keeps the schedule when the revision is not better", async () => {
     const t = await queuedTarget();
-    const first = await service.submit(t, PARTLY);
+    const first = await send(t, PARTLY);
     expect(first).toMatchObject({ outcome: "getting_there", readyCount: 0, nextDueOn: "2026-11-05" });
     const before = itemOf(t.drillId);
     const final = await service.revise(first.attemptId, THIN);
@@ -606,11 +615,11 @@ describe("revising a drill", () => {
 
   it("a ready result after a revision never closes the drill: the count stops at 2", async () => {
     const t = await queuedTarget();
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     clock = new Date(2026, 10, 6, 9, 0);
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     clock = new Date(2026, 10, 13, 9, 0);
-    const first = await service.submit(t, PARTLY);
+    const first = await send(t, PARTLY);
     expect(itemOf(t.drillId)).toMatchObject({ passes: 2, dueOn: "2026-11-15" });
     const final = await service.revise(first.attemptId, ANSWER_READY);
     expect(final).toMatchObject({ outcome: "ready", readyCount: 2, closed: false, nextDueOn: "2026-11-15" });
@@ -619,9 +628,9 @@ describe("revising a drill", () => {
 
   it("a better revision restores the count and the ready list from the state before the attempt", async () => {
     const t = await queuedTarget();
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     clock = new Date(2026, 10, 6, 9, 0);
-    const first = await service.submit(t, THIN);
+    const first = await send(t, THIN);
     expect(itemOf(t.drillId)).toMatchObject({ passes: 0, readyOn: [], dueOn: "2026-11-07" });
     const final = await service.revise(first.attemptId, PARTLY);
     expect(final).toMatchObject({ outcome: "getting_there", readyCount: 1, nextDueOn: "2026-11-08" });
@@ -717,7 +726,7 @@ describe("revising a drill", () => {
 
   it("leaves everything as it was when the grader fails", async () => {
     const t = await queuedTarget();
-    const first = await service.submit(t, THIN);
+    const first = await send(t, THIN);
     const before = store.snapshot();
     const bodyBefore = await store.readBody(first.attemptId);
     const failing = new DrillService({
@@ -856,23 +865,23 @@ describe("repeating a drill on another problem", () => {
   it("asks a changed constraint when only one problem is playable, and sends the question", async () => {
     const first = await queuedCapacity();
     const t = { ...target, drillId: first?.id };
-    await service.submit(t, ANSWER_READY);
+    await send(t, ANSWER_READY);
     expect(itemOf(first?.id)).toMatchObject({ problemId: "c2-url-shortener", variant: "global-latency" });
     expect(await queuedCapacity()).toMatchObject({ problemId: "c2-url-shortener", variantTitle: "Global latency", originProblemTitle: "URL Shortener" });
     const prompt = await service.prompt(t);
-    expect(prompt.variant).toEqual({ title: "Global latency" });
+    expect(prompt.variant).toEqual({ id: "global-latency", title: "Global latency" });
     expect(prompt.material.at(-1)?.heading).toBe("What changed");
     expect(prompt.material.at(-1)?.markdown).toContain("Asia see 400 ms redirects");
-    expect(prompt.task).toContain("The load changed as below");
+    expect(prompt.task).toContain("The situation changed as below");
   });
 
   it("keeps the changed-constraint answer key out of every response and out of the saved body", async () => {
     const first = await queuedCapacity();
     const t = { ...target, drillId: first?.id };
-    const one = await service.submit(t, ANSWER_READY);
+    const one = await send(t, ANSWER_READY);
     clock = new Date(2026, 10, 6, 9, 0);
     const prompt = await service.prompt(t);
-    const second = await service.submit(t, "The primary handles it.");
+    const second = await send(t, "The primary handles it.");
     const revised = await service.revise(second.attemptId, ANSWER_READY);
     const summary = await service.summary();
     const body = JSON.stringify(await store.readBody(second.attemptId));
@@ -889,9 +898,9 @@ describe("repeating a drill on another problem", () => {
     const spy = spyOn(keys);
     const first = (await spy.summary()).queue.find((r) => r.drill === "capacity");
     const t = { ...target, drillId: first?.id };
-    await spy.submit(t, ANSWER_READY);
+    await sendOn(spy, t, ANSWER_READY);
     clock = new Date(2026, 10, 6, 9, 0);
-    const second = await spy.submit(t, "It is a big system.");
+    const second = await sendOn(spy, t, "It is a big system.");
     await spy.revise(second.attemptId, ANSWER_READY);
     expect(keys).toHaveLength(3);
     expect(keys[0]).not.toContain("After the change");
@@ -910,11 +919,60 @@ describe("repeating a drill on another problem", () => {
     await expect(service.prompt({ ...stale, drillId: "ffffffffffffffff" })).rejects.toMatchObject({ status: 404 });
   });
 
-  it("takes the variant from the item, never from the request", async () => {
-    const first = await queuedCapacity();
-    await service.submit({ ...target, drillId: first?.id }, ANSWER_READY);
-    const bad = { ...target, drillId: first?.id, variant: "cache-failure" } as typeof target;
-    expect((await service.prompt(bad)).variant?.title).toBe("Global latency");
+  describe("the changed constraint the page names", () => {
+    const attempts = () => store.snapshot().attempts.length;
+
+    it("refuses a stale tab: the item moved to a changed constraint after another tab answered the plain question", async () => {
+      const first = await queuedCapacity();
+      const t = { ...target, drillId: first?.id };
+      // Two tabs opened the plain prompt. Tab A answers and the item moves to a changed constraint.
+      expect((await service.prompt(t)).variant).toBeUndefined();
+      await service.submit(t, ANSWER_READY, undefined, null);
+      expect(itemOf(first?.id)).toMatchObject({ variant: "global-latency", passes: 1, readyOn: ["c2-url-shortener"] });
+      clock = new Date(2026, 10, 6, 9, 0);
+      // Tab B still sends the plain question's answer.
+      await expect(service.submit(t, ANSWER_READY, undefined, null)).rejects.toMatchObject({
+        status: 409,
+        message: "This drill moved to another problem. Open it again from Practice.",
+      });
+      await expect(service.submit(t, ANSWER_READY)).rejects.toMatchObject({ status: 409 });
+      await expect(service.submit(t, ANSWER_READY, undefined, "cache-failure")).rejects.toMatchObject({ status: 409 });
+      expect(attempts()).toBe(1);
+      expect(itemOf(first?.id)).toMatchObject({ passes: 1, readyOn: ["c2-url-shortener"] });
+      // The variant the prompt names is accepted and counts on its own key.
+      await expect(service.submit(t, ANSWER_READY, undefined, "global-latency")).resolves.toMatchObject({ readyCount: 2 });
+      expect(itemOf(first?.id)?.readyOn).toEqual(["c2-url-shortener", "c2-url-shortener#global-latency"]);
+    });
+
+    it("grades on the key of the checked pick", async () => {
+      const keys: string[] = [];
+      const spy = spyOn(keys);
+      const first = (await spy.summary()).queue.find((r) => r.drill === "capacity");
+      const t = { ...target, drillId: first?.id };
+      await spy.submit(t, ANSWER_READY, undefined, null);
+      clock = new Date(2026, 10, 6, 9, 0);
+      await expect(spy.submit(t, ANSWER_READY, undefined, null)).rejects.toMatchObject({ status: 409 });
+      expect(keys).toHaveLength(1);
+      const prompt = await spy.prompt(t);
+      await spy.submit(t, ANSWER_READY, undefined, prompt.variant?.id ?? null);
+      expect(keys).toHaveLength(2);
+      expect(keys[1]).toContain("After the change, a strong answer covers:\n");
+    });
+
+    it("refuses a changed constraint on a free drill", async () => {
+      await expect(service.submit(target, ANSWER_READY, undefined, "global-latency")).rejects.toMatchObject({ status: 400 });
+      expect(attempts()).toBe(0);
+    });
+
+    it("takes the variant to check from the request and to grade from the item", async () => {
+      const first = await queuedCapacity();
+      await service.submit({ ...target, drillId: first?.id }, ANSWER_READY, undefined, null);
+      const asked = { ...target, drillId: first?.id };
+      expect((await service.prompt(asked)).variant?.id).toBe("global-latency");
+      clock = new Date(2026, 10, 6, 9, 0);
+      await service.submit(asked, ANSWER_READY, undefined, "global-latency");
+      expect(store.snapshot().attempts.at(-1)?.variant).toBe("global-latency");
+    });
   });
 
   it("counts a free drill for a due item only when it matches the saved pick", async () => {
@@ -965,5 +1023,105 @@ describe("repeating a drill on another problem", () => {
     expect(result.readyCount).toBeNull();
     expect(itemOf(first?.id)).toMatchObject({ passes: 0, problemId: "c2-rate-limiter" });
     expect(store.snapshot().attempts[0]?.drillId).toBeNull();
+  });
+});
+
+describe("one problem with few changed constraints", () => {
+  const CURVEBALL = "1. **Spike:** Traffic is 10x for an hour. What breaks first? Expect: shed load and cache the hot key.";
+  const READY = () => (stack.deps.problems.get("c2-url-shortener") as Problem).sections["Capacity math"] ?? "";
+  const THIN = "It is a big system.";
+  let brief: Problem;
+
+  function briefWith(curveballs: string | null): Problem {
+    const real = stack.deps.problems.get("c2-url-shortener") as Problem;
+    const sections = { ...real.sections };
+    if (curveballs === null) delete sections["Curveballs"];
+    else sections["Curveballs"] = curveballs;
+    return { ...real, sections, custom: true } as Problem;
+  }
+
+  function serviceFor(before?: () => Promise<void>): DrillService {
+    const real = createFakeDriver({ chunkDelayMs: 0 });
+    return new DrillService({
+      store,
+      history: () => history,
+      problems: { reload: async () => [brief], get: (id) => (id === brief.meta.id ? brief : undefined) },
+      driver: {
+        ...real,
+        kind: "fake",
+        startConversation: real.startConversation.bind(real),
+        runOnce: async (setup) => {
+          await before?.();
+          return real.runOnce(setup);
+        },
+      },
+      settings: stack.settings,
+      prompts: stack.deps.prompts,
+      guard: stack.deps.guard,
+      log: stack.log,
+      now: () => clock,
+    });
+  }
+
+  const rowOf = async (svc: DrillService) => (await svc.summary()).queue.find((r) => r.drill === "capacity");
+  const itemOf = (id: string | undefined) => store.snapshot().items.find((i) => i.id === id) as DrillItem;
+
+  /** Answers the queued drill the way the page does, on its due day. */
+  async function play(svc: DrillService, id: string | undefined, answer: string) {
+    const item = itemOf(id);
+    clock = new Date(`${item.dueOn}T09:00:00`);
+    return svc.submit({ drill: "capacity", problemId: item.problemId, drillId: id }, answer, undefined, item.variant);
+  }
+
+  it("closes after a needs-work result when the brief has one changed constraint", async () => {
+    brief = briefWith(CURVEBALL);
+    const svc = serviceFor();
+    const id = (await rowOf(svc))?.id;
+    expect((await play(svc, id, THIN)).outcome).toBe("needs_work");
+    const proofs: string[] = [];
+    let closed = false;
+    for (let i = 0; i < 6 && !closed; i++) {
+      const item = itemOf(id);
+      proofs.push(`${item.problemId}#${item.variant ?? ""}`);
+      closed = (await play(svc, id, READY())).closed;
+    }
+    expect(closed).toBe(true);
+    expect(proofs).toEqual(["c2-url-shortener#spike", "c2-url-shortener#", "c2-url-shortener#spike"]);
+    expect(new Set(itemOf(id).readyOn).size).toBe(2);
+  });
+
+  it("closes on the third ready result when the brief has no changed constraint", async () => {
+    brief = briefWith(null);
+    const svc = serviceFor();
+    const id = (await rowOf(svc))?.id;
+    expect((await play(svc, id, THIN)).outcome).toBe("needs_work");
+    const results = [];
+    for (let i = 0; i < 3; i++) results.push(await play(svc, id, READY()));
+    expect(results.map((r) => r.closed)).toEqual([false, false, true]);
+    expect(itemOf(id)).toMatchObject({ status: "closed", variant: null, readyOn: ["c2-url-shortener"] });
+  });
+
+  it("refuses to revise an attempt whose changed constraint left the brief", async () => {
+    brief = briefWith(CURVEBALL);
+    const svc = serviceFor();
+    const id = (await rowOf(svc))?.id;
+    await play(svc, id, THIN);
+    const second = await play(svc, id, THIN);
+    expect(store.snapshot().attempts.at(-1)).toMatchObject({ variant: "spike", outcome: "needs_work" });
+    brief = briefWith("1. **Other:** The region is lost. What now? Expect: fail over.");
+    await expect(svc.revise(second.attemptId, READY())).rejects.toMatchObject({ status: 409, message: "This attempt cannot be revised." });
+    expect(store.snapshot().attempts.at(-1)).toMatchObject({ revised: false, outcome: "needs_work" });
+  });
+
+  it("picks the next attempt from the briefs as they are after grading", async () => {
+    brief = briefWith(CURVEBALL);
+    const original = brief;
+    const svc = serviceFor(async () => {
+      brief = briefWith(null);
+    });
+    const id = (await rowOf(svc))?.id;
+    await play(svc, id, READY());
+    expect(brief).not.toBe(original);
+    expect(itemOf(id)).toMatchObject({ problemId: "c2-url-shortener", variant: null, passes: 1 });
   });
 });

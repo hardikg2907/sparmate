@@ -235,6 +235,11 @@ describe("request schemas", () => {
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "x".repeat(8001) }).success).toBe(false);
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", extra: 1 }).success).toBe(false);
   });
+  it("takes a changed-constraint id, null or nothing, and rejects anything else", () => {
+    for (const variant of [undefined, null, "global-latency", "a"]) expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", variant }).success).toBe(true);
+    for (const variant of ["", "Global Latency", "-x", "../x", "a/b", "a".repeat(81), 3])
+      expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", variant }).success, String(variant)).toBe(false);
+  });
 });
 
 describe("grader setting", () => {
