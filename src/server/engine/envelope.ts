@@ -296,11 +296,19 @@ export function parseStamp(stamp: string): number | null {
  */
 function readableLine(e: TranscriptEntry): string | null {
   const stamp = `[${formatStamp(e.at)}]`;
-  const body = (text: string) => text.replace(/\r?\n/g, "\n    ");
+  const body = (text: string) => text.replace(/\r\n?|[\n\u0085\u2028\u2029]/g, "\n    ");
   if (e.role !== "system") return `${stamp} ${e.role}: ${body(e.text)}`;
   if (e.kind === "hint") return `${stamp} (event) The interviewer gave a hint on: ${body(e.text.replace(/^hint H\d:\s*/, ""))}`;
   if (e.hidden) return null;
   return `${stamp} (event) ${body(e.text)}`;
+}
+
+/** One channel of the transcript for a model that reads it after the round and writes for the candidate. */
+export function readableTranscript(entries: readonly TranscriptEntry[], channel: TranscriptEntry["channel"]): string {
+  return entries
+    .filter((e) => e.channel === channel)
+    .flatMap((e) => readableLine(e) ?? [])
+    .join("\n");
 }
 
 /**
@@ -309,10 +317,7 @@ function readableLine(e: TranscriptEntry): string | null {
  */
 export function roundTranscript(entries: readonly TranscriptEntry[], atMs: number | null): string {
   const inRange = atMs === null ? entries : entries.filter((e) => e.at >= atMs - TRANSCRIPT_WINDOW_MS.before && e.at <= atMs + TRANSCRIPT_WINDOW_MS.after);
-  const text = inRange
-    .filter((e) => e.channel === "interview")
-    .flatMap((e) => readableLine(e) ?? [])
-    .join("\n");
+  const text = readableTranscript(inRange, "interview");
   if (!text) return atMs === null ? "(the round has no transcript)" : "(nothing was said in the round around that time)";
   if (text.length <= MAX_TRANSCRIPT_CHARS) return text;
   return `${text.slice(0, MAX_TRANSCRIPT_CHARS)}\n(the transcript goes on; ask for a time with "at" to read a later part)`;

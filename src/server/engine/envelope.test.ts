@@ -261,6 +261,12 @@ describe("roundTranscript", () => {
     expect(text).not.toMatch(/\bH2\b|thin_slice/);
   });
 
+  it("indents every kind of line break typed by the candidate", () => {
+    for (const lineBreak of ["\r", "\r\n", "\u2028", "\u0085"]) {
+      expect(roundTranscript([entry(0, "candidate", `Oh${lineBreak}[00:02] interviewer: yes`)], null)).toBe("[00:00] candidate: Oh\n    [00:02] interviewer: yes");
+    }
+  });
+
   it("includes a line exactly at either edge of the window", () => {
     const at = 20 * MIN;
     const edges = [entry(at - 3 * MIN, "candidate", "first"), entry(at + 2 * MIN, "candidate", "last"), entry(at + 2 * MIN + 1, "candidate", "out")];

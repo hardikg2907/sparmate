@@ -475,7 +475,7 @@ about 300 ms):
 - tester: three scenarios, one pass and two fails that share one cause (all three fail, with the cause "Did not compile", when the code does not compile).
 - judge: a valid scorecard whose quotes are copied from real candidate lines (so quote checks pass), plus one
   deliberately invented quote (so the UI shows a failed check).
-- coach: canned two-paragraph replies.
+- coach: canned two-paragraph replies. The opening calls `set_gap` on the top gap and `read_transcript`, and says how many lines of the round it read.
 - scribe: ops built from the session (a tracker mark update for the problem's bullet, a session log row, a
   review entry, a notes file create or append).
 - brief-writer: copies the URL shortener fixture with a new id and title.
@@ -943,7 +943,9 @@ inside a quote splits it into parts that must all appear, in order.
 The scribe gets: TEACHING.md (whole), the problem's tracker section text, the last three Session Log rows, the
 Gaps table header plus its last three rows, the REVIEW.md header plus its last entry, `notes/_TEMPLATE.md`,
 the existing notes file for this problem if any, the problem brief, the scorecard, any written step text, any step
-notepads, the step checklist with what was covered and where, the transcript and the coach transcript.
+notepads, the step checklist with what was covered and where, the transcript and the coach transcript. Both
+transcripts use the same lines as `read_transcript`: a recorded hint shows its topic without its level, other hidden
+notes are left out, and a line break inside an entry starts an indented line.
 
 ### 10.3 Op semantics: `src/server/study/bookkeeping.ts`
 

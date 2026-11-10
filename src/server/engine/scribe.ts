@@ -5,7 +5,7 @@ import type { Session } from "../../shared/types";
 import { sectionText, tableTail } from "../study/tracker";
 import { phasesFor } from "../../shared/phases";
 import { stepChecklistText } from "./checker";
-import { stepNotesText, stepSummariesText, transcriptLines } from "./envelope";
+import { readableTranscript, stepNotesText, stepSummariesText } from "./envelope";
 import { scorecardWithCurrentPlan } from "./store";
 
 const STUDY_READABLE = /^(TRACKER\.md|REVIEW\.md|TEACHING\.md|notes\/[A-Za-z0-9_][A-Za-z0-9_-]*\.md)$/;
@@ -93,8 +93,8 @@ export async function buildScribeInput({ studyRoot, problem, session, date }: Sc
     block("step_notes", stepNotesText(phasesFor(session.track), session.stepNotes)),
     block("step_summaries", stepSummariesText(phasesFor(session.track), session.stepSummaries ?? {})),
     block("step_checklist", stepChecklistText(phasesFor(session.track), session.checklist ?? {}, session.stepChecks ?? {})),
-    block("transcript", transcriptLines(session.transcript, "interview")),
-    block("coach_transcript", transcriptLines(session.transcript, "coach")),
+    block("transcript", readableTranscript(session.transcript, "interview")),
+    block("coach_transcript", readableTranscript(session.transcript, "coach")),
     "Draft the bookkeeping ops for this session.",
   ].join("\n\n");
   return { text, notesFileExists: notes !== null };
