@@ -14,12 +14,12 @@ import { DrillIcon, DumbbellIcon } from "../components/DrillIcon";
 import { ArrowLeftIcon, ChevronRightIcon, ListIcon, PlayFilledIcon, WarnIcon } from "../components/icons";
 import { SidePanel } from "../components/SidePanel";
 import { InfoTip, TrackChip } from "../components/study";
-import { Alert, Button, Card, Skeleton, cn } from "../components/ui";
+import { Alert, Badge, Button, Card, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import type { GymData } from "../lib/useGym";
 import { Link, drillPath } from "../router";
 
-export const HOW_A_GAP_CLOSES = `Three interview-ready results in a row close the gap. After a first-try ready result the next drill comes ${READY_INTERVAL_DAYS[0]} days later, then ${READY_INTERVAL_DAYS[1]}. Getting there, or ready only after a revision, brings it back in ${REVISED_INTERVAL_DAYS} days. Needs work starts again tomorrow.`;
+export const HOW_A_GAP_CLOSES = `Three interview-ready results in a row close the gap, on at least two different problems, and the last one on a first try. Each repeat uses another problem, or the same problem with a changed constraint. After a first-try ready result the next drill comes ${READY_INTERVAL_DAYS[0]} days later, then ${READY_INTERVAL_DAYS[1]}. Getting there, or ready only after a revision, brings it back in ${REVISED_INTERVAL_DAYS} days. Needs work starts again tomorrow.`;
 /** How many drills the "Also due" card lists before it says how many more wait. */
 const ALSO_DUE_SHOWN = 3;
 
@@ -107,10 +107,16 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
       <h2 id="drill-title" className={TITLE}>
         {row.title}
       </h2>
-      <p className="mt-3 text-body text-muted-foreground sm:text-lead">
-        On <b className="font-semibold text-foreground">{row.problemTitle}</b>
+      <p className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-body text-muted-foreground sm:text-lead">
+        <span>
+          On <b className="font-semibold text-foreground">{row.problemTitle}</b>
+        </span>
+        <ChangedTag row={row} />
       </p>
-      <p className="mt-1 max-w-[62ch] truncate text-ui text-muted-foreground">Gap: {row.gapTitle}</p>
+      <p className="mt-1 max-w-[62ch] truncate text-ui text-muted-foreground">
+        Gap: {row.gapTitle}
+        {row.originProblemTitle !== row.problemTitle ? `, from your round on ${row.originProblemTitle}` : ""}
+      </p>
       <dl className="mt-7 grid w-full auto-cols-fr grid-flow-col divide-x divide-border rounded-xl bg-sunken ring-1 ring-inset ring-border sm:inline-grid sm:w-auto sm:auto-cols-auto">
         <Fact label="Length" value={`${row.minutes} min`} />
         <Fact
@@ -157,6 +163,16 @@ function Hero({ row, today }: { row: GymDrillRow; today: string }) {
   );
 }
 
+/** Marks a drill that asks the problem again with one changed constraint. */
+export function ChangedTag({ row }: { row: Pick<GymDrillRow, "variantTitle"> }) {
+  if (!row.variantTitle) return null;
+  return (
+    <Badge tone="accent" title={row.variantTitle}>
+      Changed constraint
+    </Badge>
+  );
+}
+
 function Fact({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="min-w-0 px-3 py-3 sm:px-5 sm:py-3.5">
@@ -179,7 +195,7 @@ function NothingDue({ gym, onAll }: { gym: GymSummary; onAll: () => void }) {
       </h2>
       <p className="mt-3 max-w-[56ch] text-body text-muted-foreground sm:text-lead">
         {next
-          ? `Your next drill is ${next.title.toLowerCase()} on ${next.problemTitle}, due ${dueText(next, gym.today)}.`
+          ? `Your next drill is ${next.title.toLowerCase()} on ${next.problemTitle}${next.variantTitle ? " with a changed constraint" : ""}, due ${dueText(next, gym.today)}.`
           : "A drill appears the day after a debrief names a gap. You can also train any skill now."}
       </p>
       <div className="mt-8">
@@ -231,6 +247,11 @@ function AlsoDue({ rows, today, onAll, hasHero }: { rows: GymDrillRow[]; today: 
                   <span className="block truncate text-body font-semibold">{row.title}</span>
                   <span className="block truncate text-meta text-muted-foreground">{row.gapTitle}</span>
                   <span className="block truncate text-meta text-faint">{row.problemTitle}</span>
+                  {row.variantTitle ? (
+                    <span className="mt-0.5 block">
+                      <ChangedTag row={row} />
+                    </span>
+                  ) : null}
                   {row.topic ? <span className="block truncate text-meta text-faint">Topic: {row.topic}</span> : null}
                 </span>
                 <span className="shrink-0 text-right text-ui text-warning">

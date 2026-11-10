@@ -117,7 +117,7 @@ Layout for every scenario unless stated: floor 1 = M, M, C, C, T (spot ids 0 to 
 
 Pick one the candidate has not seen. The display-board extension was already used in a past session, so prefer 1 or 2.
 1. **Electric-vehicle charging:** some car spots have chargers. An electric car prefers a charger spot but may take any car spot; a charger spot costs 20 more per hour while charging. What changes? Expect: a spot attribute plus a pricing rule, ideally no edit to the assignment loop beyond a preference order; Strategy pays off here.
-2. **Weekend and night rates:** the rate depends on when the hour started. Expect: a new `PricingStrategy` that walks the stay hour by hour; `ParkingLot` untouched.
+2. **Weekend and night rates:** the rate depends on when the hour started. What changes? Expect: a new `PricingStrategy` that walks the stay hour by hour; `ParkingLot` untouched.
 3. **Display boards (already seen):** each floor shows free spots by size and updates on every entry and exit. Expect: Observer, notify after releasing the lot's lock, each board with its own lock.
 
 ## Concurrency follow-up

@@ -162,6 +162,21 @@ describe("DrillStore", () => {
     expect(again.snapshot().attempts[0]?.itemBefore).toEqual({ passes: 1, readyOn: ["c2-url-shortener"] });
   });
 
+  it("accepts a variant id and proof keys, and rejects a variant that is not a slug or a key that is too long", () => {
+    const state = (over: object) => ({ version: 2, items: [{ ...itemV2, ...over }], attempts: [] });
+    expect(DrillStateSchema.safeParse(state({ variant: "hot-link-10x", readyOn: ["c2-url-shortener", "c2-url-shortener#hot-link-10x"] })).success).toBe(true);
+    for (const variant of ["Hot Link", "../etc", "a/b", "x".repeat(81), ""]) expect(DrillStateSchema.safeParse(state({ variant })).success, variant).toBe(false);
+    expect(DrillStateSchema.safeParse(state({ readyOn: ["p".repeat(182)] })).success).toBe(false);
+  });
+
+  it("saves the changed-constraint question with an attempt body and caps it", async () => {
+    const store = new DrillStore(path, memoryLogger());
+    await store.load();
+    await store.writeBody({ ...BODY, changed: "Users in Asia see 400 ms redirects." });
+    expect((await store.readBody(BODY.id))?.changed).toBe("Users in Asia see 400 ms redirects.");
+    await expect(store.writeBody({ ...BODY, changed: "x".repeat(2001) })).rejects.toThrow();
+  });
+
   it("does not write when a change says not to, and keeps the old state when the draft is invalid", async () => {
     const store = new DrillStore(path, memoryLogger());
     await store.load();

@@ -3,7 +3,7 @@ import type { DsaResponse } from "../../../shared/dsa";
 import type { GymDrillRow } from "../../../shared/drills";
 import { Link, drillPath } from "../../router";
 import { ExternalIcon } from "../icons";
-import { Button, Card, Skeleton, cn } from "../ui";
+import { Badge, Button, Card, Skeleton, cn } from "../ui";
 
 const LEETCODE_URL = "https://leetcode.com/problemset/";
 
@@ -35,8 +35,13 @@ export function DrillsDueCard({ due }: { due: readonly GymDrillRow[] }) {
             <div className="min-w-0">
               <p className="truncate text-ui font-semibold">{d.gapTitle}</p>
               <p className="truncate text-meta text-muted-foreground">
-                {d.title}, {d.minutes} min
+                {d.title}, {d.minutes} min, {d.problemTitle}
               </p>
+              {d.variantTitle ? (
+                <Badge tone="accent" className="mt-0.5">
+                  Changed constraint
+                </Badge>
+              ) : null}
             </div>
             <Button asChild variant="secondary" size="sm">
               <Link href={drillPath({ drill: d.drill, problemId: d.problemId, drillId: d.id })} aria-label={`Start ${d.title}: ${d.gapTitle}`}>

@@ -486,7 +486,8 @@ Today is one page for the whole day, and with data it fills the first screen at 
   with a swatch in its colour, its name and its minutes.
 - **Also today.** A right column of raised cards. *Unfinished round* has the name, the pause date, a clock bar,
   **Finish**, **End and debrief** (or **Discard**) and "N more unfinished rounds". *Drills due* shows the count and
-  total minutes, up to three rows (the gap and the drill with its minutes) each with **Start**, and "Open Practice". It
+  total minutes, up to three rows (the gap, and the drill with its minutes and the problem of its next attempt, with a
+  "Changed constraint" tag when it asks one) each with **Start**, and "Open Practice". It
   is hidden when nothing is due. *DSA this week* shows a ring ("2 of 3 mediums"), "1 more by Sunday" and "Open
   LeetCode". Without a username it asks for one and links to Settings. A link card lists the other redos.
 - **Focus band.** In the left column under the plan preview. "This week's focus: <skill>", the skill's average over
@@ -511,9 +512,13 @@ Today is one page for the whole day, and with data it fills the first screen at 
   with groups; a row has a mark, title, difficulty and a two-line result, and no button. The detail is a sticky raised
   panel: chips, title, the interviewer's opening line, a facts tile, the mode switch with an info tip, one filled Start
   button and a caption. `/practice#<problem id>` opens the list on that problem.
-- **Drills.** A raised panel holds the next drill: an amber "Next drill" pill, the drill name, the problem, a tile of three
-  facts (length, due, Interview-ready results with three pips and an info tip) and one line for the task, then the one primary
-  button. A raised "Also due" card lists three more with a drill glyph, the problem and the due day in amber. "All drills"
+- **Drills.** A raised panel holds the next drill: an amber "Next drill" pill, the drill name, the problem of its next
+  attempt (with a small accent "Changed constraint" tag when the drill asks the problem after one changed constraint, and
+  the problem of the round that showed the gap in the gap line when it differs), a tile of three
+  facts (length, due, Interview-ready results with three pips and an info tip that says three results on at least two
+  different problems close a gap) and one line for the task, then the one primary
+  button. A raised "Also due" card lists three more with a drill glyph, the problem of the next attempt, the same tag and
+  the due day in amber. "All drills"
   opens the side panel. A first run with no drills shows "Drills start after your first round".
 
 ### Progress
@@ -544,7 +549,9 @@ Today is one page for the whole day, and with data it fills the first screen at 
 ### Drill screen
 
 - The drill screen is full screen with a slim bar: Back to Practice, the drill name and a soft countdown that turns amber
-  and counts up in overtime. Two columns hold the prompt cards and one raised answer card. The result is a mesh hero (the
+  and counts up in overtime. Two columns hold the prompt cards and one raised answer card. A changed-constraint drill
+  shows the accent "Changed constraint" tag beside the problem name, and a "What changed" card with the other material.
+  The result shows the same tag beside the problem. The result is a mesh hero (the
   outcome as the title, the schedule tile, then "Revise your answer" as the primary button when a
   revision is allowed) with cards below: the criteria list, "What went well" beside "What to improve", and "Your line".
   Each criterion is a row with its label, a four-step meter (green at 3 or more, amber below) and "n of 4"; a core

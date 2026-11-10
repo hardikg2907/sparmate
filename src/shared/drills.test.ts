@@ -18,6 +18,7 @@ import {
   firstDueDay,
   isDue,
   localDay,
+  proofKey,
   weekDrillStats,
 } from "./drills";
 import { DEFAULT_SETTINGS, ScorecardSchema, SettingsSchema } from "./types";
@@ -69,7 +70,7 @@ describe("schedule", () => {
     expect(firstDueDay("2026-12-31")).toBe("2027-01-01");
   });
 
-  const base = { passes: 0, readyOn: [] as string[], problemId: "p1", today };
+  const base = { passes: 0, readyOn: [] as string[], proof: "p1", canVary: true, today };
 
   it("a first-try ready result comes back in 3 days", () => {
     expect(applyOutcome({ ...base, outcome: "ready", revised: false })).toEqual({ passes: 1, readyOn: ["p1"], dueOn: "2026-11-13", status: "open" });
@@ -79,10 +80,29 @@ describe("schedule", () => {
     expect(applyOutcome({ ...base, passes: 1, readyOn: ["p1"], outcome: "ready", revised: false })).toEqual({ passes: 2, readyOn: ["p1"], dueOn: "2026-11-17", status: "open" });
   });
 
-  it("the third first-try ready result closes the gap", () => {
-    const closed = applyOutcome({ ...base, passes: 2, outcome: "ready", revised: false });
+  it("the third first-try ready result closes the gap when two different proofs gave ready results", () => {
+    const closed = applyOutcome({ ...base, passes: 2, readyOn: ["p0", "p1"], outcome: "ready", revised: false });
     expect(closed.passes).toBe(READY_TO_CLOSE);
     expect(closed.status).toBe("closed");
+    expect(applyOutcome({ ...base, passes: 2, readyOn: ["p0"], outcome: "ready", revised: false })).toMatchObject({ passes: 3, status: "closed" });
+  });
+
+  it("the third ready result on one proof only holds the count at 2 and comes back in 3 days", () => {
+    expect(applyOutcome({ ...base, passes: 2, readyOn: ["p1"], outcome: "ready", revised: false })).toEqual({ passes: 2, readyOn: ["p1"], dueOn: "2026-11-13", status: "open" });
+  });
+
+  it("closes on one proof when the picker has nothing else to offer", () => {
+    expect(applyOutcome({ ...base, passes: 2, readyOn: ["p1"], canVary: false, outcome: "ready", revised: false })).toMatchObject({ passes: 3, status: "closed" });
+  });
+
+  it("counts a changed-constraint proof as different from its problem", () => {
+    const next = applyOutcome({ ...base, passes: 2, readyOn: ["p1"], proof: proofKey("p1", "hot-link"), outcome: "ready", revised: false });
+    expect(next).toMatchObject({ passes: 3, status: "closed", readyOn: ["p1", "p1#hot-link"] });
+  });
+
+  it("builds a proof key from the problem and the variant", () => {
+    expect(proofKey("p1", null)).toBe("p1");
+    expect(proofKey("p1", "hot-link")).toBe("p1#hot-link");
   });
 
   it("remembers each problem once on the ready list", () => {
@@ -214,6 +234,11 @@ describe("request schemas", () => {
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "  \n " }).success).toBe(false);
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "x".repeat(8001) }).success).toBe(false);
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", extra: 1 }).success).toBe(false);
+  });
+  it("takes a changed-constraint id, null or nothing, and rejects anything else", () => {
+    for (const variant of [undefined, null, "global-latency", "a"]) expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", variant }).success).toBe(true);
+    for (const variant of ["", "Global Latency", "-x", "../x", "a/b", "a".repeat(81), 3])
+      expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", variant }).success, String(variant)).toBe(false);
   });
 });
 

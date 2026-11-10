@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { DRILL_TYPES } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
 import { APP_ROOT } from "./config";
-import { buildDrill, deepDiveEntries, drillFits, drillsAvailable, pickDeepDive, scaleFacts } from "./drill-content";
+import { buildDrill, deepDiveEntries, drillFits, drillsAvailable, interviewerNotesIn, matchDeepDive, pickDeepDive, scaleFacts, variantEntries } from "./drill-content";
 import { memoryLogger } from "./log";
 import { ProblemCatalog } from "./problems";
 
@@ -111,24 +111,59 @@ describe("drill content from the shipped briefs", () => {
 });
 
 describe("deep dive for the real URL Shortener gaps", () => {
-  it("matches caching and hot keys to the redirects entry and click counting to the clicks entry", () => {
+  it("matches redirect and click gaps to the entry whose title names them", () => {
     const entries = deepDiveEntries(hld);
-    expect(pickDeepDive(entries, "Caching a viral link: TTLs, hot keys and stampede")?.title).toBe("Fast, highly available redirects");
+    expect(pickDeepDive(entries, "Making redirects fast under a viral link")?.title).toBe("Fast, highly available redirects");
     expect(pickDeepDive(entries, "Batching click counts off the redirect path")?.title).toBe("Counting clicks without slowing redirects");
   });
 
   it("lets the gap title beat a long reason that shares a word with another title", () => {
     const entries = deepDiveEntries(hld);
-    const reason = "Short TTLs for spiky traffic make a viral key expire about 1,800 times an hour and each expiry sends a burst to the database.";
-    expect(pickDeepDive(entries, "Caching a viral link: TTLs, hot keys and stampede", reason)?.title).toBe("Fast, highly available redirects");
+    const reason = "Short expiry for spiky traffic makes a viral key expire about 1,800 times an hour and each expiry sends a burst to the database.";
+    expect(pickDeepDive(entries, "Fast redirects for a viral link", reason)?.title).toBe("Fast, highly available redirects");
   });
 
-  it("reads the whole entry, not only its title", () => {
+  it("uses the entry's text to rank entries whose titles match, never to admit one", () => {
     const entries = [
-      { title: "Alpha", text: "uses a bloom filter to skip lookups" },
-      { title: "Beta", text: "plain" },
+      { title: "Alpha cache", text: "plain notes about the layout." },
+      { title: "Beta cache", text: "It uses a bloom filter to skip lookups. A filter removes most misses." },
+      { title: "Gamma", text: "A bloom filter also fits here. Bloom filters are cheap." },
     ];
-    expect(pickDeepDive(entries, "bloom filters")?.title).toBe("Alpha");
+    expect(matchDeepDive(entries, "Cache bloom filters")?.title).toBe("Beta cache");
+    expect(matchDeepDive(entries, "Bloom filters")).toBeNull();
+  });
+
+  it("does not admit an unrelated gap through words in a long entry text", () => {
+    const entries = [
+      {
+        title: "Choosing the algorithm and what it costs",
+        text: "Compare fixed windows with token buckets. A bucket tracks tokens per client. Each request takes one token, and a driver for the cell lookup is not needed here. Sizing the store follows from the client count.",
+      },
+      {
+        title: "Redis slow or down",
+        text: "When the store is slow, fail open for most clients. The lookup adds latency. Cell phones on a slow network retry, and a driver of load is the retry storm.",
+      },
+    ];
+    expect(matchDeepDive(entries, "Geohash cell sizing for driver lookup", "Cells too large return too many drivers, so a lookup is slow.")).toBeNull();
+  });
+
+  it("matches none of three shipped briefs for a gap about another topic", () => {
+    const gap = "Geohash cell sizing for driver lookup";
+    const hint = "Cells that are too large return too many drivers, and a lookup that scans them is slow.";
+    for (const id of ["c2-rate-limiter", "c2-url-shortener", "c2-chat-system"]) {
+      const entries = deepDiveEntries(all.find((p) => p.meta.id === id) as Problem);
+      expect(entries.length, id).toBeGreaterThan(0);
+      expect(matchDeepDive(entries, gap, hint), id).toBeNull();
+    }
+  });
+
+  it("reads only a bounded part of a very long Deep dives section, and a heading with no title is not an entry", () => {
+    const long = `### Real\nbody\n### \n${"x".repeat(200000)}\n### Late\nlate`;
+    const entries = deepDiveEntries(stubBrief("hld", { "Deep dives": long }));
+    expect(entries.map((e) => e.title)).toEqual(["Real"]);
+    const started = Date.now();
+    deepDiveEntries(stubBrief("hld", { "Deep dives": `### ${" ".repeat(300000)}a` }));
+    expect(Date.now() - started).toBeLessThan(500);
   });
 
   it("builds the same topic for the hero as the drill page when no word matches", () => {
@@ -152,5 +187,174 @@ describe("pickDeepDive", () => {
     expect(pickDeepDive(entries, "", "", 1)?.title).toBe("Fast, highly available redirects");
     expect(pickDeepDive(entries, "", "", 2)?.title).toBe("Generating unique short codes");
     expect(pickDeepDive([], "x")).toBeNull();
+  });
+});
+
+describe("matchDeepDive", () => {
+  const entries = [
+    { title: "Generating unique short codes", text: "a" },
+    { title: "Fast, highly available redirects", text: "b" },
+  ];
+  it("returns null when no title word is shared, where the pick falls back to the rotation", () => {
+    expect(matchDeepDive(entries, "Zzzz qqqq", "Nothing here")).toBeNull();
+    expect(matchDeepDive(entries, "redirects are slow")?.title).toBe("Fast, highly available redirects");
+    expect(pickDeepDive(entries, "Zzzz qqqq", "", 1)?.title).toBe("Fast, highly available redirects");
+  });
+  it("never admits an entry through the reason alone", () => {
+    expect(matchDeepDive(entries, "Zzzz", "unique codes")).toBeNull();
+  });
+});
+
+function stubBrief(track: "hld" | "lld", sections: Record<string, string>): Problem {
+  return { meta: { id: "stub-brief", track }, sections, body: "", file: "", custom: true } as unknown as Problem;
+}
+
+describe("variantEntries", () => {
+  it("parses every shipped brief into at least one clean entry", () => {
+    for (const problem of all) {
+      const entries = variantEntries(problem);
+      expect(entries.length, problem.meta.id).toBeGreaterThan(0);
+      for (const entry of entries) {
+        for (const text of [entry.title, entry.question]) {
+          expect(text.toLowerCase(), `${problem.meta.id} ${entry.id}`).not.toContain("already seen");
+          expect(text.toLowerCase(), `${problem.meta.id} ${entry.id}`).not.toContain("past session");
+        }
+        expect(entry.question, `${problem.meta.id} ${entry.id}`).not.toContain("Expect");
+        expect(entry.expect.length).toBeGreaterThan(0);
+        expect(entry.id).toMatch(/^[a-z0-9][a-z0-9-]{0,79}$/);
+      }
+      expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
+    }
+    expect(all.filter((p) => p.meta.track === "hld")).toHaveLength(12);
+    expect(all.filter((p) => p.meta.track === "lld")).toHaveLength(9);
+  });
+
+  it("reads the curveballs of a system design brief and skips a seen entry", () => {
+    const entries = variantEntries(hld);
+    expect(entries.map((e) => e.id)).toEqual(["hot-link", "cache-failure", "global-latency"]);
+    expect(entries[0]?.title).toBe("Hot link");
+    expect(entries[0]?.question).toContain("A celebrity posts one of our links");
+    expect(entries[0]?.expect).toContain("in-process cache");
+    const limiter = variantEntries(all.find((p) => p.meta.id === "c2-rate-limiter") as Problem);
+    expect(limiter.map((e) => e.id)).toEqual(["shard-failure", "second-region"]);
+  });
+
+  it("reads the extensions of a machine coding brief and skips the seen display boards", () => {
+    expect(variantEntries(lld).map((e) => e.id)).toEqual(["electric-vehicle-charging", "weekend-and-night-rates"]);
+  });
+
+  it("keeps sub-bullet facts in the question and the checks in the key", () => {
+    const lru = variantEntries(all.find((p) => p.meta.id === "b3-lru-cache") as Problem)[0];
+    expect(lru?.question).toContain("What changes?");
+    expect(lru?.question).toContain("Facts:");
+    expect(lru?.question.trimEnd().endsWith("-")).toBe(false);
+    expect(lru?.expect).toContain("Same:");
+  });
+
+  it("ignores notes before the first item, entries with no Expect: and entries with no bold title", () => {
+    const brief = stubBrief("hld", {
+      Curveballs: [
+        "Use one. Expect: this note is for the interviewer.",
+        "1. **Real one:** What now? Expect: a good answer.",
+        "2. **No marker:** Just a question.",
+        "3. A plain item with no title. Expect: nothing.",
+        "4. **Used before (already used):** Question. Expect: x.",
+      ].join("\n"),
+    });
+    expect(variantEntries(brief).map((e) => e.title)).toEqual(["Real one"]);
+  });
+
+  it("drops a closing note from the title and skips an entry whose title says Expect", () => {
+    const brief = stubBrief("hld", {
+      Curveballs: [
+        "1. **Dispense failure (close to the maintenance mode they saw):** What now? Expect: a plan.",
+        "2. **Nested (a (b)):** Two? Expect: b.",
+        "3. **(Only a note):** Three? Expect: c.",
+        "4. **Expect the unexpected:** Four? Expect: d.",
+      ].join("\n"),
+    });
+    expect(variantEntries(brief).map((e) => [e.id, e.title])).toEqual([
+      ["dispense-failure", "Dispense failure"],
+      ["nested", "Nested"],
+      ["only-a-note", "(Only a note)"],
+    ]);
+  });
+
+  it("returns nothing when the section is missing and caps the entry count and the lengths", () => {
+    expect(variantEntries(stubBrief("hld", {}))).toEqual([]);
+    const many = Array.from({ length: 30 }, (_, i) => `${i + 1}. **Entry ${i}:** ${"q".repeat(5000)} Expect: ${"e".repeat(9000)}`).join("\n");
+    const entries = variantEntries(stubBrief("hld", { Curveballs: many }));
+    expect(entries.length).toBeLessThanOrEqual(8);
+    expect(entries.every((e) => e.question.length <= 1500 && e.expect.length <= 4000 && e.title.length <= 120)).toBe(true);
+  });
+
+  it("stays fast on a huge odd line and gives one entry for repeated titles", () => {
+    const odd = `1. **${"a".repeat(100000)}\n${" ".repeat(200000)}`;
+    const started = Date.now();
+    expect(variantEntries(stubBrief("hld", { Curveballs: odd }))).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(500);
+    const twice = stubBrief("hld", { Curveballs: "1. **Same:** One? Expect: a.\n2. **Same!** Two? Expect: b." });
+    expect(variantEntries(twice)).toHaveLength(1);
+  });
+});
+
+describe("shipped variant questions", () => {
+  it("variant questions hold no interviewer notes", () => {
+    for (const problem of all) {
+      for (const entry of variantEntries(problem)) {
+        expect(interviewerNotesIn(entry.question), `${problem.meta.id} ${entry.id}`).toEqual([]);
+      }
+    }
+  });
+});
+
+describe("interviewerNotesIn", () => {
+  it("finds each note phrase in any case and passes a clean question", () => {
+    expect(interviewerNotesIn("What does The Candidate do? Pick another. They saw it.")).toEqual(["the candidate", "pick another", "they saw"]);
+    expect(interviewerNotesIn("Redis is down at peak. What breaks first?")).toEqual([]);
+    for (const phrase of ["the candidate", "is also accepted", "are accepted", "pick another", "state this when", "they saw"]) {
+      expect(interviewerNotesIn(`x ${phrase.toUpperCase()} y`)).toEqual([phrase]);
+    }
+  });
+});
+
+describe("buildDrill with a variant", () => {
+  const hot = "hot-link";
+  const kinds: [(typeof DRILL_TYPES)[number], string][] = [
+    ["capacity", "Work out the numbers that matter now"],
+    ["walk", "after the change below"],
+    ["requirements", "The interviewer adds the change below"],
+    ["deep_dive", "what breaks first"],
+    ["lld_skeleton", "The requirement below is new"],
+  ];
+
+  it.each(kinds)("%s: adds the What changed block, the tag, the task and the extra key", (drill, task) => {
+    const problem = drill === "lld_skeleton" ? lld : hld;
+    const entry = variantEntries(problem)[0];
+    const normal = buildDrill(problem, drill);
+    const built = buildDrill(problem, drill, { variant: entry?.id ?? "" });
+    expect(built?.prompt.task).toContain(task);
+    expect(built?.prompt.variant).toEqual({ id: entry?.id, title: entry?.title });
+    expect(built?.prompt.material.at(-1)).toEqual({ heading: "What changed", markdown: entry?.question });
+    if (drill !== "deep_dive") expect(built?.key.startsWith(normal?.key ?? "?")).toBe(true);
+    expect(built?.key).toContain("After the change, a strong answer covers:\n");
+    expect(built?.key).toContain(entry?.expect ?? "?");
+    expect(built?.changed).toBe(entry?.question);
+    expect(JSON.stringify(built?.prompt)).not.toContain(entry?.expect ?? "?");
+    expect(built?.prompt.material.map((m) => m.heading)).not.toContain("The topic");
+  });
+
+  it("names the changed entry as the deep-dive topic and rebuilds the same key", () => {
+    const a = buildDrill(hld, "deep_dive", { variant: hot, gapTitle: "Anything", rotation: 3 });
+    const b = buildDrill(hld, "deep_dive", { variant: hot, topic: a?.prompt.topic });
+    expect(a?.prompt.topic).toBe("Hot link");
+    expect(b?.key).toBe(a?.key);
+  });
+
+  it("builds the normal drill for a variant id the brief does not have", () => {
+    const normal = buildDrill(hld, "walk");
+    const built = buildDrill(hld, "walk", { variant: "no-such-entry" });
+    expect(built).toEqual(normal);
+    expect(built?.prompt.variant).toBeUndefined();
   });
 });

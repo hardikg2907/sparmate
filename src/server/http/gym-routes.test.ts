@@ -178,6 +178,8 @@ describe("POST /api/gym/submit", () => {
     ["a missing answer", { drill: "capacity", problemId: "c2-url-shortener" }],
     ["an answer over 8000 characters", { drill: "capacity", problemId: "c2-url-shortener", answer: "x".repeat(8001) }],
     ["an unknown key", { drill: "capacity", problemId: "c2-url-shortener", answer: "x", outcome: "ready" }],
+    ["a path in the variant", { drill: "capacity", problemId: "c2-url-shortener", answer: "x", variant: "../x" }],
+    ["a variant on a free drill", { drill: "capacity", problemId: "c2-url-shortener", answer: "x", variant: "global-latency" }],
     ["a path in the problem id", { drill: "capacity", problemId: "../x", answer: "x" }],
   ])("rejects %s with 400", async (_n, payload) => {
     expect((await post("/api/gym/submit", payload)).statusCode).toBe(400);
