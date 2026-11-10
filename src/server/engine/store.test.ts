@@ -235,7 +235,7 @@ describe("fields added later", () => {
       ],
       gaps: [
         { title: "Capacity math", severity: "high", whyItMatters: "", whatGoodLooksLike: "Each number ends in which means", teachMinutes: 5 },
-        { title: "Retries", severity: "low", whyItMatters: "", whatGoodLooksLike: "Backoff", teachMinutes: 3 },
+        { title: "Retries", severity: "low", whyItMatters: "", whatGoodLooksLike: "Backoff", teachMinutes: 3, aboutTheRound: true },
       ],
       phaseTiming: [{ phase: "capacity", label: "Capacity math", plannedMinutes: 4, actualMinutes: 22 }],
     } as unknown as Session["scorecard"];
@@ -247,7 +247,7 @@ describe("fields added later", () => {
     expect(item.phaseTiming).toEqual([{ phase: "capacity", label: "Capacity math", plannedMinutes: 4, actualMinutes: 22 }]);
     expect(item.gaps).toEqual([
       { title: "Capacity math", goodLooksLike: "Each number ends in which means", severity: "high", done: true, whyItMatters: "" },
-      { title: "Retries", goodLooksLike: "Backoff", severity: "low", done: false, whyItMatters: "" },
+      { title: "Retries", goodLooksLike: "Backoff", severity: "low", done: false, whyItMatters: "", aboutTheRound: true },
     ]);
   });
 

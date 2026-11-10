@@ -271,6 +271,8 @@ export interface HistoryGap {
   whyItMatters?: string;
   /** The coach taught it all the way. */
   done: boolean;
+  /** The judge marked the gap as about how the round was run, so no drill trains it. */
+  aboutTheRound?: boolean;
   /** The drill the judge chose for this gap, when one fits. */
   drill?: DrillType;
 }
@@ -403,6 +405,10 @@ export const ScorecardSchema = z.strictObject({
         whatGoodLooksLike: z.string(),
         teachMinutes: z.number().int().min(1).max(60),
         drill: DrillTypeSchema.optional().describe("The short drill that trains this gap, or leave it out when none fits."),
+        aboutTheRound: z
+          .boolean()
+          .optional()
+          .describe("True when the gap is about how the round was run (pace, time, staying in the round, answering what was asked) rather than what was designed."),
       }),
     )
     .describe(`At most ${MAX_GAPS} gaps, most severe first.`),

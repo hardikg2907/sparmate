@@ -260,7 +260,6 @@ describe("gap to drill", () => {
     ["Leaving spare minutes unspent: using the round's time", "tradeoff"],
     ["Holding the scoping step to its time box", "requirements"],
     ["Spending the remaining minutes well after the demo", "deep_dive"],
-    ["Setting a steady pace through the middle steps", "capacity"],
     ["Unused round time after the extension", "walk"],
   ] as const)("queues no drill for the round-running gap %s, even when the judge chose %s", (title, drill) => {
     expect(drillForGap({ title, drill }, "hld")).toBeNull();
@@ -268,12 +267,53 @@ describe("gap to drill", () => {
   });
 
   it.each([
-    ["Replying to half of a two-part question, and staying on the question", "Splitting the reply between the cache and the queue left the latency question open."],
-    ["A clear job for each box, then the slowest bottleneck", "The worker box had no job and the queue latency was never named."],
-    ["Payment intake with a durable accept path", "A crash after the reply loses the order, because nothing durable holds it before the queue."],
-    ["Answering all three probes before the clock ran out", "The failover question and the cache question got no answer."],
-  ] as const)("never sends %s to a deep dive the judge did not choose", (title, whyItMatters) => {
-    expect(drillForGap({ title, whyItMatters }, "hld")).not.toBe("deep_dive");
+    ["Replying to half of a two-part question, and staying on the question", "Splitting the reply between the cache and the queue left the latency question open.", null],
+    ["A clear job for each box, then the slowest bottleneck", "The worker box had no job and the queue latency was never named.", "walk"],
+    ["Payment intake with a durable accept path", "A crash after the reply loses the order, because nothing durable holds it before the queue.", "walk"],
+    ["Answering all three probes before the clock ran out", "The failover question and the cache question got no answer.", null],
+  ] as const)("never sends %s to a deep dive the judge did not choose", (title, whyItMatters, drill) => {
+    expect(drillForGap({ title, whyItMatters }, "hld")).toBe(drill);
+  });
+
+  it("queues nothing for a gap the judge marked as about the round, whatever else it says", () => {
+    expect(drillForGap({ title: "Cache stampede on a viral link", drill: "deep_dive", aboutTheRound: true }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Cache stampede on a viral link", aboutTheRound: false }, "hld")).toBe("deep_dive");
+  });
+
+  it.each([
+    "Ran out of time before the deep dive",
+    "Ran long on requirements",
+    "Twenty minutes on requirements",
+    "Spending too long on capacity math",
+    "Setting a steady pace through the middle steps",
+  ])("queues nothing for the round-running gap %s when the judge chose no drill", (title) => {
+    expect(drillForGap({ title }, "hld")).toBeNull();
+  });
+
+  it.each(["Left the curveball unanswered", "Leaving fifteen minutes unused", "Finished with time to spare", "Stayed on the question only after a nudge"])(
+    "overrules the judge's drill for the round-running gap %s",
+    (title) => {
+      expect(drillForGap({ title, drill: "deep_dive" }, "hld")).toBeNull();
+    },
+  );
+
+  it.each([
+    "Broadcast with no pacing or cancel",
+    "Per-host crawl pace and politeness",
+    "Recovering workers when stuck on a lock",
+    "Answering every read from the cache",
+    "Reclaiming unused time slots in the calendar",
+    "Refresh using remaining time-to-live",
+    "Matching the producer to the consumer's pace",
+    "Time-boxed leases for the lock",
+  ])("keeps the judge's drill for the design gap %s, which shares words with round-running gaps", (title) => {
+    expect(drillForGap({ title, drill: "deep_dive" }, "hld")).toBe("deep_dive");
+  });
+
+  it("reads the capacity words as whole words", () => {
+    expect(drillForGap({ title: "Matching riders to nearby drivers", whyItMatters: "A number of drivers move at once." }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Response data shape for the feed" }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Naming the numbers that drive the shard count" }, "hld")).toBe("capacity");
   });
 
   it("reads the broad deep-dive words in the title only", () => {
@@ -295,7 +335,9 @@ describe("gap to drill", () => {
 
   it("maps a machine coding gap about the extension or a choice to the trade-off drill", () => {
     expect(drillForGap({ title: "Refund design choice settled only once the interviewer listed both" }, "lld")).toBe("tradeoff");
-    expect(drillForGap({ title: "Extension handled by a new branch in every method" }, "lld")).toBe("tradeoff");
+    expect(drillForGap({ title: "Extensibility of the fee rules" }, "lld")).toBe("tradeoff");
+    expect(drillForGap({ title: "Never reached the extension" }, "lld")).toBeNull();
+    expect(drillForGap({ title: "Ran out of time before the extension", drill: "tradeoff" }, "lld")).toBeNull();
   });
 
   it.each(["Using time windows instead of a sliding log", "Use time-to-live on the dedup key", "Using the clock of one server to order events"])(

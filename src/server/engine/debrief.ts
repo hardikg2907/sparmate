@@ -233,17 +233,28 @@ function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions
   return { sde2, senior };
 }
 
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const;
+
+/**
+ * The judge's gaps cut to the cap by dropping the least severe. The kept gaps stay in the judge's order, because its
+ * practice task aims at the gap it put first.
+ */
+export function mostSevereGaps<G extends { severity: keyof typeof SEVERITY_RANK }>(gaps: readonly G[]): G[] {
+  if (gaps.length <= MAX_GAPS) return [...gaps];
+  const keep = new Set(
+    gaps
+      .map((g, i) => ({ g, i }))
+      .sort((a, b) => SEVERITY_RANK[a.g.severity] - SEVERITY_RANK[b.g.severity] || a.i - b.i)
+      .slice(0, MAX_GAPS)
+      .map((x) => x.i),
+  );
+  return gaps.filter((_, i) => keep.has(i));
+}
+
 /**
  * Rules the engine owns regardless of what the judge wrote. Hint caps are not applied: a hint carries free text and
  * no dimension, so which score it caps is a judgement the judge makes.
  */
-const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const;
-
-/** The judge's gaps cut to the cap, most severe first; a stable sort keeps its own order within one severity. */
-export function mostSevereGaps<G extends { severity: keyof typeof SEVERITY_RANK }>(gaps: readonly G[]): G[] {
-  return [...gaps].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]).slice(0, MAX_GAPS);
-}
-
 export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; track: Session["track"]; tester: TesterOutput | null }): JudgedCard {
   const out: JudgedCard = { ...card };
   if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : out.lldScenarios;

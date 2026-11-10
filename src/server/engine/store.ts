@@ -57,6 +57,7 @@ function scoredParts(s: Session): Pick<SessionSummary, "scores" | "phaseTiming" 
       severity: g.severity,
       done: s.gapProgress?.[g.title]?.state === "taught",
       ...(g.drill ? { drill: g.drill } : {}),
+      ...(g.aboutTheRound ? { aboutTheRound: true } : {}),
     })),
   };
 }
