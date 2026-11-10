@@ -17,9 +17,12 @@ const OUT = resolve(process.argv[2] ?? join(APP, "docs", "screens"));
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// A fixed day keeps the week strip and the due drills the same on every run. DSA numbers need a username.
-const DAY = "now=2026-10-30";
-const COMMON = `${DAY}&testmode=0&username=example_user&testhooks=1`;
+// The fixtures date their rounds from the clock, so the page clock is frozen on an HLD day (Thursday). That keeps the
+// week strip, the redo due dates and the paused rounds the same on every run. DSA numbers need a username.
+const TODAY = "2026-11-12";
+const COMMON = `now=${TODAY}&testmode=0&username=example_user&testhooks=1`;
+// Wednesday is an LLD day so the Parking Lot round from that day shows as done, and Tuesday shows as missed.
+const HOME = `fixture=home&${COMMON}&plan=dsa,hld,lld,hld,dsa,lld,redo`;
 const DESKTOP = { width: 1440, height: 900, deviceScaleFactor: 2 };
 const PHONE = { width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true };
 
@@ -41,18 +44,28 @@ const settleRoom = async (page) => {
   await sleep(1200);
 };
 
-// The step view leaves the first frames under the floating toolbar, so the canvas is panned down to clear it.
+// The step view opens at about 30%. Zooming at the design frame keeps it in place while it grows to fill the canvas, and
+// the hand tool carries no hint, so Excalidraw's pan-the-canvas line goes away.
 const frameHldBoard = async (page) => {
   await settleRoom(page);
-  await page.mouse.move(800, 600);
-  await page.mouse.wheel({ deltaY: -190 });
+  await page.mouse.move(617, 494);
+  await page.keyboard.down("Control");
+  for (let i = 0; i < 40; i++) {
+    const zoom = await page.evaluate(() => Number(/(\d+)%/.exec(document.body.innerText)?.[1] ?? 100));
+    if (zoom >= 38) break;
+    await page.mouse.wheel({ deltaY: -20 });
+    await sleep(60);
+  }
+  await page.keyboard.up("Control");
   await clickText(page, /^jump to latest$/);
+  await page.mouse.click(438, 127);
+  await page.mouse.move(700, 60);
   await sleep(800);
 };
 
 const SHOTS = [
-  { name: "home-dark", query: `fixture=home&${COMMON}&unfinished=0` },
-  { name: "home-light", query: `fixture=home&${COMMON}&unfinished=0&theme=light` },
+  { name: "home-dark", query: HOME },
+  { name: "home-light", query: `${HOME}&theme=light` },
   { name: "room-hld", query: `fixture=room-hld&mode=guided&${COMMON}`, room: true, before: frameHldBoard },
   { name: "room-lld", query: `fixture=room-lld&mode=guided&${COMMON}`, room: true, before: settleRoom },
   { name: "debrief", query: `fixture=debrief-hld&mode=guided&${COMMON}`, room: true, before: settleRoom },
@@ -60,7 +73,7 @@ const SHOTS = [
   { name: "progress", query: `fixture=progress&${COMMON}` },
   {
     name: "palette",
-    query: `fixture=home&${COMMON}&unfinished=0`,
+    query: HOME,
     before: async (page) => {
       await page.keyboard.down("Meta");
       await page.keyboard.press("k");
@@ -70,7 +83,7 @@ const SHOTS = [
       await sleep(400);
     },
   },
-  { name: "today-phone", query: `fixture=home&${COMMON}&unfinished=0`, viewport: PHONE },
+  { name: "today-phone", query: HOME, viewport: PHONE },
 ];
 
 const work = await mkdtemp(join(tmpdir(), "docs-screens-"));
@@ -101,6 +114,20 @@ try {
     const page = await browser.newPage();
     try {
       await page.setViewport(shot.viewport ?? DESKTOP);
+      await page.evaluateOnNewDocument((iso) => {
+        const shift = new Date(`${iso}T10:00:00`).getTime() - Date.now();
+        const RealDate = Date;
+        class FrozenDate extends RealDate {
+          constructor(...args) {
+            if (args.length === 0) super(RealDate.now() + shift);
+            else super(...args);
+          }
+          static now() {
+            return RealDate.now() + shift;
+          }
+        }
+        window.Date = FrozenDate;
+      }, TODAY);
       // Reduced motion makes entry animations and number counters jump to their final values.
       await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
       await page.goto(`${BASE}/?${shot.query}`, { waitUntil: "networkidle0" });

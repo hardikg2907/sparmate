@@ -95,7 +95,7 @@ export function hldRoom(mode: Mode, status: "live" | "paused" = "live", pauseRea
     ],
     transcript,
     graphText: HLD_GRAPH_TEXT,
-    steps: fixtureSteps(HLD_CHECKLIST, mode, status, roundMs - 12_000),
+    steps: fixtureSteps(HLD_CHECKLIST, status, roundMs - 12_000),
     pins: mode === "guided" ? HLD_GUIDE_PINS : [],
   });
 }
@@ -141,7 +141,7 @@ export function lldRoom(mode: Mode, status: "live" | "paused" = "live", pauseRea
     ],
     transcript,
     graphText: LLD_GRAPH_TEXT,
-    steps: fixtureSteps(LLD_CHECKLIST, mode, status, roundMs - 40_000),
+    steps: fixtureSteps(LLD_CHECKLIST, status, roundMs - 40_000),
     pins: mode === "guided" ? LLD_GUIDE_PINS : [],
   });
 }
@@ -412,7 +412,7 @@ export function hldDebrief(status: PublicSession["status"] = "debriefed"): Publi
     ],
     transcript,
     graphText: HLD_GRAPH_TEXT,
-    steps: fixtureSteps(HLD_DEBRIEF_CHECKLIST, "interview", status, roundMs),
+    steps: fixtureSteps(HLD_DEBRIEF_CHECKLIST, status, roundMs),
     pins: HLD_JUDGE_PINS,
   });
   const at = (offsetSec: number) => new Date(base + roundMs + offsetSec * 1000).toISOString();
@@ -647,7 +647,7 @@ export function lldDebrief(status: PublicSession["status"] = "debriefed"): Publi
     ],
     transcript,
     graphText: LLD_GRAPH_TEXT,
-    steps: fixtureSteps(LLD_CHECKLIST, "interview", status, roundMs),
+    steps: fixtureSteps(LLD_CHECKLIST, status, roundMs),
     pins: LLD_JUDGE_PINS,
   });
   return { ...session, scorecard: status === "debriefed" ? LLD_SCORECARD : null, reference: status === "debriefed" ? LLD_REFERENCE : null };
