@@ -108,6 +108,7 @@ export interface FakeFacts {
   checkItems?: readonly ChecklistItem[];
   frameText?: string;
   codeText?: string;
+  notesText?: string;
   imageAttached?: boolean;
   pinTargets?: () => PinTarget[];
   /** The grader's input: the drill's answer key and the candidate's answer. */

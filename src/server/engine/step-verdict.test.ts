@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "../../shared/types";
-import { MAX_GAP_CHARS, parseStepVerdict, recordStepVerdict } from "./step-verdict";
+import { HLD_PHASES, LLD_PHASES } from "../../shared/phases";
+import type { StepCheck } from "../../shared/types";
+import { MAX_GAP_CHARS, parseStepVerdict, passCheck, passNeed, passRefusalText, recordStepVerdict, stepStatusLine } from "./step-verdict";
 
 const PHASES = ["requirements", "entities", "api"];
 const parse = (args: unknown) => parseStepVerdict(args, PHASES);
@@ -64,5 +66,65 @@ describe("recordStepVerdict", () => {
     const s = held();
     recordStepVerdict(s, { phase: "api", verdict: "pass" }, 1);
     expect(recordStepVerdict(s, { phase: "entities", verdict: "not_yet", gap: "Which number?" }, 2)).toEqual({ ok: true });
+  });
+});
+
+describe("passCheck", () => {
+  const items = ["a", "b", "c", "d", "e"].map((id) => ({ id, label: `Item ${id}` }));
+  const reading = (states: Record<string, "covered" | "partial">): StepCheck => ({
+    status: "done",
+    checkedAt: 1_000,
+    usedImage: false,
+    items: Object.fromEntries(Object.entries(states).map(([id, state]) => [id, { state, source: "chat" as const, at: 1, quote: "q", detail: "" }])),
+  });
+
+  it("needs half the items covered, rounded up, and at least one", () => {
+    expect([1, 2, 3, 4, 5, 7, 10].map((n) => passNeed({}, n))).toEqual([1, 1, 2, 2, 3, 4, 5]);
+    expect(passNeed({}, 0)).toBe(0);
+    expect(passNeed({ passNeeds: "one" }, 5)).toBe(1);
+    expect(passNeed({ passNeeds: "all" }, 2)).toBe(2);
+    expect(
+      passNeed(
+        LLD_PHASES.find((p) => p.id === "extend")!,
+        2,
+      ),
+    ).toBe(2);
+  });
+
+  it("refuses a pass when too few items are covered, and does not count a partial item", () => {
+    const out = passCheck({}, items, reading({ a: "covered", b: "partial", c: "partial", d: "partial" }));
+    expect(out).toEqual({ ok: false, covered: 1, total: 5, need: 3, open: ["Item b", "Item c", "Item d", "Item e"] });
+    expect(passCheck({}, items, reading({ a: "covered", b: "covered", c: "covered" }))).toEqual({ ok: true });
+  });
+
+  it("refuses a pass when the reading covers nothing", () => {
+    expect(passCheck({}, items, reading({}))).toMatchObject({ ok: false, covered: 0 });
+    expect(passCheck({ passNeeds: "one" }, items, reading({}))).toMatchObject({ ok: false, need: 1 });
+  });
+
+  it("leaves the call to the guide when the step has no checklist or no finished reading", () => {
+    expect(passCheck({}, [], reading({}))).toEqual({ ok: true });
+    expect(passCheck({}, items, undefined)).toEqual({ ok: true });
+    expect(passCheck({}, items, { status: "failed", checkedAt: null, usedImage: false, items: {} })).toEqual({ ok: true });
+  });
+
+  it("tells the guide to name one open item and never to mention the reading", () => {
+    const out = passCheck({}, items, reading({ a: "covered" }));
+    if (out.ok) throw new Error("expected a refusal");
+    const text = passRefusalText("API", out);
+    expect(text).toContain("API cannot pass yet");
+    expect(text).toContain("Items not covered yet: Item b; Item c; Item d; Item e.");
+    expect(text).toContain("name the most important one");
+    expect(text).toContain("do not mention this reading to him");
+  });
+});
+
+describe("stepStatusLine", () => {
+  it("lists the passed and the open steps in rail order", () => {
+    expect(stepStatusLine(HLD_PHASES, undefined)).toBe("passed: none yet · not passed yet: Requirements, Core entities, API, High-level design, Deep dives");
+    const verdicts = { api: { verdict: "pass" as const, at: 2 }, requirements: { verdict: "not_yet" as const, gap: "x", at: 1 }, entities: { verdict: "pass" as const, at: 3 } };
+    expect(stepStatusLine(HLD_PHASES, verdicts)).toBe("passed: Core entities, API · not passed yet: Requirements, High-level design, Deep dives");
+    const all = Object.fromEntries(HLD_PHASES.map((p) => [p.id, { verdict: "pass" as const, at: 1 }]));
+    expect(stepStatusLine(HLD_PHASES, all)).toBe("every step has passed");
   });
 });

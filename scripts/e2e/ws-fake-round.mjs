@@ -798,6 +798,25 @@ async function guidedRound() {
 
   mark = c.mark();
   c.send({ type: "guided.feedback" });
+  const held = await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to a check with nothing new" });
+  check(
+    "a pass the step's reading does not support is refused",
+    held.entry.text.includes("does not pass yet") && c.msgs.filter((m) => m.type === "session.state").at(-1)?.session.stepVerdicts?.requirements?.verdict === "not_yet",
+    held.entry.text.slice(0, 80),
+  );
+
+  // He states the core requirements, so the next check has the evidence a pass needs.
+  mark = c.mark();
+  c.send({
+    type: "chat.send",
+    channel: "interview",
+    clientMsgId: "req1",
+    text: "Create a short link for a long URL, with an optional custom alias and an optional expiry. Redirect a short link to its long URL, and an expired link stops redirecting. About 100 million new links a month and about 100 redirects per link. A redirect adds under 50 ms at p99.",
+  });
+  await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to the requirements" });
+
+  mark = c.mark();
+  c.send({ type: "guided.feedback" });
   const passed = await c.waitFor((m) => m.type === "session.state" && m.session.stepVerdicts?.requirements?.verdict === "pass", {
     since: mark,
     timeout: 10_000,

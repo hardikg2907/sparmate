@@ -48,6 +48,8 @@ export interface ContextView {
   code?: CodeView;
   lastRun?: RunView | null;
   events?: string[];
+  /** Guided rounds: which steps have a pass, so the guide never states it from memory. */
+  steps?: string;
 }
 
 export function timeLine(t: TimeView): string {
@@ -129,6 +131,7 @@ export function contextBlock(v: ContextView): string {
     const behind = behindPlanLine(v.time);
     if (behind) lines.push(behind);
   }
+  if (v.steps) lines.push(`steps: ${v.steps}`);
   lines.push(...boardLines(v.board));
   lines.push(...notesLines(v.notes));
   if (v.code) lines.push(codeLine(v.code));

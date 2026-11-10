@@ -87,7 +87,7 @@ import { decodePng, localDate, randomId, sha256Hex } from "./fsutil";
 import { describeError, type Logger } from "./log";
 import { validatePin, withPin } from "./pins";
 import { computeReadiness } from "./readiness";
-import { parseStepVerdict, recordStepVerdict, StepVerdictShape } from "./step-verdict";
+import { emptyStepRefusalText, parseStepVerdict, passCheck, passNeed, passRefusalText, recordStepVerdict, stepStatusLine, StepVerdictShape } from "./step-verdict";
 import { PromptError, commonVars, extensionMinute, focusText, formatPhasePlan, type PromptLoader, type PromptName } from "./prompts";
 import { toPublicSession } from "./public";
 import { TesterOutputSchema, toApiSchema, toCompatSchema, type TesterOutput } from "./schemas";
@@ -125,6 +125,8 @@ interface StepCheckRun {
   imageKey: string | null;
   /** Counts finished re-reads, so a caller can tell whether the one it asked for completed. */
   freshDone: number;
+  /** Counts every finished reading, so a caller can tell whether one finished while it waited. */
+  done: number;
 }
 
 /** Resolves true when `p` settles within `ms`, false after `ms`; it never rejects. */
@@ -811,7 +813,7 @@ export class SessionRuntime {
   private checkRun(phase: string): StepCheckRun {
     let run = this.checkRuns.get(phase);
     if (!run) {
-      run = { settled: null, again: false, againWithImage: false, againFresh: false, lastKey: null, imageKey: null, freshDone: 0 };
+      run = { settled: null, again: false, againWithImage: false, againFresh: false, lastKey: null, imageKey: null, freshDone: 0, done: 0 };
       this.checkRuns.set(phase, run);
     }
     return run;
@@ -829,7 +831,7 @@ export class SessionRuntime {
     return out;
   }
 
-  /** What the checker reads for a step: its chat, its frame on the board, and the code in a machine-coding round. */
+  /** What the checker reads for a step: its chat, its frame on the board, his written answer, and the code in a machine-coding round. */
   private stepEvidence(phase: string): { evidence: CheckerEvidence; frameId: string | null; needsImage: boolean; drawn: boolean; empty: boolean } | null {
     const s = this.session;
     const def = this.phases.find((p) => p.id === phase);
@@ -844,10 +846,11 @@ export class SessionRuntime {
     const scope = codeScopeFor(s.track, phase);
     const codeText =
       scope === "step" ? stepCodeText(this.codeContent, s.stepCode[phase] ?? []) : scope === "file" && this.codeContent.trim() !== "" ? numberedCode(this.codeContent) : "";
-    const said = chat.some((e) => e.role === "candidate");
+    const notesText = (s.stepNotes[phase] ?? "").trim();
+    const said = chat.some((e) => e.role === "candidate") || notesText !== "";
     const drawn = unframed ? s.board.graphText.trim() !== "" : frame !== null && !frame.empty;
     return {
-      evidence: { stepLabel: def.label, goal: def.goal, items, chat, boardText, codeText, imageAttached: false },
+      evidence: { stepLabel: def.label, goal: def.goal, items, chat, boardText, codeText, notesText, imageAttached: false },
       frameId: unframed ? null : (frame?.frameId ?? null),
       needsImage: frame?.needsImage ?? false,
       drawn,
@@ -883,6 +886,7 @@ export class SessionRuntime {
         s.stepChecks = { ...s.stepChecks, [phase]: { status: "done", checkedAt: this.roundNow(), usedImage: false, items: {} } };
         run.lastKey = key;
         run.freshDone += 1;
+        run.done += 1;
         this.saveSoon();
         this.sendState();
       }
@@ -927,6 +931,7 @@ export class SessionRuntime {
           candidateLines: evidence.chat.filter((e) => e.role === "candidate").map((e) => e.text),
           frameText: evidence.boardText,
           codeText: unnumberedCode(evidence.codeText),
+          notesText: evidence.notesText,
           imageAttached: evidence.imageAttached,
         },
         usage: { sessionId: s.id, problemId: s.problemId, track: s.track, mode: s.mode },
@@ -941,6 +946,7 @@ export class SessionRuntime {
       if (!res.output) throw new DriverError("The checker returned nothing.");
       next = mergeCheck(fresh ? undefined : this.session.stepChecks[phase], res.output, evidence, this.roundNow());
       run.lastKey = key;
+      run.done += 1;
       if (png) run.imageKey = key;
       if (fresh) run.freshDone += 1;
     } catch (err) {
@@ -1237,6 +1243,7 @@ export class SessionRuntime {
     const events = [...this.pending()];
     const view: ContextView = {
       time: this.timeView(),
+      ...(s.mode === "guided" ? { steps: stepStatusLine(this.phases, s.stepVerdicts) } : {}),
       board: { version: boardVersion, graphText: s.board.graphText, changed: boardVersion !== ch.boardSeen },
       ...(withNotes ? { notes: this.notesView(ch) } : {}),
       code: this.codeView(ch),
@@ -1292,7 +1299,7 @@ export class SessionRuntime {
         const label = phase?.label ?? phaseId;
         const written = (this.session.stepNotes[phaseId] ?? "").trim();
         const body = [
-          `The candidate pressed "Check this step" for the step "${label}"${phase ? ` (goal: ${phase.goal})` : ""}. Give feedback on this step only: one thing that holds, then call step_verdict exactly once for this step (phase "${phaseId}"). If it does not pass, name the one most important gap, as a missing question or a missing decision and not its answer.`,
+          `The candidate pressed "Check this step" for the step "${label}"${phase ? ` (goal: ${phase.goal})` : ""}. Give feedback on this step only. Call step_verdict once for this step (phase "${phaseId}") before you write the verdict, and call it again with "not_yet" if the app refuses a pass. Then write one thing that holds and the verdict. If it does not pass, name the one most important gap, as a missing question or a missing decision and not its answer.`,
           ...(written ? ["His written answer for this step:", "<notes>", written, "</notes>"] : []),
           this.checklistBlock(phaseId),
           this.pinTargetsBlock(),
@@ -1314,7 +1321,7 @@ export class SessionRuntime {
         const body = [
           `The candidate pressed "I'm stuck" on the step "${label}"${phase ? ` (goal: ${phase.goal})` : ""}. Give a short model answer for this step: at most about 150 words, no tables and no quiz. Then add one line asking him to redo the step in his own words.`,
           `Do not call step_verdict with "pass" in this reply, and do not call note_hint: the server has already recorded this as an assist. Longer teaching waits for the coach after the round.`,
-          this.checklistBlock(phaseId),
+          this.checklistBlock(phaseId, false),
         ].join("\n");
         const { view, commit } = this.interviewContext(this.interview, false);
         return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "stuck" } }, commit };
@@ -1338,8 +1345,15 @@ export class SessionRuntime {
     };
   }
 
+  private passRuleText(phase: string): string {
+    const items = this.session.checklist[phase] ?? [];
+    const need = passNeed(this.phases.find((p) => p.id === phase) ?? {}, items.length);
+    return `The server refuses a pass while fewer than ${need} of these ${items.length} items are covered. That is a floor, not the bar: pass only when the step meets the level bar. If he covered more than the reading shows, call recheck_step before you decide.`;
+  }
+
   /** The checker's last finished reading of a step. It is evidence for the guide; the candidate never sees the list in a live round. */
-  private checklistBlock(phase: string): string {
+  /** `withPassRule` false leaves out the pass floor, for a reply that may not pass the step. */
+  private checklistBlock(phase: string, withPassRule = true): string {
     const items = this.session.checklist[phase] ?? [];
     if (items.length === 0) return "This step has no checklist.";
     const check = this.session.stepChecks[phase];
@@ -1349,7 +1363,7 @@ export class SessionRuntime {
       "<checklist>",
       stepReadingText(items, check),
       "</checklist>",
-      "Use it as evidence. Your step_verdict is the call he sees, so base it on what he has said and drawn.",
+      ...(withPassRule ? [this.passRuleText(phase)] : ["Use it as evidence for the model answer."]),
     ].join("\n");
   }
 
@@ -1576,7 +1590,7 @@ export class SessionRuntime {
         ),
         defineTool(
           "step_verdict",
-          `Record your call on one step. This is the only "passed" the candidate sees, so call it once for each step check. Use "pass" when the step meets the level bar; a pass is final and you must not raise that step again. Use "not_yet" with one gap, the most important one, phrased as a missing question or a missing decision and not its answer. Steps: ${phaseIds}.`,
+          `Record your call on one step. This is the only "passed" the candidate sees, so call it once for each step check. Use "pass" when the step meets the level bar; a pass is final and you must not raise that step again. The app refuses a pass that the step's checklist reading does not support; then call it again with "not_yet". Use "not_yet" with one gap, the most important one, phrased as a missing question or a missing decision and not its answer. Steps: ${phaseIds}.`,
           StepVerdictShape,
           async (args) => {
             const parsed = parseStepVerdict(
@@ -1584,13 +1598,19 @@ export class SessionRuntime {
               this.phases.map((p) => p.id),
             );
             if (!parsed.ok) return textOutput(parsed.error, true);
-            if (parsed.value.verdict === "pass" && this.passBarredThisTurn)
+            const { phase, verdict } = parsed.value;
+            if (verdict === "pass" && this.passBarredThisTurn)
               return textOutput("This reply gives a model answer, so the step cannot pass now. Ask him to redo the step; judge it on his next check.", true);
+            if (verdict === "pass" && this.session.stepVerdicts?.[phase]?.verdict !== "pass") {
+              const refused = await this.passRefusal(phase);
+              if (refused) return textOutput(refused, true);
+            }
             const done = recordStepVerdict(this.session, parsed.value, this.roundNow());
             if (!done.ok) return textOutput(done.error, true);
             this.saveSoon();
             this.sendState();
-            return textOutput(parsed.value.verdict === "pass" ? "Recorded: the step passed." : "Recorded: not yet.");
+            if (verdict === "not_yet") return textOutput("Recorded: not yet.");
+            return textOutput(`Recorded: the step passed. Steps now: ${stepStatusLine(this.phases, this.session.stepVerdicts)}.`);
           },
         ),
         defineTool(
@@ -1624,6 +1644,32 @@ export class SessionRuntime {
       );
     }
     return tools;
+  }
+
+  /**
+   * Refuses a pass the step's reading does not support, after bringing the reading up to date with his latest work.
+   * A check that is already running is awaited rather than queued again, and a new one runs only when the evidence
+   * changed since the last reading, so a pass right after "Check this step" costs no second call. When no reading
+   * finished while it waited (the checker failed or ran out of time), the call is left to the guide, so a broken
+   * checker never locks a step. An edit made while the checker reads does not count as a failure: the reading that
+   * just finished decides.
+   */
+  private async passRefusal(phase: string): Promise<string | null> {
+    const notLive = "The round is not live, so no step can pass now.";
+    if (this.disposed || (this.session.status !== "live" && this.session.status !== "paused")) return notLive;
+    const def = this.phases.find((p) => p.id === phase);
+    const label = def?.label ?? phase;
+    const built = this.stepEvidence(phase);
+    if (!built) return null;
+    if (built.empty) return emptyStepRefusalText(label);
+    const run = this.checkRun(phase);
+    const before = run.done;
+    if (run.settled) await settleWithin(run.settled, RECHECK_WAIT_MS);
+    else if (run.lastKey !== evidenceKey(built.evidence)) await settleWithin(this.checkStep(phase), RECHECK_WAIT_MS);
+    if (this.disposed || (this.session.status !== "live" && this.session.status !== "paused")) return notLive;
+    if (run.done === before && run.lastKey !== evidenceKey(built.evidence)) return null;
+    const result = passCheck(def ?? {}, this.session.checklist[phase] ?? [], this.session.stepChecks[phase]);
+    return result.ok ? null : passRefusalText(label, result);
   }
 
   private async recheckStep(phase: string): Promise<ToolOutput> {

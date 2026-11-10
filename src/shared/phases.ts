@@ -8,6 +8,12 @@ export interface PhaseDef {
   baseMinutes: number;
   /** One line shown under the phase on the rail. */
   goal: string;
+  /**
+   * How many checklist items a guided pass needs covered. Most steps need half, so a pass rests on the work the
+   * debrief's step card reads; a step whose level bar asks for one of several items needs one, and a step whose
+   * items are all essential needs all.
+   */
+  passNeeds?: "one" | "all";
 }
 
 // The five-step HLD delivery order: requirements first, numbers only inside the deep dives where one decides something.
@@ -21,7 +27,13 @@ export const HLD_PHASES: readonly PhaseDef[] = [
     baseMinutes: 13,
     goal: "Boxes and arrows that meet the functional requirements; walk one request through every box, cache miss included",
   },
-  { id: "deep_dives", label: "Deep dives", baseMinutes: 20, goal: "One per hard non-functional requirement; math only where a number decides something; then the curveball" },
+  {
+    id: "deep_dives",
+    label: "Deep dives",
+    baseMinutes: 20,
+    goal: "One per hard non-functional requirement; math only where a number decides something; then the curveball",
+    passNeeds: "one",
+  },
 ];
 
 // The candidate's own seven-step machine-coding method.
@@ -32,7 +44,8 @@ export const LLD_PHASES: readonly PhaseDef[] = [
   { id: "skeleton", label: "Skeleton", baseMinutes: 10, goal: "Classes and signatures that compile" },
   { id: "thin_slice", label: "Thin slice", baseMinutes: 15, goal: "One happy path running end to end from main()" },
   { id: "fill_out", label: "Fill out", baseMinutes: 25, goal: "Every requirement and edge case, with scenarios in main()" },
-  { id: "extend", label: "Extension", baseMinutes: 15, goal: "The new requirement, then the demo" },
+  // The extension is done only when the demo runs after the change, not when the new requirement is restated.
+  { id: "extend", label: "Extension", baseMinutes: 15, goal: "The new requirement, then the demo", passNeeds: "all" },
 ];
 
 export const BASE_MINUTES: Record<Track, number> = { hld: 45, lld: 90 };

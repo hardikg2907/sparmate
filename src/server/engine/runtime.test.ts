@@ -856,8 +856,8 @@ describe("the step checker in a machine-coding round", () => {
     expect(body).toMatch(/- clarify-2: Entry: assign the first free fitting spot and return a ticket; reject if nothing fits — (covered|partial), in the code/);
     expect(body).toContain("- clarify-1: Configure floors, spots per floor with sizes, gates and rates at setup — missing");
     expect(body).toContain("- clarify-5: Safe under concurrent entry and exit calls — partial, in the code; lacks only part of it is stated");
-    expect(body).toContain("Your step_verdict is the call he sees");
-    expect(body).toContain("call step_verdict exactly once");
+    expect(body).toContain("The server refuses a pass while fewer than 3 of these 5 items are covered. That is a floor, not the bar");
+    expect(body).toContain("Call step_verdict once for this step");
     rt.dispose();
   });
 
@@ -1582,6 +1582,16 @@ describe("guided step verdicts, assists and move-on offers", () => {
     return m.session;
   };
 
+  /** His written answer for a step, so the step holds evidence the checker can read; the fake checker covers each label line. */
+  const write = (session: Session, phase: string, text?: string) => {
+    session.stepNotes = { ...session.stepNotes, [phase]: text ?? (session.checklist[phase] ?? []).map((i) => i.label).join("\n") };
+  };
+  /** A tool call that may wait for a checker run, with the fake clock moved on while it waits. */
+  const settled = async <T>(call: Promise<T>): Promise<T> => {
+    await vi.advanceTimersByTimeAsync(1_000);
+    return call;
+  };
+
   it("gives only the guide a step_verdict tool", async () => {
     for (const mode of ["guided", "interview"] as const) {
       const w = watched();
@@ -1608,12 +1618,178 @@ describe("guided step verdicts, assists and move-on offers", () => {
     expect((await w.tool("step_verdict", { phase: "requirements", verdict: "not_yet", gap: "What latency does a redirect need?" })).isError).toBe(false);
     expect(lastState(t.msgs).stepVerdicts?.requirements).toMatchObject({ verdict: "not_yet", gap: "What latency does a redirect need?" });
 
-    expect((await w.tool("step_verdict", { phase: "requirements", verdict: "pass" })).isError).toBe(false);
+    write(session, "requirements");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(false);
     const refused = await w.tool("step_verdict", { phase: "requirements", verdict: "not_yet", gap: "One more thing" });
     expect(refused.isError).toBe(true);
     expect(refused.text).toContain("already passed");
     expect(lastState(t.msgs).stepVerdicts?.requirements?.verdict).toBe("pass");
     rt.dispose();
+  });
+
+  it("refuses a pass the step's reading does not support, and names the open items to the guide", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const items = session.checklist.requirements ?? [];
+    expect(items.length).toBeGreaterThanOrEqual(4);
+    const covered = { state: "covered" as const, source: "notes" as const, at: null, quote: "Draft", detail: "" };
+    write(session, "requirements", "Draft");
+    session.stepChecks = { ...session.stepChecks, requirements: { status: "done", checkedAt: 2_000, usedImage: false, items: { [items[0]!.id]: covered } } };
+
+    const refused = await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }));
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain(`covers 1 of ${items.length} checklist items, and a pass needs at least ${Math.ceil(items.length / 2)}`);
+    expect(refused.text).toContain(items[1]!.label);
+    expect(refused.text).not.toContain(`${items[0]!.label};`);
+    expect(refused.text).toContain("recheck_step");
+    expect(session.stepVerdicts).toBeUndefined();
+
+    const enough = Object.fromEntries(items.slice(0, Math.ceil(items.length / 2)).map((i) => [i.id, covered]));
+    session.stepChecks = { ...session.stepChecks, requirements: { status: "done", checkedAt: 3_000, usedImage: false, items: enough } };
+    const passed = await w.tool("step_verdict", { phase: "requirements", verdict: "pass" });
+    expect(passed.isError).toBe(false);
+    expect(passed.text).toContain("Steps now: passed: Requirements · not passed yet: Core entities, API, High-level design, Deep dives.");
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("pass");
+    rt.dispose();
+  });
+
+  it("passes Deep dives on one covered item, and refuses a step that holds nothing of his", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const empty = await settled(w.tool("step_verdict", { phase: "api", verdict: "pass" }));
+    expect(empty.isError).toBe(true);
+    expect(empty.text).toContain("API cannot pass: he has said nothing in this step");
+
+    const dives = session.checklist.deep_dives ?? [];
+    expect(dives.length).toBeGreaterThanOrEqual(3);
+    write(session, "deep_dives", "Draft");
+    const covered = { state: "covered" as const, source: "notes" as const, at: null, quote: "Draft", detail: "" };
+    expect((await settled(w.tool("step_verdict", { phase: "deep_dives", verdict: "pass" }))).text).toContain("a pass needs at least 1");
+    session.stepChecks = { ...session.stepChecks, deep_dives: { status: "done", checkedAt: 3_000, usedImage: false, items: { [dives[0]!.id]: covered } } };
+    expect((await settled(w.tool("step_verdict", { phase: "deep_dives", verdict: "pass" }))).isError).toBe(false);
+    rt.dispose();
+  });
+
+  it("judges a pass on the reading that just finished, even when he edits while the checker reads", async () => {
+    const w = watched();
+    const session = newSession("guided");
+    const driver: Driver = {
+      ...w.driver,
+      runOnce: async (spec) => {
+        const out = await w.driver.runOnce(spec);
+        if (spec.role === "checker") session.stepNotes = { ...session.stepNotes, requirements: "Draft more" };
+        return out;
+      },
+    };
+    const t = setup(driver, "guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements", "Draft");
+    const out = await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }));
+    expect(out).toMatchObject({ isError: true, text: expect.stringContaining("cannot pass yet") });
+    expect(session.stepVerdicts).toBeUndefined();
+    rt.dispose();
+  });
+
+  it("leaves the pass to the guide when the checker fails on his newest work after an earlier reading refused it", async () => {
+    const w = watched();
+    let down = false;
+    const driver: Driver = { ...w.driver, runOnce: async (spec) => (spec.role === "checker" && down ? Promise.reject(new Error("checker down")) : w.driver.runOnce(spec)) };
+    const t = setup(driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements", "Draft");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(true);
+    down = true;
+    write(session, "requirements", "Draft two");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(false);
+    rt.dispose();
+  });
+
+  it("waits for a check that is already running instead of asking the checker again", async () => {
+    const w = watched();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let checks = 0;
+    const driver: Driver = {
+      ...w.driver,
+      runOnce: async (spec) => {
+        if (spec.role !== "checker") return w.driver.runOnce(spec);
+        checks += 1;
+        await gate;
+        return w.driver.runOnce(spec);
+      },
+    };
+    const t = setup(driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements");
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(checks).toBe(1);
+    const pass = w.tool("step_verdict", { phase: "requirements", verdict: "pass" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    release();
+    expect((await settled(pass)).isError).toBe(false);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(checks).toBe(1);
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("pass");
+    rt.dispose();
+  });
+
+  it("refuses a pass once the room is disposed", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements");
+    rt.dispose();
+    expect(await w.tool("step_verdict", { phase: "requirements", verdict: "pass" })).toMatchObject({ isError: true, text: expect.stringContaining("not live") });
+    expect(session.stepVerdicts).toBeUndefined();
+  });
+
+  it("leaves the pass to the guide when the checker cannot read his latest work, and refuses one after the end", async () => {
+    const w = watched();
+    const driver: Driver = { ...w.driver, runOnce: async (spec) => (spec.role === "checker" ? Promise.reject(new Error("checker down")) : w.driver.runOnce(spec)) };
+    const t = setup(driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "api", "Draft");
+    expect((await settled(w.tool("step_verdict", { phase: "api", verdict: "pass" }))).isError).toBe(false);
+
+    write(session, "entities");
+    session.status = "ended";
+    const late = await settled(w.tool("step_verdict", { phase: "entities", verdict: "pass" }));
+    expect(late).toMatchObject({ isError: true, text: expect.stringContaining("not live") });
+    rt.dispose();
+  });
+
+  it("tells the guide on every turn which steps passed, and tells an interviewer nothing of the kind", async () => {
+    for (const mode of ["guided", "interview"] as const) {
+      const w = watched();
+      const t = setup(w.driver, mode);
+      const session = newSession(mode);
+      session.stepVerdicts = mode === "guided" ? { entities: { verdict: "pass", at: 1 } } : undefined;
+      const rt = await t.start(session);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "s1", text: "Are we done?" }, t.peer);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const said = w.turns.find((x) => x.meta.kind === "candidate")?.text ?? "";
+      expect(said).toContain("Are we done?");
+      if (mode === "guided") expect(said).toContain("steps: passed: Core entities · not passed yet: Requirements, API, High-level design, Deep dives");
+      else expect(said).not.toContain("steps:");
+      rt.dispose();
+    }
   });
 
   it("asks the guide for a verdict on a step check, and never sends the checklist to the room", async () => {
@@ -1625,9 +1801,14 @@ describe("guided step verdicts, assists and move-on offers", () => {
     await rt.handle({ type: "guided.feedback" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     const request = w.turns.find((x) => x.meta.request === "feedback");
-    expect(request?.text).toContain("call step_verdict exactly once");
+    expect(request?.text).toContain("Call step_verdict once for this step");
     // The fake guide names a gap on the first check, then passes on the next.
     expect(session.stepVerdicts?.requirements?.verdict).toBe("not_yet");
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    // Nothing of his is in the step yet, so the fake guide's pass is refused and the step stays "not yet".
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("not_yet");
+    write(session, "requirements");
     await rt.handle({ type: "guided.feedback" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(session.stepVerdicts?.requirements?.verdict).toBe("pass");
@@ -1649,6 +1830,7 @@ describe("guided step verdicts, assists and move-on offers", () => {
     expect(request?.text).toContain("about 150 words");
     expect(request?.text).toContain("no tables and no quiz");
     expect(request?.text).toContain("redo the step in his own words");
+    expect(request?.text).not.toContain("refuses a pass");
     expect(session.hints).toEqual([]);
     expect(lastState(t.msgs).assistCount).toBe(1);
     expect("assists" in lastState(t.msgs)).toBe(false);
@@ -1668,7 +1850,8 @@ describe("guided step verdicts, assists and move-on offers", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(seen).toMatchObject({ isError: true });
     expect(session.stepVerdicts).toBeUndefined();
-    expect((await w.tool("step_verdict", { phase: "requirements", verdict: "pass" })).isError).toBe(false);
+    write(session, "requirements");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(false);
     rt.dispose();
   });
 

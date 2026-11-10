@@ -155,7 +155,12 @@ class FakeConversation implements Conversation {
           if (phase) {
             const held = facts.session?.().stepVerdicts?.[phase];
             if (held?.verdict === "not_yet") {
-              await callTool(this.setup, "step_verdict", { phase, verdict: "pass" });
+              const out = await callTool(this.setup, "step_verdict", { phase, verdict: "pass" });
+              // A pass the server refuses stays "not yet", as a model following the refusal would leave it.
+              if (out?.isError) {
+                await callTool(this.setup, "step_verdict", { phase, verdict: "not_yet", gap: "What latency does the read path need to meet?" });
+                return `On ${label.toLowerCase()}: the requirements you named hold up. The step does not pass yet: the latency target is still missing.`;
+              }
               return `On ${label.toLowerCase()}: the latency target is stated now, so this step passes.`;
             }
             if (!held) {
@@ -330,6 +335,13 @@ function hitsIn(text: string, words: readonly string[]): number {
   return words.filter((w) => have.has(w)).length;
 }
 
+/** The text cut to at most `max` characters at a word boundary, since a quote that ends mid-word is never found. */
+function wholeWords(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max + 1).lastIndexOf(" ");
+  return text.slice(0, cut > 0 ? cut : max);
+}
+
 /** The label inside brackets or quotes on a frame-text line, which is what the board quote must copy. */
 function boardQuote(line: string): string | null {
   const m = /\[([^\]]+)\]|"([^"]+)"/.exec(line);
@@ -338,12 +350,12 @@ function boardQuote(line: string): string | null {
 
 /**
  * The checker as a careful but fallible model would answer. It reads whole words only: an item is covered when
- * one of his lines, a frame label or a code line carries at least half of the item's words, and partial when it
+ * one of his lines, a frame label, a code line or a line of his written answer carries at least half of the item's words, and partial when it
  * carries fewer. It always claims one more item with a quote he never said, so the server's quote check must
  * refuse that claim.
  */
 function fakeCheck(facts: FakeFacts): {
-  items: { id: string; state: "covered" | "partial" | "missing"; source: "chat" | "board" | "code" | "none"; quote: string; detail: string }[];
+  items: { id: string; state: "covered" | "partial" | "missing"; source: "chat" | "board" | "code" | "notes" | "none"; quote: string; detail: string }[];
 } {
   const lines = (facts.candidateLines ?? []).map((l) => l.trim()).filter((l) => l !== "");
   const labels = (facts.frameText ?? "").split("\n").flatMap((l) => {
@@ -354,20 +366,25 @@ function fakeCheck(facts: FakeFacts): {
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l !== "");
+  const notes = (facts.notesText ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
   let invented = false;
   const items = (facts.checkItems ?? []).map((item) => {
     const words = keywords(item.label);
     const need = Math.max(1, Math.ceil(words.length / 2));
-    const sources: ["chat" | "board" | "code", readonly string[]][] = [
+    const sources: ["chat" | "board" | "code" | "notes", readonly string[]][] = [
       ["chat", lines],
       ["board", labels],
       ["code", code],
+      ["notes", notes],
     ];
-    let best: { source: "chat" | "board" | "code"; quote: string; hits: number } | null = null;
+    let best: { source: "chat" | "board" | "code" | "notes"; quote: string; hits: number } | null = null;
     for (const [source, texts] of sources) {
       for (const text of texts) {
         const hits = hitsIn(text, words);
-        if (hits > 0 && (best === null || hits > best.hits)) best = { source, quote: text.slice(0, 200), hits };
+        if (hits > 0 && (best === null || hits > best.hits)) best = { source, quote: wholeWords(text, 200), hits };
       }
     }
     if (best) {
