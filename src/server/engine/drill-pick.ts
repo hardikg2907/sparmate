@@ -1,6 +1,6 @@
 import { proofKey, type DrillAttempt, type DrillItem } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
-import { deepDiveEntries, drillFits, matchDeepDive, variantEntries, variantsFor } from "./drill-content";
+import { deepDiveEntries, drillFits, matchDeepDive, variantEntries, variantsFor, type DeepDiveEntry, type VariantEntry } from "./drill-content";
 
 /** Where the next attempt of a queued drill goes: a problem, and a changed constraint of it or null. */
 export interface DrillPick {
@@ -24,11 +24,22 @@ function countedAttempts(item: Pick<DrillItem, "id">, attempts: readonly PickAtt
   return attempts.filter((a) => a.status === "done" && a.drillId === item.id);
 }
 
-/** Whether the saved pick can still be played: the problem is playable, fits, and a variant is still in the brief. */
+/** The deep dive topic an item asks on a problem: the entry whose title matches its gap, or null. */
+function topicOf(item: PickItem, problem: Problem): DeepDiveEntry | null {
+  return item.drill === "deep_dive" ? matchDeepDive(deepDiveEntries(problem), item.gapTitle, item.gapHint) : null;
+}
+
+/** The changed constraints this item may ask on a problem. */
+function changesFor(item: PickItem, problem: Problem): VariantEntry[] {
+  return variantsFor(problem, item.drill, topicOf(item, problem));
+}
+
+/** Whether the saved pick can still be played: the problem is playable, fits, and a variant is one the item may still ask. */
 export function isPickValid(item: PickItem, problems: Playable): boolean {
   const problem = problems.get(item.problemId);
   if (!problem || !drillFits(problem, item.drill)) return false;
-  return item.variant === null || variantEntries(problem).some((e) => e.id === item.variant);
+  if (item.variant === null) return true;
+  return (item.drill === "deep_dive" ? changesFor(item, problem) : variantEntries(problem)).some((e) => e.id === item.variant);
 }
 
 /** The last counted attempt of an item, in the order the attempts were saved. */
@@ -41,9 +52,9 @@ function lastCounted(item: Pick<DrillItem, "id">, attempts: readonly PickAttempt
  * one this item used least, a tie going to the last one in brief order, and never the proof of the last counted attempt
  * while another exists.
  */
-function stayOn(problem: Problem, drill: DrillItem["drill"], counted: readonly PickAttempt[]): DrillPick {
+function stayOn(problem: Problem, item: PickItem, counted: readonly PickAttempt[]): DrillPick {
   const id = problem.meta.id;
-  const proofs: (string | null)[] = [null, ...variantsFor(problem, drill).map((e) => e.id)];
+  const proofs: (string | null)[] = [null, ...changesFor(item, problem).map((e) => e.id)];
   const here = counted.filter((a) => a.problemId === id);
   const last = counted.at(-1);
   const lastProof = last?.problemId === id ? last.variant : undefined;
@@ -88,7 +99,7 @@ export function pickNext(item: PickItem, problems: Playable, attempts: readonly 
   if (first) return { problemId: first.meta.id, variant: null };
 
   const stay = (last ? problems.get(last.problemId) : undefined) ?? (originFits ? origin : undefined);
-  if (stay && drillFits(stay, item.drill)) return stayOn(stay, item.drill, counted);
+  if (stay && drillFits(stay, item.drill)) return stayOn(stay, item, counted);
   const any = [...problems.values()].filter((p) => drillFits(p, item.drill)).sort((a, b) => a.meta.id.localeCompare(b.meta.id))[0];
   return any ? { problemId: any.meta.id, variant: null } : null;
 }
@@ -106,6 +117,8 @@ export function repickStale(items: DrillItem[], attempts: readonly PickAttempt[]
   let changed = false;
   for (const item of items) {
     if (item.status !== "open") continue;
+    // A conversation still open on the saved pick is answered on it, so the pick waits until that attempt ends.
+    if (attempts.some((a) => a.status === "open" && a.drillId === item.id && a.problemId === item.problemId && a.variant === item.variant)) continue;
     const last = lastCounted(item, attempts);
     const repeats = last !== undefined && proofKey(last.problemId, last.variant) === proofKey(item.problemId, item.variant);
     if (isPickValid(item, problems) && !repeats) continue;

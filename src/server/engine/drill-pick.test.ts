@@ -180,12 +180,36 @@ describe("pickNext", () => {
     expect(canVaryFrom(pickNext(item(), problems, [done("a")]), ["a"])).toBe(false);
   });
 
-  it("stays on the origin with a variant when the item has no attempt and the pool holds nothing else", () => {
+  it("repeats the plain problem for a deep dive whose topic no changed constraint fits", () => {
     const problems = mapOf(brief("a", { deepDives: ["Zzz"] }));
     const gap = item({ drill: "deep_dive", gapTitle: "Cache stampede" });
     expect(pickNext(gap, problems, [])).toEqual({ problemId: "a", variant: null });
-    expect(pickNext(gap, problems, [done("a", { drill: "deep_dive" })])).toEqual({ problemId: "a", variant: "outage" });
-    expect(pickNext(gap, problems, [done("a", { drill: "deep_dive" }), done("a", { drill: "deep_dive", variant: "outage" })])).toEqual({ problemId: "a", variant: "spike" });
+    expect(pickNext(gap, problems, [done("a", { drill: "deep_dive" })])).toEqual({ problemId: "a", variant: null });
+  });
+
+  it("alternates a deep dive only between the changed constraints that fit its topic", () => {
+    const problems = mapOf(brief("a", { deepDives: ["Spike handling"], curveballs: ["Spike", "Outage"] }));
+    const gap = item({ drill: "deep_dive", gapTitle: "Spike handling under load" });
+    expect(pickNext(gap, problems, [done("a", { drill: "deep_dive" })])).toEqual({ problemId: "a", variant: "spike" });
+    expect(pickNext(gap, problems, [done("a", { drill: "deep_dive" }), done("a", { drill: "deep_dive", variant: "spike" })])).toEqual({ problemId: "a", variant: null });
+  });
+
+  it("keeps a pick that an open conversation still uses, and re-picks it once that ends", () => {
+    const problems = mapOf(brief("a", { deepDives: ["Spike handling"], curveballs: ["Spike", "Outage"] }));
+    const gap = item({ drill: "deep_dive", gapTitle: "Spike handling under load", problemId: "a", variant: "outage" });
+    const open = done("a", { drill: "deep_dive", variant: "outage", status: "open" });
+    const items = [{ ...gap }];
+    expect(repickStale(items, [open], problems)).toBe(false);
+    expect(items[0]?.variant).toBe("outage");
+    expect(repickStale(items, [{ ...open, status: "done" }], problems)).toBe(true);
+    expect(items[0]?.variant).not.toBe("outage");
+  });
+
+  it("re-picks a saved deep-dive variant that no longer fits the topic", () => {
+    const problems = mapOf(brief("a", { deepDives: ["Spike handling"], curveballs: ["Spike", "Outage"] }));
+    const gap = item({ drill: "deep_dive", gapTitle: "Spike handling under load", problemId: "a", variant: "outage" });
+    expect(isPickValid(gap, problems)).toBe(false);
+    expect(isPickValid({ ...gap, variant: "spike" }, problems)).toBe(true);
   });
 
   it("returns null when no playable problem fits at all", () => {

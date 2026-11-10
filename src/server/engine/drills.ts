@@ -333,7 +333,7 @@ export class DrillService {
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
     const topic = requested?.topic;
     if (topic !== undefined) {
-      // Behind a changed constraint the topic follows the change, so it must match what the brief builds now.
+      // Behind a changed constraint the topic is the one the brief builds for the item now, so the two must match.
       if (content.prompt.variant) {
         if (content.prompt.topic !== topic) throw new HttpError(409, MOVED);
       } else {

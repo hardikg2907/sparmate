@@ -17,6 +17,10 @@ import {
   scaleFacts,
   tradeoffEntries,
   variantEntries,
+  variantFits,
+  variantsFor,
+  type DeepDiveEntry,
+  type VariantEntry,
 } from "./drill-content";
 import { memoryLogger } from "./log";
 import { ProblemCatalog } from "./problems";
@@ -644,14 +648,78 @@ describe("buildDrill with a variant", () => {
     expect(built?.key).toContain(entry?.expect ?? "?");
     expect(built?.changed).toBe(entry?.question);
     expect(JSON.stringify(built?.prompt)).not.toContain(entry?.expect ?? "?");
-    expect(built?.prompt.material.map((m) => m.heading)).not.toContain("The topic");
+    if (drill !== "deep_dive") expect(built?.prompt.material.map((m) => m.heading)).not.toContain("The topic");
   });
 
-  it("names the changed entry as the deep-dive topic and rebuilds the same key", () => {
-    const a = buildDrill(hld, "deep_dive", { variant: hot, gapTitle: "Anything", rotation: 3 });
-    const b = buildDrill(hld, "deep_dive", { variant: hot, topic: a?.prompt.topic });
-    expect(a?.prompt.topic).toBe("Hot link");
-    expect(b?.key).toBe(a?.key);
+  it("keeps the gap's own deep-dive topic and adds the change to it", () => {
+    const plain = buildDrill(hld, "deep_dive", { gapTitle: "Counting clicks off the redirect path" });
+    const built = buildDrill(hld, "deep_dive", { variant: hot, gapTitle: "Counting clicks off the redirect path" });
+    expect(built?.prompt.topic).toBe(plain?.prompt.topic);
+    expect(built?.prompt.topic).toBe("Counting clicks without slowing redirects");
+    expect(built?.prompt.task).toBe(
+      'Take "Counting clicks without slowing redirects" after the change below: say what breaks first, what you would build instead, and what it costs.',
+    );
+    expect(built?.prompt.material.map((m) => m.heading)).toEqual(["The problem", "The topic", "What changed"]);
+    expect(built?.key.startsWith(plain?.key ?? "?")).toBe(true);
+    expect(built?.key).toContain("After the change, a strong answer covers:\n");
+  });
+
+  it("gives two gaps on one changed constraint two different tasks, and rebuilds each from its saved topic", () => {
+    const clicks = buildDrill(hld, "deep_dive", { variant: hot, gapTitle: "Counting clicks off the redirect path" });
+    const codes = buildDrill(hld, "deep_dive", { variant: hot, gapTitle: "Generating short codes without collisions" });
+    expect(clicks?.prompt.task).not.toBe(codes?.prompt.task);
+    const again = buildDrill(hld, "deep_dive", { variant: hot, topic: codes?.prompt.topic });
+    expect(again?.key).toBe(codes?.key);
+  });
+
+  it("rebuilds an attempt saved when the change itself was the topic", () => {
+    const legacy = buildDrill(hld, "deep_dive", { variant: hot, topic: "Hot link" });
+    expect(legacy?.prompt.topic).toBe("Hot link");
+    expect(legacy?.prompt.material.map((m) => m.heading)).not.toContain("The topic");
+  });
+
+  it("reads the deep dives a change fits from its Fits line, and keeps that line out of the key", () => {
+    const problem = {
+      ...hld,
+      sections: {
+        ...hld.sections,
+        Curveballs:
+          '1. **Hot key:** "One key gets 50,000 reads a second." Expect: one shard takes it all.\n   Fits: `Partitioning`; Replication.\n2. **Region:** "Add a region." Expect: latency.\n   Fits: none',
+      },
+    };
+    const [hot, region] = variantEntries(problem);
+    expect(hot?.fits).toEqual(["Partitioning", "Replication"]);
+    expect(hot?.expect).toBe("one shard takes it all.");
+    expect(region?.fits).toEqual([]);
+    expect(variantFits({ title: "Partitioning" }, hot as VariantEntry)).toBe(true);
+    expect(variantFits({ title: "Caching hot keys" }, hot as VariantEntry)).toBe(false);
+    expect(variantFits({ title: "Partitioning" }, region as VariantEntry)).toBe(false);
+  });
+
+  it("names, for every shipped curveball, only deep dives of its own brief", () => {
+    for (const problem of all.filter((p) => p.meta.track === "hld")) {
+      const titles = deepDiveEntries(problem).map((e) => e.title);
+      for (const change of variantEntries(problem)) {
+        expect(change.fits, `${problem.meta.id} ${change.id}`).toBeDefined();
+        for (const t of change.fits ?? []) expect(titles, `${problem.meta.id} ${change.id}`).toContain(t);
+      }
+    }
+  });
+
+  it("builds a new-rule attempt when a deep dive and a change share a title", () => {
+    const problem = { ...hld, sections: { ...hld.sections, "Deep dives": `${hld.sections["Deep dives"] ?? ""}\n### Hot link\n- **Good:** a local cache.` } };
+    const built = buildDrill(problem, "deep_dive", { variant: hot, topic: "Hot link" });
+    expect(built?.prompt.material.map((m) => m.heading)).toContain("The topic");
+  });
+
+  it("offers a deep dive only the changes that fit its topic", () => {
+    const redirects = deepDiveEntries(hld).find((e) => e.title.startsWith("Fast")) as DeepDiveEntry;
+    const counting = deepDiveEntries(hld).find((e) => e.title.startsWith("Counting")) as DeepDiveEntry;
+    expect(variantsFor(hld, "deep_dive", redirects).map((e) => e.id)).toContain(hot);
+    expect(variantsFor(hld, "deep_dive", counting).map((e) => e.id)).not.toContain(hot);
+    expect(variantsFor(hld, "deep_dive", { title: "Zebra pens" })).toEqual([]);
+    expect(variantsFor(hld, "deep_dive", null)).toEqual([]);
+    expect(variantsFor(hld, "walk").length).toBe(variantEntries(hld).length);
   });
 
   it("builds the normal drill for a variant id the brief does not have", () => {

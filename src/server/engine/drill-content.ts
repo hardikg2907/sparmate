@@ -88,6 +88,8 @@ const COMMON = new Set([
   "does",
   "over",
   "just",
+  "within",
+  "without",
 ]);
 
 /** Words that name no topic in a trade-off gap or title: they sit in nearly every entry and every gap about a choice. */
@@ -242,6 +244,8 @@ export interface VariantEntry {
   question: string;
   /** What a strong answer covers. It joins the answer key and never leaves the server. */
   expect: string;
+  /** The deep-dive titles this change fits, from the entry's "Fits:" line, or undefined when the brief names none. */
+  fits?: string[];
 }
 
 const MAX_VARIANT_ENTRIES = 8;
@@ -250,6 +254,7 @@ const MAX_VARIANT_TITLE = 120;
 const MAX_VARIANT_QUESTION = 1500;
 const MAX_VARIANT_EXPECT = 4000;
 const EXPECT_MARKER = "Expect:";
+const MAX_FITS = 8;
 /** An entry that says the candidate met it already is not offered again. */
 const SEEN_MARKERS = ["already seen", "already used", "seen before", "past session", "earlier attempt", "earlier session"];
 
@@ -336,12 +341,21 @@ function parseVariantEntry(raw: string): Omit<VariantEntry, "id"> | null {
   const at = expectIndex(rest);
   if (at < 0) return null;
   const question = trimTail(rest.slice(0, at)).trim().slice(0, MAX_VARIANT_QUESTION);
-  const expect = rest
-    .slice(at + EXPECT_MARKER.length)
-    .trim()
-    .slice(0, MAX_VARIANT_EXPECT);
+  const after = rest.slice(at + EXPECT_MARKER.length);
+  // "Fits: <deep dive>; <deep dive>" says which deep dives the change can be asked with; it is not part of the key.
+  const fitsLine = /(?:^|\n)\s*Fits:[ \t]*([^\n]{0,600})/.exec(after);
+  const expect = (fitsLine ? after.slice(0, fitsLine.index) : after).trim().slice(0, MAX_VARIANT_EXPECT);
   if (question === "" || expect === "") return null;
-  return { title, question, expect };
+  if (!fitsLine) return { title, question, expect };
+  const named = (fitsLine[1] ?? "").replace(/[.`]+\s*$/, "").trim();
+  const fits = /^none$/i.test(named)
+    ? []
+    : named
+        .split(";")
+        .map((t) => t.replace(/`/g, "").trim())
+        .filter((t) => t !== "")
+        .slice(0, MAX_FITS);
+  return { title, question, expect, fits };
 }
 
 /**
@@ -387,11 +401,26 @@ const VARIANT_TASK: Record<Exclude<DrillType, "tradeoff">, string> = {
 };
 
 /**
- * The entries a drill may ask. A capacity drill needs numbers to work with, so it prefers entries whose question holds
- * a digit and falls back to all of them.
+ * Whether a changed constraint fits a deep dive's topic. A deep dive keeps its topic and adds the change, so a change
+ * about something else would ask two unrelated things. The brief names the fitting deep dives on the change's "Fits:"
+ * line; a brief without one (an older custom brief) falls back to a shared word stem between the topic's title and the
+ * change's title and question.
  */
-export function variantsFor(problem: Problem, drill: DrillType): VariantEntry[] {
+export function variantFits(topic: Pick<DeepDiveEntry, "title">, change: VariantEntry): boolean {
+  const same = (a: string) => a.toLowerCase().replace(/`/g, "").trim();
+  if (change.fits) return change.fits.some((t) => same(t) === same(topic.title));
+  const changed = stems(`${change.title} ${change.question}`);
+  for (const s of stems(topic.title)) if (changed.has(s)) return true;
+  return false;
+}
+
+/**
+ * The entries a drill may ask. A capacity drill needs numbers to work with, so it prefers entries whose question holds
+ * a digit and falls back to all of them. A deep dive asks only the changes that fit its topic, and none without one.
+ */
+export function variantsFor(problem: Problem, drill: DrillType, topic?: Pick<DeepDiveEntry, "title"> | null): VariantEntry[] {
   const entries = variantEntries(problem);
+  if (drill === "deep_dive") return topic ? entries.filter((e) => variantFits(topic, e)) : [];
   if (drill !== "capacity") return entries;
   const numeric = entries.filter((e) => /\d/.test(e.question));
   return numeric.length > 0 ? numeric : entries;
@@ -507,7 +536,9 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
   const entry = ctx.variant ? variantEntries(problem).find((e) => e.id === ctx.variant) : undefined;
   if (!entry) return buildNormal(problem, drill, ctx);
   if (drill === "tradeoff") return buildTradeoffVariant(problem, entry);
-  // The deep dive behind a variant follows the change itself, so a saved attempt rebuilds the same key.
+  const legacyTopic = ctx.topic === entry.title && !deepDiveEntries(problem).some((e) => e.title === ctx.topic);
+  if (drill === "deep_dive" && !legacyTopic) return buildDeepDiveVariant(problem, entry, ctx);
+  // An attempt saved when a changed-constraint deep dive took the change itself as its topic rebuilds the same key.
   const base = buildNormal(problem, drill, drill === "deep_dive" ? { gapTitle: entry.title, hint: entry.question } : {});
   if (!base) return null;
   const material = base.prompt.material.filter((m) => m.heading !== "The topic");
@@ -521,6 +552,25 @@ export function buildDrill(problem: Problem, drill: DrillType, ctx: DrillContext
     },
     key: `${base.key}\n\nAfter the change, a strong answer covers:\n${entry.expect}`,
     changed: entry.question,
+  };
+}
+
+/**
+ * A deep dive after a changed constraint: the gap's own topic, in a new situation. The key is the topic's levels plus
+ * what a strong answer covers after the change.
+ */
+function buildDeepDiveVariant(problem: Problem, change: VariantEntry, ctx: DrillContext): DrillContent | null {
+  const base = buildNormal(problem, "deep_dive", { ...ctx, variant: undefined });
+  if (!base?.prompt.topic) return null;
+  return {
+    prompt: {
+      ...base.prompt,
+      task: `Take "${base.prompt.topic}" after the change below: say what breaks first, what you would build instead, and what it costs.`,
+      variant: { id: change.id, title: change.title },
+      material: [...base.prompt.material, { heading: "What changed", markdown: change.question }],
+    },
+    key: `${base.key}\n\nAfter the change, a strong answer covers:\n${change.expect}`,
+    changed: change.question,
   };
 }
 

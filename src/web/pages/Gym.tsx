@@ -261,11 +261,14 @@ function NothingYet() {
       <h2 className="font-display text-title font-extrabold">Drills start after your first round</h2>
       <p className="mt-2 max-w-[52ch] text-body text-muted-foreground">
         A drill trains one gap from a round you played, so it never gives away a problem you have not met. Finish a round and read its debrief, and your first drill appears the
-        next day.
+        next day. A question you prepare yourself can be drilled at once, with no round played.
       </p>
-      <div className="mt-6">
+      <div className="mt-6 flex flex-wrap gap-3">
         <Button asChild size="lg" variant="default">
           <Link href="/practice">Pick a round in Practice</Link>
+        </Button>
+        <Button asChild size="lg" variant="outline">
+          <Link href="/practice/new">Prepare a question</Link>
         </Button>
       </div>
     </Card>
@@ -367,7 +370,9 @@ function AllDrillsPanel({ gym, onClose }: { gym: GymSummary; onClose: () => void
                   <span className="min-w-0 flex-1">
                     <span className="block text-body font-semibold">{DRILL_INFO[drill].title}</span>
                     <span className="block text-ui text-muted-foreground">{DRILL_INFO[drill].about}</span>
-                    <span className="mt-0.5 block text-meta text-faint">{available === 0 ? "Play a round of this track first" : `${DRILL_INFO[drill].minutes} min`}</span>
+                    <span className="mt-0.5 block text-meta text-faint">
+                      {available === 0 ? "Play a round or prepare a question of this track first" : `${DRILL_INFO[drill].minutes} min`}
+                    </span>
                   </span>
                   <ChevronRightIcon size={16} className="shrink-0 text-faint" />
                 </button>
