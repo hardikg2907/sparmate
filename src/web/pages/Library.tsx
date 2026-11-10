@@ -6,7 +6,21 @@ import { GUIDED_HINT, INTERVIEW_HINT, InfoTip, ModeSwitch, TrackChip, TrackIcon 
 import { Alert, Badge, Button, Card, EmptyState, Segmented, Skeleton, TONE_TEXT, cn } from "../components/ui";
 import { dayMonth } from "../lib/dates";
 import { MODE_LABEL } from "../lib/format";
-import { FILTER_LABEL, STATUS_LABEL, inTab, libraryGroups, openRoundFor, problemStatus, tabCounts, type LibraryFilter, type LibraryTab } from "../lib/library";
+import {
+  FILTER_LABEL,
+  STATUS_LABEL,
+  STATUS_TONE,
+  inTab,
+  libraryGroups,
+  openRoundFor,
+  problemStatus,
+  tabCounts,
+  type LibraryFilter,
+  type LibraryTab,
+  type ProblemStatus,
+} from "../lib/library";
+import { redoDueText } from "../lib/redoDue";
+import { useNow } from "../lib/useNow";
 import { scrollToInScroller } from "../lib/scrollInScroller";
 import { startKey, type StudyData } from "../lib/useStudyData";
 import { attemptBadge } from "../lib/verdict";
@@ -16,32 +30,26 @@ import type { PageContext } from "./context";
 
 const DEBRIEF_MINUTES = 15;
 
-function resultOf(problem: ProblemSummary, open: boolean): { word: string; tone: "good" | "warn" | "bad" | "neutral" | "accent"; detail: string | null } {
-  const badge = problem.lastAttempt ? attemptBadge(problem.lastAttempt) : null;
-  const word =
-    badge ?? (problem.trackerMark === "[~]" ? { label: "Partly done", tone: "warn" as const } : problem.trackerMark === "[x]" ? { label: "Done", tone: "good" as const } : null);
-  const detail = open
-    ? "Round open"
-    : problem.badge === "redo"
-      ? `Redo due ${problem.redoDueOn ? dayMonth(problem.redoDueOn) : "now"}`
-      : problem.lastAttempt
-        ? `Tried ${dayMonth(problem.lastAttempt.date)}`
-        : null;
-  return { word: word?.label ?? "Not tried", tone: word?.tone ?? "neutral", detail };
+/** The second line of a row: when the redo fell due, or how the last try went. */
+function detailOf(problem: ProblemSummary, status: ProblemStatus, now: Date): string | null {
+  if (status === "redo") return redoDueText(problem.redoDueOn ?? null, now);
+  const last = problem.lastAttempt;
+  if (!last) return null;
+  const badge = attemptBadge(last);
+  return badge ? `${badge.label} · ${dayMonth(last.date)}` : `Tried ${dayMonth(last.date)}`;
 }
 
-function Mark({ problem, open }: { problem: ProblemSummary; open: boolean }) {
-  const label = open ? "Round open" : problem.badge === "redo" ? "Redo due" : problem.trackerMark === "[x]" ? "Done" : problem.trackerMark === "[~]" ? "Partly done" : "Not tried";
+function Mark({ status }: { status: ProblemStatus }) {
   return (
-    <span role="img" aria-label={label} className="flex size-6 shrink-0 items-center justify-center">
-      {problem.badge === "redo" || open ? (
+    <span role="img" aria-label={STATUS_LABEL[status]} className="flex size-6 shrink-0 items-center justify-center">
+      {status === "redo" || status === "open" ? (
         <RedoIcon size={16} className="text-warning" />
-      ) : problem.trackerMark === "[x]" ? (
+      ) : status === "done" ? (
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
           <circle cx="9" cy="9" r="8" className="fill-success-fill" />
           <path d="M5.5 9.2 8 11.6l4.6-5" fill="none" stroke="var(--card)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      ) : problem.trackerMark === "[~]" ? (
+      ) : status === "partly" ? (
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
           <circle cx="9" cy="9" r="7.25" fill="none" className="stroke-warning-fill" strokeWidth="1.5" />
           <path d="M9 1.75a7.25 7.25 0 0 1 0 14.5z" className="fill-warning-fill" />
@@ -62,6 +70,7 @@ export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }
   const panel = useRef<HTMLElement>(null);
   const hashNav = useHash();
   const applied = useRef<unknown>(null);
+  const now = useNow();
 
   // A link such as /practice#<problem id> opens the list on that problem, in its own track. Each link applies once,
   // so a later reload of the list does not undo what the user chose since.
@@ -152,7 +161,8 @@ export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }
                       <ProblemRow
                         key={problem.id}
                         problem={problem}
-                        open={openRoundFor(problem.id, history ?? []) !== undefined}
+                        status={problemStatus(problem, history ?? [])}
+                        now={now}
                         selected={selected?.id === problem.id}
                         onSelect={() => select(problem.id)}
                       />
@@ -171,8 +181,8 @@ export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }
   );
 }
 
-function ProblemRow({ problem, open, selected, onSelect }: { problem: ProblemSummary; open: boolean; selected: boolean; onSelect: () => void }) {
-  const result = resultOf(problem, open);
+function ProblemRow({ problem, status, now, selected, onSelect }: { problem: ProblemSummary; status: ProblemStatus; now: Date; selected: boolean; onSelect: () => void }) {
+  const detail = detailOf(problem, status, now);
   return (
     <li>
       <button
@@ -184,15 +194,15 @@ function ProblemRow({ problem, open, selected, onSelect }: { problem: ProblemSum
           selected ? "bg-primary-soft ring-1 ring-inset ring-primary/40" : "hover:bg-accent/50",
         )}
       >
-        <Mark problem={problem} open={open} />
+        <Mark status={status} />
         <span className="min-w-0">
           <span className="block truncate text-body font-semibold">{problem.title}</span>
           <span className="block text-meta capitalize text-faint sm:hidden">{problem.difficulty}</span>
         </span>
         <span className="hidden text-ui capitalize text-faint sm:block">{problem.difficulty}</span>
         <span className="text-right text-meta leading-4">
-          <span className={cn("block font-semibold", result.word === "Not tried" ? "text-faint" : TONE_TEXT[result.tone])}>{result.word}</span>
-          {result.detail ? <span className="block text-faint">{result.detail}</span> : null}
+          <span className={cn("block font-semibold", status === "fresh" ? "text-faint" : TONE_TEXT[STATUS_TONE[status]])}>{STATUS_LABEL[status]}</span>
+          {detail ? <span className="block text-faint">{detail}</span> : null}
         </span>
         <ChevronRightIcon size={16} className={cn("hidden text-faint transition-opacity sm:block", selected ? "opacity-100" : "opacity-0 group-hover:opacity-100")} />
       </button>

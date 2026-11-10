@@ -1,6 +1,6 @@
 import { DRILL_INFO, DRILL_TYPES, addDays, drillSkill, localDay, type DrillAttempt, type DrillOutcome, type DrillPoint, type DrillType } from "./drills";
 import type { Mode, Track } from "./phases";
-import { isAttempt, isOpenRound } from "./today";
+import { isAttempt, isFinishedAttempt, isRedoRound, roundEndedDay } from "./today";
 import type { HistoryGap, HistoryScore, SessionHistoryItem } from "./types";
 import { DEFAULT_WEEKLY_PLAN, weekStart, type DayKind } from "./week";
 
@@ -257,18 +257,18 @@ export interface WeekStats {
 }
 
 /**
- * Rounds finished this week against the plan. A finished round on a problem that was tried before counts as a
- * redo, and a first try counts as a round. Paused and live rounds are not finished.
+ * Rounds finished this week against the plan. A round counts on the day it ended, the same day the week strip on Today
+ * uses. A finished round on a problem that was tried before counts as a redo, and a first try counts as a round.
+ * Paused and live rounds are not finished.
  */
 export function weekStats(history: readonly SessionHistoryItem[], plan: readonly DayKind[] = DEFAULT_WEEKLY_PLAN, now: Date = new Date()): WeekStats {
-  const start = weekStart(now).getTime();
-  const end = start + 7 * 86_400_000;
-  const finished = (h: SessionHistoryItem) => isAttempt(h) && !isOpenRound(h) && h.status !== "failed";
-  const mine = history.filter((h) => finished(h) && Date.parse(h.createdAt) >= start && Date.parse(h.createdAt) < end);
-  // Only an earlier round that was debriefed makes this one a redo. An open or failed earlier round was never finished.
-  const isRedo = (h: SessionHistoryItem) =>
-    history.some((o) => isAttempt(o) && o.status === "debriefed" && o.problemId === h.problemId && o.id !== h.id && o.createdAt < h.createdAt);
-  const redos = mine.filter(isRedo).length;
+  const first = localDay(weekStart(now));
+  const after = addDays(first, 7);
+  const mine = history.filter((h) => {
+    const day = isFinishedAttempt(h) ? roundEndedDay(h) : null;
+    return day !== null && day >= first && day < after;
+  });
+  const redos = mine.filter((h) => isRedoRound(h, history)).length;
   return {
     rounds: { done: mine.length - redos, planned: plan.filter((d) => d === "hld" || d === "lld").length },
     redos: { done: redos, planned: plan.filter((d) => d === "redo").length },

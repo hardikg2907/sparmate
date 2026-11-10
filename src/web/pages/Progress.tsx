@@ -23,7 +23,8 @@ import { PageHeader, PageShell } from "../components/PageShell";
 import { SidePanel } from "../components/SidePanel";
 import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Button, Card, Segmented, SectionTitle, Skeleton, cn } from "../components/ui";
-import { parseDay, shortDay } from "../lib/dates";
+import { shortDay } from "../lib/dates";
+import { redoDueText } from "../lib/redoDue";
 import { scrollToInScroller } from "../lib/scrollInScroller";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
 import { scoreFill } from "../lib/scoreTone";
@@ -36,11 +37,6 @@ import { Link, useHash } from "../router";
 import { DsaSection } from "./Dsa";
 import { HistorySection } from "./History";
 import type { PageContext } from "./context";
-
-function dueLabel(entry: RedoEntry): string {
-  if (entry.due || !entry.dueOn) return "Today";
-  return shortDay(parseDay(entry.dueOn));
-}
 
 const SECTIONS = [
   { id: "week", label: "This week" },
@@ -189,7 +185,7 @@ export function ProgressView({
               <FocusCard focus={focus} gap={gap} data={data} />
               <div className="flex flex-col gap-4">
                 <WeekStats stats={stats} dsa={dsa.response} username={ctx.settings.leetcodeUsername} drills={gym?.week ?? null} />
-                <RedosCard queue={queue} onSeeAll={() => setQueueOpen(true)} />
+                <RedosCard queue={queue} now={now} onSeeAll={() => setQueueOpen(true)} />
               </div>
             </div>
           )}
@@ -223,7 +219,7 @@ export function ProgressView({
                     <TrackChip track={entry.problem.track} />
                   </span>
                 </span>
-                <span className={cn("shrink-0 text-ui", entry.due ? "font-semibold text-warning" : "text-muted-foreground")}>{dueLabel(entry)}</span>
+                <span className={cn("shrink-0 text-ui", entry.due ? "font-semibold text-warning" : "text-muted-foreground")}>{redoDueText(entry.dueOn, now)}</span>
               </li>
             ))}
           </ul>
@@ -351,7 +347,10 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
               <PlayFilledIcon size={14} />
               Practise this gap
             </Button>
-            <span className="text-ui text-muted-foreground">20-minute round on {gap.item.title}</span>
+            <p className="max-w-[44ch] text-ui text-muted-foreground">
+              A 20-minute guided round on {gap.item.title}, aimed at &ldquo;{gap.gap.title}&rdquo;. That gap is still open from your round on {shortDay(gap.item.createdAt)}, and it
+              names {focus.name}, your lowest skill.
+            </p>
           </>
         ) : (
           <Button asChild size="lg" variant="default">
@@ -553,7 +552,7 @@ function DrillKindsCard({ kinds, failed }: { kinds: DrillKindRow[] | null; faile
   );
 }
 
-function RedosCard({ queue, onSeeAll }: { queue: RedoEntry[]; onSeeAll: () => void }) {
+function RedosCard({ queue, now, onSeeAll }: { queue: RedoEntry[]; now: Date; onSeeAll: () => void }) {
   const next = queue.slice(0, 2);
   return (
     <Card variant="raised" className="p-5 sm:p-6">
@@ -574,10 +573,10 @@ function RedosCard({ queue, onSeeAll }: { queue: RedoEntry[]; onSeeAll: () => vo
               <span className="truncate text-body font-semibold">{entry.problem.title}</span>
               {entry.due ? (
                 <span className="shrink-0 rounded-full bg-primary-soft px-3 py-1 text-meta font-semibold text-primary-soft-foreground ring-1 ring-inset ring-primary/40">
-                  Today
+                  {redoDueText(entry.dueOn, now)}
                 </span>
               ) : (
-                <span className="shrink-0 text-ui text-muted-foreground">{dueLabel(entry)}</span>
+                <span className="shrink-0 text-ui text-muted-foreground">{redoDueText(entry.dueOn, now)}</span>
               )}
             </li>
           ))}

@@ -158,6 +158,36 @@ describe("weekStats", () => {
   });
 });
 
+describe("weekStats by end day", () => {
+  const plan = ["dsa", "hld", "dsa", "hld", "dsa", "lld", "redo"] as const;
+  const at = (day: number, hour: number) => new Date(2026, 10, day, hour).toISOString();
+
+  it("counts a round that began on Sunday and ended on Tuesday in the week it ended", () => {
+    const history = [scored("long", 8, {}, { createdAt: at(8, 23), endedAt: at(10, 9) })];
+    const thisWeek = new Date(2026, 10, 12, 9);
+    const lastWeek = new Date(2026, 10, 8, 12);
+    expect(weekStats(history, plan, thisWeek).rounds.done).toBe(1);
+    expect(weekStats(history, plan, lastWeek).rounds.done).toBe(0);
+  });
+
+  it("counts a round that began last week and ended this week only this week", () => {
+    const history = [scored("late", 8, {}, { createdAt: at(8, 23), endedAt: at(9, 1) })];
+    expect(weekStats(history, plan, new Date(2026, 10, 11, 12)).rounds.done).toBe(1);
+    expect(weekStats(history, plan, new Date(2026, 10, 5, 12)).rounds.done).toBe(0);
+  });
+
+  it("falls back to the start for a summary with no end time", () => {
+    const history = [scored("old", 10, {}, { endedAt: undefined })];
+    expect(weekStats(history, plan, new Date(2026, 10, 12, 9)).rounds.done).toBe(1);
+  });
+
+  it("counts a round that ended just after midnight on Monday in the new week", () => {
+    const history = [scored("night", 8, {}, { createdAt: at(8, 23), endedAt: new Date(2026, 10, 9, 0, 5).toISOString() })];
+    expect(weekStats(history, plan, new Date(2026, 10, 9, 12)).rounds.done).toBe(1);
+    expect(weekStats(history, plan, new Date(2026, 10, 8, 12)).rounds.done).toBe(0);
+  });
+});
+
 const row = (phase: string, planned: number, actual: number) => ({ phase, label: phase, plannedMinutes: planned, actualMinutes: actual });
 
 describe("focusFigure", () => {

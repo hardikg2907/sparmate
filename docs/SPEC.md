@@ -499,7 +499,9 @@ least 3 minutes and 1.5 times over its plan. With no such step the line is left 
 
 `src/shared/progress.ts` holds the Progress derivations: the focus skill (lowest average score over the newest three
 scored interview rounds, or guided rounds when there is no interview round), the per-skill rows for each mode, and the
-week's counts (a finished round on a problem tried before counts as a redo).
+week's counts. A round counts on the local day it ended (its creation day when it has no end time), the same day the
+week strip on Today uses, so a round that began on a Sunday and ended on a Tuesday belongs to the week of the Tuesday.
+A finished round on a problem tried before counts as a redo.
 
 ### 5.11 HTTP and WebSocket (ENGINE agent)
 

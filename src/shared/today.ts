@@ -31,6 +31,25 @@ export function isOpenRound(item: Pick<SessionHistoryItem, "status">): boolean {
   return item.status === "live" || item.status === "paused";
 }
 
+/** A round that finished: it is an attempt, it is not open, and it did not fail. */
+export function isFinishedAttempt(item: SessionHistoryItem): boolean {
+  return isAttempt(item) && !isOpenRound(item) && item.status !== "failed";
+}
+
+/**
+ * The local day a round ended, falling back to its start for a summary saved before the end time existed. Every count
+ * that puts a round in a day or a week uses this one day, so two pages never place the same round differently.
+ */
+export function roundEndedDay(item: Pick<SessionHistoryItem, "endedAt" | "createdAt">): string | null {
+  const at = new Date(item.endedAt ?? item.createdAt);
+  return Number.isNaN(at.getTime()) ? null : localDay(at);
+}
+
+/** A round on a problem that an earlier round already took to a debrief. */
+export function isRedoRound(item: SessionHistoryItem, history: readonly SessionHistoryItem[]): boolean {
+  return history.some((o) => isAttempt(o) && o.status === "debriefed" && o.problemId === item.problemId && o.id !== item.id && o.createdAt < item.createdAt);
+}
+
 /** Clock time used so far, in milliseconds. Null for a round saved without its clock. */
 export function clockUsedMs(item: SessionHistoryItem, nowMs: number): number | null {
   const clock = item.clock;

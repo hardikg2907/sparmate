@@ -48,7 +48,10 @@ export function problemStatus(problem: ProblemSummary, history: readonly Session
   return isFresh(problem) ? "fresh" : "partly";
 }
 
-export const STATUS_LABEL: Record<ProblemStatus, string> = { fresh: "Fresh", redo: "Redo due", open: "Round open", partly: "Partly done", done: "Done" };
+/** The one name of each state, read by the list row, its mark and the detail panel. */
+export const STATUS_LABEL: Record<ProblemStatus, string> = { fresh: "Not tried", redo: "Redo due", open: "Round open", partly: "Partly done", done: "Done" };
+
+export const STATUS_TONE: Record<ProblemStatus, "good" | "warn" | "neutral" | "accent"> = { fresh: "neutral", redo: "warn", open: "accent", partly: "warn", done: "good" };
 
 /** The open round of a problem, newest first. */
 export function openRoundFor(problemId: string, history: readonly SessionHistoryItem[]): SessionHistoryItem | undefined {

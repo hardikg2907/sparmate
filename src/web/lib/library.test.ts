@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
-import { libraryGroups, openRoundFor, problemStatus, tabCounts } from "./library";
+import { STATUS_LABEL, libraryGroups, openRoundFor, problemStatus, tabCounts } from "./library";
 
 function problem(id: string, extra: Partial<ProblemSummary> = {}): ProblemSummary {
   return { id, track: "hld", title: id, difficulty: "medium", tags: [], trackerMark: "[ ]", lastAttempt: null, summary: "", badge: null, custom: false, ...extra };
@@ -79,5 +79,15 @@ describe("problemStatus", () => {
   it("finds the open round of a problem", () => {
     expect(openRoundFor("a", [open("a"), open("b")])?.id).toBe("r-a");
     expect(openRoundFor("z", [open("a")])).toBeUndefined();
+  });
+});
+
+describe("STATUS_LABEL", () => {
+  it("gives every state one name", () => {
+    expect(STATUS_LABEL).toEqual({ fresh: "Not tried", redo: "Redo due", open: "Round open", partly: "Partly done", done: "Done" });
+  });
+
+  it("calls a problem with an earlier try but no tracker mark partly done", () => {
+    expect(problemStatus(problem("x", { trackerMark: "[ ]", lastAttempt: attempt }), [])).toBe("partly");
   });
 });
