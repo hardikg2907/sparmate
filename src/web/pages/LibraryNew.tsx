@@ -6,7 +6,7 @@ import { ArrowLeftIcon, CheckIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
 import { GUIDED_HINT } from "../components/study";
 import { Alert, Badge, Button, Card, Segmented, Spinner, Textarea, Tooltip, cn } from "../components/ui";
-import { isFactualCorrection, preparedSummary, prepProgress } from "../lib/customPrep";
+import { isFactualCorrection, lookupNote, preparedSummary, prepProgress } from "../lib/customPrep";
 import { TRACK_LABEL, TRACK_TITLE } from "../lib/format";
 import { useStudyData, type StudyData } from "../lib/useStudyData";
 import { Link } from "../router";
@@ -162,7 +162,7 @@ function CustomPrompt({
                   <h3 className="text-lead font-semibold text-foreground">{job.title}</h3>
                   <Badge title={TRACK_TITLE[job.track ?? track]}>{TRACK_LABEL[job.track ?? track]}</Badge>
                 </div>
-                <p className="mt-1 text-ui text-muted-foreground">{preparedSummary(job)}</p>
+                <p className="mt-1 text-ui text-muted-foreground">{preparedSummary(job, factual.length)}</p>
               </div>
             </div>
 
@@ -260,18 +260,12 @@ function CustomPrompt({
                     ) : (
                       <span className="size-4 rounded-full border border-border inline-block" />
                     )}
-                    <span>
-                      {step === "research"
-                        ? `Researching: ${job?.searches ?? 0} ${job?.searches === 1 ? "search" : "searches"}, ${job?.pages ?? 0} ${job?.pages === 1 ? "page" : "pages"}`
-                        : step === "writing"
-                          ? "Writing the brief"
-                          : "Checking facts"}
-                    </span>
+                    <span>{step === "writing" ? "Writing the brief" : "Checking facts"}</span>
                   </li>
                 );
               })}
             </ol>
-            <p className="text-meta text-faint">Preparing a brief can take a few minutes.</p>
+            <p className="text-meta text-faint">{[lookupNote(job), "Preparing a brief can take a few minutes."].filter(Boolean).join(" ")}</p>
             <div className="pt-1">
               <Button variant="ghost" disabled={busy || cancelling} busy={cancelling} onClick={cancelPreparation}>
                 Cancel
@@ -330,7 +324,7 @@ export function LibraryNewView({ data, ctx }: { data: StudyData; ctx: PageContex
         </Link>
         <PageHeader title="Practise any question" />
         <p className="-mt-2 max-w-[60ch] text-body text-muted-foreground">
-          Paste a question from a list or a past interview. The app researches real systems, writes a private brief, and checks its facts before you start.
+          Paste a question from a list or a past interview. The app can look up real systems, writes a private brief, and checks its facts before you start.
         </p>
         {data.startError ? <ErrorLine text={data.startError} /> : null}
         <CustomPrompt starting={data.starting} busy={data.starting !== null} onStart={(id, mode) => data.start(id, mode)} onReloadProblems={data.reload} />

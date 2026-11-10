@@ -633,7 +633,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   "Class diagram", with the Run button beside them on the Code tab and the board switch beside them on the diagram
   tab. The console below the editor shows no Run of its own.
 - **Board.** A fresh board starts with one empty frame per step (HLD: Requirements, Core entities, API, High-level design,
-  Deep dives; LLD: Entities and States), and opens on the current step's frame. Pins are numbered circles over the
+  Deep dives; LLD: Entities and Behaviour), and opens on the current step's drawing. Pins are numbered circles over the
   canvas: a brand gradient for a guide's note, outlined green or red for what the judge marked held or a gap, each
   with a soft glow in its own colour. A pin whose element sits under one of the board's controls (the top toolbar,
   the menu button, the shape properties panel, zoom, undo and redo, help) is hidden and out of the tab order until the element is scrolled into

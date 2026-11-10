@@ -6,6 +6,7 @@ import { CaptureUpdateAction, Excalidraw, MainMenu, exportToBlob, hashElementsVe
 import type { ExcalidrawImperativeAPI, ExcalidrawInitialDataState, UIOptions } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement, OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { BoardPin } from "../../shared/types";
+import { withFrameMembership } from "../../shared/graph/frames";
 import { freeInsertPoint, type PlacedElement } from "./placement";
 import { BoardPalette } from "./BoardPalette";
 import { PinLayer } from "./PinLayer";
@@ -115,10 +116,19 @@ function showStepOn(api: ExcalidrawImperativeAPI, step: string | null, animate: 
   const frame = step ? findStepFrame(elements as unknown as Record<string, unknown>[], step) : null;
   if (!frame && elements.length === 0) return;
   // A frame is far larger than what is usually drawn in it, so fitting the frame shows the drawing at about a third of
-  // its size. Fitting the drawing keeps its labels readable; an empty frame is fitted whole.
-  const drawn = frame ? elements.filter((element) => (element as { frameId?: string | null }).frameId === (frame as { id?: string }).id) : [];
-  const target = frame ? (drawn.length > 0 ? drawn : [frame as unknown as ExcalidrawElement]) : elements;
-  api.scrollToContent(target, { fitToViewport: true, viewportZoomFactor: frame && drawn.length === 0 ? 0.92 : 0.9, animate: animate && !reducedMotion(), duration: 240 });
+  // its size. Fitting the drawing keeps its labels readable; an empty frame is fitted whole. Membership follows the
+  // same rule as the server's, because Excalidraw records it only for shapes dropped with the pointer.
+  const frameId = frame ? String((frame as { id?: unknown }).id) : null;
+  const drawn = frameId ? withFrameMembership(elements as unknown as Record<string, unknown>[]).filter((element) => element.frameId === frameId) : [];
+  const target = frame ? (drawn.length > 0 ? (drawn as unknown as ExcalidrawElement[]) : [frame as unknown as ExcalidrawElement]) : elements;
+  api.scrollToContent(target, {
+    fitToViewport: true,
+    viewportZoomFactor: frame && drawn.length === 0 ? 0.92 : 0.9,
+    // Without a cap a single small box would open at several hundred percent.
+    maxZoom: 1,
+    animate: animate && !reducedMotion(),
+    duration: 240,
+  });
 }
 
 /** Centre of the visible canvas in scene coordinates, shifted a little more on each call so inserts do not stack. */

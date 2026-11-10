@@ -91,12 +91,6 @@
   --scrollbar-thumb-hover: var(--faint);
 }
 
-/* Excalidraw opens its style panel at the left, over the first step frame. It sits at the right edge instead. */
-.ir-board .excalidraw .Island.App-menu__left {
-  left: auto;
-  right: 12px;
-}
-
 /* The islands sit on a canvas of the same tone, so the shadow alone does not separate them. */
 .ir-board .excalidraw .Island {
   border: 1px solid var(--border);

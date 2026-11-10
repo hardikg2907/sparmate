@@ -821,11 +821,12 @@ scribe read them.
 - `onSceneChange` is called at most once per 1.5 s with the non-deleted elements and an incrementing version.
 - **Step frames.** A fresh board (version 0, no step frames) starts with one Excalidraw frame per step that is answered
   on the board, laid out by `src/shared/stepFrames.ts`, named after the step and tagged `customData: { step }`. HLD:
-  Requirements, Core entities and API in a row above High-level design and Deep dives. LLD: Entities and States (the behaviour step); the other LLD steps are answered in the code. The frames
+  Requirements, Core entities and API in a row above High-level design and Deep dives. LLD: Entities and Behaviour (the behaviour step); the other LLD steps are answered in the code. The frames
   go in through `initialData` and are sent with the first scene report. A palette insert that lands inside a step frame
   is put in that frame.
-- `showStep(step)` pans and zooms to a step's frame (`scrollToContent` with `fitToViewport`, animated unless reduced
-  motion is on); `showStep(null)` shows the whole board. The board opens on the current step's frame.
+- `showStep(step)` pans and zooms to what is drawn in a step's frame (`scrollToContent` with `fitToViewport` and a
+  zoom cap of 1, animated unless reduced motion is on), or to the whole frame while it is empty; `showStep(null)`
+  shows the whole board. The board opens on the current step.
 - **Pins.** `pins` are drawn over the canvas as numbered buttons, at the top-right corner of a box or the middle of an
   arrow, placed with `sceneCoordsToViewportCoords` and moved on every scroll, zoom and scene change. Hover or focus shows
   the note; a click keeps it open; Escape closes it without reaching the room's Escape shortcut. The note is plain text.
@@ -1083,10 +1084,11 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   switch (default from the mode rule), one primary Start button and a small caption. A problem with an open round shows
   "Finish the open round" in place of Start.
 - "Practise any question" (top right) opens `/practice/new`: a textarea for a pasted prompt, an HLD/LLD toggle and a
-  Prepare button. It shows multi-stage preparation progress ("Researching: N searches, M pages", only once a search or
-  a page read has happened, then "Writing the brief" and "Checking facts"). Once ready it shows a setup card with the
-  problem title, track, a line that reads "No web search was needed" or the sources count, with the number of facts
-  checked, the corrections of facts (a fix of wording or spelling is not listed or counted), a confidence note, and
+  Prepare button. It shows two preparation steps, "Writing the brief" and "Checking facts", and, once the model has
+  looked anything up, a note with the number of searches and pages read. Once ready it shows a setup card with the
+  problem title, track, a line that reads "No web search was needed", "Searched the web, no source cited" or the
+  sources count, with the number of facts checked (the sources plus the corrections of facts), the corrections of
+  facts (a fix of wording or spelling is not listed or counted), a confidence note, and
   "Start interview" and "Guided" buttons, without revealing the hidden brief.
   The debrief's reference section renders the verified research sources with secure outbound links (`target="_blank"`,
   `rel="noreferrer noopener"`).

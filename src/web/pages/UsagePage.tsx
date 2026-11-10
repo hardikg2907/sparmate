@@ -531,6 +531,9 @@ function StatCell({ index, label, value, subtext, meter }: { index: number; labe
   );
 }
 
+/** A calendar day in the app's date style; anything else is shown as it came. */
+const axisDay = (day?: string): string => (day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? dayMonth(day) : (day ?? ""));
+
 function DailyCostChart({ days }: { days: UsageSummaryResponse["byDay"] }) {
   const maxCost = Math.max(0.001, ...days.map((d) => d.costUsd));
   const height = 120;
@@ -545,7 +548,7 @@ function DailyCostChart({ days }: { days: UsageSummaryResponse["byDay"] }) {
             <Tooltip
               key={day.date}
               side="top"
-              content={`${dayMonth(day.date)}: $${day.costUsd.toFixed(4)} (${day.calls} calls, ${(day.inputTokens + day.outputTokens).toLocaleString()} tokens)`}
+              content={`${axisDay(day.date)}: $${day.costUsd.toFixed(4)} (${day.calls} calls, ${(day.inputTokens + day.outputTokens).toLocaleString()} tokens)`}
             >
               <div className="flex h-full flex-1 flex-col items-center justify-end">
                 <div
@@ -561,9 +564,9 @@ function DailyCostChart({ days }: { days: UsageSummaryResponse["byDay"] }) {
         })}
       </div>
       <div className="flex justify-between border-t border-hero-foreground/25 pt-2 text-meta tabular-nums text-hero-muted">
-        <span>{days[0] ? dayMonth(days[0].date) : ""}</span>
+        <span>{axisDay(days[0]?.date)}</span>
         <span>Past 30 days</span>
-        <span>{days.length > 0 ? dayMonth(days[days.length - 1]?.date ?? "") : ""}</span>
+        <span>{axisDay(days[days.length - 1]?.date)}</span>
       </div>
     </div>
   );

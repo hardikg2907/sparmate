@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isFactualCorrection, preparedSummary, prepProgress } from "./customPrep";
+import { isFactualCorrection, lookupNote, preparedSummary, prepProgress } from "./customPrep";
 
 describe("isFactualCorrection", () => {
   it("counts a changed fact or number", () => {
@@ -8,31 +8,45 @@ describe("isFactualCorrection", () => {
   });
   it("does not count a fix of wording", () => {
     expect(isFactualCorrection({ fix: "'An answer' (grammar only)", source: "Editorial" })).toBe(false);
-    expect(isFactualCorrection({ fix: "Fixed a typo in the title", source: "Own check" })).toBe(false);
+    expect(isFactualCorrection({ fix: "Fixed the spelling of the title", source: "Spelling" })).toBe(false);
+  });
+  it("keeps a fact that only mentions a word like style or typo", () => {
+    expect(isFactualCorrection({ fix: "Instagram-style fan-out on write for 500M DAU", source: "https://example.com/feeds" })).toBe(true);
+    expect(isFactualCorrection({ fix: "Search needs typo tolerance, so use an n-gram index", source: "Search engine docs" })).toBe(true);
+    expect(isFactualCorrection({ fix: "Path-style URLs are deprecated", source: "https://example.com/date-formatting/guide" })).toBe(true);
+    expect(isFactualCorrection({ fix: "Use 429", source: "Google API style guide" })).toBe(true);
   });
 });
 
 describe("preparedSummary", () => {
-  it("says no search was needed when there are no sources", () => {
-    expect(preparedSummary({ sourcesCount: 0, checksCount: 4 })).toBe("No web search was needed, 4 facts checked");
-    expect(preparedSummary({ checksCount: 1 })).toBe("No web search was needed, 1 fact checked");
+  it("says no search was needed when nothing was looked up", () => {
+    expect(preparedSummary({ sourcesCount: 0, searches: 0, pages: 0 }, 0)).toBe("No web search was needed");
+    expect(preparedSummary({ searches: 0, pages: 0 }, 2)).toBe("No web search was needed, 2 facts checked");
   });
-  it("counts sources, and leaves out an empty count of checks", () => {
-    expect(preparedSummary({ sourcesCount: 1, checksCount: 0 })).toBe("1 source");
-    expect(preparedSummary({ sourcesCount: 3, checksCount: 5 })).toBe("3 sources, 5 facts checked");
+  it("does not say that when the model searched but cited nothing", () => {
+    expect(preparedSummary({ sourcesCount: 0, searches: 3, pages: 0 }, 0)).toBe("Searched the web, no source cited");
+  });
+  it("counts sources, and a fact once for each source and each factual correction", () => {
+    expect(preparedSummary({ sourcesCount: 1, searches: 1, pages: 1 }, 0)).toBe("1 source, 1 fact checked");
+    expect(preparedSummary({ sourcesCount: 3, searches: 2, pages: 3 }, 2)).toBe("3 sources, 5 facts checked");
   });
 });
 
 describe("prepProgress", () => {
-  it("shows no research step while no search has run, and puts the writer first", () => {
+  it("always lists the writing and checking steps, and marks the one that runs", () => {
     expect(prepProgress(null)).toEqual({ steps: ["writing", "checking"], active: "writing" });
-    expect(prepProgress({ stage: "researching", searches: 0, pages: 0 })).toEqual({ steps: ["writing", "checking"], active: "writing" });
+    expect(prepProgress({ stage: "researching" }).active).toBe("writing");
+    expect(prepProgress({ stage: "writing" }).active).toBe("writing");
+    expect(prepProgress({ stage: "checking" }).active).toBe("checking");
   });
-  it("shows the research step once a search has run", () => {
-    expect(prepProgress({ stage: "researching", searches: 2, pages: 0 })).toEqual({ steps: ["research", "writing", "checking"], active: "research" });
-    expect(prepProgress({ stage: "writing", searches: 2, pages: 1 })).toEqual({ steps: ["research", "writing", "checking"], active: "writing" });
+});
+
+describe("lookupNote", () => {
+  it("is empty while nothing was looked up", () => {
+    expect(lookupNote(null)).toBeNull();
+    expect(lookupNote({ searches: 0, pages: 0 })).toBeNull();
   });
-  it("marks the checking step when the checker runs", () => {
-    expect(prepProgress({ stage: "checking", searches: 0, pages: 0 }).active).toBe("checking");
+  it("counts searches and pages", () => {
+    expect(lookupNote({ searches: 1, pages: 2 })).toBe("1 search, 2 pages read so far.");
   });
 });
