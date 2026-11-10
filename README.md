@@ -6,7 +6,7 @@
   Solo practice for system design and machine-coding interviews, against an AI interviewer, with a judge and a coach.
 </p>
 
-![The Today page](docs/screens/home-dark.png)
+![Today: the week strip, the day's session and the drills due](docs/screens/home-dark.png)
 
 ## What it does
 
@@ -18,9 +18,10 @@
 - **Study-note drafts you approve.** The app drafts edits to your notes. You pick what to keep. Nothing is written before you click Save.
 - **Voice in and out.** Speak your answers and hear the interviewer's replies.
 - **A weekly plan.** Today picks the session for the day from your plan: a redo, a new problem, a DSA day or rest.
-- **DSA progress.** The DSA page counts your LeetCode solves from a day you choose, against your weekly goal. It reads your public profile through LeetCode's unofficial GraphQL endpoint, so it can change, and it needs no login.
-- **A Gym.** Short drills of 10 to 15 minutes, queued from the gaps in your debriefs and spaced 1, 3 and 7 days apart. A grader gives Pass or Not yet and the one fix.
-- **Progress.** One focus skill each week, your scores per skill, and the redo queue.
+- **DSA progress.** The Progress page counts your LeetCode solves from a day you choose, against your weekly goal. It reads your public profile through LeetCode's unofficial GraphQL endpoint, so it can change, and it needs no login.
+- **Drills.** Under Practice, short drills of 10 to 15 minutes, queued from the gaps in your debriefs and spaced 1, 3 and 7 days apart. A grader gives Pass or Not yet and the one fix.
+- **Progress.** One focus skill each week, your scores per skill, the redo queue and your round history.
+- **A command palette.** Press ⌘K (Ctrl+K elsewhere) to jump to a page, a problem or a past round.
 - **A usage page.** See tokens and cost for each round, role and model.
 
 | Today                                                     | Debrief                                          |
@@ -30,6 +31,14 @@
 | HLD room                                                   | LLD room                                                               |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------- |
 | ![A guided system design round](docs/screens/room-hld.png) | ![A machine-coding round with a C++ editor](docs/screens/room-lld.png) |
+
+| Practice                                                             | Progress                                                                    |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| ![Practice, with the drills that are due](docs/screens/practice.png) | ![Progress: skills, redo queue, DSA and history](docs/screens/progress.png) |
+
+| Command palette                                                | Today on a phone                                                                                         |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| ![The ⌘K palette with a short query](docs/screens/palette.png) | <img src="docs/screens/today-phone.png" alt="Today at phone width, with the bottom tab bar" width="240"> |
 
 ## Requirements
 
@@ -247,6 +256,8 @@ node scripts/e2e/ws-fake-pause.mjs    # pause and discard
 node scripts/e2e/ui-tour.mjs          # screenshots of the main pages (needs Chrome)
 node scripts/e2e/layout-check.mjs     # layout and scroll checks across screen sizes (needs Chrome)
 ```
+
+The screenshots in `docs/screens/` come from the fixture pages. Rebuild them with `npx vite build && node scripts/capture-docs-screens.mjs` (needs Chrome).
 
 `scripts/e2e/real-round.mjs --profile strong|weak|lld` runs a full round with a real model, so it uses your Claude plan. Run it only when you mean to.
 
