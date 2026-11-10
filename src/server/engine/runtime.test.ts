@@ -1300,7 +1300,7 @@ describe("pins", () => {
 describe("the coach and the scorecard gaps", () => {
   const GAPS = ["Hot keys", "Cache stampede", "Retry storms"].map((title) => ({ title, severity: "major", whyItMatters: "x", whatGoodLooksLike: "y", teachMinutes: 8 }));
 
-  /** A debriefed round whose coach has already opened, with the coach's tools and the turns it receives captured. */
+  /** A debriefed round, by default with its coach chat started, with the coach's tools and the turns it receives captured. */
   async function coachRoom({ started = true }: { started?: boolean } = {}) {
     const inner = createFakeDriver({ chunkDelayMs: 0 });
     let tools: RoomTool[] = [];
@@ -1351,6 +1351,36 @@ describe("the coach and the scorecard gaps", () => {
     await rt.handle({ type: "coach.open" }, t.peer);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(turns).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("runs a failed opening again on a second press, and refuses a press before the debrief", async () => {
+    const { rt, turns, t, session } = await coachRoom({ started: false });
+    const failing = rt as unknown as { coach: { status: string; queue: unknown[] } };
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    await vi.waitFor(() => expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true));
+    // Put the channel back into the state a failed opening leaves: an error, with the opening still queued.
+    session.transcript.splice(0, session.transcript.length, ...session.transcript.filter((e) => e.channel !== "coach"));
+    failing.coach.status = "error";
+    failing.coach.queue.push((rt as unknown as { coachOpenTurn: () => unknown }).coachOpenTurn());
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await vi.waitFor(() => expect(turns).toHaveLength(2));
+    expect(turns[1]?.meta).toMatchObject({ request: "coach_open" });
+    session.status = "ended";
+    await rt.handle({ type: "coach.open" }, t.peer);
+    expect(t.msgs.some((m) => m.type === "error" && m.code === "coach_unavailable")).toBe(true);
+    rt.dispose();
+  });
+
+  it("drops a queued opening when the candidate's first message arrives instead", async () => {
+    const { rt, turns, say } = await coachRoom({ started: false });
+    const room = rt as unknown as { coach: { status: string; queue: unknown[] }; coachOpenTurn: () => unknown };
+    room.coach.status = "error";
+    room.coach.queue.push(room.coachOpenTurn());
+    await say("Teach me this gap: Hot keys");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(turns.map((turn) => turn.meta.kind)).toEqual(["candidate"]);
     rt.dispose();
   });
 
@@ -1786,7 +1816,10 @@ describe("dropping an idle round from memory", () => {
       expect(session.status).toBe("debriefed");
     });
     rt.detach(t.peer);
-    expect(rt.isDormant()).toBe(true);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(rt.isDormant()).toBe(true);
+    });
     rt.dispose();
   });
 });

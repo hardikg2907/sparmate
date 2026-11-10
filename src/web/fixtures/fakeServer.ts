@@ -249,7 +249,7 @@ export class FakeServer {
         this.runDebrief();
         break;
       case "coach.open":
-        if (!this.session.transcript.some((e) => e.channel === "coach" && e.role === "coach")) this.stream("coach", COACH_REPLY);
+        if (!this.busy.coach && !this.session.transcript.some((e) => e.channel === "coach" && e.role !== "system")) this.stream("coach", COACH_REPLY);
         break;
       case "hello":
         break;

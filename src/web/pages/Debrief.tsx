@@ -41,6 +41,17 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
   const connected = state.connection === "open";
   const roundMs = finalRoundMs(session);
   const coach = state.agent.coach;
+  // A "Now on" divider from a failed opening is not a start, so the button stays until a real line arrives.
+  const coachStarted = ctl.chat.coach.some((item) => item.role !== "system");
+  const startCoach =
+    debriefed && !coachStarted ? (
+      <div className="flex flex-col items-center gap-3">
+        <p>The coach sums up the round and teaches the gaps, starting with the one you pick. Press Teach me this on a gap, ask a question, or start here.</p>
+        <Button variant="outline" disabled={!connected || coach.state === "thinking"} onClick={() => actions.openCoach()}>
+          Start with the coach
+        </Button>
+      </div>
+    ) : null;
   const marks = useGapMarks(scorecard, session, ctl.chat.coach);
 
   return (
@@ -94,7 +105,9 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
           {coach.state === "error" ? (
             <Banner tone="bad" role="alert">
               <WarnIcon size={16} />
-              <span>{coach.error ?? "The coach could not answer."} Send your message again.</span>
+              <span>
+                {coach.error ?? "The coach could not answer."} {coachStarted ? "Send your message again." : "Press Start with the coach to try again."}
+              </span>
             </Banner>
           ) : null}
           <div className="min-h-0 flex-1">
@@ -106,18 +119,8 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
               disabled={!debriefed || !connected}
               inputLabel="Message to the coach"
               placeholder={debriefed ? "Ask the coach about a gap…" : "Waiting for the scorecard…"}
-              empty={
-                debriefed ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <p>The coach sums up the round and teaches the gaps, starting with the one you pick. Press Teach me this on a gap, ask a question, or start here.</p>
-                    <Button variant="outline" disabled={!connected || coach.state === "thinking"} onClick={() => actions.openCoach()}>
-                      Start with the coach
-                    </Button>
-                  </div>
-                ) : (
-                  "The coach joins when the scorecard is ready."
-                )
-              }
+              empty={debriefed ? startCoach : "The coach joins when the scorecard is ready."}
+              topSlot={ctl.chat.coach.length > 0 && startCoach ? <div className="px-2 py-4 text-center text-ui text-muted-foreground">{startCoach}</div> : undefined}
               onSend={(text) => actions.sendChat("coach", text)}
             />
           </div>

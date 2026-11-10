@@ -183,7 +183,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 | guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note, recheck_step and step_verdict | chat text |
 | tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail,cause?}], notes }` structured |
 | judge | after the round (and the tester) | one-shot | pin_element (board PNG attached as an image block) | `ScorecardSchema` structured |
-| coach | after the debrief | streaming, persisted | read_transcript, view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
+| coach | after the debrief, when the candidate starts the chat | streaming, persisted | read_transcript, view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
 | brief-writer | custom problem preparation | one-shot | WebSearch (<= 8), WebFetch (<= 6) | `{ meta: { title, difficulty, tags }, body, sources, confidence }` structured |
 | brief-checker | custom problem verification | one-shot | WebFetch, WebSearch (<= 3) | `{ body, corrections, unconfirmed? }` structured |
@@ -460,7 +460,9 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 
 - The coach waits for the candidate, because an opening nobody reads still costs a model turn. It starts when they
   press "Start with the coach" in the empty coach panel (`coach.open`, which sends the opening once and only while the
-  chat has no coach or candidate line), press "Teach me this" or send a first message. Its first reply is the opening,
+  chat has no coach or candidate line; after a failed opening, a second press runs it again), press "Teach me this" or
+  send a first message (which replaces an opening still queued from a failed press). A coach message that a restart cut
+  off before its reply is answered when the round loads. Its first reply is the opening,
   written from the scorecard (summary in two or three sentences, then "let's start with" the gap the first message
   names, or the top gap), following TEACHING.md section 2 and the problem
   session step 6 (teach each gap directly, about ten minutes each). While

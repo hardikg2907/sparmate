@@ -431,6 +431,12 @@ export class SessionRuntime {
       this.scheduler.reschedule();
       this.syncAwayTimer();
     }
+    // A coach message that a restart cut off before its reply still gets one.
+    const lastCoach = [...s.transcript].reverse().find((e) => e.channel === "coach" && e.role !== "system");
+    if (s.status === "debriefed" && lastCoach?.role === "candidate") {
+      this.coach.queue.push(this.coachCandidateTurn(lastCoach.text));
+      void this.pump(this.coach);
+    }
     this.syncCoachAwayTimer();
   }
 
@@ -678,6 +684,8 @@ export class SessionRuntime {
   private onChat(channel: Channel, text: string, clientMsgId: string): void {
     if (channel === "coach") {
       if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
+      // A first message makes the coach's reply the opening, so an opening still queued from a failed press would be a second one.
+      if (!this.coachStarted()) this.coach.queue.splice(0, this.coach.queue.length, ...this.coach.queue.filter((turn) => turn.kind !== "request"));
       this.addEntry({ channel: "coach", role: "candidate", text }, clientMsgId);
       this.noteTeachRequest(text);
       if (this.coach.status === "error") this.retry(this.coach);
@@ -1638,10 +1646,15 @@ export class SessionRuntime {
   /** Sends the coach's opening once, when the candidate starts the chat; a later press, or a chat already started, changes nothing. */
   private onCoachOpen(): void {
     if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
-    // A divider written by the opening turn must not count as the opening itself.
-    const started = this.session.transcript.some((e) => e.channel === "coach" && e.role !== "system");
-    if (started || this.coach.busy || this.coach.queue.length > 0) return;
+    // A failed opening stays queued, so a second press runs it again.
+    if (this.coach.status === "error") return this.retry(this.coach);
+    if (this.coachStarted() || this.coach.busy || this.coach.queue.length > 0) return;
     this.enqueue(this.coach, this.coachOpenTurn());
+  }
+
+  /** Whether the coach chat holds a line; a "Now on" divider written by a failed opening does not count. */
+  private coachStarted(): boolean {
+    return this.session.transcript.some((e) => e.channel === "coach" && e.role !== "system");
   }
 
   private coachOpenTurn(): QueuedTurn {
@@ -1650,7 +1663,7 @@ export class SessionRuntime {
       build: () => {
         const { view, commit } = this.coachContext(this.coach);
         const body =
-          'The debrief is ready. Write your opening message now: sum up the scorecard in two or three sentences, then say "let\'s start with" the top gap and begin teaching it.';
+          'They pressed "Start with the coach". Write your opening message now: sum up the scorecard in two or three sentences, then say "let\'s start with" the top gap and ask one question about the moment where it bit.';
         return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "coach_open" } }, commit };
       },
     };
@@ -2303,8 +2316,6 @@ export class SessionRuntime {
       this.progress("done");
       this.broadcast({ type: "debrief.ready", scorecard });
       this.sendState();
-      // The coach waits for the candidate: an opening nobody reads still costs a model turn.
-      this.coach.closed = false;
     } catch (err) {
       this.log.error(`Debrief failed in session ${s.id}`, err instanceof DriverError ? err.detail : err);
       s.status = "failed";
