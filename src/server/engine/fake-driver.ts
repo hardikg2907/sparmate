@@ -540,13 +540,13 @@ async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
           {
             name: "Scenario 2: a rejected request",
             pass: false,
-            detail: "No way to express a rejection through the candidate's API.",
+            detail: compiled ? "No way to express a rejection through the candidate's API." : "Did not compile.",
             cause: compiled ? "No rejection result in the API" : "Did not compile",
           },
           {
             name: "Scenario 3: a second rejected request",
             pass: false,
-            detail: "The second rejection could not be expressed either.",
+            detail: compiled ? "The second rejection could not be expressed either." : "Did not compile.",
             cause: compiled ? "No rejection result in the API" : "Did not compile",
           },
         ],

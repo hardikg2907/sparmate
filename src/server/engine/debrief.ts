@@ -104,16 +104,16 @@ export const NOT_COMPILED_CAUSE = "Did not compile";
 
 /**
  * A cause belongs to a failed scenario only. It is cut to one short line, and a cause with no word in it is dropped,
- * so the page never shows an empty label.
+ * so the page never shows an empty label. A file that did not compile fails every scenario for that one cause.
  */
 export function tidyTesterOutput(t: TesterOutput): TesterOutput {
+  if (!t.compiled) return { ...t, scenarios: t.scenarios.map(({ cause: _cause, ...s }) => ({ ...s, pass: false, cause: NOT_COMPILED_CAUSE })) };
   return {
     ...t,
     scenarios: t.scenarios.map(({ cause, ...s }) => {
       if (s.pass) return s;
       const label = (cause ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CAUSE_CHARS);
-      if (/[\p{L}\p{N}]/u.test(label)) return { ...s, cause: label };
-      return t.compiled ? s : { ...s, cause: NOT_COMPILED_CAUSE };
+      return /[\p{L}\p{N}]/u.test(label) ? { ...s, cause: label } : s;
     }),
   };
 }

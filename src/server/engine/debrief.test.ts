@@ -441,16 +441,21 @@ describe("tester causes", () => {
     expect(out.scenarios.map((s) => s.cause)).toEqual(["Stock never drops", undefined]);
   });
 
-  it("names the compile failure as the cause of every scenario when the file did not compile", () => {
+  it("fails every scenario for one cause when the file did not compile", () => {
     const out = tidyTesterOutput({
       compiled: false,
       scenarios: [
         { name: "1", pass: false, detail: "Did not compile." },
         { name: "2", pass: false, detail: "Did not compile.", cause: "Missing semicolon on line 12" },
+        { name: "3", pass: true, detail: "ok" },
       ],
       notes: "",
     });
-    expect(out.scenarios.map((s) => s.cause)).toEqual([NOT_COMPILED_CAUSE, "Missing semicolon on line 12"]);
+    expect(out.scenarios.map((s) => [s.pass, s.cause])).toEqual([
+      [false, NOT_COMPILED_CAUSE],
+      [false, NOT_COMPILED_CAUSE],
+      [false, NOT_COMPILED_CAUSE],
+    ]);
   });
 
   it("accepts a judge scorecard that copies the tester's causes", () => {
