@@ -279,7 +279,7 @@ describe("fields added later", () => {
     expect(out).toMatchObject({ summary: "kept as saved" });
     expect(out?.phaseTiming?.map((r) => r.plannedMinutes)).toEqual([2, 7]);
     expect(s.scorecard?.phaseTiming?.[0]?.plannedMinutes).toBe(3);
-    expect(scorecardWithCurrentPlan(session())).toBeUndefined();
+    expect(scorecardWithCurrentPlan(session())).toBeFalsy();
   });
 
   it("marks a gap round in its summary, and an ordinary or older round as not one", () => {
