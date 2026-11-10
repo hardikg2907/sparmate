@@ -563,7 +563,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   tip, when it comes back, the next problem with the "Changed constraint" tag, and the problems it has used. A hairline
   and one quiet line name the ready proofs.
 - A raised "Attempts" card: each row is a full-width button with a turning chevron, the date, the outcome badge ("after a
-  revision" beside it in muted text), the problem, a strip of one bar for each criterion (green at 3 or more, amber below;
+  revision" beside it in muted text), the problem, a strip of one bar for each criterion (green at 3 or 4, amber at 2, red at 1;
   one label for a screen reader), the time and the cost. An open row shows, in this order: "Your task", "What changed", the
   answers or "The conversation" (the same sunken thread as the result screen), then for each grade "How each part scored",
   "What went well" beside "What to improve", "Your line" and, when sent, "What a strong answer says". A revised attempt
@@ -588,7 +588,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   no revise button and shows a "The conversation" card with the same thread below "Your line". The result is a mesh hero (the
   outcome as the title, the schedule tile, then "Revise your answer" as the primary button when a
   revision is allowed) with cards below: the criteria list, "What went well" beside "What to improve", and "Your line".
-  Each criterion is a row with its label, a four-step meter (green at 3 or more, amber below) and "n of 4"; a core
+  Each criterion is a row with its label, a four-step meter (green at 3 or 4, amber at 2, red at 1, the tones of the Progress skill rows) and "n of 4"; a core
   criterion carries a small "Core" tag that screen readers read too. The quote sits in a quiet sunken block with a 1 px
   hairline all round. Revising shows two columns: the feedback on the left, the answer box with the first answer in it on
   the right, and "Submit revision" as its button; the timer is hidden. "Interview-ready" takes the success tone and the

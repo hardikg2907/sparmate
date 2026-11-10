@@ -26,6 +26,7 @@ import { Alert, Button, Card, Segmented, SectionTitle, Skeleton, cn } from "../c
 import { parseDay, shortDay } from "../lib/dates";
 import { scrollToInScroller } from "../lib/scrollInScroller";
 import { MODE_LABEL, SCORE_WORD } from "../lib/format";
+import { scoreFill } from "../lib/scoreTone";
 import { mediumsTip } from "../lib/dsaText";
 import { useDsa, type DsaData } from "../lib/useDsa";
 import { useGym } from "../lib/useGym";
@@ -457,11 +458,9 @@ function SkillsCard({ rows, rounds, mode, onMode }: { rows: SkillRow[]; rounds: 
   );
 }
 
-const toneOf = (score: number) => (score >= BAR_SCORE ? "bg-success-fill" : score >= 2 ? "bg-warning-fill" : "bg-destructive-fill");
-
 function SkillLine({ row }: { row: SkillRow }) {
   const at = (score: number) => `${((score - 1) / 3) * 100}%`;
-  const tone = toneOf(row.level);
+  const tone = scoreFill(row.level);
   const level = row.level.toFixed(1);
   return (
     <li className="grid grid-cols-[minmax(0,9.5rem)_minmax(0,1fr)_2.25rem] items-center gap-x-4 py-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_2.25rem]">
@@ -491,7 +490,7 @@ function SkillLine({ row }: { row: SkillRow }) {
                   role="img"
                   aria-label={`Drill, ${DRILL_INFO[drill.kind].title}, ${score.toFixed(1)}, ${OUTCOME_LABEL[drill.outcome]}`}
                   title={`${DRILL_INFO[drill.kind].title}, ${score.toFixed(1)}`}
-                  className={cn("absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45", toneOf(drill.score))}
+                  className={cn("absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45", scoreFill(drill.score))}
                   style={{ left: at(drill.score) }}
                 />
               );
