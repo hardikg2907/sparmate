@@ -314,7 +314,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         trackingSince: null,
       };
     }
-    return deps.usageLedger.summary();
+    const attempts = deps.drills?.attemptsOnRecord();
+    return deps.usageLedger.summary({
+      known: { rounds: new Set(manager.history().map((h) => h.id)), ...(attempts ? { attempts: attempts.ids, legacyAttempts: attempts.legacy } : {}) },
+    });
   });
 
   app.get<{ Params: { id: string } }>("/api/sessions/:id/usage", async (req, reply) => {

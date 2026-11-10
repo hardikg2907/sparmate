@@ -253,6 +253,12 @@ export class DrillService {
     return this.deps.store.snapshot();
   }
 
+  /** The attempts still on record, so the usage page can tell a drill that was started over from one that was graded. */
+  attemptsOnRecord(): { ids: Set<string>; legacy: number } {
+    const attempts = this.deps.store.snapshot().attempts;
+    return { ids: new Set(attempts.map((a) => a.id)), legacy: attempts.filter((a) => a.legacy).length };
+  }
+
   async summary(): Promise<GymSummary> {
     const problems = await this.playable();
     const state = await this.sync(problems);

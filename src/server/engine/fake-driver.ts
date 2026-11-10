@@ -99,7 +99,8 @@ class FakeConversation implements Conversation {
     const outputTokens = Math.max(50, Math.min(600, Math.round(text.length / 4)));
     const cacheReadTokens = isFirstTurn ? 0 : 1500 + this.turnIndex * 200;
     const cacheCreationTokens = isFirstTurn ? 1500 : 250;
-    const costUsd = isFirstTurn ? 0.006 : 0.002;
+    // A scripted call costs nothing, so a test run never changes the cost totals of a real study folder.
+    const costUsd = 0;
     return {
       text,
       stats: {
@@ -615,19 +616,19 @@ async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
 function fakeOneShotStats(setup: OneShotSetup<unknown>, durationMs: number): TurnStats {
   switch (setup.role) {
     case "judge":
-      return { durationMs, costUsd: 0.02, inputTokens: 3500, outputTokens: 1200, cacheReadTokens: 2000, cacheCreationTokens: 1000, model: setup.model };
+      return { durationMs, costUsd: 0, inputTokens: 3500, outputTokens: 1200, cacheReadTokens: 2000, cacheCreationTokens: 1000, model: setup.model };
     case "tester":
-      return { durationMs, costUsd: 0.01, inputTokens: 2000, outputTokens: 500, cacheReadTokens: 1500, cacheCreationTokens: 500, model: setup.model };
+      return { durationMs, costUsd: 0, inputTokens: 2000, outputTokens: 500, cacheReadTokens: 1500, cacheCreationTokens: 500, model: setup.model };
     case "scribe":
-      return { durationMs, costUsd: 0.015, inputTokens: 2500, outputTokens: 800, cacheReadTokens: 2000, cacheCreationTokens: 500, model: setup.model };
+      return { durationMs, costUsd: 0, inputTokens: 2500, outputTokens: 800, cacheReadTokens: 2000, cacheCreationTokens: 500, model: setup.model };
     case "grader":
-      return { durationMs, costUsd: 0.003, inputTokens: 1600, outputTokens: 140, cacheReadTokens: 800, cacheCreationTokens: 200, model: setup.model };
+      return { durationMs, costUsd: 0, inputTokens: 1600, outputTokens: 140, cacheReadTokens: 800, cacheCreationTokens: 200, model: setup.model };
     case "checker":
-      return { durationMs, costUsd: 0.004, inputTokens: 1400, outputTokens: 220, cacheReadTokens: 900, cacheCreationTokens: 200, model: setup.model };
+      return { durationMs, costUsd: 0, inputTokens: 1400, outputTokens: 220, cacheReadTokens: 900, cacheCreationTokens: 200, model: setup.model };
     case "brief-writer":
-      return { durationMs, costUsd: 0.02, inputTokens: 3000, outputTokens: 1500, cacheReadTokens: 1500, cacheCreationTokens: 1500, model: setup.model };
+      return { durationMs, costUsd: 0, inputTokens: 3000, outputTokens: 1500, cacheReadTokens: 1500, cacheCreationTokens: 1500, model: setup.model };
     default:
-      return { durationMs, costUsd: 0.005, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 500, cacheCreationTokens: 500, model: setup.model };
+      return { durationMs, costUsd: 0, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 500, cacheCreationTokens: 500, model: setup.model };
   }
 }
 

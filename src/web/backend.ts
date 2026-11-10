@@ -176,7 +176,10 @@ export interface UsageTotals {
   cacheCreationTokens: number;
   cacheHitRate: number;
   calls: number;
+  /** Rounds that are still saved. */
   rounds: number;
+  /** Rounds that spent calls and were discarded since. Absent from a server that predates it. */
+  discardedRounds?: number;
   drillCost: number;
   /** Absent from a server that predates the counts. */
   failedCalls?: number;
@@ -199,6 +202,8 @@ export interface SessionUsageSummary {
   cacheHitRate: number;
   calls: number;
   durationMs: number;
+  /** True when the round was discarded after it spent these calls. */
+  discarded?: boolean;
 }
 
 export interface ProblemUsageSummary {
@@ -272,6 +277,10 @@ export interface DrillUsageSummary {
     durationMs: number;
   }[];
   earlier: { cost: number; calls: number };
+  /** Drills the user started over: they spent calls but are not attempts on record. */
+  startedOver?: { attempts: number; cost: number; calls: number };
+  /** Attempts saved before calls were recorded per attempt; they have no cost row. */
+  legacyAttempts?: number;
 }
 
 export interface UsageSummaryResponse {
@@ -279,6 +288,8 @@ export interface UsageSummaryResponse {
   drills: DrillUsageSummary;
   bySession: SessionUsageSummary[];
   byProblem: ProblemUsageSummary[];
+  /** Calls no problem owns, so the rows by problem plus these add up to the total. */
+  unassigned?: { preparation: ProblemUsageSummary | null; other: ProblemUsageSummary | null };
   byRole: RoleUsageSummary[];
   byModel: ModelUsageSummary[];
   byDay: DayUsageSummary[];

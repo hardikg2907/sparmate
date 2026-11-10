@@ -558,6 +558,69 @@ describe("UsageLedger drill cost", () => {
     expect(drills.byAttempt[0]!.attemptId).toBe((204).toString(16).padStart(16, "0"));
   });
 
+  it("counts only the rounds that are still saved, keeps a discarded round's cost, and says how many were discarded", async () => {
+    const ledger = await ledgerWith([
+      row({ sessionId: "kept", role: "interviewer", cost: 1, costUsd: 1 }),
+      row({ sessionId: "gone", role: "interviewer", cost: 2, costUsd: 2 }),
+      row({ sessionId: "gone2", role: "interviewer", cost: 4, costUsd: 4 }),
+    ]);
+    const s = await ledger.summary({ timeZone: "UTC", known: { rounds: new Set(["kept"]) } });
+    expect(s.totals.rounds).toBe(1);
+    expect(s.totals.discardedRounds).toBe(2);
+    expect(s.totals.costUsd).toBeCloseTo(7);
+    expect(s.byProblem[0]?.rounds).toBe(1);
+    expect(
+      s.bySession
+        .filter((x) => x.discarded)
+        .map((x) => x.sessionId)
+        .sort(),
+    ).toEqual(["gone", "gone2"]);
+    expect(s.bySession.find((x) => x.sessionId === "kept")?.discarded).toBeUndefined();
+  });
+
+  it("counts every round as kept when it is not told which are saved", async () => {
+    const ledger = await ledgerWith([row({ sessionId: "a", role: "judge" }), row({ sessionId: "b", role: "judge" })]);
+    const s = await ledger.summary({ timeZone: "UTC" });
+    expect(s.totals.rounds).toBe(2);
+    expect(s.totals.discardedRounds).toBeUndefined();
+  });
+
+  it("gives custom question preparation its own row, so the rows add up to the total", async () => {
+    const ledger = await ledgerWith([
+      row({ sessionId: "s1", role: "interviewer", cost: 1, costUsd: 1 }),
+      row({ problemId: null, track: "hld", role: "brief-writer", cost: 0.6, costUsd: 0.6 }),
+      row({ problemId: null, track: "hld", role: "brief-checker", cost: 0.31, costUsd: 0.31 }),
+      row({ problemId: null, role: "grader", cost: 0.4, costUsd: 0.4 }),
+    ]);
+    const s = await ledger.summary({ timeZone: "UTC" });
+    expect(s.unassigned?.preparation).toMatchObject({ calls: 2 });
+    expect(s.unassigned?.preparation?.costUsd).toBeCloseTo(0.91);
+    expect(s.unassigned?.other).toMatchObject({ calls: 1 });
+    const rows = [...s.byProblem, s.unassigned?.preparation, s.unassigned?.other].reduce((sum, r) => sum + (r?.costUsd ?? 0), 0);
+    expect(rows).toBeCloseTo(s.totals.costUsd);
+  });
+
+  it("has no preparation row when no custom question was prepared", async () => {
+    const s = await (await ledgerWith([row({ sessionId: "s1", role: "judge" })])).summary({ timeZone: "UTC" });
+    expect(s.unassigned).toEqual({ preparation: null, other: null });
+  });
+
+  it("does not count a drill the user started over as an attempt, and keeps its cost apart", async () => {
+    const ledger = await ledgerWith([
+      row({ drillAttemptId: A1, drillKind: "walk", cost: 0.2, costUsd: 0.2 }),
+      row({ drillAttemptId: A1, drillKind: "walk", cost: 0.1, costUsd: 0.1 }),
+      row({ drillAttemptId: A2, drillKind: "tradeoff", cost: 0.05, costUsd: 0.05 }),
+    ]);
+    const { drills } = await ledger.summary({ timeZone: "UTC", known: { attempts: new Set([A1]), legacyAttempts: 3 } });
+    expect(drills.attempts).toBe(1);
+    expect(drills.byAttempt.map((a) => a.attemptId)).toEqual([A1]);
+    expect(drills.byKind.find((k) => k.kind === "tradeoff")).toMatchObject({ attempts: 0, calls: 1 });
+    expect(drills.startedOver).toMatchObject({ attempts: 1, calls: 1 });
+    expect(drills.startedOver?.cost).toBeCloseTo(0.05);
+    expect(drills.legacyAttempts).toBe(3);
+    expect(drills.cost).toBeCloseTo(0.35);
+  });
+
   it("sums the cost of each attempt over its calls and leaves out rows without an attempt id", async () => {
     const a = "0123456789abcdef";
     const b = "fedcba9876543210";

@@ -25,7 +25,7 @@ const DAILY = [0, 0, 0.42, 1.18, 0, 0, 0.9, 2.35, 0.31, 0, 0, 0, 1.64, 0.77, 0, 
 /** A month of rounds, so the usage page can be checked without a server or a ledger. */
 export const fixtureUsage: UsageSummaryResponse = {
   trackingSince: day(34),
-  totals: { ...cost(17.55, 214, 640_000, 182_000, 4_900_000), rounds: 11, drillCost: 0.62 },
+  totals: { ...cost(17.55, 214, 640_000, 182_000, 4_900_000), rounds: 11, discardedRounds: 2, drillCost: 0.62 },
   drills: {
     cost: 0.62,
     calls: 14,

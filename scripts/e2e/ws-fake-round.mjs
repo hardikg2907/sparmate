@@ -1032,10 +1032,10 @@ async function main() {
 
     const usageRes = await api.get("/api/usage");
     check(
-      "/api/usage reports the rounds and model calls",
+      "/api/usage reports the rounds and model calls, and a fake call costs nothing",
       usageRes.status === 200 &&
         usageRes.json?.totals?.calls > 0 &&
-        usageRes.json?.totals?.costUsd > 0 &&
+        usageRes.json?.totals?.costUsd === 0 &&
         usageRes.json?.totals?.inputTokens > 0 &&
         usageRes.json?.bySession?.length > 0 &&
         typeof usageRes.json?.totals?.cacheHitRate === "number",
