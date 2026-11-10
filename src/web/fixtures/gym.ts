@@ -103,7 +103,7 @@ export const fixtureGym: GymSummary = {
       15,
       "2026-11-09",
       0,
-      'Take "Fan-out strategy": pick the option you would build for this problem, give the reason from its requirements, and say when the other option wins.',
+      'The topic is "Fan-out strategy". Say what you would choose for this problem, give the reason from its requirements, and say what would make you choose differently.',
     ),
     row("a1b2c3d4e5f60006", "Capacity math done without prompting", null, "capacity", "Capacity math", "c2-news-feed", "News Feed", 10, "2026-11-12", 1, ""),
   ],

@@ -8,7 +8,7 @@ const PROMPT: DrillPrompt = {
   drill: "tradeoff",
   title: "Defend a trade-off",
   minutes: 15,
-  task: 'Take "Fan-out strategy": pick the option you would build for this problem, give the reason from its requirements, and say when the other option wins.',
+  task: 'The topic is "Fan-out strategy". Say what you would choose for this problem, give the reason from its requirements, and say what would make you choose differently.',
   topic: "Fan-out strategy",
   problem: { id: "c2-news-feed", title: "News Feed", track: "hld" },
   material: [
@@ -23,7 +23,7 @@ const TURNS: DrillTurn[] = [
     role: "candidate",
     text: "I would fan out on write for most users. A timeline read must be fast, and reads outnumber posts by a large factor.\nFor an account with millions of followers I would skip the push and merge its posts when the reader opens the feed.",
   },
-  { role: "grader", text: "What does that merge cost on a read, and when would you choose fan-out on read for everyone?" },
+  { role: "grader", text: "What does that merge cost on every read of the feed?" },
 ];
 
 /** A dialogue drill after the first question: the prompt on the left, the thread and the reply box on the right. */

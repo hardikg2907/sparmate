@@ -50,7 +50,7 @@ Environment variables (all optional). The server also reads them from a gitignor
 |---|---|---|
 | `PORT` | `4747` | Server port. The server binds `127.0.0.1` only natively, or `0.0.0.0` when `SPARMATE_IN_CONTAINER=1`. |
 | `STUDY_ROOT` | `~/sparmate-study` | Where `TRACKER.md`, `REVIEW.md`, `notes/`, `lld/` live. Tests point it at a temp copy. |
-| `DATA_DIR` | `<STUDY_ROOT>/rounds` | Sessions, settings, custom problems, logs. |
+| `DATA_DIR` | `<STUDY_ROOT>/rounds` | Sessions, settings, custom problems, drill schedule and attempts, usage ledger, logs. |
 | `SPARMATE_IN_CONTAINER` | unset | `1` enables container mode: server listens on `0.0.0.0`, strict host/origin allow-lists applied. |
 | `SPARMATE_FAKE_AGENT` | unset | `1` replaces every model call with the deterministic fake driver (section 5.7). |
 | `SPARMATE_CLAUDE_JSON` | `~/.claude.json` | Where the privacy guard reads the account email (section 11). |
@@ -65,6 +65,8 @@ rounds/
   settings.json                      Settings (src/shared/types.ts), defaults when missing
   usage.jsonl                        append-only model call ledger (tokens, cost, duration)
   leetcode.json                      the DSA solve ledger and cached problem details (below)
+  drills.json                        the drill queue and the index of every drill attempt, format version 2 (section 12.1)
+  drill-attempts/<attemptId>.json    the saved body of one drill attempt: task, answers, dialogue turns and grades
   sessions/<sessionId>/              deleted whole when the round is discarded (section 5.11)
     session.json                     Session, rewritten atomically after every change worth keeping
     board.json                       { version, elements } latest scene
@@ -183,7 +185,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
 | brief-writer | custom problem preparation | one-shot | WebSearch (<= 8), WebFetch (<= 6) | `{ meta: { title, difficulty, tags }, body, sources, confidence }` structured |
 | brief-checker | custom problem verification | one-shot | WebFetch, WebSearch (<= 3) | `{ body, corrections, unconfirmed? }` structured |
-| grader | when the candidate submits, or replies in, a Gym drill (section 12.1) | one-shot, default `claude-sonnet-5-5` at effort `medium`, set in Settings `models.grader` and `effort.grader` | none | `{ scores, wentWell, improve, yourLine, strong }` structured, checked and trimmed by the server; the server derives the outcome from the scores. The interviewer questions of a dialogue drill use the same role and the prompt `drill-follow-up`, and return `{ question }` or `{ another, question }`, checked and cleaned by the server |
+| grader | when the candidate submits, or replies in, a drill (section 12.1) | one-shot, default `claude-sonnet-5-5` at effort `medium`, set in Settings `models.grader` and `effort.grader` | none | `{ scores, wentWell, improve, yourLine, strong }` structured, checked and trimmed by the server; the server derives the outcome from the scores. The interviewer questions of a dialogue drill use the same role and the prompt `drill-follow-up`, and return `{ question }` or `{ another, question }`, checked and cleaned by the server |
 | checker | when the round leaves a step, when the round ends, on a guided step check, and when the guide re-reads a step (section 5.11) | one-shot, always `claude-sonnet-5-5` at effort `low` | none (a frame PNG attached as an image block when needed) | `{ items[{ id, state, source, quote, detail }] }` structured, verified and stored in `Session.stepChecks` |
 
 Tool definitions (zod input schemas, every input validated, size-capped):
@@ -953,24 +955,29 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 ### 12.1 Screens
 
 **Main bar** (every page except the room, the debrief and the start flow)
-- "Sparmate" and six links: Today, Library, Gym, DSA, Progress, History. The current page is underlined. Usage and
-  Settings are icons on the right, with the Test mode pill beside them. On a phone the links scroll sideways inside
-  the bar, so the page never does. The Gym link shows the number of due drills, and nothing when none is due.
+- "Sparmate" and three links: Today, Practice and Progress. The current page is underlined. A "Jump to…" box opens
+  the command palette, and a Menu button holds Settings, Usage and the keyboard shortcuts, with the Test mode pill
+  beside it. On a phone the links move to a bottom tab bar with a Jump tab. The Practice link shows the number of
+  due drills, and nothing when none is due. The old addresses `/library`, `/gym`, `/dsa` and `/history` are replaced
+  in place by `/practice`, `/practice/drills`, `/progress#dsa` and `/progress#history`.
 
 **Today `/`**
 - Kicker date and the day's title ("System design day", "Machine coding day", "DSA day", "Redo day", "Rest day"). A
   quiet week strip top right marks today and shows each day's kind from the weekly plan.
 - The hero card is the session `selectToday` picks (section 5.10a): chips ("Redo due" or "New problem", the track), the
   problem title large, one sentence why, a facts row (Mode, Round, Debrief), at most one warning line, the one filled
-  primary button, "See the plan" and a quiet "Pick another problem" link to the Library. "See the plan" opens a side
+  primary button, "See the plan" and a quiet "Pick another problem" link to Practice. "See the plan" opens a side
   panel with the mode switch, the step plan with its minutes and the minutes of the last try, the last try's result, and
   a link to the last debrief. A round to finish shows Finish as the primary action. A DSA day shows "Open LeetCode"
   (new tab, `rel="noopener noreferrer"`).
-- Side column: an Unfinished card for the newest unfinished round (title, paused date, clock used of the total with a
+- Side column: a "Drills due" card with the number of due drills and their total minutes, up to three rows (the gap,
+  and the drill kind with its minutes and the problem of its next attempt, with a "Changed constraint" tag when
+  one applies) each with a Start button, and an "Open Practice" link; an Unfinished card for the newest unfinished round (title, paused date, clock used of the total with a
   bar, Finish, and End and debrief, or Discard under 5 minutes of clock), with "N more unfinished rounds" linking to
   History; a link card "N more redos" to Progress. End and debrief calls `POST /api/sessions/:id/end` and opens the round.
 
-**Library `/library`**
+**Practice, Rounds `/practice`**
+- A segmented switch, Rounds and Drills, sits under the title; Drills carries the number due. `/practice` opens Rounds and `/practice/drills` opens Drills.
 - Track switch HLD, LLD and My questions with counts; filter Fresh first (default), Redo due, All. Rows hold a status
   mark, title, difficulty and the last result on two lines (a coloured result word and a small detail such as "Redo due
   8 Nov" or "Round open"), grouped Fresh then Tried before. A row has no button: selecting it fills the right panel with
@@ -992,10 +999,13 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   and one chart with a bar per step, planned minutes against used minutes, from the newest scorecard's phase timing. The
   primary button is "Practise this gap" (a 20-minute guided round on the newest open gap whose text names the skill) or,
   with no such gap, "Start a round" to Today.
-- Side cards: Skills with a Guided and Interview switch (never mixed), a 1 to 4 track per skill with the target bar
-  marked, one dot per round (the newest bold), the skill's level as its number to one decimal, and an info tip ("Your
-  last 3 rounds, plus drills from the last 30 days at a lower weight.") that also explains the scale; and Next
-  redos with the next two and their dates, "See all N" opening a side panel with the full queue.
+- Side cards beside it: the counters above and Next redos with the next two and their dates, "See all N" opening a
+  side panel with the full queue.
+- The page is one scroll with a sub-navigation of four sections: This week, Skills, DSA and History. The Skills section
+  holds a "Level per skill" card and a "Drills by kind" card. "Level per skill" has a Guided and Interview switch (never
+  mixed), a 1 to 4 track per skill with the target bar marked, one dot per round (the newest bold), the skill's level as
+  its number to one decimal, and an info tip ("Your last 3 rounds, plus drills from the last 30 days at a lower
+  weight.") that also explains the scale.
 - Drills feed Progress. A drill point is one finished, non-legacy attempt that has scores: its day, kind, the skill the
   kind trains on the track of its problem (`drillSkill`; the trade-off takes the track of the attempt's problem), the
   mean of the scores of its first grade, its outcome and whether it was a first try (Interview-ready with no revision).
@@ -1014,14 +1024,14 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   the attempts of the last 30 days, and the share of those that were ready on the first try. A row links to Practice,
   Drills. With no point the card says no drill has been graded yet; when the summary cannot be read it says so.
 
-**History `/history`**
+**Progress, History `/progress#history`**
 - Every round, newest first: date, problem and track, mode, a result chip (the verdict as its plain label, or "Ready" or
   "Not yet" for a guided round with a readiness call, or the status), a link (Finish for a live or paused round, else
   Open debrief or Open) and a "Discard" button. A debriefed round shows "Notes saved" or "Notes not saved". An unfinished
   round carries an "Unfinished" chip. Discard asks first, with the same confirm text as the room, then calls
   `DELETE /api/sessions/:id`. It is disabled while the status is Debriefing.
 
-**Gym `/gym`**
+**Practice, Drills `/practice/drills`**
 - The next due drill is the hero: title, problem, length, due day, Interview-ready results (three pips, with an info tip on how a gap closes), the one-line task and "Start drill". "Also due" lists the next three due drills and says how many more wait. "All drills" opens a side panel with the six drill kinds, then the problems that can supply the drill. With nothing due the hero says so and "All drills" is the one primary button. With no round played and no custom problem, the page explains that drills start after the first round.
 - Drill kinds are fixed: `capacity`, `walk`, `requirements`, `deep_dive`, `tradeoff` ("Defend a trade-off") and `lld_skeleton`. Capacity, walk and requirements take 10 minutes; the other three take 15. Capacity, walk and requirements serve system design only, the LLD skeleton serves machine coding only, and the deep dive serves system design. The trade-off serves both tracks, so a kind lists the tracks it serves (`DRILL_INFO[kind].tracks`). Each kind reads one section of the problem brief: capacity keys on "Capacity math" and prompts with the numeric lines of "Hidden facts"; walk keys on "Reference design"; requirements prompts with the opening prompt only and keys on "Expected requirements" plus the held-back facts, so it grades the questions and settled requirements the candidate writes, each with the answer or number the candidate assumes, because nobody answers in a drill; deep dive keys on one "Deep dives" entry, chosen by words shared with the gap (with no shared word, the entries rotate); the trade-off on system design keys on one top-level bullet of "Accepted alternatives" (`- **Name.** text` with its sub-bullets; the title is the bold lead without its closing dot, and each title names one decision). A bullet whose title is "Smaller choices" or starts with "Other" gathers small unrelated choices, so it is never a topic. The task is `The topic is "<title>". Say what you would choose for this problem, give the reason from its requirements, and say what would make you choose differently.` The entry is the one whose title shares the most four-letter word stems with the gap's title; the gap's reason and the entry's text are not read, and the common words ("without", "reason", "choice", "option", "design", "picked", "explain" and the usual filler words) never count. With no shared stem the entries rotate by a count: for a queued drill the number of finished attempts that counted for it, so its topic holds until one is done; for a free drill the number of finished attempts of that kind on the problem. A problem fits with at least one entry. The trade-off on machine coding asks about the whole "Patterns that fit" section at once, because a pattern's name would give the answer away ("Name the design patterns you would use in this problem and the ones you would leave out, each with the reason from the requirements."), shows the same "What you know" facts block as the LLD skeleton, and keys on that section; the LLD skeleton prompts with the facts and keys on "Entities and relationships" and "Behaviour and states". The skeleton is a plain-text answer graded on structure, not the C++ editor. Text of a brief is untrusted: sections are read up to 40,000 characters, by plain line scanning, with capped entry counts and lengths.
 - Each kind has a rubric (`DRILL_RUBRIC`): the round scorecard skill it trains and three to five named criteria, some marked core. `drillSkill(kind, track)` gives the skill, because the trade-off trains `depth` on system design and `design` on machine coding. The grader scores each criterion from 1 to 4 (1 missing or wrong, 2 partly there, 3 at the bar, 4 strong) on the candidate's reasoning; the key is a reference, so a different design or number that holds up with a reason earns full credit. Capacity trains `scale_reliability` (picks the numbers that decide, math is about right, each number ends in a decision: core; states its assumptions), walk trains `design` (full path in the right order, each box has a job: core; says what is read and written where, names the slow or weak step), requirements trains `navigation` (core functions, quality needs as numbers, asks the questions that change the design: core; says what is out of scope), deep dive trains `depth` (says what breaks in the naive way, a mechanism that works one level deeper, holds up under the follow-up: core; states the cost), the trade-off trains `depth` or `design` (takes a clear position, the reason uses this problem's needs, holds or changes position for a good reason: core; says when the other option wins) and the LLD skeleton trains `design` (right classes, each rule has one owner, signatures express the behaviour: core; relations and states, room for the next change). The server, not the model, sets the outcome: **Interview-ready** when every core criterion is 3 or more and none is 1; **Needs work** when a core criterion is 1 or two or more core criteria are below 3; **Getting there** otherwise. A deep-dive row saved with three scores, from before the follow-up criterion, is judged on the three it has. The grader's reply is rejected, and asked for again once, unless its score ids are exactly the kind's criteria once each. Feedback is short: up to two lines of what went well, one or two of what to improve, the candidate's own line (quote-checked against all the candidate's turns, else the first line) and one line of what a strong answer says. Any feedback line that shares six or more words in a row with the answer key is dropped. So is a line that gives part of the key away in its own words: one that holds a number from the key, or three words of six letters or more from it, that the candidate did not write and the drill did not show (`dropKeyReveals`). The candidate revises right after the feedback, so feedback points at the gap and never supplies the answer; when no improve line is left, the server writes "Work on this: <criterion>." for the lowest scored criterion. The strong line is saved in the attempt body. The result of a submit, a reply or a revision never holds it; `GET /api/gym/attempts/:attemptId` returns it only under the rule in the route table.
@@ -1041,7 +1051,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
 - Loading shows skeletons; a failed read shows an alert with "Try again"; an unknown drill says it is not in the schedule; a drill with no attempt says so.
 - Practice, Drills links to it: the hero and each "Also due" row carry a "History" link, a "Closed drills" card below them lists the closed drills (five, then "Show all N"), and a "Recent attempts" card lists the newest 20 attempts of every kind, free drills included, with the same expanding rows and, for a queued drill, a link to its history.
 
-**DSA `/dsa`**
+**Progress, DSA `/progress#dsa`**
 - DSA measures the current pass, never the account's history. A hero shows "Mediums this week" as N of the weekly goal,
   "N problems this week" under the number and a Monday-first strip captioned "Problems solved each day" (days that are DSA days in the weekly plan are outlined and a small legend says so; today has a ring outside the cell) and
   one primary button, "Open LeetCode" (`https://leetcode.com/problemset/`, new tab, `rel="noopener noreferrer"`). The side
@@ -1135,7 +1145,7 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   were saved shows "Saved N changes to your study files on <date>" with a "Draft again" button.
 
 **Usage `/usage`**
-- Linked from the app header next to Settings.
+- Linked from the Menu in the main bar, next to Settings.
 - Totals: API-equivalent cost, input tokens, output tokens, cache hit rate, number of model calls, rounds. The
   ledger records a failed call as a row with `ok: false` (a row without `ok` reads as ok), and the totals count
   these as `failedCalls`, shown beside the call count. When the SDK gives no cost, the row is priced from its tokens
