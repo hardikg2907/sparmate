@@ -788,7 +788,7 @@ normal file the user can open in an editor at the same time (`lld/compile_flags.
   -fno-color-diagnostics -fdiagnostics-print-source-range-info
   -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG`.
 - Syntax check: the same flags plus `-fsyntax-only`; 20 s timeout.
-- Run: compile to a temp folder (`DATA_DIR/runtime/cpp/<random>/`), run the binary with a 5 s timeout, no
+- Run: compile to a temp folder (`DATA_DIR/runtime/cpp/<random>/`), run the binary with a 5 s time limit, no
   stdin, cap stdout and stderr at 64 KB each (keep the head, say it was cut).
 - Harness run: copy the candidate file into the temp folder as `candidate.cpp`, write `harness.cpp`:
 
@@ -802,7 +802,17 @@ normal file the user can open in an editor at the same time (`lld/compile_flags.
   then `#line 1 "harness.cpp"` and the tester's code (which defines `int main()`); compile with the base
   flags plus `-fsanitize=undefined` (and `-fsanitize=address -fno-omit-frame-pointer` when a one-time probe
   shows the toolchain's AddressSanitizer works; Apple clang 16 on macOS 27 aborts every ASan program before
-  `main()`, so it is off there); run with a 10 s timeout.
+  `main()`, so it is off there); run with a 10 s time limit.
+- Start report: every built program (a run, a harness run and the sanitizer probe) links `runner_hook.cpp`, which
+  the runner writes into the build folder and puts before the user's sources, so its initializer runs before any
+  user code. It writes one byte to fd 3, a pipe from the runner. A program's time limit starts at that byte, not
+  at the spawn: loading a fresh binary goes through the system's first-launch checks, which take about 0.3 s and
+  queue past a second when several programs start at once. The run's `durationMs` counts from the byte as well.
+  A program that has not reported within 10 s is stopped, `timedOut` is set, and stderr says it did not start in
+  time. The pipe is untrusted: a later byte changes nothing, and closing the pipe starts the limit at once, so a
+  program can only shorten or end its own run, never pass 10 s plus its limit. The hook has internal linkage only
+  and compiles without warnings, so it never shows in the user's diagnostics. The compiler keeps its limit from
+  the spawn.
 - Diagnostics: `parseClangDiagnostics(stderr, filePath)` in `src/shared/clang.ts`, keeping only lines for the
   compiled file (skip notes inside system headers). Regex on lines of at most 2,000 characters.
 - Sandbox: the compiler and every produced binary run in an isolated sandbox with no network access and no file
@@ -822,9 +832,12 @@ normal file the user can open in an editor at the same time (`lld/compile_flags.
     other file. Forking stays allowed because the compiler driver starts the linker.
   - macOS limits: both wrap the command in `/bin/sh` with `ulimit -f` (16 MB for a program, 256 MB for the compiler)
     and `ulimit -t` (10 s CPU for a program; the compile timeout plus 5 s for the compiler). macOS enforces no
-    memory rlimit, so the runner polls the resident memory of the whole process group every 100 ms with `ps` and
-    kills the group above 1 GB for a program and 2 GB for the compiler, and the result says the memory limit was
-    passed.
+    memory rlimit (`ulimit -v`, `-m` and `-d` are refused), so the hook in every built program starts a thread that
+    reads the program's physical footprint (`task_info`, `phys_footprint`) every 2 ms and, above 1 GB, writes `m`
+    on the status pipe and kills the program. The footprint counts compressed and swapped pages, which the resident
+    size leaves out. The runner also polls the resident memory of the whole process group every 100 ms with `ps`;
+    that poll is the only memory check for the compiler (2 GB) and a backstop for a program that stops its own
+    thread. Either way the group is killed and the result says the memory limit was passed.
   - Linux (containers or host): Bubblewrap (`bwrap`) with private namespaces (`--unshare-all`), a minimal read-only
     system root (`/usr`, `/etc`), only `/dev/null`, `/dev/zero`, `/dev/random` and `/dev/urandom` as devices, a
     private `/tmp`, **no `/proc`** (the container's `/proc` would expose the server's environment and its token, and

@@ -190,11 +190,11 @@ A save that contains a listed term is refused. Log files redact listed terms. Th
 | Tool      | `sandbox-exec`                                                                                                                        | Bubblewrap (`bwrap`) with `prlimit`                                                              |
 | Compiling | Reads only the system folders, the toolchain, the build folder and your one source file. Writes only to the build folder. No network. | A minimal root with system libraries and compilers. No home folder, no study folder, no network. |
 | Running   | Writes only to the build folder, cannot read your home folder, no network, no child processes.                                        | The same private root, with no network and its own process space.                                |
-| Limits    | File size and CPU time, plus a 1 GB memory cap that the app checks by polling.                                                        | File size, CPU time, process count and a 1 GB address-space limit from `prlimit`.                |
+| Limits    | File size and CPU time, plus a 1 GB memory cap that each program checks on itself every 2 ms.                                         | File size, CPU time, process count and a 1 GB address-space limit from `prlimit`.                |
 
 Honest limits:
 
-- On macOS the memory cap is polled, not enforced by the system. A program can pass 1 GB for a short time before the app stops it.
+- On macOS the memory cap is checked, not enforced by the system. A program can pass 1 GB by a few tens of MB before it stops. A program that stops its own check is caught only by a slower poll of its resident memory.
 - A program can still tell whether a file exists, for example with `__has_include`.
 
 ## Cost

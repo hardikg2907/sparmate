@@ -1,4 +1,12 @@
 import { execFile, spawn } from "node:child_process";
+import type { Readable } from "node:stream";
+
+/**
+ * The extra descriptor a program reports on when `startupTimeoutMs` is set: any byte, or the end of the pipe, says it
+ * has started, and the byte MEMORY_REPORT says it passed its memory cap.
+ */
+export const STATUS_FD = 3;
+export const MEMORY_REPORT = "m";
 
 export interface ProcessOptions {
   command: string;
@@ -6,11 +14,18 @@ export interface ProcessOptions {
   cwd: string;
   env: Readonly<Record<string, string>>;
   timeoutMs: number;
+  /**
+   * When set, `timeoutMs` counts from the program's first report on STATUS_FD instead of from the spawn, and this
+   * bounds the wait for that report. Loading a freshly built binary is not the program's own time: the first launch
+   * goes through the system's security checks, which take hundreds of milliseconds and queue up on a busy machine.
+   */
+  startupTimeoutMs?: number;
   maxStdoutBytes: number;
   maxStderrBytes: number;
   /**
    * Kill the process group once its resident memory passes this size. macOS only: it enforces no memory
-   * rlimit, while Linux runs get an address-space limit from prlimit instead.
+   * rlimit, while Linux runs get an address-space limit from prlimit instead. A program that reports on
+   * STATUS_FD watches its own footprint much more closely; this watch also covers code that does not.
    */
   maxRssBytes?: number;
 }
@@ -24,8 +39,11 @@ export interface ProcessResult {
   stdoutCut: boolean;
   stderrCut: boolean;
   timedOut: boolean;
-  /** True when the group was killed for passing `maxRssBytes`. */
+  /** True when the time ran out before the program reported its start; `timedOut` is set too. */
+  startupTimedOut: boolean;
+  /** True when the group was killed for passing `maxRssBytes`, or the program reported passing its own cap. */
   memoryExceeded: boolean;
+  /** From the program's start report when there was one in time, otherwise from the spawn. */
   durationMs: number;
   /** Set when the process could not be started at all, for example because the compiler is missing. */
   spawnError: string | null;
@@ -34,7 +52,7 @@ export interface ProcessResult {
 /** After the process ends, wait this long for its pipes to drain before giving up on stragglers that kept them open. */
 const DRAIN_GRACE_MS = 1000;
 
-/** At full allocation speed a program gets roughly half a gigabyte past the cap before the kill lands. */
+/** Each sample starts a ps process, so this watch stays coarse; programs that report on STATUS_FD watch themselves. */
 const MEMORY_POLL_MS = 100;
 
 const liveGroups = new Set<number>();
@@ -53,19 +71,25 @@ export function killLiveProcessGroups(): void {
 /**
  * Runs one program with an argument array (never a shell), no stdin, capped output and a hard timeout.
  * The child leads its own process group so a timeout, or an exit that leaves children behind, kills them all.
+ *
+ * The program is untrusted, and so is everything it writes on STATUS_FD. Whatever it writes there can only start
+ * its limit earlier or end its run: the group is always killed by `startupTimeoutMs` plus `timeoutMs`.
  */
 export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
   return new Promise((resolve) => {
-    const started = performance.now();
+    const spawned = performance.now();
+    const reportsStart = options.startupTimeoutMs !== undefined;
     const stdout = new Capture(options.maxStdoutBytes);
     const stderr = new Capture(options.maxStderrBytes);
     let timedOut = false;
+    let startupTimedOut = false;
+    let programStarted: number | undefined;
+    let exited = false;
     let memoryExceeded = false;
     let exitCode: number | null = null;
     let signal: string | null = null;
     let finished = false;
     // Declared up front because finish() reads it; the timer starts only after the listeners are attached.
-    // eslint-disable-next-line prefer-const
     let timeout: NodeJS.Timeout | undefined;
     let grace: NodeJS.Timeout | undefined;
     let memoryWatch: NodeJS.Timeout | undefined;
@@ -75,13 +99,13 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
       child = spawn(options.command, [...options.args], {
         cwd: options.cwd,
         env: { ...options.env },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: reportsStart ? ["ignore", "pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
         detached: true,
         windowsHide: true,
       });
       if (child.pid !== undefined) liveGroups.add(child.pid);
     } catch (error) {
-      resolve(failedToStart(started, error));
+      resolve(failedToStart(spawned, error));
       return;
     }
 
@@ -93,6 +117,7 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
         // The group is already gone.
       }
     };
+    const status = reportsStart ? (child.stdio[STATUS_FD] as Readable | null) : null;
 
     const finish = (spawnError: string | null): void => {
       if (child.pid !== undefined) liveGroups.delete(child.pid);
@@ -103,6 +128,7 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
       clearInterval(memoryWatch);
       child.stdout?.destroy();
       child.stderr?.destroy();
+      status?.destroy();
       resolve({
         exitCode,
         signal,
@@ -111,8 +137,9 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
         stdoutCut: stdout.cut,
         stderrCut: stderr.cut,
         timedOut,
+        startupTimedOut,
         memoryExceeded,
-        durationMs: Math.round(performance.now() - started),
+        durationMs: Math.round(performance.now() - (programStarted ?? spawned)),
         spawnError,
       });
     };
@@ -121,6 +148,7 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
     child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
     child.on("error", (error) => finish(describeSpawnError(error)));
     child.on("exit", (code, sig) => {
+      exited = true;
       exitCode = code;
       signal = sig;
       killGroup();
@@ -128,11 +156,40 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
     });
     child.on("close", () => finish(null));
 
-    timeout = setTimeout(() => {
+    const outOfTime = (): void => {
       timedOut = true;
       killGroup();
       grace ??= setTimeout(() => finish(null), DRAIN_GRACE_MS);
-    }, options.timeoutMs);
+    };
+    const stopForMemory = (): void => {
+      if (finished || timedOut || memoryExceeded) return;
+      memoryExceeded = true;
+      killGroup();
+    };
+
+    if (options.startupTimeoutMs === undefined) {
+      timeout = setTimeout(outOfTime, options.timeoutMs);
+    } else {
+      timeout = setTimeout(() => {
+        startupTimedOut = true;
+        outOfTime();
+      }, options.startupTimeoutMs);
+      // Once the exit is seen, a report still in the pipe no longer says when the program started.
+      const programStarts = (): void => {
+        if (programStarted !== undefined || exited || timedOut || finished) return;
+        programStarted = performance.now();
+        clearTimeout(timeout);
+        timeout = setTimeout(outOfTime, options.timeoutMs);
+      };
+      // Each chunk is scanned and dropped, so a program that floods the pipe costs no memory here.
+      status?.on("data", (chunk: Buffer) => {
+        programStarts();
+        if (chunk.includes(MEMORY_REPORT)) stopForMemory();
+      });
+      // A program that closes the descriptor before reporting only starts its own limit early.
+      status?.on("end", programStarts);
+      status?.on("error", () => undefined);
+    }
 
     const cap = options.maxRssBytes;
     if (cap !== undefined && process.platform === "darwin" && child.pid !== undefined) {
@@ -143,9 +200,8 @@ export function runProcess(options: ProcessOptions): Promise<ProcessResult> {
         polling = true;
         groupRssBytes(pid).then((bytes) => {
           polling = false;
-          if (bytes > cap && !finished && !timedOut) {
-            memoryExceeded = true;
-            killGroup();
+          if (bytes > cap) {
+            stopForMemory();
             clearInterval(memoryWatch);
           }
         });
@@ -218,7 +274,7 @@ function dropIncompleteUtf8(buffer: Buffer): Buffer {
   return needed > continuation + 1 ? buffer.subarray(0, index) : buffer;
 }
 
-function failedToStart(started: number, error: unknown): ProcessResult {
+function failedToStart(spawned: number, error: unknown): ProcessResult {
   return {
     exitCode: null,
     signal: null,
@@ -227,8 +283,9 @@ function failedToStart(started: number, error: unknown): ProcessResult {
     stdoutCut: false,
     stderrCut: false,
     timedOut: false,
+    startupTimedOut: false,
     memoryExceeded: false,
-    durationMs: Math.round(performance.now() - started),
+    durationMs: Math.round(performance.now() - spawned),
     spawnError: describeSpawnError(error),
   };
 }
