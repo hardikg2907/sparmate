@@ -357,7 +357,8 @@ export class DrillService {
     const state = await this.sync(problems);
     const { problem, item, content, variant } = await this.resolve(target, state);
     // A queued drill opened before its day is graded but counts for nothing, so the page says so before the answer.
-    const early = item && !isDue(item, this.today()) ? { early: { dueOn: item.dueOn } } : {};
+    const today = this.today();
+    const early = item && !isDue(item, today) ? { early: { dueOn: item.dueOn, today } } : {};
     if (!isDialogue(target.drill)) return { ...content.prompt, ...early };
     const row = this.findOpen(state, target, variant);
     if (!row) return { ...content.prompt, ...early };

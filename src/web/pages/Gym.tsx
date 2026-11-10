@@ -14,7 +14,7 @@ import {
 import { DrillIcon, DumbbellIcon } from "../components/DrillIcon";
 import { ArrowLeftIcon, ChevronRightIcon, ListIcon, PlayFilledIcon, WarnIcon } from "../components/icons";
 import { SidePanel } from "../components/SidePanel";
-import { InfoTip, TrackChip } from "../components/study";
+import { InfoTip, TRACK_TITLE_SHORT, TrackChip } from "../components/study";
 import { Alert, Badge, Button, Card, Skeleton, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
 import type { GymData } from "../lib/useGym";
@@ -381,7 +381,7 @@ function AllDrillsPanel({ gym, onClose }: { gym: GymSummary; onClose: () => void
             <li key={problem.id}>
               <Link
                 href={drillPath({ drill: picked, problemId: problem.id })}
-                aria-label={`Start ${DRILL_INFO[picked].title} on ${problem.title}`}
+                aria-label={`${problem.title}, ${TRACK_TITLE_SHORT[problem.track]}: start ${DRILL_INFO[picked].title}`}
                 className="-mx-3 flex items-center justify-between gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-accent/50"
               >
                 <span className="min-w-0">

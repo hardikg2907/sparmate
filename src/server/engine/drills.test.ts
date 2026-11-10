@@ -321,10 +321,24 @@ describe("running a drill", () => {
     const t = { ...target, drillId: queued?.id };
     expect((await service.prompt(t)).early).toBeUndefined();
     await send(t, ANSWER_READY);
-    expect((await service.prompt(t)).early).toEqual({ dueOn: "2026-11-06" });
+    expect((await service.prompt(t)).early).toEqual({ dueOn: "2026-11-06", today: "2026-11-03" });
     expect((await service.prompt(target)).early).toBeUndefined();
     clock = new Date(2026, 10, 6, 9, 0);
     expect((await service.prompt(t)).early).toBeUndefined();
+    clock = new Date(2026, 10, 8, 9, 0);
+    expect((await service.prompt(t)).early).toBeUndefined();
+  });
+
+  it("keeps the early note on a dialogue drill that is still open", async () => {
+    clock = new Date(2026, 9, 30, 20, 0);
+    const row = (await service.summary()).queue.find((r) => r.drill === "deep_dive");
+    const t = { drill: "deep_dive" as const, problemId: row?.problemId ?? "", drillId: row?.id };
+    const first = await service.prompt(t);
+    expect(first.early?.dueOn).toBe(row?.dueOn);
+    await service.submit(t, "The naive way counts on one row, so I would shard the counter and pay with a slower read.", undefined, null, first.topic);
+    const again = await service.prompt(t);
+    expect(again.open?.asked).toBe(1);
+    expect(again.early?.dueOn).toBe(row?.dueOn);
   });
 
   it("a ready result on a queued drill moves it out 3 days, then 7, and the third closes it", async () => {

@@ -658,7 +658,7 @@ export interface DrillPrompt {
   /** Set when a dialogue attempt for this drill is still open today, so the page can pick the conversation up again. */
   open?: DrillOpen;
   /** Set for a queued drill that is not due yet: an attempt now is practice and moves no schedule. */
-  early?: { dueOn: string };
+  early?: { dueOn: string; today: string };
 }
 
 /** One line of a dialogue. The grader is the interviewer who asks the follow-up questions. */

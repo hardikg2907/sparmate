@@ -99,7 +99,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
         setSubmitError(notice);
         setBusy(false);
         setRestarting(false);
-        // A new answer's clock starts with its first keystroke (`clockStart`); a resumed conversation runs from its start.
+        // A resumed conversation runs from when it opened; a new answer waits for its first change.
         if (p.open) segmentStart.current = Date.now();
         setStartedAt((held) => (p.open ? openedAtMs(p.open) : held));
         document.title = `${p.title} · Sparmate`;
@@ -130,6 +130,12 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
     });
     return () => guardNavigation(null);
   }, [guarded]);
+
+  // A new answer starts with an empty box, so its clock waits for the first change again.
+  const clearClock = () => {
+    segmentStart.current = null;
+    setStartedAt(null);
+  };
 
   const onAnswer = (text: string) => {
     setAnswer(text);
@@ -208,7 +214,10 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
       (failure: unknown) => {
         if (!live.current) return;
         // The conversation ended or moved on elsewhere: show what the server holds instead of a dead end.
-        if (conversationGone(failure)) return loadPrompt(reloadFailed, "That conversation changed in another window. This is how it stands now.");
+        if (conversationGone(failure)) {
+          clearClock();
+          return loadPrompt(reloadFailed, "That conversation changed in another window. This is how it stands now.");
+        }
         setSubmitError(messageOf(failure, "The reply could not be sent. Try again."));
         setBusy(false);
       },
@@ -222,9 +231,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
     api.gymAbandon(conversation.attemptId).then(
       () => {
         if (!live.current) return;
-        const now = Date.now();
-        segmentStart.current = now;
-        setStartedAt(now);
+        clearClock();
         setConversation(null);
         setReplyText("");
         setAnswer("");
@@ -233,7 +240,10 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
       },
       (failure: unknown) => {
         if (!live.current) return;
-        if (failure instanceof ApiError && failure.status === 404) return loadPrompt(reloadFailed, "That conversation was already ended.");
+        if (failure instanceof ApiError && failure.status === 404) {
+          clearClock();
+          return loadPrompt(reloadFailed, "That conversation was already ended.");
+        }
         setSubmitError(messageOf(failure, "The conversation could not be ended. Try again."));
         setBusy(false);
       },
@@ -242,13 +252,16 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
 
   const startRevision = () => {
     setSubmitError(null);
-    setStartedAt(Date.now());
+    // Reading the feedback is not revision time.
+    const now = Date.now();
+    segmentStart.current = now;
+    setStartedAt(now);
     setRevising(true);
   };
 
   return (
     <div className="page-canvas flex h-full min-h-0 flex-col overflow-y-auto">
-      <TopBar prompt={prompt} startedAt={result ? null : startedAt} waiting={!result && startedAt === null} />
+      <TopBar prompt={prompt} startedAt={startedAt} running={!result} />
       <main tabIndex={-1} className="mx-auto w-full max-w-[1224px] flex-1 px-4 pb-16 pt-8 sm:px-8">
         {loadError ? (
           <Alert
@@ -350,7 +363,7 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
   );
 }
 
-function TopBar({ prompt, startedAt, waiting }: { prompt: DrillPrompt | null; startedAt: number | null; waiting: boolean }) {
+function TopBar({ prompt, startedAt, running }: { prompt: DrillPrompt | null; startedAt: number | null; running: boolean }) {
   return (
     <header className="header-hairline sticky top-0 z-20 shrink-0 border-b border-border/70 bg-card/90 shadow-xs backdrop-blur-xl supports-[backdrop-filter]:bg-card/80">
       <div className="mx-auto flex h-14 max-w-[1224px] items-center gap-4 px-4 sm:px-8">
@@ -366,7 +379,7 @@ function TopBar({ prompt, startedAt, waiting }: { prompt: DrillPrompt | null; st
             <span className="truncate">{prompt.title}</span>
           </span>
         ) : null}
-        <div className="ml-auto">{prompt && (startedAt !== null || waiting) ? <DrillTimer minutes={prompt.minutes} startedAt={startedAt} /> : null}</div>
+        <div className="ml-auto">{prompt && running ? <DrillTimer minutes={prompt.minutes} startedAt={startedAt} /> : null}</div>
       </div>
     </header>
   );
@@ -405,7 +418,7 @@ export function PromptView({ prompt }: { prompt: DrillPrompt }) {
           </span>
           {prompt.variant ? <Badge tone="accent">Changed constraint</Badge> : null}
         </p>
-        {prompt.early ? <p className="mt-2 text-ui text-muted-foreground">{earlyNote(prompt.early.dueOn)}</p> : null}
+        {prompt.early ? <p className="mt-2 text-ui text-muted-foreground">{earlyNote(prompt.early.dueOn, prompt.early.today)}</p> : null}
       </div>
       <Card variant="raised" className="p-6">
         <h2 className="text-meta font-semibold uppercase tracking-wide text-muted-foreground">Your task</h2>
@@ -662,7 +675,7 @@ function ResultView({ prompt, result, onRevise }: { prompt: DrillPrompt; result:
           {prompt.variant ? <Badge tone="accent">Changed constraint</Badge> : null}
         </p>
         {result.revised && result.firstOutcome ? <p className="mt-1 text-ui text-muted-foreground">After a revision. First try: {OUTCOME_LABEL[result.firstOutcome]}.</p> : null}
-        <ScheduleFacts result={result} />
+        <ScheduleFacts result={result} early={prompt.early !== undefined} />
         <div className="mt-8 flex flex-wrap items-center gap-3">
           {result.canRevise ? (
             <Button size="lg" variant="default" onClick={onRevise}>
@@ -713,14 +726,14 @@ function ResultView({ prompt, result, onRevise }: { prompt: DrillPrompt; result:
   );
 }
 
-function ScheduleFacts({ result }: { result: DrillResult }) {
+function ScheduleFacts({ result, early }: { result: DrillResult; early: boolean }) {
   const items = useMemo(() => {
     if (result.readyCount === null) return null;
     const next = result.nextDueOn ? shortDay(parseDay(result.nextDueOn)) : "Gap closed";
     return { ready: result.readyCount, next };
   }, [result]);
   if (!items) {
-    return <p className="mt-6 text-ui text-muted-foreground">This was a free drill. It does not change your schedule.</p>;
+    return <p className="mt-6 text-ui text-muted-foreground">{early ? "This was an early try." : "This was a free drill."} It does not change your schedule.</p>;
   }
   return (
     <dl className="mesh-tile mt-7 grid w-full auto-cols-fr grid-flow-col divide-x divide-border rounded-xl sm:inline-grid sm:w-auto sm:auto-cols-auto">

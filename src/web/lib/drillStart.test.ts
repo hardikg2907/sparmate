@@ -12,7 +12,7 @@ describe("earlyNote", () => {
 });
 
 describe("clockStart", () => {
-  it("waits until the first keystroke", () => {
+  it("waits until the first change", () => {
     expect(clockStart(null, "", 5)).toBeNull();
     expect(clockStart(null, "   ", 5)).toBeNull();
     expect(clockStart(null, "R", 5)).toBe(5);
