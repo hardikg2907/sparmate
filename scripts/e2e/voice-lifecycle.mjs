@@ -163,7 +163,7 @@ try {
 
   // Navigate back to Home using in-app back button.
   const backClicked = await page.evaluate(() => {
-    const btn = document.querySelector('a[aria-label="Back to home"]');
+    const btn = document.querySelector('a[aria-label="Back to Today"]');
     if (!btn) return false;
     btn.click();
     return true;

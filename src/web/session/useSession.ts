@@ -191,7 +191,7 @@ export function useSessionController(source: SessionSource): SessionController {
             : error instanceof ApiError && error.message
               ? error.message
               : "The session could not be loaded.";
-        dispatch({ type: "load-failed", message });
+        dispatch({ type: "load-failed", message, missing: error instanceof ApiError && error.status === 404 });
       },
     );
     return () => {

@@ -267,7 +267,7 @@ function Detail({ problem, history, data, ctx }: { problem: ProblemSummary; hist
           </Button>
         )}
         <p className="mt-3 text-center text-meta text-muted-foreground">
-          {mode === "guided" ? "Guided has no clock. You can stop at any step." : "You read the plan before the clock starts."}
+          {mode === "guided" ? "Guided has no clock. You can stop at any step." : "The clock starts as soon as the round opens. You can pause it."}
         </p>
         {lastDebrief ? (
           <p className="mt-2 text-center text-meta">

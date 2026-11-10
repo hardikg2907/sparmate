@@ -55,6 +55,8 @@ export interface NotesState {
 export interface SessionState {
   session: PublicSession | null;
   loadError: string | null;
+  /** True when the server has no round with this id, so loading again cannot help. */
+  loadMissing: boolean;
   clockOffsetMs: number;
   connection: SocketStatus;
   streams: Record<string, StreamBuffer>;

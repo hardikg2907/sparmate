@@ -439,10 +439,10 @@ function RoomHeader({
   return (
     <header className="room-header shrink-0">
       <div className="room-header__bar header-hairline flex min-h-[52px] flex-wrap items-center gap-x-3 gap-y-1 px-3 max-md:py-1.5 md:h-[52px] md:flex-nowrap">
-        <Tooltip content="Back to home">
+        <Tooltip content="Back to Today">
           <Link
             href="/"
-            aria-label="Back to home"
+            aria-label="Back to Today"
             onClick={(event) => {
               event.preventDefault();
               onLeave();

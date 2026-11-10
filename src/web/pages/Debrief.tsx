@@ -45,7 +45,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
   return (
     <div className="fade-in flex h-full min-h-0 flex-col overflow-clip">
       <header className="header-hairline relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card px-3 shadow-xs sm:px-4">
-        <Link href="/" aria-label="Back to home" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+        <Link href="/" aria-label="Back to Today" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
           <ArrowLeftIcon size={16} />
         </Link>
         <h1 className="min-w-0 truncate text-lead font-bold tracking-[-0.01em]" title={session.title}>
