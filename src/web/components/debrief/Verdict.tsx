@@ -59,7 +59,7 @@ export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEv
       <div
         role="group"
         aria-label="Scores by dimension"
-        className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-flow-col sm:auto-cols-fr sm:grid-cols-none"
+        className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-flow-col sm:auto-cols-fr sm:grid-cols-none md:grid-flow-row md:auto-cols-auto md:grid-cols-3 xl:grid-flow-col xl:auto-cols-fr xl:grid-cols-none"
       >
         {scorecard.dimensions.map((dimension) => {
           const tone = dimension.score < 3 ? "warn" : "good";
@@ -71,7 +71,7 @@ export function ScoreRow({ scorecard, onEvidence }: { scorecard: Scorecard; onEv
               aria-label={`${dimension.name}, ${dimension.score} of 4`}
               className="flex min-w-0 flex-col gap-1 bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
             >
-              <span className="truncate text-meta text-muted-foreground" title={dimension.name}>
+              <span className="text-meta leading-tight text-muted-foreground max-xl:min-h-[2.5em]">
                 {dimension.name}
               </span>
               <span className="flex items-baseline gap-0.5">

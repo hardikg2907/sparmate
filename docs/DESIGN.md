@@ -392,6 +392,10 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
   into view (the Code tab for an LLD step that is answered in code). The frame also comes into view when the
   interviewer or guide moves the rail. A guided round marks each passed step with a tick. On a phone only the
   current segment shows.
+- **Phone.** The work area and the chat each need the whole screen, so below the md breakpoint a "Room view" switch under
+  the header shows one of them at a time: the board or the code, or the chat. The hidden one keeps its size, so the board
+  and the editor stay laid out. A dot on the chat option marks a message that arrived while the work area was shown. The
+  board's component palette narrows to its swatches, each with its name for assistive technology.
 - **The board is the answer sheet.** One board holds a labelled frame per step, so each step's drawing and notes are
   its answer. "This step" and "Whole board" in the work bar move the view. In a guided round, the guide's pins sit on
   the elements they are about; hover or focus shows the note.
@@ -478,8 +482,8 @@ Today is one page for the whole day, and with data it fills the first screen at 
   day does not finish it: the cell stays open and out of the count while it is today, and is missed after. The hero still
   follows the plan. A DSA day is done only when the DSA numbers
   show a medium solved that day, and otherwise stays planned, because missing data is never a missed day. A past
-  day of a round kind with no finished round is missed. On a phone the strip scrolls sideways inside its own row,
-  with today centred.
+  day of a round kind with no finished round is missed. On a phone the cells narrow into seven columns that stack
+  the day name, the type and the mark, so the whole week shows, and today is marked by its fill.
 - **Hero.** The only mesh panel, about 300 px tall. One row of chips: an amber chip ("Redo due", "New problem" or
   "Unfinished"), the track pill, then Mode, Round and Debrief as label-and-value pills. Under it the title at 40 px with
   tight tracking in the rounded face, one sentence why, at most one amber warning line, then the filled primary
@@ -582,7 +586,8 @@ Today is one page for the whole day, and with data it fills the first screen at 
 ### Settings
 
 - A left nav on desktop and a scrolling row of buttons on a phone. Raised sections hold label and control pairs, with a
-  hairline between pairs. One filled "Save changes" button sits at the top right.
+  hairline between pairs. The weekly plan shows two days per row on a phone, four on a small tablet and seven from 640 px.
+  One filled "Save changes" button sits at the top right.
 
 ### Drill screen
 
@@ -666,7 +671,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   behind the debrief header carries the same tone. The confidence, and for an interview round the stretch-level call, sit beside the call as small
   muted text. One or two muted lines under it give the reasons or the meaning. The call is the second loudest thing
   on the page.
-- **Score strip.** One row of equal cells with a hairline between them (three per row on a phone): the dimension name
+- **Score strip.** One row of equal cells with a hairline between them (three per row on a phone and while the coach sits beside the scorecard on a narrow screen): the dimension name
   in small muted text, the score at 20 px with tabular figures and a muted "/4", and a thin four-segment meter. A
   score below 3 is in the warning colour, a score of 3 or more in the success colour. The strip is one target that
   opens the Evidence tab.
@@ -681,7 +686,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   "5 of 6 on the checklist"; "What held" and "What's missing" are headings in the status colour with a tinted mark
   (a tick, a minus); his notes from the round sit in a sunken fill.
 - **Coach.** On a wide screen the coach sits beside the scorecard. Below the md breakpoint it sits under it, so
-  the score stays reachable on a phone.
+  the score stays reachable on a phone. The page then scrolls as one, with the coach as its last section.
 
 ### Usage
 

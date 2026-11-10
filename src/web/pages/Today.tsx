@@ -119,7 +119,7 @@ export function TodayView({
         {!pick && !error ? (
           <TodaySkeleton />
         ) : pick ? (
-          <div className="today-grid grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="today-grid grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
             <div className="space-y-6">
               {firstRun ? (
                 <FirstRunHero pick={pick.hero} data={data} ctx={ctx} />

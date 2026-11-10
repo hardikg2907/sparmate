@@ -15,7 +15,7 @@ import { PlanTrack } from "../components/PlanTrack";
 import { StepChecklist, StepNeeds } from "../components/StepChecklist";
 import { StepVerdictNote } from "../components/StepVerdictNote";
 import { Timer } from "../components/Timer";
-import { Banner, Button, Badge, EmptyState, Tooltip, cn, toast } from "../components/ui";
+import { Banner, Button, Badge, EmptyState, Segmented, Tooltip, cn, toast } from "../components/ui";
 import { phasesFor } from "../../shared/phases";
 import { evidenceStepFor } from "../../shared/stepFrames";
 import { isTimedRound, planDelta, type PlanDelta } from "../lib/plan";
@@ -57,6 +57,13 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   const [confirm, setConfirm] = useState<"end" | "leave" | "discard" | null>(null);
   const [reveal, setReveal] = useState<{ line: number; column: number; nonce: number } | null>(null);
   const [chatWidth, setChatWidth] = useChatWidth();
+  // On a phone the work area and the chat each need the whole screen, so the room shows one at a time.
+  const [phoneView, setPhoneView] = useState<"work" | "chat">("chat");
+  const chatCount = ctl.chat.interview.length;
+  const [seenChat, setSeenChat] = useState(chatCount);
+  useEffect(() => {
+    if (phoneView === "chat") setSeenChat(chatCount);
+  }, [phoneView, chatCount]);
 
   const errored = agent.state === "error";
   // A model error offers Retry; every other pause is the user's to lift with Resume.
@@ -164,8 +171,25 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
       {ended ? <EndedBanner connected={connected} onStart={actions.retryDebrief} /> : null}
       <MessageBanners state={state} actions={actions} />
 
+      <div className="flex shrink-0 justify-center border-b border-border/70 px-3 py-1.5 md:hidden">
+        <Segmented
+          label="Room view"
+          size="sm"
+          value={phoneView}
+          onChange={setPhoneView}
+          options={[
+            { value: "work", label: lld ? "Code and board" : "Board" },
+            {
+              value: "chat",
+              label: speaker,
+              badge: phoneView === "work" && chatCount > seenChat ? <span role="img" aria-label="New message" className="size-2 rounded-full bg-primary" /> : undefined,
+            },
+          ]}
+        />
+      </div>
+
       <div className="relative flex min-h-0 flex-1 flex-col overflow-clip md:flex-row">
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip" tabIndex={-1} inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
+        <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-clip", phoneView === "chat" && "max-md:invisible max-md:absolute max-md:inset-0")} tabIndex={-1} inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
           <div className="room-toolbar flex min-h-9 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 max-md:py-1.5 md:h-9 md:flex-nowrap">
             <PhaseGoal session={session} />
             <div className="flex shrink-0 items-center gap-2">
@@ -279,7 +303,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
-          className="room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:h-[68%] max-md:w-full md:w-(--chat-w)"
+          className={cn("room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:w-full md:w-(--chat-w)", phoneView === "chat" ? "max-md:flex-1" : "max-md:invisible max-md:absolute max-md:inset-0")}
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}
         >

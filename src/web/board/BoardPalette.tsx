@@ -145,7 +145,7 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
 
   let index = -1;
   return (
-    <aside className="ir-palette flex w-44 shrink-0 flex-col text-ui text-foreground" data-theme={theme} aria-label="Board palette">
+    <aside className="ir-palette flex w-44 shrink-0 flex-col max-md:w-12 text-ui text-foreground" data-theme={theme} aria-label="Board palette">
       <div
         className="ir-palette__list min-h-0 flex-1 overflow-y-auto px-1.5 pt-2"
         role="toolbar"
@@ -155,7 +155,7 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
       >
         {sections.map((section) => (
           <div key={section.heading} role="group" aria-label={section.heading} className="ir-palette__group mt-2 first:mt-0">
-            <div className="ir-palette__heading px-2 pt-0.5 pb-1.5 text-meta font-semibold text-muted-foreground" aria-hidden="true">
+            <div className="ir-palette__heading px-2 pt-0.5 pb-1.5 text-meta font-semibold text-muted-foreground max-md:hidden" aria-hidden="true">
               {section.heading}
             </div>
             {section.entries.map((entry) => {
@@ -168,7 +168,7 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
                       buttons.current[i] = el;
                     }}
                     type="button"
-                    className="ir-palette__item flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-ui font-medium disabled:cursor-default disabled:opacity-50"
+                    className="ir-palette__item flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left max-md:min-h-9 max-md:justify-center max-md:px-0 text-ui font-medium disabled:cursor-default disabled:opacity-50"
                     tabIndex={i === current ? 0 : -1}
                     disabled={disabled}
                     data-kind={entry.id}
@@ -176,7 +176,7 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
                     onClick={(event) => entry.run(event.detail > 0)}
                   >
                     {entry.swatch}
-                    <span className="ir-palette__label min-w-0 truncate">{entry.title}</span>
+                    <span className="ir-palette__label min-w-0 truncate max-md:sr-only">{entry.title}</span>
                   </button>
                 </Tooltip>
               );
@@ -184,7 +184,7 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
           </div>
         ))}
       </div>
-      <p className="ir-palette__hint shrink-0 border-t border-border px-3 pt-2 pb-2.5 text-meta text-faint">
+      <p className="ir-palette__hint shrink-0 border-t border-border px-3 pt-2 pb-2.5 text-meta text-faint max-md:hidden">
         {track === "hld" ? "Double-click a shape to rename it." : "Select one or two shapes, then pick a relation. The first shape selected is the start."}
       </p>
     </aside>

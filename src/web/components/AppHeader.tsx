@@ -68,7 +68,7 @@ export function AppHeader({ testMode }: { testMode?: boolean }) {
         data-on={scrolled}
         className="pointer-events-none absolute inset-0 border-b border-border/70 bg-card/80 opacity-0 shadow-xs backdrop-blur-xl backdrop-saturate-150 transition-opacity duration-150 data-[on=true]:opacity-100"
       />
-      <div className="relative mx-auto flex h-14 max-w-[1224px] items-center gap-2 px-4 sm:gap-6 sm:px-8">
+      <div className="relative mx-auto flex h-14 max-w-[1224px] items-center gap-2 px-4 sm:gap-4 sm:px-8 lg:gap-6">
         <Link href="/" aria-label="Sparmate, Today" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-md text-lead font-bold tracking-[-0.01em]">
           <span className="brand-tile flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-hidden="true">
             <Logo size={18} />
@@ -100,11 +100,11 @@ export function AppHeader({ testMode }: { testMode?: boolean }) {
           <button
             type="button"
             onClick={openPalette}
-            className="flex h-9 w-64 items-center gap-2 rounded-lg border border-border bg-muted/60 px-3 text-ui text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground max-sm:hidden"
+            className="flex h-9 items-center gap-2 rounded-lg sm:w-36 lg:w-64 border border-border bg-muted/60 px-3 text-ui text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground max-sm:hidden"
           >
             <SearchIcon size={15} />
             <span className="flex-1 text-left">Jump to…</span>
-            <span className="flex items-center gap-0.5" aria-hidden="true">
+            <span className="flex items-center gap-0.5 max-lg:hidden" aria-hidden="true">
               {PALETTE_KEYS.map((key) => (
                 <Kbd key={key}>{key}</Kbd>
               ))}

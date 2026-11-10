@@ -25,7 +25,7 @@ export function SetupChecklist({ steps }: { steps: readonly SetupStep[] }) {
           <li
             key={step.id}
             aria-current={index === current ? "step" : undefined}
-            className={cn("mesh-tile flex items-center gap-3.5 rounded-xl px-4 py-3", index === current ? "ring-1 ring-white/50" : step.done ? "" : "opacity-90")}
+            className={cn("mesh-tile flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl px-4 py-3 sm:flex-nowrap", index === current ? "ring-1 ring-white/50" : step.done ? "" : "opacity-90")}
           >
             <span
               aria-hidden="true"
@@ -36,14 +36,16 @@ export function SetupChecklist({ steps }: { steps: readonly SetupStep[] }) {
             >
               {step.done ? <CheckIcon size={14} /> : index + 1}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 max-sm:basis-[10rem]">
               <p className={cn("text-body font-semibold", step.done && "line-through decoration-1")}>
                 {step.title}
                 {step.done ? <span className="sr-only"> (done)</span> : null}
               </p>
-              <p className="truncate text-ui text-muted-foreground">{step.detail}</p>
+              <p className="text-ui text-muted-foreground sm:truncate">{step.detail}</p>
             </div>
-            {step.done ? <span className="rounded-full bg-success-soft px-2.5 py-0.5 text-meta font-bold text-success">Done</span> : (step.action ?? null)}
+            <span className="max-sm:basis-full max-sm:pl-[2.625rem]">
+              {step.done ? <span className="rounded-full bg-success-soft px-2.5 py-0.5 text-meta font-bold text-success">Done</span> : (step.action ?? null)}
+            </span>
           </li>
         ))}
       </ol>
