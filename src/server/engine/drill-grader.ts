@@ -29,7 +29,7 @@ const MAX_QUESTION_RAW = 800;
 const SHOWN_QUESTION_CHARS = 300;
 
 /** The question the interviewer asks when the model's own question would hand back the key. */
-export const FALLBACK_QUESTION = "What is the weakest part of what you just said, and how would you fix it?";
+export const FALLBACK_QUESTION = "What is the weakest part of what you just said?";
 
 export const FirstQuestionSchema = z.strictObject({
   question: z
@@ -60,8 +60,12 @@ export interface GradedAnswer {
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]+/g;
 
+function flatQuestion(raw: string): string {
+  return raw.replace(CONTROL, " ").replace(/\s+/g, " ").trim();
+}
+
 function clip(text: string, max: number): string {
-  const flat = text.replace(CONTROL, " ").replace(/\s+/g, " ").trim();
+  const flat = flatQuestion(text);
   return flat.length <= max ? flat : `${flat.slice(0, max - 1).trimEnd()}…`;
 }
 
@@ -102,7 +106,7 @@ const REVEAL_WORD_CHARS = 6;
  * `KEY_REVEAL_WORDS` longer words from it, that the candidate did not write and the drill did not show. Feedback may
  * point at a gap, but the candidate must still do the thinking, because one revision follows the feedback.
  */
-export function dropKeyReveals(lines: readonly string[], key: string, known: string): string[] {
+export function dropKeyReveals(lines: readonly string[], key: string, known: string, limit = KEY_REVEAL_WORDS): string[] {
   const inKey = new Set(tokens(key));
   const seen = new Set(tokens(known));
   return lines.filter((line) => {
@@ -112,21 +116,77 @@ export function dropKeyReveals(lines: readonly string[], key: string, known: str
       if (/[0-9]/.test(w)) return false;
       if (w.length >= REVEAL_WORD_CHARS) words++;
     }
-    return words < KEY_REVEAL_WORDS;
+    return words < limit;
   });
 }
 
 /**
- * Cleans a follow-up question from the model. Control characters go, the length is capped, private names are redacted,
- * and a question that shares `KEY_COPY_WORDS` or more words in a row with the answer key is replaced by a fixed one, so
- * a question never hands the key back. Null when nothing is left.
+ * A question builds on the candidate's own words, so it may bring in fewer key words than a feedback line before it
+ * counts as handing over a mechanism the candidate never wrote.
  */
-export function cleanQuestion(raw: string, key: string, redact: (text: string) => string): string | null {
-  // An interviewer asks one thing at a time, so anything after the first question mark is cut.
-  const mark = raw.indexOf("?");
-  const text = redact(clip(mark >= 0 ? raw.slice(0, mark + 1) : raw, SHOWN_QUESTION_CHARS));
-  if (text === "") return null;
-  return dropKeyCopies([text], key).length === 0 ? FALLBACK_QUESTION : text;
+export const QUESTION_REVEAL_WORDS = 2;
+
+export type QuestionProblem = "two" | "opener" | "statement" | "key";
+
+/** Why a question was not used, in words the model reads when it is asked again. */
+export const QUESTION_PROBLEMS: Record<QuestionProblem, string> = {
+  two: 'it asks two things at once. Ask one question with one question mark and no second clause joined by "and".',
+  opener: "it opens by telling the candidate what the hard part of the problem is. Ask about what the candidate wrote.",
+  statement: "it tells the candidate what their design is. Quote or name only what the candidate wrote, then ask.",
+  key: "it names something from the reference that the candidate did not write. Ask what happens, what it costs or why, in the candidate's own terms.",
+};
+
+// The input is model output capped by its schema; each pattern is anchored or has bounded repeats, so none can backtrack badly.
+const JOINED = /,\s+and\s+(?:what|how|why|where|which|when|who|whose|does|do|did|is|are|was|were|can|could|would|will|should|has|have)\b/i;
+const OPENER = /^the\s+(?:hardest|hard|tricky|trickiest|key|main|real|core|central|crux)\b/i;
+const STATEMENT = /\byour\s+(?:[a-z-]+\s+){0,2}is\s+(?:a|an|just|really|actually)\s/i;
+
+function problemOf(text: string, key: string, known: string): QuestionProblem | null {
+  if (dropKeyCopies([text], key).length === 0 || dropKeyReveals([text], key, known, QUESTION_REVEAL_WORDS).length === 0) return "key";
+  if (OPENER.test(text)) return "opener";
+  if (STATEMENT.test(text)) return "statement";
+  if ((text.match(/\?/g) ?? []).length > 1 || sentences(text).some((x) => x.endsWith("?") && JOINED.test(x))) return "two";
+  return null;
+}
+
+/** A setup sentence may join clauses with "and"; only the sentence that asks can hold a second question. */
+function sentences(text: string): string[] {
+  return text.split(/(?<=[.!?])\s+/);
+}
+
+export interface QuestionReview {
+  /** The question as the page would show it. */
+  question: string;
+  problem: QuestionProblem | null;
+}
+
+/**
+ * Checks a follow-up question from the model. An interviewer asks one thing at a time, never tells the candidate what
+ * their design is or where the difficulty lies, and never brings in the key. `known` is what the candidate wrote and
+ * was shown: words from it are never a giveaway. Control characters go, the length is capped and private names are
+ * redacted. Null when nothing is left.
+ */
+export function reviewQuestion(raw: string, key: string, known: string, redact: (text: string) => string): QuestionReview | null {
+  const flat = flatQuestion(raw);
+  const question = redact(clip(flat, SHOWN_QUESTION_CHARS));
+  if (question === "") return null;
+  return { question, problem: problemOf(redact(flat), key, known) };
+}
+
+/**
+ * The question to show when the model asked a flawed one twice. A question of two parts keeps its first part; anything
+ * that still breaks a rule after that becomes the fixed question, so a question never hands the key back.
+ */
+export function salvageQuestion(raw: string, key: string, known: string, redact: (text: string) => string): string {
+  const flat = redact(flatQuestion(raw));
+  const mark = flat.indexOf("?");
+  const parts = sentences(mark >= 0 ? flat.slice(0, mark + 1) : flat);
+  const ask = parts.at(-1) ?? "";
+  const joined = JOINED.exec(ask);
+  if (joined) parts[parts.length - 1] = `${ask.slice(0, joined.index).trimEnd()}?`;
+  const text = parts.join(" ");
+  if (text === "" || text === "?" || problemOf(text, key, known) !== null) return FALLBACK_QUESTION;
+  return clip(text, SHOWN_QUESTION_CHARS);
 }
 
 export interface FinishOptions {
@@ -233,11 +293,29 @@ export function graderMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "prob
   ].join("\n");
 }
 
-/** The user message for the interviewer's question calls. `asked` is how many questions the transcript already holds. */
-export function followUpMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">, key: string, turns: readonly DrillTurn[], asked: number): string {
+/** A question the model wrote before that the server did not use, and why. */
+export interface RejectedQuestion {
+  question: string;
+  problem: QuestionProblem;
+}
+
+/**
+ * The user message for the interviewer's question calls. `asked` is how many questions the transcript already holds.
+ * With `rejected`, the model sees its last question and the reason it was not used, so it can ask again once.
+ */
+export function followUpMessage(
+  prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">,
+  key: string,
+  turns: readonly DrillTurn[],
+  asked: number,
+  rejected?: RejectedQuestion,
+): string {
   const last =
     asked === 0
       ? "Ask the first follow-up question. Return it in `question`."
       : `You asked ${asked} of at most ${MAX_FOLLOW_UPS} questions. Decide whether one more question is needed: only when a core point is still open. Return \`another\`, and the question in \`question\` (an empty string when another is false).`;
-  return [...messageHead(prompt, key), ...transcriptBlock(turns), last].join("\n");
+  const retry = rejected
+    ? [`<rejected_question>${escapeBlock(rejected.question)}</rejected_question>`, `That question was not used, because ${QUESTION_PROBLEMS[rejected.problem]} Write a new one.`]
+    : [];
+  return [...messageHead(prompt, key), ...transcriptBlock(turns), last, ...retry].join("\n");
 }

@@ -19,8 +19,8 @@ import { variantEntries } from "./drill-content";
 import { DrillStore, emptyState } from "./drill-store";
 import { DrillService, drillItemId, playableProblems, queueGapDrills } from "./drills";
 import { FAKE_FIRST_QUESTION, FAKE_SECOND_QUESTION, FAKE_STRONG_LINE, createFakeDriver } from "./fake-driver";
-import { FALLBACK_QUESTION } from "./drill-grader";
-import type { Driver } from "./driver";
+import { FALLBACK_QUESTION, QUESTION_PROBLEMS } from "./drill-grader";
+import { DriverError, type Driver } from "./driver";
 import type { PromptLoader } from "./prompts";
 import { HttpError } from "./sessions";
 
@@ -1230,6 +1230,57 @@ describe("dialogue drills", () => {
     const done = result(await eager.reply(q1.attemptId, 2, SHORT_REPLY));
     expect(done.turns).toHaveLength(5);
     expect(calls).toEqual(["ask0", "ask1", "grade"]);
+  });
+
+  describe("one question at a time", () => {
+    /** A service whose interviewer answers from a script and records each message it was sent. */
+    const scripted = (answers: (string | Error)[], next = false) => {
+      const sent: string[] = [];
+      const svc = service2(async (setup) => {
+        if (!setup.fake.drillFollowUp) return undefined;
+        sent.push(setup.turn.text);
+        const answer = answers.shift() ?? "Spare?";
+        if (answer instanceof Error) throw answer;
+        return next && setup.fake.drillFollowUp.asked > 0 ? { another: true, question: answer } : { question: answer };
+      });
+      return { svc, sent };
+    };
+
+    it("asks again once with the reason when a question asks two things, and uses the new one", async () => {
+      const { svc, sent } = scripted(["Where does the write go, and what does the reader see?", "Where does the write go?"]);
+      const q1 = question(await svc.submit(free, OPEN));
+      expect(q1.question).toBe("Where does the write go?");
+      expect(sent).toHaveLength(2);
+      expect(sent[0]).not.toContain("rejected_question");
+      expect(sent[1]).toContain("<rejected_question>Where does the write go, and what does the reader see?</rejected_question>");
+      expect(sent[1]).toContain(QUESTION_PROBLEMS.two);
+    });
+
+    it("keeps the first part when the second try asks two things too, with no third call", async () => {
+      const { svc, sent } = scripted(["Which store, and why?", "Which store would you pick, and why that one?"]);
+      expect(question(await svc.submit(free, OPEN)).question).toBe("Which store would you pick?");
+      expect(sent).toHaveLength(2);
+    });
+
+    it("salvages the first reply when the second call fails", async () => {
+      const { svc, sent } = scripted(["Which store would you pick, and why?", new DriverError("down")]);
+      expect(question(await svc.submit(free, OPEN)).question).toBe("Which store would you pick?");
+      expect(sent).toHaveLength(2);
+    });
+
+    it("shows the fixed question when what is left still tells the candidate their design", async () => {
+      const { svc } = scripted(["Your plan is a cache. Why?", "Your plan is just a cache. Why?"]);
+      expect(question(await svc.submit(free, OPEN)).question).toBe(FALLBACK_QUESTION);
+    });
+
+    it("checks the second question the same way", async () => {
+      const { svc, sent } = scripted(["Why that store?", "What breaks first, and how would you see it?", "What breaks first?"], true);
+      const q1 = question(await svc.submit(free, OPEN));
+      const q2 = question(await svc.reply(q1.attemptId, 1, SHORT_REPLY));
+      expect(q2.question).toBe("What breaks first?");
+      expect(sent).toHaveLength(3);
+      expect(sent[2]).toContain(QUESTION_PROBLEMS.two);
+    });
   });
 
   it("works on a machine coding problem too", async () => {
