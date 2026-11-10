@@ -278,6 +278,51 @@ export function transcriptLines(entries: readonly TranscriptEntry[], channel: Tr
     .join("\n");
 }
 
+/** Round time before and after a moment that `roundTranscript` shows around it. */
+export const TRANSCRIPT_WINDOW_MS = { before: 3 * 60_000, after: 2 * 60_000 } as const;
+/** A full transcript past this size is cut, with a note, so one tool call stays a sane size. */
+export const MAX_TRANSCRIPT_CHARS = 60_000;
+
+/** "12:05" (or "[12:05]", as the transcript prints it) as round milliseconds, or null when it is not a mm:ss time. */
+export function parseStamp(stamp: string): number | null {
+  const m = /^\[?(\d{1,3}):([0-5]\d)\]?$/.exec(stamp.trim());
+  return m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 : null;
+}
+
+/**
+ * One transcript line for a reader who talks to the candidate. A hidden hint record keeps only its topic, because its
+ * level code means nothing to the candidate, and other hidden notes are clock bookkeeping. Continuation lines are
+ * indented, so text typed by the candidate can never pass for a line of its own.
+ */
+function readableLine(e: TranscriptEntry): string | null {
+  const stamp = `[${formatStamp(e.at)}]`;
+  const body = (text: string) => text.replace(/\r\n?|[\n\u0085\u2028\u2029]/g, "\n    ");
+  if (e.role !== "system") return `${stamp} ${e.role}: ${body(e.text)}`;
+  if (e.kind === "hint") return `${stamp} (event) The interviewer gave a hint on: ${body(e.text.replace(/^hint H\d:\s*/, ""))}`;
+  if (e.hidden) return null;
+  return `${stamp} (event) ${body(e.text)}`;
+}
+
+/** One channel of the transcript for a model that reads it after the round and writes for the candidate. */
+export function readableTranscript(entries: readonly TranscriptEntry[], channel: TranscriptEntry["channel"]): string {
+  return entries
+    .filter((e) => e.channel === channel)
+    .flatMap((e) => readableLine(e) ?? [])
+    .join("\n");
+}
+
+/**
+ * The round's interview transcript for a model that reads it after the round, either whole or the few minutes around
+ * one moment.
+ */
+export function roundTranscript(entries: readonly TranscriptEntry[], atMs: number | null): string {
+  const inRange = atMs === null ? entries : entries.filter((e) => e.at >= atMs - TRANSCRIPT_WINDOW_MS.before && e.at <= atMs + TRANSCRIPT_WINDOW_MS.after);
+  const text = readableTranscript(inRange, "interview");
+  if (!text) return atMs === null ? "(the round has no transcript)" : "(nothing was said in the round around that time)";
+  if (text.length <= MAX_TRANSCRIPT_CHARS) return text;
+  return `${text.slice(0, MAX_TRANSCRIPT_CHARS)}\n(the transcript goes on; ask for a time with "at" to read a later part)`;
+}
+
 export function countLines(content: string): number {
   if (content === "") return 0;
   return content.replace(/\n$/, "").split("\n").length;

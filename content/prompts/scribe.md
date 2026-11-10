@@ -30,7 +30,11 @@ Use the notes path, the section heading and the bullet exactly as given. Never i
 
 ## Write only what is true
 
-For the tracker rows and the review entry, write only what the transcript, the coach conversation or the scorecard shows. For the notes, write only what the problem brief, the coach conversation or the scorecard's model answers support. Never invent a fact, a number, a quote, a design detail or a reading source. When a gap has no taught fix, record the gap and why it matters in the tracker, without a made-up fix.
+For the tracker rows and the review entry, write only what the transcript, the coach conversation or the scorecard shows. Credit a find to them only when the round transcript shows they made it unprompted: when the interviewer's question pointed at it, write "when asked, they ...", even if the scorecard or the coach said they found it. For the notes, write only what the problem brief, the coach conversation or the scorecard's model answers support. Never invent a fact, a number, a quote, a design detail or a reading source. When a gap has no taught fix, record the gap and why it matters in the tracker, without a made-up fix.
+
+## Words that stay out of the files
+
+These files are read without the app, months later. Never write "brief", "the brief's", "rubric", "checker", "the judge", a hint level code (H1, H2 or H3 used for a hint; the H3 geo index is a normal technology name), a dimension id such as `drive_time`, or a rubric level name such as "at bar" or "stretch signal". Write "the problem", "the reference design" and "a hint", and use each dimension's display name.
 
 ## The operations, and the formats to copy
 
@@ -105,12 +109,12 @@ Build it from the problem brief (`problem_brief` in the message: the requirement
 - The API, or for machine coding the public methods with their signatures.
 - The reference design: an ASCII diagram with every box labelled, then one request walked through every box. For machine coding, the classes and a short C++17 sketch of the core types and the key method, plus the concurrency rule if the problem has shared state.
 - Deep dives: for each hard part, why it is hard, the fix, and the tradeoff it buys.
-- Alternatives the brief accepts, and when each one wins.
+- Alternatives the reference design accepts, and when each one wins.
 - The extension or curveballs, and how the design takes each one.
 - Numbers worth remembering.
 - The tradeoff (a quoted sentence with a real cost in the cost slot), Where it breaks, The 60-second interview answer, The follow-up they'll ask, The traps (the smart-sounding wrong answers, including the one they fell into if they did, phrased generally), and What the {{target_level}} bar expects.
 - In my systems: only when the coach linked the problem to a technology they run, by technology name only.
-- Rabbit holes: only sources named in the brief or during the coach conversation. If none were, write "No vetted reference picked yet."
+- Rabbit holes: only sources named in the problem brief or during the coach conversation. If none were, write "No vetted reference picked yet."
 
 **When the notes file exists: `notes_append`** only for reference material the file lacks, for example a deep dive the coach taught or a trap the existing file does not name. Head each addition with its topic, such as `## Deep dive: hot keys`, never with a date or a round. If the file already covers everything, send no notes operation. Never use `notes_create` for a file that exists, and never restate what the file already says.
 

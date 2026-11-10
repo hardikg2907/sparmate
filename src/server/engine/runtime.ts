@@ -71,8 +71,10 @@ import {
   countLines,
   diagnosticsText,
   numberedCode,
+  parseStamp,
   replayTurn,
   requestTurn,
+  roundTranscript,
   runResultText,
   runSummary,
   startTurn,
@@ -1738,6 +1740,16 @@ export class SessionRuntime {
         "Record where you are on one scorecard gap. Call it with started in the same turn you open a gap, with taught once his answer to your check holds, and with core_only when he chose the core idea now and the rest as a topic session later. The title must match the scorecard exactly.",
         { title: z.string().min(1).max(300), state: z.enum(["started", "taught", "core_only"]) },
         async ({ title, state }) => this.setGap(title, state),
+      ),
+      defineTool(
+        "read_transcript",
+        "Read the round's transcript: interviewer and candidate lines and round events, with their mm:ss times. Give at (mm:ss) to read only the few minutes around one moment.",
+        { at: z.string().max(10).optional() },
+        async ({ at }) => {
+          const atMs = at === undefined ? null : parseStamp(at);
+          if (at !== undefined && atMs === null) return textOutput("Give at as mm:ss, such as 12:05.", true);
+          return textOutput(roundTranscript(this.session.transcript, atMs));
+        },
       ),
       defineTool("view_whiteboard", "See the candidate's final whiteboard: an image plus its exact text form.", {}, async () => {
         ch.boardSeen = this.session.board.version;

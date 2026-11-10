@@ -183,7 +183,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 | guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note, recheck_step and step_verdict | chat text |
 | tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail,cause?}], notes }` structured |
 | judge | after the round (and the tester) | one-shot | pin_element (board PNG attached as an image block) | `ScorecardSchema` structured |
-| coach | after the debrief | streaming, persisted | view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
+| coach | after the debrief | streaming, persisted | read_transcript, view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
 | brief-writer | custom problem preparation | one-shot | WebSearch (<= 8), WebFetch (<= 6) | `{ meta: { title, difficulty, tags }, body, sources, confidence }` structured |
 | brief-checker | custom problem verification | one-shot | WebFetch, WebSearch (<= 3) | `{ body, corrections, unconfirmed? }` structured |
@@ -195,6 +195,12 @@ Tool definitions (zod input schemas, every input validated, size-capped):
 - `view_whiteboard()` -> asks the browser for a PNG (`board.png.request`, 15 s timeout), returns
   `[{type:"image", data, mimeType:"image/png"}, {type:"text", text: graphText}]`. If the browser does not
   answer, return the graph text alone and say the image was unavailable.
+- `read_transcript({ at? })` (coach only) -> the round's interview transcript, one `[mm:ss] role: text` line per entry
+  with app events as `(event)` lines. A recorded hint shows as `The interviewer gave a hint on: <topic>`, without its
+  level; other hidden notes are left out; a line break inside an entry starts an indented line. With `at` (`mm:ss`,
+  brackets allowed, at most 10 characters) it returns only the lines from three minutes before to two minutes after
+  that time; an `at` that is not a time is a tool error. A transcript over 60,000 characters is cut, with a note to ask
+  for a time.
 - `set_phase({ phase })` -> phase must belong to the track; records `phaseHistory` with `by: "interviewer"`.
 - `note_hint({ level: 1|2|3, topic })` -> appends to `session.hints`. Hidden from the candidate.
 - `end_interview({ reason })` -> ends the round (same path as the candidate's end).
@@ -469,7 +475,7 @@ about 300 ms):
 - tester: three scenarios, one pass and two fails that share one cause (all three fail, with the cause "Did not compile", when the code does not compile).
 - judge: a valid scorecard whose quotes are copied from real candidate lines (so quote checks pass), plus one
   deliberately invented quote (so the UI shows a failed check).
-- coach: canned two-paragraph replies.
+- coach: canned two-paragraph replies. The opening calls `set_gap` on the top gap and `read_transcript`, and says how many lines of the round it read.
 - scribe: ops built from the session (a tracker mark update for the problem's bullet, a session log row, a
   review entry, a notes file create or append).
 - brief-writer: copies the URL shortener fixture with a new id and title.
@@ -937,7 +943,9 @@ inside a quote splits it into parts that must all appear, in order.
 The scribe gets: TEACHING.md (whole), the problem's tracker section text, the last three Session Log rows, the
 Gaps table header plus its last three rows, the REVIEW.md header plus its last entry, `notes/_TEMPLATE.md`,
 the existing notes file for this problem if any, the problem brief, the scorecard, any written step text, any step
-notepads, the step checklist with what was covered and where, the transcript and the coach transcript.
+notepads, the step checklist with what was covered and where, the transcript and the coach transcript. Both
+transcripts use the same lines as `read_transcript`: a recorded hint shows its topic without its level, other hidden
+notes are left out, and a line break inside an entry starts an indented line.
 
 ### 10.3 Op semantics: `src/server/study/bookkeeping.ts`
 
