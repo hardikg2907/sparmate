@@ -397,9 +397,45 @@ export function variantsFor(problem: Problem, drill: DrillType): VariantEntry[] 
   return numeric.length > 0 ? numeric : entries;
 }
 
+// A brief's fact bullets are written for the interviewer, and some carry notes to them inside a fact. A drill shows
+// the facts to the candidate, so a note, and any word about the extensions still to come, must not reach the page.
+const NOTE_SENTENCE = [
+  /\b(?:do not|don't|never) (?:mention|volunteer|test|require|reveal|bring up|hint)\b/i,
+  /\bextension step\b/i,
+  /\bif they (?:propose|suggest|ask)\b/i,
+  /\blet them\b/i,
+  /\bthe candidate\b/i,
+];
+const NOTE_ASIDE = /\b(?:if asked|volunteer|candidate|extension|interviewer|do not|don't)\b/i;
+const EXTENSIONS_LEAD = /^\**\s*extensions?\b/i;
+const MAX_FACT_CHARS = 2000;
+
+/** One fact bullet without its notes to the interviewer, or null when nothing but a note or its label is left. */
+export function factOnly(bullet: string): string | null {
+  const text = bullet.slice(0, MAX_FACT_CHARS);
+  if (EXTENSIONS_LEAD.test(text)) return null;
+  const asides = text.replace(/\s*\([^()]{0,300}\)/g, (aside) => (NOTE_ASIDE.test(aside) ? "" : aside));
+  // The bold label names the fact, so it stays even when the sentence it opens is a note.
+  const lead = /^\*\*[^*]{1,120}\*\*:?/.exec(asides)?.[0] ?? "";
+  const kept = asides
+    .slice(lead.length)
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !NOTE_SENTENCE.some((note) => note.test(sentence)))
+    .join(" ")
+    .trim();
+  if (kept === "") return null;
+  return lead === "" ? kept : `${lead} ${kept}`;
+}
+
+/** The hidden-fact bullets as a drill may show them: facts only. */
+export function shownFacts(problem: Problem): string[] {
+  return bullets(section(problem, "Hidden facts")).flatMap((b) => factOnly(b) ?? []);
+}
+
 /** Hidden-fact bullets that carry a number: the scale facts a capacity estimate starts from. */
 export function scaleFacts(problem: Problem): string[] {
-  return bullets(section(problem, "Hidden facts")).filter((b) => /\d/.test(b));
+  return shownFacts(problem).filter((b) => /\d/.test(b));
 }
 
 function walkName(problem: Problem): string {
@@ -535,7 +571,7 @@ function buildNormal(problem: Problem, drill: DrillType, ctx: DrillContext): Dri
     case "tradeoff":
       return buildTradeoff(problem, ctx);
     default: {
-      const facts = bullets(section(problem, "Hidden facts"));
+      const facts = shownFacts(problem);
       return {
         prompt: {
           ...base,
@@ -558,7 +594,7 @@ const LLD_TRADEOFF_VARIANT_HINT = "Name the patterns you would use or drop after
 function tradeoffShell(problem: Problem) {
   const opening = section(problem, "Opening prompt").replace(/\s*Where would you (like to )?start\?\s*$/i, "");
   const info = DRILL_INFO.tradeoff;
-  const facts = problem.meta.track === "lld" ? bullets(section(problem, "Hidden facts")) : [];
+  const facts = problem.meta.track === "lld" ? shownFacts(problem) : [];
   return {
     base: {
       drill: "tradeoff" as const,

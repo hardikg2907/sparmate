@@ -8,12 +8,14 @@ import {
   deepDiveEntries,
   drillFits,
   drillsAvailable,
+  factOnly,
   interviewerNotesIn,
   matchDeepDive,
   matchTradeoff,
   pickDeepDive,
   pickTradeoff,
   scaleFacts,
+  shownFacts,
   tradeoffEntries,
   variantEntries,
 } from "./drill-content";
@@ -123,6 +125,60 @@ describe("drill content from the shipped briefs", () => {
     expect(built?.key).toContain("`Ticket`");
     expect(built?.key).toContain("enter(type, time)");
     expect(built?.prompt.minutes).toBe(15);
+  });
+});
+
+describe("facts a drill shows", () => {
+  it.each([
+    ["an extensions bullet", "**Extensions:** undo, a second board. Do not mention them until the extension step.", null],
+    ["an extensions bullet with no note", "**Extension:** undo.", null],
+    ["a sentence that tells the interviewer what to hold back", "**Split types:** equal and exact. Do not mention weighted splits.", "**Split types:** equal and exact."],
+    ["a sentence about the candidate", "**Names:** `open`, `close`. The names are the candidate's choice.", "**Names:** `open`, `close`."],
+    ["an aside for the interviewer", "**Out of scope:** billing (do not volunteer it), a UI.", "**Out of scope:** billing, a UI."],
+    ["an aside in the label", "**Cost (give only if asked):** storage is cheap.", "**Cost:** storage is cheap."],
+    [
+      "a note about what to accept",
+      "**Callers:** code calls `send` directly. If they propose a queue, accept it, but do not require it.",
+      "**Callers:** code calls `send` directly.",
+    ],
+    ["what to say when asked", "**Not now:** undo, replay. If they ask, say so and add nothing.", "**Not now:** undo, replay."],
+  ])("drops %s", (_n, bullet, expected) => {
+    expect(factOnly(bullet)).toBe(expected);
+  });
+
+  it("keeps the label when the sentence it opens is a note", () => {
+    expect(factOnly("**Errors:** the candidate picks the style. A rejected call changes nothing.")).toBe("**Errors:** A rejected call changes nothing.");
+  });
+
+  it("drops a bullet with nothing left but its label", () => {
+    expect(factOnly("**Style:** the candidate picks it.")).toBeNull();
+  });
+
+  it("keeps a plain fact, an aside that is part of it, and a rule for the candidate's code", () => {
+    const fact = "**Time:** the caller passes minutes in (an int). Do not read the system clock.";
+    expect(factOnly(fact)).toBe(fact);
+  });
+
+  it("shows no note to the interviewer in any shipped brief", () => {
+    for (const problem of all) {
+      for (const fact of shownFacts(problem)) {
+        expect(fact, problem.meta.id).not.toMatch(/\b(?:do not mention|do not volunteer|the candidate|let them|extension step|if they (?:ask|propose))\b/i);
+        expect(fact, problem.meta.id).not.toMatch(/^\**\s*extensions?\b/i);
+      }
+    }
+  });
+
+  it("shows only facts under What you know in the machine coding drills", () => {
+    const sections = {
+      ...lld.sections,
+      "Hidden facts": `${lld.sections["Hidden facts"] ?? ""}\n- **Extensions:** night rates, a second gate. Do not mention them until the extension step.\n- **Spots:** three sizes. The names are the candidate's choice.`,
+    };
+    const problem = { ...lld, sections };
+    for (const drill of ["lld_skeleton", "tradeoff"] as const) {
+      const known = buildDrill(problem, drill)?.prompt.material.find((m) => m.heading === "What you know")?.markdown ?? "";
+      expect(known, drill).toContain("- **Spots:** three sizes.");
+      expect(known, drill).not.toMatch(/Extensions|night rates|candidate/);
+    }
   });
 });
 
