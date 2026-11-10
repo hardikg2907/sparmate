@@ -151,14 +151,16 @@ describe("a machine coding round on a system design day", () => {
   });
   const problems = [
     problem("parking-lot", "lld", { trackerMark: "[~]", lastAttempt: { sessionId: "r12-lld", date: "2026-11-12", mode: "interview", verdict: "hire" }, redoDueOn: "2026-11-19" }),
+    problem("elevator", "lld"),
     problem("url-shortener", "hld", { badge: "next" }),
   ];
   const history = [round(12, { track: "lld", problemId: "parking-lot" })];
 
-  it("keeps the day an HLD day: the title and the hero follow the plan, and the new problem is a system design one", () => {
+  it("keeps the day an HLD day: the hero is a system design problem although a fresh machine coding one exists, and the redo of the round just played only waits", () => {
     const pick = selectToday({ now: NOW, plan: PLAN, problems, history });
     expect(pick.dayKind).toBe("hld");
     expect(pick.hero).toMatchObject({ kind: "problem", reason: "new", problem: { id: "url-shortener" } });
+    expect(pick.moreRedos.map((e) => [e.problem.id, e.due])).toEqual([["parking-lot", false]]);
   });
 
   it("leaves the day open on the strip and out of the count, because only a round of the day's kind finishes it", () => {
@@ -170,7 +172,7 @@ describe("a machine coding round on a system design day", () => {
     expect(withHld.done).toBe(week.done + 1);
   });
 
-  it("counts the machine coding round on Saturday's day only when it ends then", () => {
+  it("finishes a machine coding day only with a machine coding round that ended that day", () => {
     const week = weekDays(PLAN, [round(12, { track: "lld" })], null, new Date(2026, 10, 14, 10));
     expect(week.days[5]).toMatchObject({ kind: "lld", state: "today", done: false });
     const later = weekDays(PLAN, [round(14, { track: "lld" })], null, new Date(2026, 10, 14, 15));
