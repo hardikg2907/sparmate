@@ -42,12 +42,18 @@ export function drillServesTrack(drill: DrillType, track: Track): boolean {
 /** Follow-up questions the grader may ask in one dialogue attempt. */
 export const MAX_FOLLOW_UPS = 2;
 
+/** What the server says when a dialogue moved on, so the page knows to load the conversation again. */
+export const CONVERSATION_MOVED = "This conversation moved on. Reload to continue.";
+export const DRILL_IN_PROGRESS = "This drill already has an answer in progress.";
+
 // ---------------------------------------------------------------------------
 // Gap to drill
 
 interface Rule {
   drill: DrillType;
   pattern: RegExp;
+  /** A rule that reads the title alone: the reason a gap matters often names a topic it only touches on. */
+  titleOnly?: true;
 }
 
 const HLD_RULES: Rule[] = [
@@ -59,6 +65,7 @@ const HLD_RULES: Rule[] = [
     drill: "tradeoff",
     pattern:
       /trade-?off|justif|alternative|unreason|rationale|\b(choice|chose|choos\w*|pick\w*) (without|with no|lacking|and no)\b|no (reason|why)|without (a |any |stating )?(reason|why)/,
+    titleOnly: true,
   },
   {
     drill: "deep_dive",
@@ -68,7 +75,7 @@ const HLD_RULES: Rule[] = [
 ];
 
 const LLD_RULES: Rule[] = [
-  { drill: "tradeoff", pattern: /pattern|strategy|extensib|trade-?off|justif|alternative|unreason|rationale/ },
+  { drill: "tradeoff", pattern: /pattern|strategy|extensib|trade-?off|justif|alternative|unreason|rationale/, titleOnly: true },
   { drill: "lld_skeleton", pattern: /entit|class|interface|skeleton|model(l)?ing|object|relationship|data shape|abstraction|responsib|encapsulat|\bapi\b|noun/ },
 ];
 
@@ -76,25 +83,26 @@ const LLD_RULES: Rule[] = [
 const ABOUT_THE_ROUND = /pacing|leading the round|time[- ]?(management|box)|drive the (round|interview)|running out of time|phase (timing|pacing)/;
 
 /** A gap about getting the idea across is trained by defending a choice aloud. */
-const ABOUT_EXPLAINING = /communicat|explain/;
+const ABOUT_EXPLAINING = /explain|explanation|communicat|articulat/;
 
 /**
  * Picks a drill for a scorecard gap. The judge's own choice wins when it fits the track. Otherwise the gap's title is
- * matched first, then its title with the reason it matters. A gap about communicating or explaining gets the trade-off
- * drill. A gap about pacing or leading the round gets none, and neither does a gap no rule fits: null queues nothing.
+ * matched first, then its title with the reason it matters; the trade-off rule reads the title only. A gap about
+ * explaining or communicating names no topic of its own, so it is the last resort: it gets the trade-off drill only
+ * when no topic rule matched, and it reads the title only. A gap about pacing or leading the round gets none, and
+ * neither does a gap no rule fits: null queues nothing.
  */
 export function drillForGap(gap: { title: string; whyItMatters?: string; drill?: DrillType | undefined }, track: Track): DrillType | null {
   if (gap.drill && drillServesTrack(gap.drill, track)) return gap.drill;
   const title = gap.title.toLowerCase();
   if (ABOUT_THE_ROUND.test(title)) return null;
-  if (ABOUT_EXPLAINING.test(title)) return "tradeoff";
   const rules = track === "lld" ? LLD_RULES : HLD_RULES;
   const full = `${title} ${(gap.whyItMatters ?? "").toLowerCase()}`;
   for (const text of [title, full]) {
-    const hit = rules.find((r) => r.pattern.test(text));
+    const hit = rules.find((r) => (text === title || !r.titleOnly) && r.pattern.test(text));
     if (hit) return hit.drill;
   }
-  return null;
+  return ABOUT_EXPLAINING.test(title) ? "tradeoff" : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +395,7 @@ export const DRILL_ID = /^[a-f0-9]{16}$/;
 export const ATTEMPT_ID = /^[a-f0-9]{16}$/;
 export const MAX_ELAPSED_SECONDS = 7200;
 export const MAX_ANSWER_CHARS = 8000;
+export const MAX_TOPIC_CHARS = 200;
 
 /** Names one drill to run. `drillId` is set when it comes from the queue. */
 export const DrillTargetSchema = z.strictObject({
@@ -400,6 +409,8 @@ export const DrillSubmitSchema = z.strictObject({
   ...DrillTargetSchema.shape,
   /** The changed constraint the prompt named, sent back so a tab that opened an older prompt is never graded on another one. */
   variant: z.string().max(MAX_VARIANT_ID).regex(VARIANT_ID).nullable().optional(),
+  /** The topic the prompt named, sent back so a drill whose topic moved since is never graded on another one. */
+  topic: z.string().min(1).max(MAX_TOPIC_CHARS).optional(),
   answer: z
     .string()
     .max(MAX_ANSWER_CHARS)
@@ -420,6 +431,8 @@ export type DrillRevise = z.infer<typeof DrillReviseSchema>;
 /** The candidate's answer to a follow-up question of a dialogue drill. */
 export const DrillReplySchema = z.strictObject({
   attemptId: z.string().regex(ATTEMPT_ID),
+  /** The question the reply answers, counted from 1. A reply to a question the conversation moved past is refused. */
+  asked: z.number().int().min(1).max(MAX_FOLLOW_UPS),
   answer: AnswerSchema,
   elapsedSeconds: z.number().int().min(0).max(MAX_ELAPSED_SECONDS).optional(),
 });
@@ -431,7 +444,7 @@ export interface GymDrillRow {
   id: string;
   /** The scorecard gap this drill trains. */
   gapTitle: string;
-  /** The deep-dive topic, for a deep dive. */
+  /** The deep dive's or trade-off's topic. */
   topic: string | null;
   drill: DrillType;
   title: string;
@@ -466,7 +479,7 @@ export interface DrillPrompt {
   title: string;
   minutes: number;
   task: string;
-  /** The deep-dive topic, for a deep dive. */
+  /** The deep dive's or trade-off's topic. The browser sends it back with its answer. */
   topic?: string;
   problem: { id: string; title: string; track: Track };
   /** Set when the drill asks the problem with one changed constraint. The browser sends `id` back with its answer. */
@@ -486,6 +499,8 @@ export interface DrillTurn {
 
 export interface DrillOpen {
   attemptId: string;
+  /** When the attempt was opened, as an ISO time, so a resumed page counts its time from then. */
+  openedAt: string;
   turns: DrillTurn[];
   /** Follow-up questions asked so far. */
   asked: number;

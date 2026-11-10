@@ -147,7 +147,7 @@ function Shell() {
             <SessionPage key={route.id} id={route.id} theme={theme} studyRoot={bootstrap.studyRoot} />
           </Suspense>
         ) : null}
-        {route.name === "drill" ? <DrillPage ctx={ctx} target={route.target} /> : null}
+        {route.name === "drill" ? <DrillPage key={pageKey} ctx={ctx} target={route.target} /> : null}
         {route.name === "not-found" ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
             <h1 className="text-lead font-semibold">Page not found</h1>

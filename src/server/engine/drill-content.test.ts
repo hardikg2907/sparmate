@@ -143,7 +143,7 @@ describe("trade-off content", () => {
     }
     const built = buildDrill(problem, "tradeoff");
     expect(built?.prompt.task).toBe(
-      `Take "${entries[0]?.title}": pick the option you would build for this problem, give the reason from its requirements, and say when the other option wins.`,
+      `The topic is "${entries[0]?.title}". Say what you would choose for this problem, give the reason from its requirements, and say what would make you choose differently.`,
     );
     expect(built?.key).toBe(entries[0]?.text);
     expect(built?.prompt.topic).toBe(entries[0]?.title);
@@ -163,8 +163,6 @@ describe("trade-off content", () => {
     expect(storage?.prompt.topic).toBe("Storage");
     const codes = buildDrill(hld, "tradeoff", { gapTitle: "Code generation scheme was never justified" });
     expect(codes?.prompt.topic).toBe("Code generation");
-    const byText = buildDrill(hld, "tradeoff", { gapTitle: "Collision handling", hint: "" });
-    expect(byText?.prompt.topic).toBe("Code generation");
     const rotated = [0, 1, 2, 3, 4].map((rotation) => buildDrill(hld, "tradeoff", { gapTitle: "Zzzz qqqq", rotation })?.prompt.topic);
     expect(rotated).toEqual(["Code generation", "Storage", "301 versus 302", "CDN caching of redirects", "Code generation"]);
   });
@@ -207,7 +205,7 @@ describe("trade-off content", () => {
     expect(pickTradeoff([], "anything")).toBeNull();
     const entries = tradeoffEntries(hld);
     expect(matchTradeoff(entries, "Zzzz qqqq")).toBeNull();
-    expect(pickTradeoff(entries, "Zzzz qqqq", "", -3)?.title).toBe("CDN caching of redirects");
+    expect(pickTradeoff(entries, "Zzzz qqqq", -3)?.title).toBe("CDN caching of redirects");
   });
 
   it.each(["b3-parking-lot", "b3-vending-machine", "b3-lru-cache"])("machine coding: %s asks for the patterns without naming one", (id) => {
@@ -223,29 +221,73 @@ describe("trade-off content", () => {
     for (const word of ["strategy", "observer", "singleton", "factory", "state pattern"]) expect(shown, word).not.toContain(word);
   });
 
-  it("machine coding shows only the problem and keys on the whole section for every shipped brief", () => {
+  it("machine coding shows the problem and its facts, and keys on the whole section for every shipped brief", () => {
     for (const problem of all.filter((p) => p.meta.track === "lld")) {
       const built = buildDrill(problem, "tradeoff");
       expect(
         built?.prompt.material.map((m) => m.heading),
         problem.meta.id,
-      ).toEqual(["The problem"]);
+      ).toEqual(["The problem", "What you know"]);
+      expect(built?.prompt.material[1]?.markdown, problem.meta.id).toBe(buildDrill(problem, "lld_skeleton")?.prompt.material[1]?.markdown);
       expect(built?.key, problem.meta.id).toBe((problem.sections["Patterns that fit"] ?? "").trim());
     }
   });
 
-  it("the changed-constraint variant asks to keep or change the choice, and keys on the section plus the expected answer", () => {
-    for (const problem of [hld, lld]) {
-      const entry = variantEntries(problem)[0];
-      const built = buildDrill(problem, "tradeoff", { variant: entry?.id ?? "" });
-      expect(built?.prompt.task).toBe("The situation changed as below. Say whether you keep your design choice or change it, and defend that.");
-      expect(built?.prompt.variant).toEqual({ id: entry?.id, title: entry?.title });
-      expect(built?.prompt.topic).toBeUndefined();
-      const section = problem.meta.track === "lld" ? "Patterns that fit" : "Accepted alternatives";
-      expect(built?.key).toBe(`${(problem.sections[section] ?? "").trim()}\n\nAfter the change, a strong answer covers:\n${entry?.expect}`);
-      expect(built?.prompt.material.at(-1)).toEqual({ heading: "What changed", markdown: entry?.question });
-      expect(JSON.stringify(built?.prompt)).not.toContain(entry?.expect ?? "?");
-    }
+  it("the system design variant names the alternative the change touches, and keys on the section plus the expected answer", () => {
+    const entry = variantEntries(hld)[0];
+    const built = buildDrill(hld, "tradeoff", { variant: entry?.id ?? "" });
+    expect(built?.prompt.topic).toBe("CDN caching of redirects");
+    expect(built?.prompt.task).toBe(
+      'Your choice was about "CDN caching of redirects". The situation changed as below. Say whether you keep that choice or change it, and defend it.',
+    );
+    expect(built?.prompt.answerHint).toBe("Say whether you keep the choice or change it, and give the reason from the change.");
+    expect(built?.prompt.variant).toEqual({ id: entry?.id, title: entry?.title });
+    expect(built?.key).toBe(`${(hld.sections["Accepted alternatives"] ?? "").trim()}\n\nAfter the change, a strong answer covers:\n${entry?.expect}`);
+    expect(built?.prompt.material.map((m) => m.heading)).toEqual(["The problem", "What changed"]);
+    expect(built?.prompt.material.at(-1)).toEqual({ heading: "What changed", markdown: entry?.question });
+    expect(JSON.stringify(built?.prompt)).not.toContain(entry?.expect ?? "?");
+  });
+
+  it("the system design variant falls back to the first alternative when no title shares a word with the change", () => {
+    const odd = withSection(hld, "Curveballs", '1. **Zzzz change:** "Qqqq wwww eeee?" Expect: something.');
+    const entry = variantEntries(odd)[0];
+    expect(buildDrill(odd, "tradeoff", { variant: entry?.id ?? "" })?.prompt.topic).toBe("Code generation");
+  });
+
+  it("the machine coding variant asks which patterns the new requirement adds or drops, with the facts shown", () => {
+    const entry = variantEntries(lld)[0];
+    const built = buildDrill(lld, "tradeoff", { variant: entry?.id ?? "" });
+    expect(built?.prompt.task).toBe("The requirement below is new. Say which patterns you would use or drop now, each with the reason.");
+    expect(built?.prompt.answerHint).toBe("Name the patterns you would use or drop after the new requirement, each with the reason.");
+    expect(built?.prompt.topic).toBeUndefined();
+    expect(built?.prompt.material.map((m) => m.heading)).toEqual(["The problem", "What you know", "What changed"]);
+    expect(built?.key).toBe(`${(lld.sections["Patterns that fit"] ?? "").trim()}\n\nAfter the change, a strong answer covers:\n${entry?.expect}`);
+    expect(JSON.stringify(built?.prompt)).not.toContain(entry?.expect ?? "?");
+  });
+
+  it("does not offer a catch-all bullet as a topic", () => {
+    const text = ["- **Smaller choices.** Relay, webhooks.", "- **Other choices: queue and store.** Mixed.", "- **Message broker.** Kafka or SQS."].join("\n");
+    expect(tradeoffEntries(withSection(hld, "Accepted alternatives", text)).map((e) => e.title)).toEqual(["Message broker"]);
+  });
+
+  it("matches a trade-off by the title only: common words and the entry text never decide", () => {
+    const entries = tradeoffEntries(
+      withSection(
+        hld,
+        "Accepted alternatives",
+        ["- **Message broker.** Fine without a reason, an option, a choice or a design that is picked.", "- **Storage engine.** Explain the reason without fuss."].join("\n"),
+      ),
+    );
+    expect(matchTradeoff(entries, "Picked the design without a reason")).toBeNull();
+    expect(matchTradeoff(entries, "Option and choice explained without a reason")).toBeNull();
+    expect(matchTradeoff(entries, "No storage reasoning")?.title).toBe("Storage engine");
+    // The reason a gap matters is not read at all.
+    expect(buildDrill(hld, "tradeoff", { gapTitle: "Chose something", hint: "storage", rotation: 1 })?.prompt.topic).toBe("Storage");
+  });
+
+  it("rotates on the count it is given when no title matches", () => {
+    const topics = [0, 1].map((rotation) => buildDrill(hld, "tradeoff", { gapTitle: "Chose something without a reason", rotation })?.prompt.topic);
+    expect(topics).toEqual(["Code generation", "Storage"]);
   });
 });
 

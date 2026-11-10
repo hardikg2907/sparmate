@@ -159,9 +159,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const typed = (req.body as { answer?: unknown } | null)?.answer;
     if (typeof typed === "string" && typed.trim() === "") return badRequest(reply, "Write an answer first.");
     if (!parsed.success || !deps.drills) return badRequest(reply, "Write an answer of up to 8000 characters.");
-    const { answer, elapsedSeconds, variant, ...target } = parsed.data;
+    const { answer, elapsedSeconds, variant, topic, ...target } = parsed.data;
     try {
-      return await deps.drills.submit(target, answer, elapsedSeconds, variant ?? null);
+      return await deps.drills.submit(target, answer, elapsedSeconds, variant ?? null, topic);
     } catch (err) {
       if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
       throw err;
@@ -174,7 +174,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (typeof typed === "string" && typed.trim() === "") return badRequest(reply, "Write an answer first.");
     if (!parsed.success || !deps.drills) return badRequest(reply, "Write an answer of up to 8000 characters.");
     try {
-      return await deps.drills.reply(parsed.data.attemptId, parsed.data.answer, parsed.data.elapsedSeconds);
+      return await deps.drills.reply(parsed.data.attemptId, parsed.data.asked, parsed.data.answer, parsed.data.elapsedSeconds);
     } catch (err) {
       if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
       throw err;

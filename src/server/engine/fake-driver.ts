@@ -484,10 +484,11 @@ export function fakeGrade(facts: FakeFacts): GraderOutput {
         : `Say what ${missing ?? "the key point"} means for the design, and end with the decision it forces.`,
     ],
     yourLine: (lines[0] ?? "").slice(0, 200),
-    strong: "Each number or step ends with what it forces: a cache in front of the database, because reads outnumber writes by a hundred to one.",
+    strong: FAKE_STRONG_LINE,
   };
 }
 
+export const FAKE_STRONG_LINE = "Each number or step ends with what it forces: a cache in front of the database, because reads outnumber writes by a hundred to one.";
 export const FAKE_FIRST_QUESTION = "What does that cost, and when would you choose the other way?";
 export const FAKE_SECOND_QUESTION = "Give one number or one failure case that backs it.";
 /** A reply shorter than this many words earns a second question. */

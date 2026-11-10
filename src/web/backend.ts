@@ -114,10 +114,16 @@ export const api = {
   boardPngUrl: (id: string) => `/api/sessions/${enc(id)}/board-final.png`,
   gym: () => request<GymSummary>("GET", "/api/gym"),
   gymPrompt: (target: DrillTarget) => request<DrillPrompt>("POST", "/api/gym/prompt", target),
-  gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number, variant: string | null = null) =>
-    request<DrillTurnResponse>("POST", "/api/gym/submit", { ...target, variant, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
-  gymReply: (attemptId: string, answer: string, elapsedSeconds?: number) =>
-    request<DrillTurnResponse>("POST", "/api/gym/reply", { attemptId, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
+  gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number, variant: string | null = null, topic?: string) =>
+    request<DrillTurnResponse>("POST", "/api/gym/submit", {
+      ...target,
+      variant,
+      ...(topic === undefined ? {} : { topic }),
+      answer,
+      ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
+    }),
+  gymReply: (attemptId: string, asked: number, answer: string, elapsedSeconds?: number) =>
+    request<DrillTurnResponse>("POST", "/api/gym/reply", { attemptId, asked, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
   gymAbandon: (attemptId: string) => request<{ ok: true }>("POST", "/api/gym/abandon", { attemptId }),
   gymRevise: (attemptId: string, answer: string, elapsedSeconds?: number) =>
     request<DrillResult>("POST", "/api/gym/revise", { attemptId, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),

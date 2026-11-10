@@ -19,6 +19,7 @@ import {
   drillSkill,
   drillServesTrack,
   MAX_FOLLOW_UPS,
+  MAX_TOPIC_CHARS,
   drillsForTrack,
   firstDueDay,
   isDue,
@@ -217,15 +218,40 @@ describe("gap to drill", () => {
     ["Communication was hard to follow", "hld"],
     ["Communication was hard to follow", "lld"],
     ["Did not explain the design clearly", "hld"],
-    ["Explaining the class design in plain words", "lld"],
+    ["Explaining the design in plain words", "lld"],
   ] as const)("maps the communication gap %j on %s to the trade-off drill", (title, track) => {
     expect(drillForGap({ title }, track)).toBe("tradeoff");
+  });
+
+  it.each([
+    ["Explaining capacity math out loud", "hld", "capacity"],
+    ["Could not explain the read path", "hld", "walk"],
+    ["Requirements not explained before designing", "hld", "requirements"],
+    ["Did not explain how the cache stays consistent", "hld", "deep_dive"],
+    ["No explanation of failure handling", "hld", "deep_dive"],
+    ["Did not explain the class relationships", "lld", "lld_skeleton"],
+    ["Explain the entities before coding", "lld", "lld_skeleton"],
+  ] as const)("keeps the topic of %j on %s: the communication rule is the last resort", (title, track, drill) => {
+    expect(drillForGap({ title }, track)).toBe(drill);
+  });
+
+  it.each(["communicate", "communication", "articulate", "explain", "explaining", "explanation"])("treats the word %s alike as a communication gap", (word) => {
+    expect(drillForGap({ title: `Weak ${word} of the design` }, "hld")).toBe("tradeoff");
+    expect(drillForGap({ title: `Weak ${word} of the design` }, "lld")).toBe("tradeoff");
+  });
+
+  it("reads a communication gap by its title only, and the trade-off rule by its title only", () => {
+    expect(drillForGap({ title: "Surface-level design", whyItMatters: "You did not explain the choice." }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Stopping at the first answer", whyItMatters: "You need to justify the cache." }, "hld")).toBe("deep_dive");
+    expect(drillForGap({ title: "Hand-waving on the hard part", whyItMatters: "Without a trade-off discussion, the sharding choice looks arbitrary." }, "hld")).toBe("deep_dive");
+    expect(drillForGap({ title: "Weak design of vehicle types", whyItMatters: "A new vehicle type needs a new pattern or strategy." }, "lld")).toBeNull();
   });
 
   it("still queues nothing for pacing, time or driving the round, even with communication words", () => {
     expect(drillForGap({ title: "Pacing and communication in the middle phases" }, "hld")).toBeNull();
     expect(drillForGap({ title: "Time management" }, "lld")).toBeNull();
     expect(drillForGap({ title: "Did not drive the interview" }, "hld")).toBeNull();
+    expect(drillForGap({ title: "Spent too long on requirements: pacing" }, "hld")).toBeNull();
   });
 
   it("takes the judge's trade-off on both tracks", () => {
@@ -290,6 +316,10 @@ describe("request schemas", () => {
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "  \n " }).success).toBe(false);
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "x".repeat(8001) }).success).toBe(false);
     expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", extra: 1 }).success).toBe(false);
+  });
+  it("takes a topic of up to the cap, and rejects an empty, long or non-text one", () => {
+    for (const topic of [undefined, "Storage", "x".repeat(MAX_TOPIC_CHARS)]) expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", topic }).success).toBe(true);
+    for (const topic of ["", "x".repeat(MAX_TOPIC_CHARS + 1), 3, null]) expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", topic }).success, String(topic)).toBe(false);
   });
   it("takes a changed-constraint id, null or nothing, and rejects anything else", () => {
     for (const variant of [undefined, null, "global-latency", "a"]) expect(DrillSubmitSchema.safeParse({ ...good, answer: "ok", variant }).success).toBe(true);
@@ -443,18 +473,23 @@ describe("dialogue request schemas", () => {
   const id = "a1b2c3d4e5f60708";
 
   it("accepts a reply with an optional time", () => {
-    expect(DrillReplySchema.safeParse({ attemptId: id, answer: "Because writes are rare." }).success).toBe(true);
-    expect(DrillReplySchema.safeParse({ attemptId: id, answer: "x", elapsedSeconds: 90 }).success).toBe(true);
+    expect(DrillReplySchema.safeParse({ attemptId: id, asked: 1, answer: "Because writes are rare." }).success).toBe(true);
+    expect(DrillReplySchema.safeParse({ attemptId: id, asked: MAX_FOLLOW_UPS, answer: "x", elapsedSeconds: 90 }).success).toBe(true);
   });
 
   it.each([
-    ["an unknown key", { attemptId: id, answer: "x", drill: "tradeoff" }],
-    ["a path in the id", { attemptId: "../../x", answer: "x" }],
-    ["a blank answer", { attemptId: id, answer: "   " }],
-    ["an answer over 8000 characters", { attemptId: id, answer: "x".repeat(8001) }],
-    ["a negative time", { attemptId: id, answer: "x", elapsedSeconds: -1 }],
-    ["a time over two hours", { attemptId: id, answer: "x", elapsedSeconds: 7201 }],
-    ["a missing id", { answer: "x" }],
+    ["an unknown key", { attemptId: id, asked: 1, answer: "x", drill: "tradeoff" }],
+    ["a path in the id", { attemptId: "../../x", asked: 1, answer: "x" }],
+    ["a blank answer", { attemptId: id, asked: 1, answer: "   " }],
+    ["an answer over 8000 characters", { attemptId: id, asked: 1, answer: "x".repeat(8001) }],
+    ["a negative time", { attemptId: id, asked: 1, answer: "x", elapsedSeconds: -1 }],
+    ["a time over two hours", { attemptId: id, asked: 1, answer: "x", elapsedSeconds: 7201 }],
+    ["a missing id", { asked: 1, answer: "x" }],
+    ["no question number", { attemptId: id, answer: "x" }],
+    ["question number 0", { attemptId: id, asked: 0, answer: "x" }],
+    [`a question number over ${MAX_FOLLOW_UPS}`, { attemptId: id, asked: MAX_FOLLOW_UPS + 1, answer: "x" }],
+    ["a fractional question number", { attemptId: id, asked: 1.5, answer: "x" }],
+    ["a question number as text", { attemptId: id, asked: "1", answer: "x" }],
   ])("rejects a reply with %s", (_n, body) => {
     expect(DrillReplySchema.safeParse(body).success).toBe(false);
   });

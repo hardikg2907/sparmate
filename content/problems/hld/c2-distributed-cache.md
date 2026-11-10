@@ -133,7 +133,7 @@ Walk one crash: shard 7's primary dies. Checkers in two of the three zones agree
 - **Eviction policy.** Sampled LRU, LFU with decay, CLOCK or segmented LRU. Exact LRU with a linked list is fine on a single-threaded node if the candidate counts the cost: about 640 MB of pointers per node and a list update on every read.
 - **Rebalancing.** Copy the data with a redirect during the move, or hand over a few slots at a time without copying and let the new owner fill from misses. The second is valid for a cache only if the pace keeps extra database reads inside the headroom of about 15,000 per second.
 - **Reads from replicas.** Fine as an opt-in for callers that accept up to 2 seconds of staleness, and as relief for a hot key.
-- **Persistence.** None, or periodic snapshots so a restart comes back warm. Not required.
+- **Snapshots for a warm restart.** None, or periodic snapshots so a restart comes back warm. Not required.
 - **Two replicas per shard.** Fine with the cost stated (50% more machines) and the reason (a spare during the minutes of a rebuild).
 - **Leaderless quorum replication.** Three copies, write to two, read from two. Fine if the candidate shows the memory cost (three copies instead of two, 50% more machines), that two plus two over three copies keeps read-after-write, and that the extra cross-zone round trip still fits the 2 ms p99. It removes the failover pause.
 - **Client behaviour on a cache error.** Fail the call, or fall back to the database with a rate cap and a circuit breaker. An unbounded fallback breaks the headroom of about 15,000 reads per second.

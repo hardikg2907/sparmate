@@ -6,7 +6,7 @@ import type { SessionHistoryItem } from "../../shared/types";
 import { PORT, makeStack, type Stack } from "../engine/__fixtures__/stack";
 import { DrillStore } from "../engine/drill-store";
 import { DrillService } from "../engine/drills";
-import { createFakeDriver } from "../engine/fake-driver";
+import { FAKE_STRONG_LINE, createFakeDriver } from "../engine/fake-driver";
 import { buildApp } from "./app";
 import { newCsrfToken } from "./security";
 
@@ -179,6 +179,7 @@ describe("POST /api/gym/submit", () => {
       ].sort(),
     );
     expect(JSON.stringify(body)).not.toContain("strong");
+    expect(JSON.stringify(body)).not.toContain(FAKE_STRONG_LINE);
   });
 
   it("puts the grader call on the usage ledger as the grader role", async () => {
@@ -247,6 +248,7 @@ describe("POST /api/gym/revise", () => {
       nextDueOn: "2026-11-05",
     });
     expect(JSON.stringify(res.json())).not.toContain("strong");
+    expect(JSON.stringify(res.json())).not.toContain(FAKE_STRONG_LINE);
   });
 
   it("answers 404 for an unknown attempt and 409 for one that cannot be revised", async () => {
@@ -299,17 +301,18 @@ describe("the dialogue routes", () => {
     const q = await start();
     expect(q).toMatchObject({ kind: "question", asked: 1, of: 2, question: "What does that cost, and when would you choose the other way?" });
     expect(Object.keys(q).sort()).toEqual(["asked", "attemptId", "kind", "of", "question"]);
-    const res = await post("/api/gym/reply", { attemptId: q.attemptId, answer: LONG, elapsedSeconds: 30 });
+    const res = await post("/api/gym/reply", { attemptId: q.attemptId, asked: 1, answer: LONG, elapsedSeconds: 30 });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toMatchObject({ kind: "result", attemptId: q.attemptId, outcome: "ready", canRevise: false });
     expect(body.turns.map((t: { role: string }) => t.role)).toEqual(["candidate", "grader", "candidate"]);
     expect(JSON.stringify(body)).not.toContain("strong");
+    expect(JSON.stringify(body)).not.toContain(FAKE_STRONG_LINE);
   });
 
   it("asks a second question after a short reply", async () => {
     const q = await start();
-    const res = await post("/api/gym/reply", { attemptId: q.attemptId, answer: "Reads dominate." });
+    const res = await post("/api/gym/reply", { attemptId: q.attemptId, asked: 1, answer: "Reads dominate." });
     expect(res.json()).toMatchObject({ kind: "question", asked: 2, of: 2, question: "Give one number or one failure case that backs it." });
   });
 
@@ -323,6 +326,31 @@ describe("the dialogue routes", () => {
     expect(again.json().error).toBe("This drill already has an answer in progress.");
   });
 
+  it("answers 409 to a reply that names a question the conversation moved past", async () => {
+    const q = await start();
+    expect((await post("/api/gym/reply", { attemptId: q.attemptId, asked: 1, answer: "Reads dominate." })).json()).toMatchObject({ kind: "question", asked: 2 });
+    const stale = await post("/api/gym/reply", { attemptId: q.attemptId, asked: 1, answer: "Reads dominate." });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toEqual({ error: "This conversation moved on. Reload to continue." });
+  });
+
+  it("carries the topic in the prompt, takes it back with the answer, and refuses one the brief does not offer", async () => {
+    const prompt = (await post("/api/gym/prompt", free)).json<{ topic: string }>();
+    expect(prompt.topic).toBeTruthy();
+    const bad = await post("/api/gym/submit", { ...free, topic: "Not a topic of this brief", answer: OPENING });
+    expect(bad.statusCode).toBe(409);
+    expect(bad.json().error).toBe("This drill moved to another problem. Open it again from Practice.");
+    expect((await post("/api/gym/submit", { ...free, topic: "x".repeat(201), answer: OPENING })).statusCode).toBe(400);
+    expect((await post("/api/gym/submit", { ...free, topic: "", answer: OPENING })).statusCode).toBe(400);
+    expect((await post("/api/gym/submit", { ...free, topic: prompt.topic, answer: OPENING })).json()).toMatchObject({ kind: "question", asked: 1 });
+  });
+
+  it("gives the time the attempt opened in the open block", async () => {
+    await start();
+    const prompt = (await post("/api/gym/prompt", free)).json<{ open: { openedAt: string } }>();
+    expect(prompt.open.openedAt).toBe(new Date(2026, 10, 3, 10, 0).toISOString());
+  });
+
   it("abandons an open conversation", async () => {
     const q = await start();
     const res = await post("/api/gym/abandon", { attemptId: q.attemptId });
@@ -330,27 +358,30 @@ describe("the dialogue routes", () => {
     expect(res.json()).toEqual({ ok: true });
     expect((await post("/api/gym/prompt", free)).json().open).toBeUndefined();
     expect((await post("/api/gym/abandon", { attemptId: q.attemptId })).statusCode).toBe(404);
-    expect((await post("/api/gym/reply", { attemptId: q.attemptId, answer: LONG })).statusCode).toBe(404);
+    expect((await post("/api/gym/reply", { attemptId: q.attemptId, asked: 1, answer: LONG })).statusCode).toBe(404);
   });
 
   it("answers 409 to a reply or an abandon for a finished attempt, and refuses a revision of it", async () => {
     const q = await start();
-    const done = (await post("/api/gym/reply", { attemptId: q.attemptId, answer: LONG })).json<{ attemptId: string }>();
-    expect((await post("/api/gym/reply", { attemptId: done.attemptId, answer: LONG })).statusCode).toBe(409);
+    const done = (await post("/api/gym/reply", { attemptId: q.attemptId, asked: 1, answer: LONG })).json<{ attemptId: string }>();
+    expect((await post("/api/gym/reply", { attemptId: done.attemptId, asked: 1, answer: LONG })).statusCode).toBe(409);
     expect((await post("/api/gym/abandon", { attemptId: done.attemptId })).statusCode).toBe(409);
     expect((await post("/api/gym/revise", { attemptId: done.attemptId, answer: LONG })).statusCode).toBe(409);
   });
 
   it.each([
-    ["an empty answer", { attemptId: "0123456789abcdef", answer: "" }],
-    ["a blank answer", { attemptId: "0123456789abcdef", answer: "  " }],
+    ["an empty answer", { attemptId: "0123456789abcdef", asked: 1, answer: "" }],
+    ["a blank answer", { attemptId: "0123456789abcdef", asked: 1, answer: "  " }],
     ["a missing answer", { attemptId: "0123456789abcdef" }],
-    ["a missing id", { answer: "x" }],
-    ["an answer over 8000 characters", { attemptId: "0123456789abcdef", answer: "x".repeat(8001) }],
-    ["an unknown key", { attemptId: "0123456789abcdef", answer: "x", drill: "tradeoff" }],
-    ["a path in the id", { attemptId: "../../x", answer: "x" }],
-    ["a negative time", { attemptId: "0123456789abcdef", answer: "x", elapsedSeconds: -1 }],
-    ["a time over two hours", { attemptId: "0123456789abcdef", answer: "x", elapsedSeconds: 7201 }],
+    ["a missing id", { asked: 1, answer: "x" }],
+    ["an answer over 8000 characters", { attemptId: "0123456789abcdef", asked: 1, answer: "x".repeat(8001) }],
+    ["an unknown key", { attemptId: "0123456789abcdef", asked: 1, answer: "x", drill: "tradeoff" }],
+    ["a path in the id", { attemptId: "../../x", asked: 1, answer: "x" }],
+    ["a negative time", { attemptId: "0123456789abcdef", asked: 1, answer: "x", elapsedSeconds: -1 }],
+    ["a time over two hours", { attemptId: "0123456789abcdef", asked: 1, answer: "x", elapsedSeconds: 7201 }],
+    ["no question number", { attemptId: "0123456789abcdef", answer: "x" }],
+    ["question number 0", { attemptId: "0123456789abcdef", asked: 0, answer: "x" }],
+    ["a question number past the limit", { attemptId: "0123456789abcdef", asked: 3, answer: "x" }],
     ["no body", undefined],
   ])("rejects a reply with %s with 400", async (_n, payload) => {
     expect((await post("/api/gym/reply", payload)).statusCode).toBe(400);
@@ -368,11 +399,11 @@ describe("the dialogue routes", () => {
 
   it("rejects a reply or an abandon without the CSRF token", async () => {
     const bare = { host: HOST, origin: `http://${HOST}` };
-    expect((await post("/api/gym/reply", { attemptId: "0123456789abcdef", answer: "x" }, bare)).statusCode).toBe(403);
+    expect((await post("/api/gym/reply", { attemptId: "0123456789abcdef", asked: 1, answer: "x" }, bare)).statusCode).toBe(403);
     expect((await post("/api/gym/abandon", { attemptId: "0123456789abcdef" }, bare)).statusCode).toBe(403);
   });
 
   it("answers 404 for an unknown attempt", async () => {
-    expect((await post("/api/gym/reply", { attemptId: "0123456789abcdef", answer: "x" })).statusCode).toBe(404);
+    expect((await post("/api/gym/reply", { attemptId: "0123456789abcdef", asked: 1, answer: "x" })).statusCode).toBe(404);
   });
 });

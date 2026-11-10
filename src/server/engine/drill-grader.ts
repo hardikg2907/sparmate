@@ -163,7 +163,7 @@ function transcriptBlock(turns: readonly DrillTurn[]): string[] {
 function messageHead(prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">, key: string): string[] {
   return [
     `<drill>${DRILL_INFO[prompt.drill].title}</drill>`,
-    `<problem>${prompt.problem.title}</problem>`,
+    `<problem>${escapeBlock(prompt.problem.title)}</problem>`,
     `<task>${escapeBlock(prompt.task)}</task>`,
     "<shown_to_candidate>",
     ...prompt.material.map((m) => escapeBlock(`${m.heading}:\n${m.markdown}`)),
