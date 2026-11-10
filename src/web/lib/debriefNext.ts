@@ -1,6 +1,6 @@
 import type { Mode } from "../../shared/phases";
 import type { Readiness, Scorecard } from "../../shared/types";
-import { currentGap, gapState, gapsComplete, type GapMark } from "./gapMarks";
+import { currentGap, gapState, gapsComplete, isPractised, type GapMark } from "./gapMarks";
 
 type Gap = Scorecard["gaps"][number];
 
@@ -25,7 +25,7 @@ export interface NextInput {
 /**
  * The one thing the debrief points at. A gap that is with the coach or not started comes first, then the study
  * notes, then the step that follows the round: interview mode after a guided "ready", a practice round on the top
- * gap after "not yet", and home otherwise.
+ * gap that is not practised yet after "not yet", and home otherwise.
  */
 export function nextAction({ gaps, marks, notesSaved, mode, readiness }: NextInput): NextAction {
   const gap = gapsComplete(gaps, marks) ? undefined : currentGap(gaps, marks);
@@ -36,7 +36,7 @@ export function nextAction({ gaps, marks, notesSaved, mode, readiness }: NextInp
   }
   if (!notesSaved) return { kind: "draft_notes", label: "Draft your study notes", button: "Go to study notes" };
   if (mode === "guided" && readiness === "ready") return { kind: "try_interview", label: "Try interview mode", button: "Start interview" };
-  const top = gaps[0];
+  const top = gaps.find((g) => !isPractised(marks.get(g.title)));
   if (mode === "guided" && readiness === "not_yet" && top) return { kind: "practise_gap", gap: top, label: "Practise the top gap", button: "Practise this gap" };
   return { kind: "home", label: "Back to Today", button: "Back to Today" };
 }

@@ -99,6 +99,20 @@ describe("rules and checks", () => {
 
   it("caps an LLD round whose code did not compile, and clears HLD scenarios", () => {
     expect(enforceRules(card(), { mode: "interview", track: "lld", tester: { compiled: false, scenarios: [], notes: "" } }).trackerMark).toBe("[~]");
+    const gap = { title: "Scale", severity: "low" as const, whyItMatters: "x", whatGoodLooksLike: "y", teachMinutes: 5 };
+    const tagged = enforceRules(
+      card({
+        gaps: [
+          { ...gap, step: "requirements" },
+          { ...gap, title: "Other", step: "skeleton" },
+        ],
+      }),
+      { mode: "guided", track: "hld", tester: null },
+    );
+    expect(tagged.gaps.map((g) => g.step)).toEqual(["requirements", undefined]);
+    expect("step" in tagged.gaps[1]!).toBe(false);
+    const pace = enforceRules(card({ gaps: [{ ...gap, aboutTheRound: true, step: "requirements" }] }), { mode: "guided", track: "hld", tester: null });
+    expect(pace.gaps[0]?.step).toBeUndefined();
     const hld = enforceRules(card({ gaps: [] }), { mode: "interview", track: "hld", tester: null });
     expect(hld.trackerMark).toBe("[x]");
     expect(hld.lldScenarios).toEqual([]);

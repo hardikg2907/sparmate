@@ -2215,6 +2215,45 @@ describe("guided step verdicts, assists and move-on offers", () => {
     rt.dispose();
   });
 
+  it("marks the source gap practised when a gap round passes its step unaided, and takes the mark back after a model answer there", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const calls: unknown[] = [];
+    t.deps.gapPractice = (source, mark, roundId) => void calls.push({ source, mark, roundId });
+    const session = newSession("guided");
+    const source = { sessionId: "20261028-1000-c2-url-shortener-wxyz", gapTitle: "Asking for the scale first", step: "requirements" };
+    session.focus = { title: source.gapTitle, goodLooksLike: "Ask for the load first.", source };
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "entities");
+    await settled(w.tool("step_verdict", { phase: "entities", verdict: "pass" }));
+    expect(calls).toEqual([]);
+    write(session, "requirements");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(false);
+    expect(calls).toEqual([{ source, mark: { sessionId: session.id, at: expect.any(String) }, roundId: session.id }]);
+    await rt.handle({ type: "guided.stuck" }, t.peer);
+    expect(calls[1]).toEqual({ source, mark: null, roundId: session.id });
+    rt.dispose();
+  });
+
+  it("does not mark a gap whose step had a model answer before its pass", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const calls: unknown[] = [];
+    t.deps.gapPractice = (source, mark, roundId) => void calls.push({ source, mark, roundId });
+    const session = newSession("guided");
+    const source = { sessionId: "20261028-1000-c2-url-shortener-wxyz", gapTitle: "Asking for the scale first", step: "requirements" };
+    session.focus = { title: source.gapTitle, goodLooksLike: "Ask for the load first.", source };
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.stuck" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    write(session, "requirements");
+    expect((await settled(w.tool("step_verdict", { phase: "requirements", verdict: "pass" }))).isError).toBe(false);
+    expect(calls).toEqual([]);
+    rt.dispose();
+  });
+
   it("names the gap on a step's first two checks", async () => {
     const w = watched();
     const t = setup(w.driver, "guided");

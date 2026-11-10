@@ -283,6 +283,10 @@ export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; tra
   if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : [];
   else out.lldScenarios = [];
 
+  // A step tag is model output: one that names no step of this track is dropped rather than trusted.
+  const stepIds = new Set(phasesFor(ctx.track).map((p) => p.id));
+  out.gaps = card.gaps.map(({ step, ...gap }) => (step !== undefined && stepIds.has(step) && !gap.aboutTheRound ? { ...gap, step } : gap));
+
   const verdicts = verdictsFor(ctx.track, card.dimensions);
   const confidence = ctx.mode === "guided" && card.verdict.confidence === "high" ? "medium" : card.verdict.confidence;
   out.verdict = { ...card.verdict, ...(verdicts ?? {}), confidence };
@@ -303,7 +307,7 @@ export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; tra
       out.trackerMarkReason = [out.trackerMarkReason, ...reasons].join(" ").trim();
     }
   }
-  out.gaps = mostSevereGaps(card.gaps);
+  out.gaps = mostSevereGaps(out.gaps);
   const validPhases = phasesFor(ctx.track);
   const phaseOrder = new Map(validPhases.map((p, i) => [p.id, i]));
   const seen = new Set<string>();

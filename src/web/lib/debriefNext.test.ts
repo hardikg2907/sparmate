@@ -39,6 +39,14 @@ describe("nextAction", () => {
     expect(next.kind === "practise_gap" && next.gap.title).toBe("Hot keys");
   });
 
+  it("offers the most serious gap not practised yet, and home when every gap is practised", () => {
+    const practised = (titles: string[]) => Object.fromEntries(titles.map((t) => [t, { sessionId: "20261111-1000-c2-url-shortener-abcd", at: "2026-11-11T10:00:00.000Z" }]));
+    const one = nextAction(input({ marks: gapMarks(gaps, settled, [], practised(["Hot keys"])), notesSaved: true, readiness: "not_yet" }));
+    expect(one.kind === "practise_gap" && one.gap.title).toBe("Retries");
+    const all = nextAction(input({ marks: gapMarks(gaps, settled, [], practised(["Hot keys", "Retries", "Backpressure"])), notesSaved: true, readiness: "not_yet" }));
+    expect(all.kind).toBe("home");
+  });
+
   it("sends an interview round home after notes are saved, and still asks for notes first", () => {
     expect(nextAction(input({ progress: settled, mode: "interview", readiness: null })).kind).toBe("draft_notes");
     expect(nextAction(input({ progress: settled, notesSaved: true, mode: "interview", readiness: null })).kind).toBe("home");

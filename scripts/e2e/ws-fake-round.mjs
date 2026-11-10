@@ -878,6 +878,56 @@ async function gapRound() {
   check("a focus on an interview round is refused", wrong.status === 400);
   const normal = (await api.get(`/api/sessions/${(await api.post("/api/sessions", { problemId: "c2-url-shortener", mode: "guided" })).json.sessionId}`)).json;
   check("a normal round has no focus", normal.focus === null);
+
+  await practisedGap();
+}
+
+/** A gap round that passes its gap's step marks the gap "practised" on the round it came from, until it is discarded. */
+async function practisedGap() {
+  const title = "Asking for the scale first";
+  const source = (await api.get("/api/sessions")).json.find((h) => h.problemId === "c2-url-shortener" && h.status === "debriefed" && h.gaps?.some((g) => g.title === title));
+  check("a debriefed round holds a gap tagged with its step", Boolean(source), JSON.stringify(source?.gaps?.map((g) => g.title)));
+  if (!source) return;
+  const created = await api.post("/api/sessions", {
+    problemId: "c2-url-shortener",
+    mode: "guided",
+    focus: { title, goodLooksLike: "Ask for the load first.", sourceSessionId: source.id },
+  });
+  const id = created.json.sessionId;
+  const round = (await api.get(`/api/sessions/${id}`)).json;
+  check("the gap round links to its source gap and step", round.focus?.source?.sessionId === source.id && round.focus.source.step === "requirements", JSON.stringify(round.focus));
+  const c = await openRoom(id, "practice");
+  await c.waitFor(isInterviewerMsg, { label: "practice opening" });
+  let mark = c.mark();
+  c.send({
+    type: "chat.send",
+    channel: "interview",
+    clientMsgId: "prq1",
+    text: "Create a short link for a long URL, with an optional custom alias and an optional expiry. Redirect a short link to its long URL, and an expired link stops redirecting. About 100 million new links a month and about 100 redirects per link. A redirect adds under 50 ms at p99.",
+  });
+  await c.waitFor(isInterviewerMsg, { since: mark, label: "practice requirements reply" });
+  for (const label of ["first practice check", "second practice check"]) {
+    mark = c.mark();
+    c.send({ type: "guided.feedback" });
+    await c.waitFor(isInterviewerMsg, { since: mark, label });
+  }
+  const practised = await pollFor(async () => (await api.get(`/api/sessions/${source.id}`)).json.gapPractice?.[title]?.sessionId === id);
+  check("a passed gap round marks its source gap practised", practised);
+  const done = await pollFor(async () => (await api.get("/api/sessions")).json.find((h) => h.id === source.id)?.gaps?.find((g) => g.title === title)?.done === true);
+  check("history counts the practised gap as done", done);
+  c.close();
+  const gone = await api.delete(`/api/sessions/${id}`);
+  const cleared = await pollFor(async () => (await api.get(`/api/sessions/${source.id}`)).json.gapPractice?.[title] === undefined);
+  check("discarding the gap round takes the mark away", gone.status < 300 && cleared, String(gone.status));
+}
+
+async function pollFor(test, ms = 8_000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    if (await test()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return false;
 }
 
 async function interviewModeRules() {

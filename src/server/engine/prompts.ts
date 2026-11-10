@@ -110,10 +110,13 @@ export function formatPhasePlan(track: Track, durationMin: number): string {
 }
 
 /** The guide's focus paragraph for a round on one gap; empty for every other round. */
-export function focusText(focus: { title: string; goodLooksLike: string } | null): string {
+export function focusText(focus: { title: string; goodLooksLike: string } | null, stepLabel: string | null = null): string {
   if (!focus) return "";
+  const step = stepLabel
+    ? ` The gap belongs to the ${stepLabel} step: the gap counts as practised when that step passes with no "I'm stuck" on it, so judge that step by the same evidence rules as any other.`
+    : "";
   return [
-    `**Focus for this session.** He came back to practise one gap from an earlier round on this problem: "${focus.title}". The session is short, about 20 minutes. Run the steps as usual, but steer each one toward this gap, and spend your teaching on it. What good looks like, in the judge's words:`,
+    `**Focus for this session.** He came back to practise one gap from an earlier round on this problem: "${focus.title}". The session is short, about 20 minutes. Run the steps as usual, but steer each one toward this gap, and spend your teaching on it.${step} What good looks like, in the judge's words:`,
     "",
     `> ${focus.goodLooksLike.replace(/\n+/g, " ")}`,
     "",

@@ -129,7 +129,14 @@ export const CreateSessionSchema = z.strictObject({
   customTrack: z.enum(["hld", "lld"]).optional(),
   mode: z.enum(["interview", "guided"]),
   /** A short guided round on one debrief gap. Needs problemId and mode "guided". */
-  focus: z.strictObject({ title: z.string().min(2).max(200), goodLooksLike: z.string().min(2).max(1500) }).optional(),
+  focus: z
+    .strictObject({
+      title: z.string().min(2).max(200),
+      goodLooksLike: z.string().min(2).max(1500),
+      /** The debriefed round the gap comes from, so a passed gap round can mark it there. */
+      sourceSessionId: z.string().min(1).max(120).optional(),
+    })
+    .optional(),
 });
 export type CreateSessionRequest = z.infer<typeof CreateSessionSchema>;
 

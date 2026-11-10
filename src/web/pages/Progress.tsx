@@ -343,7 +343,7 @@ function FocusCard({ focus, gap, data }: { focus: FocusSkill | null; gap: Return
               busy={data.starting === key}
               disabled={data.starting !== null}
               aria-describedby="gap-why"
-              onClick={() => data.start(gap.item.problemId, "guided", { title: gap.gap.title, goodLooksLike: gap.gap.goodLooksLike })}
+              onClick={() => data.start(gap.item.problemId, "guided", { title: gap.gap.title, goodLooksLike: gap.gap.goodLooksLike, sourceSessionId: gap.item.id })}
             >
               <PlayFilledIcon size={14} />
               Practise this gap

@@ -56,7 +56,7 @@ function scoredParts(s: Session): Pick<SessionSummary, "scores" | "phaseTiming" 
       goodLooksLike: g.whatGoodLooksLike,
       whyItMatters: g.whyItMatters,
       severity: g.severity,
-      done: s.gapProgress?.[g.title]?.state === "taught",
+      done: s.gapProgress?.[g.title]?.state === "taught" || s.gapPractice?.[g.title] !== undefined,
       ...(g.drill ? { drill: g.drill } : {}),
       ...(g.aboutTheRound ? { aboutTheRound: true } : {}),
     })),
