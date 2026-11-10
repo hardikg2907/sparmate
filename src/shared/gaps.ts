@@ -1,3 +1,5 @@
+import type { DrillType } from "./drills";
+import { phasesFor, type Track } from "./phases";
 import type { Scorecard } from "./types";
 
 type Gap = Scorecard["gaps"][number];
@@ -19,4 +21,21 @@ export function gapForTeachMessage(gaps: readonly Pick<Gap, "title">[], text: st
 /** The divider the coach chat shows when a gap becomes the one being taught. */
 export function gapDividerText(title: string): string {
   return `Now on: ${title}`;
+}
+
+/** The step each drill kind trains, for a gap the judge did not tag with a step. */
+const DRILL_STEP: Record<Track, Partial<Record<DrillType, string>>> = {
+  hld: { requirements: "requirements", walk: "design", capacity: "deep_dives", deep_dive: "deep_dives", tradeoff: "deep_dives" },
+  lld: { requirements: "clarify", lld_skeleton: "skeleton" },
+};
+
+/**
+ * The step a gap belongs to: the judge's tag when it names a step of the track, else the step its drill trains, else
+ * null. A gap with no known step cannot be marked practised, because no single step's pass shows it was closed.
+ */
+export function gapStep(track: Track, gap: { step?: string | undefined; drill?: DrillType | undefined }): string | null {
+  const steps = phasesFor(track).map((p) => p.id);
+  if (gap.step && steps.includes(gap.step)) return gap.step;
+  const byDrill = gap.drill ? DRILL_STEP[track][gap.drill] : undefined;
+  return byDrill ?? null;
 }

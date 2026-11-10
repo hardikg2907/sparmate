@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { Scorecard } from "../../../shared/types";
 import { SEVERITY_LABEL, SEVERITY_ORDER } from "../../lib/format";
-import { gapBadge, gapState, severitiesDiffer, type GapMark, type GapState } from "../../lib/gapMarks";
+import { gapBadge, gapState, isPractised, severitiesDiffer, type GapMark, type GapState } from "../../lib/gapMarks";
+import { Link } from "../../router";
 import { CheckIcon, ChevronDownIcon, MoreIcon } from "../icons";
 import { Badge, Button, Card, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, SectionTitle, Tooltip, cn } from "../ui";
 
@@ -31,7 +32,7 @@ const PRACTISE_HINT = "A 20-minute guided round on this problem, aimed at this g
 
 /** The mark that says where a gap stands: a tick only for done, so a tick never means "sent". */
 function StateMark({ state }: { state: GapState }) {
-  if (state === "done") return <CheckIcon size={14} className="shrink-0 text-success" />;
+  if (state === "done" || state === "practised") return <CheckIcon size={14} className="shrink-0 text-success" />;
   return (
     <span
       aria-hidden="true"
@@ -73,8 +74,17 @@ function GapMenu({ gap, state, actions }: { gap: Gap; state: GapState; actions: 
   );
 }
 
-function PrimaryAction({ gap, state, actions, size }: { gap: Gap; state: GapState; actions: GapActions; size: "sm" | "default" }) {
+function PrimaryAction({ gap, state, mark, actions, size }: { gap: Gap; state: GapState; mark: GapMark | undefined; actions: GapActions; size: "sm" | "default" }) {
   const { practise } = actions;
+  if (isPractised(mark)) {
+    return (
+      <Button asChild size={size} variant="outline">
+        <Link href={`/session/${mark.practised.sessionId}`} aria-label={`Open the practice round: ${gap.title}`}>
+          Open the practice round
+        </Link>
+      </Button>
+    );
+  }
   if (state === "done") {
     return (
       <Tooltip content={PRACTISE_HINT}>
@@ -104,7 +114,7 @@ function PrimaryAction({ gap, state, actions, size }: { gap: Gap; state: GapStat
   );
 }
 
-function GapBody({ gap, state, actions }: { gap: Gap; state: GapState; actions: GapActions }) {
+function GapBody({ gap, state, mark, actions }: { gap: Gap; state: GapState; mark: GapMark | undefined; actions: GapActions }) {
   return (
     <>
       <dl className="mt-2 grid gap-x-8 gap-y-3 md:grid-cols-2">
@@ -118,7 +128,7 @@ function GapBody({ gap, state, actions }: { gap: Gap; state: GapState; actions: 
         </div>
       </dl>
       <div className="mt-3 flex items-center gap-2">
-        <PrimaryAction gap={gap} state={state} actions={actions} size="default" />
+        <PrimaryAction gap={gap} state={state} mark={mark} actions={actions} size="default" />
         <span className="flex-1" />
         <GapMenu gap={gap} state={state} actions={actions} />
       </div>
@@ -132,7 +142,7 @@ function GapHeading({ gap, state, mark, severity }: { gap: Gap; state: GapState;
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
       {badge ? (
         <Badge tone={badge.tone} role="status">
-          {state === "done" ? <CheckIcon size={12} /> : state === "with_coach" ? <span aria-hidden="true">●</span> : null}
+          {state === "done" || state === "practised" ? <CheckIcon size={12} /> : state === "with_coach" ? <span aria-hidden="true">●</span> : null}
           {badge.label}
         </Badge>
       ) : null}
@@ -147,7 +157,7 @@ function CurrentGap({ gap, state, mark, severity, actions }: { gap: Gap; state: 
   return (
     <Card variant="raised" className="border-primary/40 p-4">
       <GapHeading gap={gap} state={state} mark={mark} severity={severity} />
-      <GapBody gap={gap} state={state} actions={actions} />
+      <GapBody gap={gap} state={state} mark={mark} actions={actions} />
     </Card>
   );
 }
@@ -186,7 +196,7 @@ function GapRow({ gap, index, state, mark, severity, actions }: { gap: Gap; inde
               <GapHeadingBadge state={state} mark={mark} />
             </div>
           ) : null}
-          <GapBody gap={gap} state={state} actions={actions} />
+          <GapBody gap={gap} state={state} mark={mark} actions={actions} />
         </div>
       ) : null}
     </div>
@@ -198,7 +208,7 @@ function GapHeadingBadge({ state, mark }: { state: GapState; mark: GapMark | und
   if (!badge) return null;
   return (
     <Badge>
-      {state === "done" ? <CheckIcon size={12} /> : state === "with_coach" ? <span aria-hidden="true">●</span> : null}
+      {state === "done" || state === "practised" ? <CheckIcon size={12} /> : state === "with_coach" ? <span aria-hidden="true">●</span> : null}
       {badge.label}
     </Badge>
   );

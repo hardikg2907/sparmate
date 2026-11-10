@@ -129,7 +129,7 @@ function StatusChip({ status }: { status: PublicSession["status"] }) {
 function useGapMarks(scorecard: Scorecard | null, session: PublicSession, coach: ChatItem[]): Map<string, GapMark> {
   return useMemo(() => {
     const texts = coach.filter((item) => item.role === "candidate").map((item) => item.text);
-    return gapMarks(scorecard?.gaps ?? [], session.gapProgress, texts);
+    return gapMarks(scorecard?.gaps ?? [], session.gapProgress, texts, session.gapPractice ?? {});
   }, [scorecard, session.gapProgress, coach]);
 }
 
@@ -206,8 +206,10 @@ function ScorecardBody({
   };
   const practise = (gap: Scorecard["gaps"][number]) => {
     setPractising(gap.title);
-    start({ problemId: session.problemId, mode: "guided", focus: { title: gap.title, goodLooksLike: gap.whatGoodLooksLike } }, "The practice round could not start.", () =>
-      setPractising(null),
+    start(
+      { problemId: session.problemId, mode: "guided", focus: { title: gap.title, goodLooksLike: gap.whatGoodLooksLike, sourceSessionId: session.id } },
+      "The practice round could not start.",
+      () => setPractising(null),
     );
   };
   const tryInterview = () => {

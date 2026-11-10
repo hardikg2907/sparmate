@@ -432,7 +432,8 @@ The chrome above the work area is two rows, 88 px in all: the top bar and the wo
 ### Coach and study notes
 
 - The coach chat stays on the right. Each gap has one main button: **Teach me this**, **Continue in chat**,
-  **Practise this gap** or **Finish the lesson**, by the gap's state (not started, with the coach, done, for later).
+  **Practise this gap**, **Finish the lesson** or **Open the practice round**, by the gap's state (not started, with
+  the coach, done, for later, practised). A practised gap carries a "Practised" badge with a tick.
   A ⋯ menu holds **Restart lesson** and **Practise this gap**. The chat shows a divider line, "Now on: <gap>",
   where each gap begins, and **Continue in chat** scrolls the chat to it.
 - **Draft study notes** sits in its own section after the gaps, with the hint "Draft once the gaps are done. You can
@@ -751,7 +752,7 @@ None of the packages uses `eval` or loads anything from the network.
 ## 8. Needs a server change
 
 One line: the default theme in `DEFAULT_SETTINGS` (`src/shared/types.ts`) is `dark`, so a new install opens dark. A
-`settings.json` that already holds a theme keeps it. The gap badges and the step count read `Session.gapProgress`.
+`settings.json` that already holds a theme keeps it. The gap badges and the step count read `Session.gapProgress` and `Session.gapPractice`.
 
 The DSA response carries `week.mediumsPerDay` (Monday first), the mediums counted on the day each problem was first
 solved this week. The week strip reads it, so a DSA day agrees with the weekly ring.

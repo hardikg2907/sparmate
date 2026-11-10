@@ -1,4 +1,4 @@
-import type { GapCounts } from "../../lib/gapMarks";
+import type { GapCounts, GapState } from "../../lib/gapMarks";
 import { progressText } from "../../lib/gapMarks";
 import type { NextAction } from "../../lib/debriefNext";
 import { Button, Card, cn } from "../ui";
@@ -25,7 +25,7 @@ export function NextStep({ next, busy, canSend, onAct }: { next: NextAction; bus
 }
 
 /** The gaps as a short line and a bar with one segment per gap; the line carries the meaning, the bar only repeats it. */
-export function GapProgressLine({ counts, states }: { counts: GapCounts; states: readonly ("not_started" | "with_coach" | "done" | "later")[] }) {
+export function GapProgressLine({ counts, states }: { counts: GapCounts; states: readonly GapState[] }) {
   if (counts.total === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-meta text-muted-foreground">
@@ -36,7 +36,7 @@ export function GapProgressLine({ counts, states }: { counts: GapCounts; states:
             key={index}
             className={cn(
               "h-1.5 flex-1 rounded-sm",
-              state === "done" || state === "later" ? "bg-success-fill" : state === "with_coach" ? "bg-primary" : "bg-muted ring-1 ring-inset ring-border",
+              state === "done" || state === "later" || state === "practised" ? "bg-success-fill" : state === "with_coach" ? "bg-primary" : "bg-muted ring-1 ring-inset ring-border",
             )}
           />
         ))}

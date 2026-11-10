@@ -26,8 +26,11 @@ import {
   type Session,
   type SessionStatus,
   type GapProgress,
+  type GapPractice,
+  type GapRoundSource,
   type TranscriptEntry,
 } from "../../shared/types";
+import { applyGapPractice } from "./gap-practice";
 import type { PrivacyGuard } from "../guard/privacy";
 import type { CppRunner } from "../runner/cpp";
 import { applyProposal, planProposal } from "../study/bookkeeping";
@@ -210,6 +213,8 @@ export interface RuntimeDeps {
   runner: CppRunner;
   prompts: PromptLoader;
   log: Logger;
+  /** Sets (or, with null, clears) the practised mark of a gap round's source gap. */
+  gapPractice?: (source: GapRoundSource, mark: GapPractice | null, roundId: string) => Promise<void> | void;
 }
 
 /** A failure caused by what the user asked for; the message is shown as is. */
@@ -761,6 +766,7 @@ export class SessionRuntime {
       this.session.assists = [...(this.session.assists ?? []), { at: this.roundNow(), phase }];
       this.saveSoon();
       this.sendState();
+      this.revokePractice(phase);
       this.enqueue(this.interview, this.stuckTurn(phase));
       return;
     }
@@ -1441,6 +1447,29 @@ export class SessionRuntime {
     };
   }
 
+  /** A gap round that passes its gap's step with no model answer on that step marks the gap practised on its source round. */
+  private notePractice(phase: string): void {
+    const source = this.session.focus?.source;
+    if (!source || source.step !== phase) return;
+    if ((this.session.assists ?? []).some((a) => a.phase === phase)) return;
+    void this.deps.gapPractice?.(source, { sessionId: this.session.id, at: new Date().toISOString() }, this.session.id);
+  }
+
+  /** A model answer asked for on a step that already passed takes the practised mark back. */
+  private revokePractice(phase: string): void {
+    const source = this.session.focus?.source;
+    if (!source || source.step !== phase || this.session.stepVerdicts?.[phase]?.verdict !== "pass") return;
+    void this.deps.gapPractice?.(source, null, this.session.id);
+  }
+
+  /** Sets or clears a practised mark on this round's gap, from a gap round that practised it. */
+  setGapPractice(title: string, mark: GapPractice | null, roundId: string): void {
+    if (this.disposed || !applyGapPractice(this.session, title, mark, roundId)) return;
+    // Saved at once, so the history that Today and Progress read agrees with the debrief page.
+    void this.saveNow();
+    this.sendState();
+  }
+
   private stepsLine(): string {
     return stepStatusLine(
       this.phases,
@@ -1664,7 +1693,7 @@ export class SessionRuntime {
           problem_brief: this.problem.body,
           extension_minute: String(extensionMinute(this.session.track, this.durationMin)),
           phase_plan: formatPhasePlan(this.session.track, this.durationMin),
-          focus: focusText(this.session.focus),
+          focus: focusText(this.session.focus, this.phases.find((p) => p.id === this.session.focus?.source?.step)?.label ?? null),
         }),
       tools: this.interviewTools(ch),
       fake: {
@@ -1800,6 +1829,7 @@ export class SessionRuntime {
             this.sendState();
             if (counted) return textOutput(`Recorded: not yet. The page shows: "${input.gap}" Name nothing that is missing in your reply.`);
             if (verdict === "not_yet") return textOutput("Recorded: not yet.");
+            this.notePractice(phase);
             return textOutput(`Recorded: the step passed. Steps now: ${this.stepsLine()}.`);
           },
         ),

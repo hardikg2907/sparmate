@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { teachMessage } from "../../shared/gaps";
 import type { GapProgress } from "../../shared/types";
-import { currentGap, gapBadge, gapCounts, gapMarks, gapState, gapsComplete, progressText, severitiesDiffer } from "./gapMarks";
+import { currentGap, gapBadge, gapCounts, gapMarks, gapState, gapsComplete, isPractised, progressText, severitiesDiffer } from "./gapMarks";
 
 const gaps = [{ title: "Hot keys" }, { title: "Retries" }, { title: "Backpressure" }];
 const rec = (by: GapProgress["by"], state: GapProgress["state"]): GapProgress => ({ by, state, at: "2026-11-01T10:00:00.000Z" });
+
+describe("practised gaps", () => {
+  const practice = { Retries: { sessionId: "20261111-1000-c2-url-shortener-abcd", at: "2026-11-11T10:00:00.000Z" } };
+
+  it("shows a practised gap over any coach record, and keeps the chat reading of an older round for the others", () => {
+    const marks = gapMarks(gaps, {}, [teachMessage(gaps[0]!)], practice);
+    expect(marks.get("Hot keys")).toBe("sent");
+    expect(isPractised(marks.get("Retries"))).toBe(true);
+    expect(gapState(marks.get("Retries"))).toBe("practised");
+    expect(gapBadge("practised", marks.get("Retries"))).toEqual({ label: "Practised", tone: "good" });
+    const recorded = gapMarks(gaps, { Retries: rec("coach", "started") }, [], practice);
+    expect(gapState(recorded.get("Retries"))).toBe("practised");
+  });
+
+  it("counts a practised gap as done and never makes it the gap to work on", () => {
+    const marks = gapMarks(gaps, { "Hot keys": rec("coach", "taught") }, [], practice);
+    expect(gapCounts(gaps, marks)).toEqual({ total: 3, done: 2, withCoach: 0 });
+    expect(currentGap(gaps, marks)?.title).toBe("Backpressure");
+    expect(gapsComplete(gaps, gapMarks(gaps, { "Hot keys": rec("coach", "taught"), Backpressure: rec("coach", "taught") }, [], practice))).toBe(true);
+  });
+});
 
 describe("gapMarks", () => {
   it("reads records alone when the round has any", () => {

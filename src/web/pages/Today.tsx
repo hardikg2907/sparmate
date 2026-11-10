@@ -405,7 +405,7 @@ function Hero({
               variant="secondary"
               busy={data.starting === startKey(gap.item.problemId, "guided", gap.gap)}
               disabled={data.starting !== null}
-              onClick={() => data.start(gap.item.problemId, "guided", { title: gap.gap.title, goodLooksLike: gap.gap.goodLooksLike })}
+              onClick={() => data.start(gap.item.problemId, "guided", { title: gap.gap.title, goodLooksLike: gap.gap.goodLooksLike, sourceSessionId: gap.item.id })}
             >
               Practise a gap, 20 min
             </Button>

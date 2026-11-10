@@ -2,11 +2,13 @@ import { deriveChecklist } from "../../shared/checklist";
 import { phasesFor, type Mode, type Track } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import type { CreateSessionRequest } from "../../shared/protocol";
-import type { ProblemSummary, PublicSession, Session } from "../../shared/types";
+import { gapStep } from "../../shared/gaps";
+import type { GapPractice, GapRoundSource, ProblemSummary, PublicSession, Session } from "../../shared/types";
 import { createAttemptFile, removeAttemptIfUntouched } from "../study/attempts";
 import { findBullet, tableTail } from "../study/tracker";
 import { localDate } from "./fsutil";
 import type { ProblemCatalog } from "./problems";
+import { applyGapPractice } from "./gap-practice";
 import { toPublicSession } from "./public";
 import { buildProblemSummaries, lastTableRow, trackFromLogRow, type TrackerBullet } from "./recommend";
 import { ATTEMPT_PATH, SessionRuntime, type RuntimeDeps } from "./runtime";
@@ -39,6 +41,8 @@ export class SessionManager {
   private readonly runtimes = new Map<string, SessionRuntime>();
   private readonly opening = new Map<string, Promise<SessionRuntime | null>>();
   private readonly discarding = new Map<string, Promise<void>>();
+  /** Practised-mark writes per source round, one at a time, so two gap rounds never lose each other's mark. */
+  private readonly practiceWrites = new Map<string, Promise<void>>();
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   readonly customJobs: CustomProblemJobManager;
 
@@ -84,7 +88,7 @@ export class SessionManager {
         this.deps.log.warn(`Session ${id} refers to a problem that no longer loads`);
         return null;
       }
-      const rt = new SessionRuntime(this.deps, session, problem);
+      const rt = new SessionRuntime(this.runtimeDeps(), session, problem);
       await rt.init();
       if (this.discarding.has(id) || this.deps.store.isRemoved(id)) {
         rt.dispose();
@@ -104,6 +108,55 @@ export class SessionManager {
     const session = await this.deps.store.load(id);
     if (!session) return null;
     return toPublicSession(session, await this.problemFor(session));
+  }
+
+  private runtimeDeps(): RuntimeDeps {
+    return { ...this.deps, gapPractice: (source, mark, roundId) => this.recordPractice(source, mark, roundId) };
+  }
+
+  private recordPractice(source: GapRoundSource, mark: GapPractice | null, roundId: string): Promise<void> {
+    const before = this.practiceWrites.get(source.sessionId) ?? Promise.resolve();
+    const next = before
+      .then(() => this.writePractice(source, mark, roundId))
+      .catch((err) => this.deps.log.warn(`Could not record a practised gap on session ${source.sessionId}`, err));
+    this.practiceWrites.set(source.sessionId, next);
+    void next.finally(() => {
+      if (this.practiceWrites.get(source.sessionId) === next) this.practiceWrites.delete(source.sessionId);
+    });
+    return next;
+  }
+
+  /**
+   * Writes through the source's runtime when one holds it, since that copy is the one that gets saved. Otherwise it
+   * edits the saved copy, and then also any runtime that opened meanwhile from the older file.
+   */
+  private async writePractice(source: GapRoundSource, mark: GapPractice | null, roundId: string): Promise<void> {
+    const id = source.sessionId;
+    if (!SESSION_ID.test(id) || this.discarding.has(id)) return;
+    await this.opening.get(id);
+    const held = this.runtimes.get(id);
+    if (held) {
+      held.setGapPractice(source.gapTitle, mark, roundId);
+      return;
+    }
+    const saved = await this.deps.store.load(id);
+    if (!saved || !applyGapPractice(saved, source.gapTitle, mark, roundId)) return;
+    await this.deps.store.save(saved);
+    const late = this.runtimes.get(id) ?? (await this.opening.get(id));
+    late?.setGapPractice(source.gapTitle, mark, roundId);
+  }
+
+  /**
+   * The source of a gap round, from the request's untrusted round id: a debriefed round of the same problem whose
+   * scorecard holds a gap with this exact title. Anything else gives no source, and the round runs without a link.
+   */
+  private async gapSource(sourceId: string, title: string, problem: Problem): Promise<GapRoundSource | null> {
+    if (!SESSION_ID.test(sourceId)) return null;
+    const source = await this.session(sourceId);
+    if (!source || source.problemId !== problem.meta.id || !source.scorecard) return null;
+    const gap = source.scorecard.gaps.find((g) => g.title === title);
+    if (!gap) return null;
+    return { sessionId: source.id, gapTitle: gap.title, step: gapStep(problem.meta.track, gap) };
   }
 
   /** The in-memory copy when a runtime holds it, else the saved one. */
@@ -163,6 +216,8 @@ export class SessionManager {
       throw new HttpError(400, "Choose a problem or paste a prompt.");
     }
 
+    const source = req.focus?.sourceSessionId !== undefined ? await this.gapSource(req.focus.sourceSessionId, req.focus.title, problem) : null;
+    if (req.focus?.sourceSessionId !== undefined && !source) this.deps.log.warn("A gap round named a source round that does not hold that gap; it runs without a link");
     const settings = this.deps.settings.get();
     const now = new Date();
     let id = newSessionId(problem.meta.id, now);
@@ -198,7 +253,7 @@ export class SessionManager {
       stepChecks: {},
       stepCode: {},
       pins: [],
-      focus: req.focus ? { title: this.deps.guard.redact(req.focus.title), goodLooksLike: this.deps.guard.redact(req.focus.goodLooksLike) } : null,
+      focus: req.focus ? { title: this.deps.guard.redact(req.focus.title), goodLooksLike: this.deps.guard.redact(req.focus.goodLooksLike), ...(source ? { source } : {}) } : null,
       gapProgress: {},
       studyNotes: null,
       code: null,
@@ -219,7 +274,7 @@ export class SessionManager {
       session.code = { path, version: 0, lastRun: null };
     }
     await this.deps.store.create(session);
-    const rt = new SessionRuntime(this.deps, session, problem);
+    const rt = new SessionRuntime(this.runtimeDeps(), session, problem);
     await rt.init();
     this.runtimes.set(id, rt);
     rt.start();
@@ -277,6 +332,9 @@ export class SessionManager {
     this.runtimes.delete(id);
     await rt?.discard();
     await this.deps.store.remove(id);
+    // A discarded gap round no longer shows that its gap was practised.
+    const source = session.focus?.source;
+    if (source) await this.recordPractice(source, null, id);
     if (session.track === "lld" && session.code) {
       try {
         const outcome = await removeAttemptIfUntouched(this.deps.config.studyRoot, session.code.path, session.title);

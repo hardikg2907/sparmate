@@ -1,33 +1,56 @@
 import { teachMessage } from "../../shared/gaps";
-import type { GapProgress, Scorecard } from "../../shared/types";
+import type { GapPractice, GapProgress, Scorecard } from "../../shared/types";
 import type { Tone } from "./format";
 
 type Gap = Pick<Scorecard["gaps"][number], "title">;
 
-/** A gap's standing on the debrief page: the coach's record, or "sent" for a round saved before records existed. */
-export type GapMark = GapProgress | "sent";
+/** A gap round that passed the gap's step with no model answer. */
+export interface PractisedMark {
+  practised: GapPractice;
+}
+
+/**
+ * A gap's standing on the debrief page: the coach's record, "sent" for a round saved before records existed, or a
+ * practised gap.
+ */
+export type GapMark = GapProgress | "sent" | PractisedMark;
+
+export function isPractised(mark: GapMark | undefined): mark is PractisedMark {
+  return typeof mark === "object" && "practised" in mark;
+}
 
 /**
  * What each gap has with the coach. A round with any record is read from the records alone. An older round has
- * none, so the only signal it holds is a "Teach me this" message in the coach chat.
+ * none, so the only signal it holds is a "Teach me this" message in the coach chat. A practised gap shows that it
+ * was practised, whatever the coach did with it.
  */
-export function gapMarks(gaps: readonly Gap[], progress: Readonly<Record<string, GapProgress>>, candidateTexts: readonly string[]): Map<string, GapMark> {
+export function gapMarks(
+  gaps: readonly Gap[],
+  progress: Readonly<Record<string, GapProgress>>,
+  candidateTexts: readonly string[],
+  practice: Readonly<Record<string, GapPractice>> = {},
+): Map<string, GapMark> {
   const marks = new Map<string, GapMark>();
   const recorded = gaps.filter((gap) => Object.hasOwn(progress, gap.title));
   if (recorded.length > 0) {
     for (const gap of recorded) marks.set(gap.title, progress[gap.title]!);
-    return marks;
+  } else {
+    const asked = new Set(candidateTexts.map((text) => text.trim()));
+    for (const gap of gaps) if (asked.has(teachMessage(gap))) marks.set(gap.title, "sent");
   }
-  const asked = new Set(candidateTexts.map((text) => text.trim()));
-  for (const gap of gaps) if (asked.has(teachMessage(gap))) marks.set(gap.title, "sent");
+  for (const gap of gaps) {
+    const held = Object.hasOwn(practice, gap.title) ? practice[gap.title] : undefined;
+    if (held) marks.set(gap.title, { practised: held });
+  }
   return marks;
 }
 
 /** Where a gap stands on the page. Only a "taught" record is done; a round that merely opened the gap is still with the coach. */
-export type GapState = "not_started" | "with_coach" | "done" | "later";
+export type GapState = "not_started" | "with_coach" | "done" | "later" | "practised";
 
 export function gapState(mark: GapMark | undefined): GapState {
   if (mark === undefined) return "not_started";
+  if (isPractised(mark)) return "practised";
   // A "sent" mark comes from a round saved before records existed and never gets a later one, so it must not hold the page.
   if (mark === "sent") return "done";
   if (mark.state === "taught") return "done";
@@ -40,17 +63,18 @@ export const GAP_STATE_LABEL: Record<GapState, string> = {
   with_coach: "With the coach",
   done: "Done",
   later: "Core idea done, rest later",
+  practised: "Practised",
 };
 
 /** The badge for a gap that has started; a gap that has not started shows none. */
 export function gapBadge(state: GapState, mark?: GapMark): { label: string; tone: Tone } | null {
   if (state === "not_started") return null;
   if (mark === "sent") return { label: "Sent to the coach", tone: "good" };
-  return { label: GAP_STATE_LABEL[state], tone: state === "with_coach" ? "accent" : state === "done" ? "good" : "warn" };
+  return { label: GAP_STATE_LABEL[state], tone: state === "with_coach" ? "accent" : state === "done" || state === "practised" ? "good" : "warn" };
 }
 
 function recordTime(mark: GapMark | undefined): number {
-  if (mark === undefined || mark === "sent") return Number.NEGATIVE_INFINITY;
+  if (mark === undefined || mark === "sent" || isPractised(mark)) return Number.NEGATIVE_INFINITY;
   const time = Date.parse(mark.at);
   return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
 }
@@ -71,7 +95,7 @@ export function currentGap<T extends Gap>(sorted: readonly T[], marks: ReadonlyM
 
 export interface GapCounts {
   total: number;
-  /** Done, or the core idea taught with the rest for a later session. */
+  /** Done, practised, or the core idea taught with the rest for a later session. */
   done: number;
   withCoach: number;
 }
@@ -80,7 +104,7 @@ export function gapCounts(gaps: readonly Gap[], marks: ReadonlyMap<string, GapMa
   const states = gaps.map((gap) => gapState(marks.get(gap.title)));
   return {
     total: gaps.length,
-    done: states.filter((state) => state === "done" || state === "later").length,
+    done: states.filter((state) => state === "done" || state === "later" || state === "practised").length,
     withCoach: states.filter((state) => state === "with_coach").length,
   };
 }

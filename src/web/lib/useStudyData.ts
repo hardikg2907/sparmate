@@ -7,6 +7,8 @@ import { navigate } from "../router";
 export interface GapFocus {
   title: string;
   goodLooksLike: string;
+  /** The debriefed round the gap comes from, so a passed gap round can mark it there. */
+  sourceSessionId?: string;
 }
 
 /** What every study page needs: the lists, and the actions that change a round. */
@@ -65,13 +67,19 @@ export function useStudyData(): StudyData {
   const start = useCallback((problemId: string, mode: Mode, focus?: GapFocus) => {
     setStarting(startKey(problemId, mode, focus));
     setStartError(null);
-    api.createSession({ problemId, mode, ...(focus ? { focus: { title: focus.title, goodLooksLike: focus.goodLooksLike } } : {}) }).then(
-      ({ sessionId }) => navigate(`/session/${sessionId}`),
-      (failure: unknown) => {
-        setStartError(messageOf(failure, "The round could not be started."));
-        setStarting(null);
-      },
-    );
+    api
+      .createSession({
+        problemId,
+        mode,
+        ...(focus ? { focus: { title: focus.title, goodLooksLike: focus.goodLooksLike, ...(focus.sourceSessionId ? { sourceSessionId: focus.sourceSessionId } : {}) } } : {}),
+      })
+      .then(
+        ({ sessionId }) => navigate(`/session/${sessionId}`),
+        (failure: unknown) => {
+          setStartError(messageOf(failure, "The round could not be started."));
+          setStarting(null);
+        },
+      );
   }, []);
 
   const discard = useCallback(

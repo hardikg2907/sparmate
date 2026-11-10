@@ -70,6 +70,10 @@ describe("focus text", () => {
     const text = focusText({ title: "Hot keys", goodLooksLike: "Split the key.\nAdd a local cache." });
     expect(text).toContain('"Hot keys"');
     expect(text).toContain("> Split the key. Add a local cache.");
+    expect(text).not.toContain("belongs to");
+    expect(focusText({ title: "Hot keys", goodLooksLike: "Split the key." }, "Deep dives")).toContain(
+      'The gap belongs to the Deep dives step: the gap counts as practised when that step passes with no "I\'m stuck" on it',
+    );
   });
 });
 

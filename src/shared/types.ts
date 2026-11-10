@@ -191,6 +191,19 @@ export interface BoardPin {
   at: number;
 }
 
+/** The round and the gap a gap round came from, and the step that gap belongs to (null when it is not known). */
+export interface GapRoundSource {
+  sessionId: string;
+  gapTitle: string;
+  step: string | null;
+}
+
+/** A gap round that passed the gap's step with no model answer. `at` is wall time (ISO). */
+export interface GapPractice {
+  sessionId: string;
+  at: string;
+}
+
 /** Where the coach stands on one scorecard gap. `by` is who first opened it and never changes afterwards. */
 export interface GapProgress {
   by: "coach" | "candidate";
@@ -246,9 +259,14 @@ export interface Session {
   pendingEvents?: string[];
   pins: BoardPin[];
   /** A gap from an earlier debrief this guided round practises. Null for a normal round. */
-  focus: { title: string; goodLooksLike: string } | null;
+  focus: { title: string; goodLooksLike: string; source?: GapRoundSource } | null;
   /** Per scorecard gap title, what the coach did with it. Sessions saved before this existed load with {}. */
   gapProgress: Record<string, GapProgress>;
+  /**
+   * Per scorecard gap title, the gap round that passed the gap's step with no model answer. Kept apart from
+   * `gapProgress`, so the coach's records and the reading of older rounds stay as they were. Absent when none.
+   */
+  gapPractice?: Record<string, GapPractice>;
   /** The study-notes draft for this round and whether it was saved to the study files. Null before a draft. */
   studyNotes: { proposalId: string; status: Proposal["status"]; appliedCount: number; savedAt: string | null } | null;
   /** LLD only. Path is relative to the study root, for example "lld/parking-lot/attempt-2026-10-30.cpp". */
@@ -272,7 +290,7 @@ export interface HistoryGap {
   severity: "high" | "medium" | "low";
   /** The judge's reason the gap matters; drills read it to pick a topic. */
   whyItMatters?: string;
-  /** The coach taught it all the way. */
+  /** The coach taught it all the way, or a gap round practised it. */
   done: boolean;
   /** The judge marked the gap as about how the round was run, so no drill trains it. */
   aboutTheRound?: boolean;
@@ -412,6 +430,7 @@ export const ScorecardSchema = z.strictObject({
           .boolean()
           .optional()
           .describe("True when the gap is about how the round was run (pace, time, staying in the round, answering what was asked) rather than what was designed."),
+        step: z.string().max(40).optional().describe("The step id, from the step windows, whose answer this gap is about. Leave it out for a gap about the whole round."),
       }),
     )
     .describe(`At most ${MAX_GAPS} gaps, most severe first.`),
