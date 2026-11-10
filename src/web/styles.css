@@ -459,6 +459,9 @@ body {
 .md {
   line-height: 1.6;
   overflow-wrap: anywhere;
+  /* A flex item never shrinks below its content, so a wide diagram would push the chat past its panel. */
+  min-width: 0;
+  max-width: 100%;
 }
 .md > :first-child {
   margin-top: 0;
@@ -529,6 +532,7 @@ body {
   padding: 0.05em 0.35em;
 }
 .md pre {
+  max-width: 100%;
   background: var(--muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);

@@ -29,7 +29,7 @@ export function StudyNotes({ notes, saved, enabled, onDraft, onApply }: StudyNot
   }, [notes.result, notes.proposal]);
   return (
     <section id="notes" aria-labelledby="notes-heading" className="scroll-mt-4">
-      <SectionTitle id="notes-heading" aside="Draft once the gaps are done. You can draft any time.">
+      <SectionTitle id="notes-heading" aside={saved && saved.appliedCount > 0 ? undefined : "Draft once the gaps are done. You can draft any time."}>
         Study notes
       </SectionTitle>
       {drafting ? (
@@ -108,7 +108,10 @@ function ProposalView({ proposal, notes, enabled, onDraft, onApply }: { proposal
         <div className="flex items-start justify-between gap-4">
           <p className="flex min-w-0 items-start gap-2 text-ui text-muted-foreground">
             <InfoIcon size={16} className="mt-0.5 shrink-0" />
-            <span>Read each change. Untick what you do not want. The diff shows every available change, and only ticked ones are saved.</span>
+            <span>
+              This draft has {proposal.ops.length} {proposal.ops.length === 1 ? "change" : "changes"} in {groups.length} {groups.length === 1 ? "file" : "files"}. Read each one and
+              untick what you do not want. Only ticked changes are saved.
+            </span>
           </p>
           <Button size="sm" onClick={onDraft} disabled={!enabled || notes.applying}>
             Draft again
@@ -136,6 +139,7 @@ function ProposalView({ proposal, notes, enabled, onDraft, onApply }: { proposal
                       checked={selected.has(op.id) && !op.blocked && !stale}
                       disabled={Boolean(op.blocked) || saved || locked}
                       onCheckedChange={() => toggle(op.id)}
+                      aria-label={`${op.summary} (${op.file})`}
                     />
                     <Label htmlFor={id} className="min-w-0 flex-1 font-normal leading-snug text-foreground peer-disabled:opacity-100">
                       <span className="font-medium text-foreground">{op.summary}</span>

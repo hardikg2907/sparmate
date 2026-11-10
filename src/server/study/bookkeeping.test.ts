@@ -171,6 +171,23 @@ describe("a bullet that already ends with a bare arrow", () => {
   });
 });
 
+describe("op summaries", () => {
+  it("names each op's own content, so several ops of one kind read apart", async () => {
+    const proposal = await plan([
+      { kind: "tracker_add_subbullet", section: C2, parentBullet: "URL Shortener", text: "Custom aliases and reserved words" },
+      { kind: "tracker_add_subbullet", section: C2, parentBullet: "URL Shortener", text: "Hot links behind one cache key" },
+      { kind: "tracker_append_gap_row", date: "2026-10-30", gap: "Unique codes across servers", cameUpWhile: "the create path", filled: "Yes" },
+      { kind: "review_append_entry", markdown: "\n## C2 — URL Shortener · taught 2026-10-30\n1. Explain to a junior: why codes collide." },
+    ]);
+    expect(proposal.ops.map((op) => op.summary)).toEqual([
+      'Add a sub-bullet under "URL Shortener": "Custom aliases and reserved words"',
+      'Add a sub-bullet under "URL Shortener": "Hot links behind one cache key"',
+      'Add a Gaps Found & Filled row: "Unique codes across servers"',
+      'Add a REVIEW.md entry: "C2 — URL Shortener · taught 2026-10-30"',
+    ]);
+  });
+});
+
 describe("tracker_add_subbullet", () => {
   const subOp = (extra: Partial<Extract<BookkeepingOp, { kind: "tracker_add_subbullet" }>> = {}): BookkeepingOp => ({
     kind: "tracker_add_subbullet",

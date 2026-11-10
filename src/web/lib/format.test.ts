@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysSince, formatClock, formatDate, formatMinutes } from "./format";
+import { daysSince, formatClock, formatDate, formatMinutes, marksInWords } from "./format";
 
 describe("formatClock", () => {
   it("pads minutes and seconds", () => {
@@ -41,5 +41,14 @@ describe("dates", () => {
     expect(daysSince("2026-10-18T12:00:00.000Z", now)).toBe(12);
     expect(daysSince("2026-10-30T11:00:00.000Z", now)).toBe(0);
     expect(daysSince("nope", now)).toBeNull();
+  });
+});
+
+describe("marksInWords", () => {
+  it("writes each tracker mark out as words", () => {
+    expect(marksInWords("Guided rounds earn at most [~]. A [x] needs every dimension at 3, and [ ] means not tried.")).toBe(
+      "Guided rounds earn at most partly done. A done needs every dimension at 3, and not done means not tried.",
+    );
+    expect(marksInWords("No marks here [y].")).toBe("No marks here [y].");
   });
 });

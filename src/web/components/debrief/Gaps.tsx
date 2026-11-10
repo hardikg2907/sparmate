@@ -98,7 +98,7 @@ function PrimaryAction({ gap, state, actions, size }: { gap: Gap; state: GapStat
         ? ["Finish the lesson", () => void actions.onTeach(gap)]
         : ["Teach me this", () => void actions.onTeach(gap)];
   return (
-    <Button size={size} variant="outline" disabled={state !== "with_coach" && !actions.canSend} onClick={run}>
+    <Button size={size} variant="outline" disabled={state !== "with_coach" && !actions.canSend} aria-label={`${label}: ${gap.title}`} onClick={run}>
       {label}
     </Button>
   );
@@ -157,20 +157,24 @@ function GapRow({ gap, index, state, mark, severity, actions }: { gap: Gap; inde
   const panel = `gap-panel-${index}`;
   return (
     <div className="px-1 py-1">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={open ? panel : undefined}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2.5 rounded py-1 text-left text-ui"
-      >
-        <StateMark state={state} />
-        {severity ? <Badge>{SEVERITY_LABEL[gap.severity]}</Badge> : null}
-        <span className="min-w-0 flex-1 text-foreground">{gap.title}</span>
-        <span className="sr-only">{`, ${gapBadge(state, mark)?.label ?? "not started"}`}</span>
-        <span className="text-meta text-muted-foreground">{gap.teachMinutes} min</span>
-        <ChevronDownIcon size={14} className={cn("shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? panel : undefined}
+          onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded py-1 text-left text-ui"
+        >
+          <StateMark state={state} />
+          {severity ? <Badge>{SEVERITY_LABEL[gap.severity]}</Badge> : null}
+          <span className="min-w-0 flex-1 text-foreground">{gap.title}</span>
+          <span className="sr-only">{`, ${gapBadge(state, mark)?.label ?? "not started"}`}</span>
+          <span className="text-meta text-muted-foreground">{gap.teachMinutes} min</span>
+          <ChevronDownIcon size={14} className={cn("shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
+        </button>
+        {/* The lesson starts from the row, so a gap never has to be opened to be taught. The open body has its own. */}
+        {open || state === "done" ? null : <PrimaryAction gap={gap} state={state} actions={actions} size="sm" />}
+      </div>
       {open ? (
         <div id={panel} className="pb-2">
           {gapBadge(state, mark) ? (

@@ -52,6 +52,11 @@ export const MARK_LABEL: Record<TrackerMark, string> = { "[ ]": "Not done", "[~]
 
 export const MARK_TONE: Record<TrackerMark, Tone> = { "[ ]": "neutral", "[~]": "warn", "[x]": "good" };
 
+/** Text with each tracker mark written out, for a reason saved before the judge was asked to use words. */
+export function marksInWords(text: string): string {
+  return text.replace(/\[(~|x| )\]/g, (mark) => MARK_LABEL[mark as TrackerMark].toLowerCase());
+}
+
 export const TRACK_LABEL: Record<Track, string> = { hld: "HLD", lld: "LLD" };
 export const TRACK_TITLE: Record<Track, string> = { hld: "High-level design", lld: "Low-level design in C++" };
 export const MODE_LABEL: Record<Mode, string> = { interview: "Interview", guided: "Guided" };
