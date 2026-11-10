@@ -431,10 +431,6 @@ function fitToLimit(labels: string[]): string[] {
 }
 
 /**
- * What a strong answer covers in each step, read from the problem brief's own sections, so the checklist and the
- * judge's answer key never disagree. A step whose sections yield nothing falls back to the step's goal.
- */
-/**
  * Steps whose checklist is read from the brief. A step with one item gives the candidate one target and the step
  * checker nothing to weigh it against. The machine coding skeleton and thin slice are one item by design.
  */
@@ -444,6 +440,10 @@ export const BRIEF_STEPS: Record<Track, readonly string[]> = {
 };
 export const MIN_BRIEF_STEP_ITEMS = 2;
 
+/**
+ * What a strong answer covers in each step, read from the problem brief's own sections, so the checklist and the
+ * judge's answer key never disagree. A step whose sections yield nothing falls back to the step's goal.
+ */
 export function deriveChecklist(track: Track, sections: Sections): Record<string, ChecklistItem[]> {
   const requirements = requirementItems(sections["Expected requirements"]);
   const apiParts = apiAndEntityItems(sections["API and entities"]);

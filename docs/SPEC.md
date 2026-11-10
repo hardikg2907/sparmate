@@ -617,7 +617,7 @@ requirements", entities from the code-span names of "Entities and relationships"
 thin slice from the first demo scenario and fill out from the rest; skeleton and extension have fixed items. A step whose
 sections yield nothing gets its goal as the one item. Item ids are `<phase>-<n>`. Every shipped brief gives each step
 read from its sections (`BRIEF_STEPS`) at least two items, so an HLD brief has two or more "Walk one ..." lines;
-`scripts/check-problems.ts` and a unit test both enforce it.
+a unit test enforces it in `npm run verify`, and `scripts/check-problems.ts` reports it per file.
 
 "Expected requirements" holds a short Core and Extras. HLD briefs have a `Core, functional:` line with about three
 numbered items and a `Core, non-functional:` line with three to five; LLD briefs have one `Core:` line with five or six.
