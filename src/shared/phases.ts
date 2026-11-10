@@ -47,13 +47,14 @@ export function phasesFor(track: Track): readonly PhaseDef[] {
 /**
  * Planned minutes per phase, scaled to the round's real length. The minutes are whole numbers that add up to the round
  * length: each step gets the whole part of its share, and the minutes left over go to the steps with the largest
- * fractions, longer steps first on a tie. Rounding each step on its own would add up to 61 for a 60-minute round.
+ * fractions, longer steps first on a tie. Rounding each step on its own would add up to 61 for a 60-minute round. It
+ * holds for any round long enough to give every step a minute; the shortest round is 20 minutes.
  */
 export function phasePlan(track: Track, durationMin: number): { id: string; label: string; minutes: number }[] {
   const phases = phasesFor(track);
   const total = Math.round(durationMin);
   const base = BASE_MINUTES[track];
-  // Whole numbers keep a tie a tie: 20 min of a 60-minute round and 5 min of a 60-minute round have the same fraction.
+  // Integer remainders keep equal fractions equal; in floating point 20 * 60 / 45 and 5 * 60 / 45 differ in the last bit.
   const shares = phases.map((p, i) => ({ i, whole: Math.floor((p.baseMinutes * total) / base), rest: (p.baseMinutes * total) % base, base: p.baseMinutes }));
   const minutes = shares.map((s) => Math.max(1, s.whole));
   let left = total - minutes.reduce((a, b) => a + b, 0);
@@ -65,4 +66,14 @@ export function phasePlan(track: Track, durationMin: number): { id: string; labe
 
 export function isPhaseOf(track: Track, phase: string): boolean {
   return phasesFor(track).some((p) => p.id === phase);
+}
+
+/**
+ * A round's saved step timing with the plan of today's rule. A round scored before the plan added up to the round
+ * length keeps its real times but would otherwise show the old planned minutes, so every reader gets the same plan
+ * that a new round of that length has. A step the plan does not list keeps what was saved.
+ */
+export function withCurrentPlan<T extends { phase: string; plannedMinutes: number }>(timing: readonly T[], track: Track, durationMin: number): T[] {
+  const planned = new Map(phasePlan(track, durationMin).map((p) => [p.id, p.minutes]));
+  return timing.map((row) => ({ ...row, plannedMinutes: planned.get(row.phase) ?? row.plannedMinutes }));
 }

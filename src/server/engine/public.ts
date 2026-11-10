@@ -1,4 +1,4 @@
-import { phasePlan } from "../../shared/phases";
+import { phasePlan, withCurrentPlan } from "../../shared/phases";
 import { REFERENCE_SECTIONS, type Problem } from "../../shared/problem";
 import type { BoardPin, PublicSession, PublicStepCheck, PublicStepItem, Session } from "../../shared/types";
 
@@ -13,6 +13,9 @@ export function toPublicSession(session: Session, problem: Problem | undefined, 
   const after = AFTER_ROUND.has(session.status);
   return {
     ...rest,
+    ...(rest.scorecard?.phaseTiming
+      ? { scorecard: { ...rest.scorecard, phaseTiming: withCurrentPlan(rest.scorecard.phaseTiming, session.track, Math.round(session.durationMs / 60_000)) } }
+      : {}),
     steps: publicSteps(session),
     assistCount: assists?.length ?? 0,
     pins: publicPins(session),

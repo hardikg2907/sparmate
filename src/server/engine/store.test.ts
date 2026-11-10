@@ -251,6 +251,20 @@ describe("fields added later", () => {
     ]);
   });
 
+  it("gives a scored round the step plan that adds up to its length, whatever plan was saved", () => {
+    const old = [
+      { phase: "requirements", label: "Requirements", plannedMinutes: 7, actualMinutes: 8 },
+      { phase: "entities", label: "Core entities", plannedMinutes: 3, actualMinutes: 6 },
+      { phase: "api", label: "API", plannedMinutes: 7, actualMinutes: 5 },
+      { phase: "design", label: "High-level design", plannedMinutes: 17, actualMinutes: 20 },
+      { phase: "deep_dives", label: "Deep dives", plannedMinutes: 27, actualMinutes: 0 },
+    ];
+    const card = { verdict: { sde2: "hire" }, dimensions: [], gaps: [], phaseTiming: old } as unknown as Session["scorecard"];
+    const item = summarize(session({ status: "debriefed", scorecard: card, durationMs: 60 * 60_000 }));
+    expect(item.phaseTiming?.map((r) => r.plannedMinutes)).toEqual([7, 2, 7, 17, 27]);
+    expect(item.phaseTiming?.map((r) => r.actualMinutes)).toEqual([8, 6, 5, 20, 0]);
+  });
+
   it("marks a gap round in its summary, and an ordinary or older round as not one", () => {
     expect(summarize(session({ focus: { title: "Capacity math", goodLooksLike: "x" } })).focus).toBe(true);
     expect(summarize(session()).focus).toBe(false);

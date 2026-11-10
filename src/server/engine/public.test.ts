@@ -90,6 +90,19 @@ describe("the browser's copy of a guided session", () => {
     expect(view.steps).toEqual({});
   });
 
+  it("shows the debrief the plan that adds up to the round length, with the times it took", () => {
+    const saved = [
+      { phase: "requirements", label: "Requirements", plannedMinutes: 7, actualMinutes: 8 },
+      { phase: "entities", label: "Core entities", plannedMinutes: 3, actualMinutes: 6 },
+      { phase: "api", label: "API", plannedMinutes: 7, actualMinutes: 5 },
+      { phase: "design", label: "High-level design", plannedMinutes: 17, actualMinutes: 20 },
+      { phase: "deep_dives", label: "Deep dives", plannedMinutes: 27, actualMinutes: 0 },
+    ];
+    const view = toPublicSession(guided({ status: "debriefed", durationMs: 60 * 60_000, scorecard: { phaseTiming: saved } as unknown as Session["scorecard"] }), undefined);
+    expect(view.scorecard?.phaseTiming?.map((r) => r.plannedMinutes)).toEqual([7, 2, 7, 17, 27]);
+    expect(view.scorecard?.phaseTiming?.map((r) => r.actualMinutes)).toEqual([8, 6, 5, 20, 0]);
+  });
+
   it("keeps the checklist for the debrief", () => {
     const view = toPublicSession(guided({ status: "debriefed" }), undefined);
     expect(view.steps.requirements?.covered).toBe(1);

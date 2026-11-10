@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { withCurrentPlan } from "../../shared/phases";
 import { DEFAULT_TARGET } from "../../shared/target";
 import type { Proposal, Session, SessionHistoryItem } from "../../shared/types";
 import { resolveInside } from "../study/files";
@@ -38,7 +39,7 @@ function scoredParts(s: Session): Pick<SessionSummary, "scores" | "phaseTiming" 
   if (!card) return {};
   return {
     scores: (card.dimensions ?? []).map((d) => ({ id: d.id, name: d.name, score: d.score })),
-    ...(card.phaseTiming ? { phaseTiming: card.phaseTiming.map((p) => ({ ...p })) } : {}),
+    ...(card.phaseTiming ? { phaseTiming: withCurrentPlan(card.phaseTiming, s.track, Math.round(s.durationMs / 60_000)) } : {}),
     gaps: (card.gaps ?? []).map((g) => ({
       title: g.title,
       goodLooksLike: g.whatGoodLooksLike,

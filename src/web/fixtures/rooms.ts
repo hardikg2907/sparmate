@@ -575,12 +575,12 @@ export const LLD_SCORECARD: Scorecard = {
     },
   ],
   phaseTiming: [
-    { phase: "clarify", label: "Clarify", plannedMinutes: 6.7, actualMinutes: 6.3 },
-    { phase: "entities", label: "Entities", plannedMinutes: 13.3, actualMinutes: 11.8 },
-    { phase: "behaviour", label: "Behaviour", plannedMinutes: 13.3, actualMinutes: 11.5 },
-    { phase: "skeleton", label: "Skeleton", plannedMinutes: 13.3, actualMinutes: 7.2 },
+    { phase: "clarify", label: "Clarify", plannedMinutes: 7, actualMinutes: 6.3 },
+    { phase: "entities", label: "Entities", plannedMinutes: 13, actualMinutes: 11.8 },
+    { phase: "behaviour", label: "Behaviour", plannedMinutes: 13, actualMinutes: 11.5 },
+    { phase: "skeleton", label: "Skeleton", plannedMinutes: 13, actualMinutes: 7.2 },
     { phase: "thin_slice", label: "Thin slice", plannedMinutes: 20, actualMinutes: 24.5 },
-    { phase: "fill_out", label: "Fill out", plannedMinutes: 33.3, actualMinutes: 41.1 },
+    { phase: "fill_out", label: "Fill out", plannedMinutes: 34, actualMinutes: 41.1 },
     { phase: "extend", label: "Extension", plannedMinutes: 20, actualMinutes: 17.6 },
   ],
   quoteChecks: [
