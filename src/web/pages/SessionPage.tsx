@@ -48,7 +48,7 @@ export function SessionRoot({ source, theme, studyRoot }: { source: SessionSourc
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center" role="status">
         <h1 className="text-lead font-semibold">This round was discarded.</h1>
         <Link href="/" className="rounded text-primary-text underline underline-offset-2">
-          Back to home
+          Back to Today
         </Link>
       </div>
     );
@@ -58,9 +58,9 @@ export function SessionRoot({ source, theme, studyRoot }: { source: SessionSourc
       <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center" role="alert">
         <h1 className="text-lead font-semibold">{state.loadError}</h1>
         <div className="flex gap-2">
-          <Button onClick={ctl.reload}>Try again</Button>
-          <Button asChild variant="outline">
-            <Link href="/">Back to home</Link>
+          {state.loadMissing ? null : <Button onClick={ctl.reload}>Try again</Button>}
+          <Button asChild variant={state.loadMissing ? "default" : "outline"}>
+            <Link href="/">Back to Today</Link>
           </Button>
         </div>
       </div>

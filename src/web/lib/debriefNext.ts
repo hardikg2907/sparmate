@@ -38,5 +38,5 @@ export function nextAction({ gaps, marks, notesSaved, mode, readiness }: NextInp
   if (mode === "guided" && readiness === "ready") return { kind: "try_interview", label: "Try interview mode", button: "Start interview" };
   const top = gaps[0];
   if (mode === "guided" && readiness === "not_yet" && top) return { kind: "practise_gap", gap: top, label: "Practise the top gap", button: "Practise this gap" };
-  return { kind: "home", label: "Back to home", button: "Back to home" };
+  return { kind: "home", label: "Back to Today", button: "Back to Today" };
 }

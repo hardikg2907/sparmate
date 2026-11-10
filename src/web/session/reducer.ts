@@ -10,6 +10,7 @@ const SILENT = "<silent/>";
 export const initialState: SessionState = {
   session: null,
   loadError: null,
+  loadMissing: false,
   clockOffsetMs: 0,
   connection: "connecting",
   streams: {},
@@ -28,7 +29,7 @@ export const initialState: SessionState = {
 export type Action =
   | { type: "reset" }
   | { type: "loaded"; session: PublicSession; board: BoardSnapshot | null; code: CodeSnapshot | null; now: number }
-  | { type: "load-failed"; message: string }
+  | { type: "load-failed"; message: string; missing?: boolean }
   | { type: "connection"; status: SocketStatus }
   /** `fresh` marks the first state after a (re)connect, when partial streams are no longer trustworthy. */
   | { type: "server"; msg: ServerMsg; now: number; fresh: boolean }
@@ -259,7 +260,7 @@ export function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case "load-failed":
-      return { ...state, loadError: action.message };
+      return { ...state, loadError: action.message, loadMissing: action.missing === true };
 
     case "connection":
       // What is still pending when a connection opens went out on the one before it.

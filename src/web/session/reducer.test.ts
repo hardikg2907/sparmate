@@ -436,3 +436,18 @@ describe("pausing and discarding", () => {
     expect(loaded().discarded).toBe(false);
   });
 });
+
+describe("a round that failed to load", () => {
+  it("marks a missing round, so the page offers no retry", () => {
+    const state = reducer(initialState, { type: "load-failed", message: "This session was not found.", missing: true });
+    expect(state.loadError).toBe("This session was not found.");
+    expect(state.loadMissing).toBe(true);
+  });
+
+  it("keeps the retry for any other failure, and clears the flag on reset", () => {
+    const failed = reducer(initialState, { type: "load-failed", message: "The session could not be loaded." });
+    expect(failed.loadMissing).toBe(false);
+    const missing = reducer(initialState, { type: "load-failed", message: "x", missing: true });
+    expect(reducer(missing, { type: "reset" }).loadMissing).toBe(false);
+  });
+});

@@ -11,6 +11,8 @@ import { scrollToInScroller } from "../lib/scrollInScroller";
 import { DEFAULT_VOICE_SETTINGS, getVoiceSettings, saveVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 import type { Theme } from "../theme";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { nextCountFrom } from "../lib/countFrom";
+import { formatDate } from "../lib/format";
 import { useDsa } from "../lib/useDsa";
 import { guardNavigation, navigate, useHash } from "../router";
 import type { PageContext } from "./context";
@@ -36,6 +38,7 @@ const ROLES = [
   { key: "judge", label: "Judge", hint: "Scores the round" },
   { key: "coach", label: "Coach", hint: "Teaches the gaps" },
   { key: "scribe", label: "Study notes", hint: "Drafts tracker and notes edits" },
+  { key: "grader", label: "Drill grader", hint: "Scores drill answers and asks the follow-ups" },
 ] as const;
 
 const DAY_LABEL: Record<DayKind, string> = { hld: "HLD", lld: "LLD", dsa: "DSA", redo: "Redo", rest: "Rest" };
@@ -77,6 +80,8 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
   const [username, setUsername] = useState(settings.leetcodeUsername ?? "");
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
+  // True while the date box holds only part of a date. The box then shows what the user typed, and the saved day waits.
+  const [datePartial, setDatePartial] = useState(false);
   const [active, setActive] = useState<string>(SECTIONS[0].id);
   const sections = useRef<Map<string, HTMLElement>>(new Map());
 
@@ -270,11 +275,20 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
                     aria-invalid={dateProblem !== null}
                     className="max-w-[200px]"
                     max={localDay(new Date())}
-                    value={draft.dsaCountFrom ?? ""}
-                    onChange={(event) => edit({ dsaCountFrom: event.target.value === "" ? undefined : event.target.value })}
+                    // An empty value for a half-typed date stops React from writing the old day over the user's typing.
+                    value={datePartial ? "" : (draft.dsaCountFrom ?? "")}
+                    onChange={(event) => {
+                      const partial = event.target.value === "" && event.target.validity.badInput;
+                      setDatePartial(partial);
+                      const day = nextCountFrom(event.target.value, partial, draft.dsaCountFrom);
+                      if (day !== draft.dsaCountFrom) edit({ dsaCountFrom: day });
+                    }}
+                    onBlur={() => setDatePartial(false)}
                   />
                   {dateProblem ? <p className="text-meta text-destructive">{dateProblem}</p> : null}
-                  {!dateProblem && draft.dsaCountFrom === undefined && username !== "" ? <p className="text-meta text-faint">Starts on the day you save</p> : null}
+                  {datePartial ? <p className="text-meta text-faint">Finish the date to change it. The saved day stays until then.</p> : null}
+                  {!dateProblem && !datePartial && draft.dsaCountFrom !== undefined ? <p className="text-meta text-faint">Counts from {formatDate(draft.dsaCountFrom)}</p> : null}
+                  {!dateProblem && !datePartial && draft.dsaCountFrom === undefined && username !== "" ? <p className="text-meta text-faint">Starts on the day you save</p> : null}
                 </div>
               </Field>
               <Field label="Weekly goal">

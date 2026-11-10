@@ -337,7 +337,7 @@ page that has the main bar.
 ```
  Today ──(Start)──► Room ──(End interview / time up)──► Debrief
   │  ▲                    │ ▲                                │
-  │  └── Back to home ◄───┘ │                                ├─ Gaps ──► Coach chat
+  │  └── Back to Today ◄──┘ │                                ├─ Gaps ──► Coach chat
   │                         │                                └─ Study notes ──► Save
   ├─ Unfinished card ──(Finish)──────────┘
   ├─ Unfinished card ──(End and debrief)──► Debrief
@@ -363,7 +363,7 @@ The old addresses `/library`, `/gym`, `/dsa` and `/history` are replaced in plac
    Rounds, he selects a row and starts from the detail panel.
 3. The button shows a spinner while the server creates the session, then the room opens.
 
-The plan panel is the moment to read the plan before the clock runs. The room shows the same plan.
+The plan panel is the place to read the plan, because the clock of an interview round starts as soon as the room opens. The room shows the same plan.
 
 ### During the round
 
@@ -702,7 +702,7 @@ Scripts and tests depend on these, so the revamp keeps them exactly.
 - A button whose text contains "End interview" in the room, and a confirm button whose text is "End interview"
   (`scripts/e2e/ui-tour.mjs`).
 - Text "What the judge saw", "Strengths" or "Teach me" on the debrief (`ui-tour.mjs`).
-- The room's back link `a[aria-label="Back to home"]`, its leave confirm button "Leave", and Ctrl+M for the
+- The room's back link `a[aria-label="Back to Today"]`, its leave confirm button "Leave", and Ctrl+M for the
   microphone (`scripts/e2e/voice-lifecycle.mjs`).
 - The room root keeps `flex h-full`, the room never scrolls as a whole, and no scroller sits inside another
   (`scripts/e2e/layout-check.mjs`).
