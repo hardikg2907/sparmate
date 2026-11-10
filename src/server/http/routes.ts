@@ -159,9 +159,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const typed = (req.body as { answer?: unknown } | null)?.answer;
     if (typeof typed === "string" && typed.trim() === "") return badRequest(reply, "Write an answer first.");
     if (!parsed.success || !deps.drills) return badRequest(reply, "Write an answer of up to 8000 characters.");
-    const { answer, ...target } = parsed.data;
+    const { answer, elapsedSeconds, ...target } = parsed.data;
     try {
-      return await deps.drills.submit(target, answer);
+      return await deps.drills.submit(target, answer, elapsedSeconds);
     } catch (err) {
       if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
       throw err;
