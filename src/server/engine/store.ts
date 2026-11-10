@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { withCurrentPlan } from "../../shared/phases";
 import { DEFAULT_TARGET } from "../../shared/target";
 import type { Proposal, Session, SessionHistoryItem } from "../../shared/types";
 import { resolveInside } from "../study/files";
@@ -32,9 +33,19 @@ function pauseSummary(s: Session): SessionSummary["pause"] {
   return { reason: s.pauseReason, pausedAt: s.pauseStartedAt, timeLeftMs: s.mode === "guided" ? null : Math.max(0, s.durationMs - roundMs) };
 }
 
+/**
+ * The scorecard as every reader sees it: the saved one, with its step timing set against the plan of today's rule.
+ * One function serves the summary, the debrief page, the coach and the scribe, so no two of them quote different planned minutes.
+ */
+export function scorecardWithCurrentPlan(s: Pick<Session, "scorecard" | "track" | "durationMs">): Session["scorecard"] {
+  const card = s.scorecard;
+  if (!card?.phaseTiming) return card;
+  return { ...card, phaseTiming: withCurrentPlan(card.phaseTiming, s.track, Math.round(s.durationMs / 60_000)) };
+}
+
 /** Scorecards saved by older versions can lack parts, so each read tolerates a missing one. */
 function scoredParts(s: Session): Pick<SessionSummary, "scores" | "phaseTiming" | "gaps"> {
-  const card = s.scorecard;
+  const card = scorecardWithCurrentPlan(s);
   if (!card) return {};
   return {
     scores: (card.dimensions ?? []).map((d) => ({ id: d.id, name: d.name, score: d.score })),

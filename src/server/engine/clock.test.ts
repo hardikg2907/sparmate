@@ -61,6 +61,33 @@ describe("planCheckpoints", () => {
     expect(cps).toHaveLength(4);
   });
 
+  it("ends the last planned window exactly at time-up for every round length", () => {
+    for (const [track, minutes] of [
+      ["hld", 45],
+      ["hld", 60],
+      ["lld", 90],
+      ["lld", 120],
+      ["hld", 20],
+      ["lld", 20],
+    ] as const) {
+      expect(phaseWindows(phasePlan(track, minutes)).at(-1)?.endMs).toBe(minutes * MIN);
+    }
+  });
+
+  it("places the phase nudges of a 60-minute and a 120-minute round on the exact plan", () => {
+    const ends = (track: "hld" | "lld", minutes: number) => phaseWindows(phasePlan(track, minutes)).map((w) => w.endMs / MIN);
+    expect(ends("hld", 60)).toEqual([7, 9, 16, 33, 60]);
+    expect(ends("lld", 120)).toEqual([7, 20, 33, 46, 66, 100, 120]);
+    for (const [track, minutes] of [
+      ["hld", 60],
+      ["lld", 120],
+    ] as const) {
+      const cps = planCheckpoints(track, "interview", minutes * MIN, phasePlan(track, minutes));
+      const extension = cps.find((c) => c.kind === "extension")?.atMs ?? 0;
+      expect(cps.filter((c) => c.kind === "phase_end").every((c) => c.atMs < extension)).toBe(true);
+    }
+  });
+
   it("computes planned windows from the scaled plan", () => {
     const w = phaseWindows(phasePlan("hld", 45));
     expect(w[2]).toEqual({ id: "api", startMs: 7 * MIN, endMs: 12 * MIN });

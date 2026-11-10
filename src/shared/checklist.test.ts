@@ -429,10 +429,10 @@ describe("phasePlan for HLD", () => {
     ]);
   });
 
-  it("scales the steps at 60 minutes", () => {
+  it("scales the steps at 60 minutes to a plan that adds up to 60", () => {
     expect(phasePlan("hld", 60).map((p) => [p.id, p.minutes])).toEqual([
       ["requirements", 7],
-      ["entities", 3],
+      ["entities", 2],
       ["api", 7],
       ["design", 17],
       ["deep_dives", 27],

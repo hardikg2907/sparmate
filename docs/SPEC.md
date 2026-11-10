@@ -24,7 +24,9 @@ Read these before building: `src/shared/*.ts` (the typed contract), the two fixt
    push, the extension at the right time (HLD: 10 minutes left; LLD: 15 minutes left). Syntax help in C++ is
    allowed at once; design help is not.
 3. **The candidate's own methods drive the phase rail:** five HLD steps and seven LLD steps
-   (`src/shared/phases.ts`). The rail is a guide, never a gate: the candidate may move freely.
+   (`src/shared/phases.ts`). The rail is a guide, never a gate: the candidate may move freely. Each step has planned
+   minutes that scale with the round's length and add up to it exactly (45 and 90 minutes are the base plans); the
+   guide's pace nudges, the clock checkpoints, the pace chip and the debrief's and Progress's planned minutes all read the same plan. A round scored under an older plan shows its real times against today's plan; its saved file is not changed.
 4. **Marks follow the tracker rules.** Guided rounds earn at most `[~]`, and get a readiness call instead of a hire verdict (section 5.7). `[x]` needs: finished inside the
    time, the code ran (LLD), and no gap at the target level bar.
 5. **Never edit the candidate's code or `main()`.** Tests compile his file plus a separate harness `main()`.
