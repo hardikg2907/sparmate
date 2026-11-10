@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysSince, formatClock, formatDate, formatMinutes, marksInWords, summaryInWords } from "./format";
+import { daysSince, formatClock, formatDate, formatMinutes, marksInWords, roleLabel, summaryInWords } from "./format";
 
 describe("formatClock", () => {
   it("pads minutes and seconds", () => {
@@ -60,5 +60,13 @@ describe("summaryInWords", () => {
   it("rewrites only the mark of an older summary, never the text it quotes", () => {
     expect(summaryInWords('Update "URL Shortener" (mark [~], add "notes/x.md")')).toBe('Update "URL Shortener" (mark it partly done, add "notes/x.md")');
     expect(summaryInWords('Add a sub-bullet under "Cache": "Checklist: [x] TTL"')).toBe('Add a sub-bullet under "Cache": "Checklist: [x] TTL"');
+  });
+});
+
+describe("roleLabel", () => {
+  it("writes a model role in plain words", () => {
+    expect(roleLabel("brief-writer")).toBe("Brief writer");
+    expect(roleLabel("brief_checker")).toBe("Brief checker");
+    expect(roleLabel("judge")).toBe("Judge");
   });
 });

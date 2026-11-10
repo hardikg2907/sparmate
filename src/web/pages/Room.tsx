@@ -265,6 +265,18 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                 <Pane active={tab === "code"} id="pane-code" labelledBy="tab-code" column>
                   {state.code ? (
                     <>
+                      {attemptPath ? (
+                        <div className="flex h-7 shrink-0 items-center gap-2 border-b border-border/70 px-3 text-meta text-muted-foreground">
+                          <span className="shrink-0">Your file</span>
+                          <code className="min-w-0 flex-1 truncate font-mono" title={attemptPath}>
+                            {attemptPath}
+                          </code>
+                          <Button variant="ghost" size="sm" className="h-6 shrink-0 gap-1 px-1.5 text-meta" onClick={copyAttemptPath}>
+                            <CopyIcon size={12} />
+                            Copy
+                          </Button>
+                        </div>
+                      ) : null}
                       <div className="relative min-h-0 flex-1">
                         <div className="absolute inset-0 [&>*]:h-full [&>*]:w-full">
                           <CodeEditor

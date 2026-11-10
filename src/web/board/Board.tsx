@@ -113,9 +113,12 @@ function reducedMotion(): boolean {
 function showStepOn(api: ExcalidrawImperativeAPI, step: string | null, animate: boolean): void {
   const elements = api.getSceneElements();
   const frame = step ? findStepFrame(elements as unknown as Record<string, unknown>[], step) : null;
-  const target = frame ? (frame as unknown as ExcalidrawElement) : elements;
   if (!frame && elements.length === 0) return;
-  api.scrollToContent(target, { fitToViewport: true, viewportZoomFactor: frame ? 0.92 : 0.9, animate: animate && !reducedMotion(), duration: 240 });
+  // A frame is far larger than what is usually drawn in it, so fitting the frame shows the drawing at about a third of
+  // its size. Fitting the drawing keeps its labels readable; an empty frame is fitted whole.
+  const drawn = frame ? elements.filter((element) => (element as { frameId?: string | null }).frameId === (frame as { id?: string }).id) : [];
+  const target = frame ? (drawn.length > 0 ? drawn : [frame as unknown as ExcalidrawElement]) : elements;
+  api.scrollToContent(target, { fitToViewport: true, viewportZoomFactor: frame && drawn.length === 0 ? 0.92 : 0.9, animate: animate && !reducedMotion(), duration: 240 });
 }
 
 /** Centre of the visible canvas in scene coordinates, shifted a little more on each call so inserts do not stack. */

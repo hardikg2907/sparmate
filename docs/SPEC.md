@@ -1083,9 +1083,11 @@ control reachable by keyboard; visible focus; contrast at WCAG AA. No external f
   switch (default from the mode rule), one primary Start button and a small caption. A problem with an open round shows
   "Finish the open round" in place of Start.
 - "Practise any question" (top right) opens `/practice/new`: a textarea for a pasted prompt, an HLD/LLD toggle and a
-  Prepare button. It shows multi-stage preparation progress ("Researching: N searches, M pages", "Writing the brief",
-  "Checking facts"). Once ready it shows a setup card with the problem title, track, sources count, checks count,
-  corrections applied, a confidence note, and "Start interview" and "Guided" buttons, without revealing the hidden brief.
+  Prepare button. It shows multi-stage preparation progress ("Researching: N searches, M pages", only once a search or
+  a page read has happened, then "Writing the brief" and "Checking facts"). Once ready it shows a setup card with the
+  problem title, track, a line that reads "No web search was needed" or the sources count, with the number of facts
+  checked, the corrections of facts (a fix of wording or spelling is not listed or counted), a confidence note, and
+  "Start interview" and "Guided" buttons, without revealing the hidden brief.
   The debrief's reference section renders the verified research sources with secure outbound links (`target="_blank"`,
   `rel="noreferrer noopener"`).
 

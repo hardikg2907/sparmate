@@ -643,7 +643,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   unchanged.
 - **Editor and console.** Monaco uses the mono cut of the family, after the font loads, so the cursor stays
   aligned. The console is lit from above like a raised panel. It keeps the error list, jump-to-line and every note;
-  Run lives in the work bar. The attempt file path is not on screen: the menu holds "Copy path".
+  Run lives in the work bar. A quiet row above the editor shows the attempt file path with a Copy button, and the menu holds "Copy path" too.
 - **Step checklist** is one 32 px row at the top of the chat column, "Checklist  0 of 2 ▾", a muted well with a
   hairline all round. It opens in place, with no scroll area of its own. Each item's mark is tinted by its state:
   green when covered, amber when partly covered, muted when missing.
