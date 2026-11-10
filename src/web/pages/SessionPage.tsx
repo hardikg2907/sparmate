@@ -75,14 +75,14 @@ export function SessionRoot({ source, theme, studyRoot }: { source: SessionSourc
   }
 
   return (
-    <div className="relative h-full min-h-0 overflow-hidden">
+    <div className="relative h-full min-h-0 overflow-clip">
       {keepRoom ? (
-        <div className={cn("absolute inset-0 overflow-hidden", !roundOpen && "pane-hidden")} inert={!roundOpen} aria-hidden={!roundOpen}>
+        <div className={cn("absolute inset-0 overflow-clip", !roundOpen && "pane-hidden")} inert={!roundOpen} aria-hidden={!roundOpen}>
           <RoomView ctl={ctl} session={session} theme={theme} studyRoot={studyRoot} />
         </div>
       ) : null}
       {!roundOpen ? (
-        <div className="absolute inset-0 bg-background overflow-hidden">
+        <div className="absolute inset-0 bg-background overflow-clip">
           <DebriefView ctl={ctl} session={session} theme={theme} boardImageUrl={source.boardImageUrl()} />
         </div>
       ) : null}

@@ -163,8 +163,7 @@ function showGapInChat(title: string): void {
   const coach = document.querySelector<HTMLElement>('section[aria-label="Coach"]');
   const dividers = [...document.querySelectorAll<HTMLElement>("[data-gap-divider]")].filter((el) => el.dataset.gapDivider === text);
   const divider = dividers.at(-1);
-  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  scrollToInScroller(divider ?? coach, { behavior: smooth ? "smooth" : "auto", block: divider ? "nearest" : "start" });
+  scrollToInScroller(divider ?? coach, { behavior: "smooth", block: divider ? "nearest" : "start" });
   if (divider) {
     divider.classList.remove("chat-flash");
     void divider.offsetWidth;

@@ -215,8 +215,8 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="relative min-h-0 min-w-0 flex-1 bg-background overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-clip">
+            <div className="relative min-h-0 min-w-0 flex-1 bg-background overflow-clip">
               <Pane active={!lld || tab === "diagram"} id="pane-diagram" labelledBy={lld ? "tab-diagram" : undefined}>
                 {state.board ? (
                   <Board
@@ -253,7 +253,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                           />
                         </div>
                       </div>
-                      <div className="room-console h-56 shrink-0 overflow-hidden [&>*]:h-full">
+                      <div className="room-console h-56 shrink-0 overflow-clip [&>*]:h-full">
                         <Console
                           lastRun={state.code.lastRun}
                           running={state.code.running}
@@ -279,7 +279,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
-          className="room-side flex min-h-0 shrink-0 flex-col overflow-hidden max-md:h-[68%] max-md:w-full md:w-(--chat-w)"
+          className="room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:h-[68%] max-md:w-full md:w-(--chat-w)"
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}
         >

@@ -1,4 +1,4 @@
-export type ScrollBlock = "start" | "center" | "nearest";
+export type ScrollBlock = "start" | "nearest";
 
 export interface ScrollMath {
   /** The target's top edge and height, and the scroller's top edge, all in viewport pixels. */
@@ -9,19 +9,17 @@ export interface ScrollMath {
   clientHeight: number;
   scrollHeight: number;
   block: ScrollBlock;
-  /** Space the target must keep from the top edge, such as a sticky bar. */
-  offset: number;
+  /** Space the target keeps from the top edge, such as a sticky bar. */
+  margin: number;
 }
 
 /** The `scrollTop` that puts the target where `block` asks, kept inside the range the scroller can reach. */
 export function targetScrollTop(m: ScrollMath): number {
   const max = Math.max(0, m.scrollHeight - m.clientHeight);
   const inContent = m.targetTop - m.scrollerTop + m.scrollTop;
-  const start = inContent - m.offset;
+  const start = inContent - m.margin;
   let wanted = start;
-  if (m.block === "center") {
-    wanted = inContent - m.offset - (m.clientHeight - m.offset - m.targetHeight) / 2;
-  } else if (m.block === "nearest") {
+  if (m.block === "nearest") {
     const end = inContent + m.targetHeight - m.clientHeight;
     if (start < m.scrollTop) wanted = start;
     else if (end > m.scrollTop) wanted = end;
@@ -47,7 +45,7 @@ const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(pre
  */
 export function scrollToInScroller(
   target: HTMLElement | null | undefined,
-  { block = "start", behavior = "auto", offset = 0, scroller }: { block?: ScrollBlock; behavior?: "auto" | "smooth"; offset?: number; scroller?: HTMLElement | null } = {},
+  { block = "start", behavior = "auto", scroller }: { block?: ScrollBlock; behavior?: "auto" | "smooth"; scroller?: HTMLElement | null } = {},
 ): void {
   if (!target) return;
   const box = scroller ?? scrollableAncestor(target);
@@ -62,7 +60,7 @@ export function scrollToInScroller(
     clientHeight: box.clientHeight,
     scrollHeight: box.scrollHeight,
     block,
-    offset: offset + margin,
+    margin,
   });
   box.scrollTo({ top, behavior: behavior === "smooth" && !reducedMotion() ? "smooth" : "auto" });
 }

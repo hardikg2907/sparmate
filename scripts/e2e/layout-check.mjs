@@ -233,6 +233,8 @@ try {
       console.log(`PASS: ${label}`);
     }
   };
+  // The 390 run is a smoke check: on a phone the last section can reach the top, so the old bug does not show there.
+  // The 1280 run also makes a raw `scrollIntoView` call that skips the helper, which proves the frame itself cannot scroll.
   for (const vp of [VIEWPORTS[0], { width: 390, height: 844 }]) {
     await page.setViewport(vp);
     const at = `@ ${vp.width}x${vp.height}`;
@@ -247,6 +249,11 @@ try {
     if (current !== "History") {
       totalFailures += 1;
       console.error(`FAIL: progress ${at}: "${current}" is current after a click on "History"`);
+    }
+    if (vp.width === VIEWPORTS[0].width) {
+      await page.evaluate(() => document.getElementById("history")?.scrollIntoView());
+      await sleep(300);
+      await checkFrame(`progress raw scrollIntoView on #history ${at}`);
     }
     await page.goto(`${BASE}/?fixture=progress&theme=dark#history`, { waitUntil: "networkidle0" });
     await sleep(800);
