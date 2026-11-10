@@ -20,6 +20,7 @@ import { ArrowLeftIcon, CheckIcon, WarnIcon } from "../components/icons";
 import { InfoTip, TrackChip } from "../components/study";
 import { Alert, Badge, Button, Card, Skeleton, Spinner, Textarea, cn } from "../components/ui";
 import { parseDay, shortDay } from "../lib/dates";
+import { scoreFill } from "../lib/scoreTone";
 import { testHooksEnabled } from "../session/testHooks";
 import { countdownText, useCountdown } from "../lib/useCountdown";
 import { Link, drillPath, guardNavigation, navigate } from "../router";
@@ -560,7 +561,7 @@ export function Meter({ score }: { score: number }) {
   return (
     <span role="img" aria-label={`${score} of 4`} className="inline-flex gap-1">
       {[1, 2, 3, 4].map((step) => (
-        <b key={step} className={cn("h-1.5 w-5 rounded-sm", step <= score ? (score >= 3 ? "bg-success-fill" : "bg-amber") : "bg-border-strong/60")} />
+        <b key={step} className={cn("h-1.5 w-5 rounded-sm", step <= score ? scoreFill(score) : "bg-border-strong/60")} />
       ))}
     </span>
   );

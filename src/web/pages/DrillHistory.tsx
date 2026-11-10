@@ -17,6 +17,7 @@ import { ArrowLeftIcon, ChevronRightIcon, WarnIcon } from "../components/icons";
 import { InfoTip } from "../components/study";
 import { Alert, Badge, Button, Card, Skeleton, cn } from "../components/ui";
 import { formatDateTime } from "../lib/format";
+import { scoreFill } from "../lib/scoreTone";
 import { useHistorySource, useLoaded } from "../lib/useDrillHistory";
 import { Link, drillDetailPath, drillPath } from "../router";
 import type { PageContext } from "./context";
@@ -44,7 +45,7 @@ function ScoreStrip({ scores }: { scores: readonly DrillScoreView[] }) {
   return (
     <span role="img" aria-label={`Scores: ${scores.map((s) => `${s.label} ${s.score} of 4`).join(", ")}`} className="inline-flex h-4 items-end gap-0.5">
       {scores.map((s) => (
-        <b key={s.id} className={cn("w-1.5 rounded-sm", s.score >= 3 ? "bg-success-fill" : "bg-amber")} style={{ height: `${s.score * 4}px` }} />
+        <b key={s.id} className={cn("w-1.5 rounded-sm", scoreFill(s.score))} style={{ height: `${s.score * 4}px` }} />
       ))}
     </span>
   );
