@@ -44,10 +44,23 @@ export function phasesFor(track: Track): readonly PhaseDef[] {
   return track === "hld" ? HLD_PHASES : LLD_PHASES;
 }
 
-/** Planned minutes per phase, scaled to the round's real length. */
+/**
+ * Planned minutes per phase, scaled to the round's real length. The minutes are whole numbers that add up to the round
+ * length: each step gets the whole part of its share, and the minutes left over go to the steps with the largest
+ * fractions, longer steps first on a tie. Rounding each step on its own would add up to 61 for a 60-minute round.
+ */
 export function phasePlan(track: Track, durationMin: number): { id: string; label: string; minutes: number }[] {
-  const scale = durationMin / BASE_MINUTES[track];
-  return phasesFor(track).map((p) => ({ id: p.id, label: p.label, minutes: Math.max(1, Math.round(p.baseMinutes * scale)) }));
+  const phases = phasesFor(track);
+  const total = Math.round(durationMin);
+  const base = BASE_MINUTES[track];
+  // Whole numbers keep a tie a tie: 20 min of a 60-minute round and 5 min of a 60-minute round have the same fraction.
+  const shares = phases.map((p, i) => ({ i, whole: Math.floor((p.baseMinutes * total) / base), rest: (p.baseMinutes * total) % base, base: p.baseMinutes }));
+  const minutes = shares.map((s) => Math.max(1, s.whole));
+  let left = total - minutes.reduce((a, b) => a + b, 0);
+  // A step already lifted to its one-minute floor holds more than its share, so it takes no leftover minute.
+  const byRest = shares.filter((s) => s.whole >= 1).sort((a, b) => b.rest - a.rest || b.base - a.base || a.i - b.i);
+  for (let k = 0; left > 0 && byRest.length > 0; k = (k + 1) % byRest.length, left -= 1) minutes[byRest[k]!.i]! += 1;
+  return phases.map((p, i) => ({ id: p.id, label: p.label, minutes: minutes[i] ?? 1 }));
 }
 
 export function isPhaseOf(track: Track, phase: string): boolean {
