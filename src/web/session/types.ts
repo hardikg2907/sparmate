@@ -118,7 +118,7 @@ export interface SessionActions {
   editCode(content: string): void;
   runCode(): void;
   retryDebrief(): void;
-  /** Asks the coach for its opening; the server sends it once, and only while the chat has not started. */
+  /** Asks the coach for its opening; the server sends it once, and runs it again only after it failed. */
   openCoach(): void;
   draftNotes(): void;
   applyNotes(proposalId: string, opIds: string[]): void;

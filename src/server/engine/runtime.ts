@@ -684,8 +684,6 @@ export class SessionRuntime {
   private onChat(channel: Channel, text: string, clientMsgId: string): void {
     if (channel === "coach") {
       if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
-      // A first message makes the coach's reply the opening, so an opening still queued from a failed press would be a second one.
-      if (!this.coachStarted()) this.coach.queue.splice(0, this.coach.queue.length, ...this.coach.queue.filter((turn) => turn.kind !== "request"));
       this.addEntry({ channel: "coach", role: "candidate", text }, clientMsgId);
       this.noteTeachRequest(text);
       if (this.coach.status === "error") this.retry(this.coach);
@@ -1646,9 +1644,11 @@ export class SessionRuntime {
   /** Sends the coach's opening once, when the candidate starts the chat; a later press, or a chat already started, changes nothing. */
   private onCoachOpen(): void {
     if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
-    // A failed opening stays queued, so a second press runs it again.
-    if (this.coach.status === "error") return this.retry(this.coach);
-    if (this.coachStarted() || this.coach.busy || this.coach.queue.length > 0) return;
+    if (this.coach.busy) return;
+    const candidateSpoke = this.session.transcript.some((e) => e.channel === "coach" && e.role === "candidate");
+    // A failed opening stays queued, even when part of it streamed, so a second press runs it again.
+    if (this.coach.status === "error" && !candidateSpoke) return this.retry(this.coach);
+    if (this.coachStarted() || this.coach.queue.length > 0) return;
     this.enqueue(this.coach, this.coachOpenTurn());
   }
 

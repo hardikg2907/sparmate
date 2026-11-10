@@ -1355,33 +1355,60 @@ describe("the coach and the scorecard gaps", () => {
   });
 
   it("runs a failed opening again on a second press, and refuses a press before the debrief", async () => {
-    const { rt, turns, t, session } = await coachRoom({ started: false });
-    const failing = rt as unknown as { coach: { status: string; queue: unknown[] } };
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    let failNext = true;
+    const sends: UserTurn[] = [];
+    const driver: Driver = {
+      ...inner,
+      startConversation(setupArgs) {
+        const conv = inner.startConversation(setupArgs);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          send(turn, handlers) {
+            if (setupArgs.role === "coach") {
+              sends.push(turn);
+              if (failNext) {
+                failNext = false;
+                return Promise.reject(new DriverError("The coach process stopped."));
+              }
+            }
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    session.status = "debriefed";
+    session.scorecard = { gaps: GAPS, verdict: { sde2: "hire", senior: "lean_no_hire", summary: "ok" } } as unknown as Session["scorecard"];
+    const rt = new SessionRuntime(t.deps, session, await urlShortener());
+    await rt.init();
+    rt.attach(t.peer);
     await rt.handle({ type: "coach.open" }, t.peer);
-    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    await vi.waitFor(() => expect(t.msgs.some((m) => m.type === "agent.status" && m.channel === "coach" && m.state === "error")).toBe(true));
+    expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(false);
+    await rt.handle({ type: "coach.open" }, t.peer);
     await vi.waitFor(() => expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true));
-    // Put the channel back into the state a failed opening leaves: an error, with the opening still queued.
-    session.transcript.splice(0, session.transcript.length, ...session.transcript.filter((e) => e.channel !== "coach"));
-    failing.coach.status = "error";
-    failing.coach.queue.push((rt as unknown as { coachOpenTurn: () => unknown }).coachOpenTurn());
-    await rt.handle({ type: "coach.open" }, t.peer);
-    await vi.waitFor(() => expect(turns).toHaveLength(2));
-    expect(turns[1]?.meta).toMatchObject({ request: "coach_open" });
+    expect(sends.map((turn) => turn.meta)).toEqual([expect.objectContaining({ request: "coach_open" }), expect.objectContaining({ request: "coach_open" })]);
     session.status = "ended";
     await rt.handle({ type: "coach.open" }, t.peer);
     expect(t.msgs.some((m) => m.type === "error" && m.code === "coach_unavailable")).toBe(true);
     rt.dispose();
   });
 
-  it("drops a queued opening when the candidate's first message arrives instead", async () => {
-    const { rt, turns, say } = await coachRoom({ started: false });
-    const room = rt as unknown as { coach: { status: string; queue: unknown[] }; coachOpenTurn: () => unknown };
-    room.coach.status = "error";
-    room.coach.queue.push(room.coachOpenTurn());
-    await say("Teach me this gap: Hot keys");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(turns.map((turn) => turn.meta.kind)).toEqual(["candidate"]);
+  it("answers a first coach message that a restart cut off before its reply", async () => {
+    const { rt, session } = await coachRoom({ started: false });
     rt.dispose();
+    session.transcript.push({ id: "q1", at: 0, wall: new Date().toISOString(), channel: "coach", role: "candidate", text: "Teach me this gap: Hot keys" });
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const again = new SessionRuntime(t.deps, session, await urlShortener());
+    await again.init();
+    again.attach(t.peer);
+    await vi.waitFor(() => expect(session.transcript.filter((e) => e.channel === "coach" && e.role === "coach")).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(session.transcript.filter((e) => e.channel === "coach" && e.role === "coach")).toHaveLength(1);
+    again.dispose();
   });
 
   it("makes the candidate's first message the coach's first turn when the chat was never started", async () => {

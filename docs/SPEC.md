@@ -461,8 +461,8 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 - The coach waits for the candidate, because an opening nobody reads still costs a model turn. It starts when they
   press "Start with the coach" in the empty coach panel (`coach.open`, which sends the opening once and only while the
   chat has no coach or candidate line; after a failed opening, a second press runs it again), press "Teach me this" or
-  send a first message (which replaces an opening still queued from a failed press). A coach message that a restart cut
-  off before its reply is answered when the round loads. Its first reply is the opening,
+  send a first message (after a failed opening, that runs the opening and then answers the message). When the last
+  coach line is the candidate's because a restart cut off the reply, the round answers it when it loads. Its first reply is the opening,
   written from the scorecard (summary in two or three sentences, then "let's start with" the gap the first message
   names, or the top gap), following TEACHING.md section 2 and the problem
   session step 6 (teach each gap directly, about ten minutes each). While
@@ -758,8 +758,9 @@ scribe read them.
 - `session.discard`: discards the round (below). A refusal arrives as an `error` message with code `discard_refused`.
 - `session.end`: interview mode skips the closing line and starts the debrief at once.
 - `debrief.retry`, `bookkeeping.draft`, `bookkeeping.apply`: as in sections 5.7 and 10.
-- `coach.open`: asks for the coach's opening (section 5.8). Before the debrief it is refused; once the coach chat has
-  started, it changes nothing.
+- `coach.open`: asks for the coach's opening (section 5.8). Before the debrief it is refused. It runs a failed opening
+  again while the candidate has not written to the coach; once the opening landed or the candidate wrote, it changes
+  nothing.
 
 **Discard** (`session.discard` over the socket, `DELETE /api/sessions/:id` over REST; both call
 `SessionManager.discard`). It is refused while the status is `debriefing`, because the judge is running. Otherwise:

@@ -41,8 +41,9 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
   const connected = state.connection === "open";
   const roundMs = finalRoundMs(session);
   const coach = state.agent.coach;
-  // A "Now on" divider from a failed opening is not a start, so the button stays until a real line arrives.
-  const coachStarted = ctl.chat.coach.some((item) => item.role !== "system");
+  // A "Now on" divider or a part of a failed opening is not a start, so the button stays until the opening lands.
+  const candidateSpoke = ctl.chat.coach.some((item) => item.role === "candidate");
+  const coachStarted = candidateSpoke || (ctl.chat.coach.some((item) => item.role !== "system") && coach.state !== "error");
   const startCoach =
     debriefed && !coachStarted ? (
       <div className="flex flex-col items-center gap-3">
