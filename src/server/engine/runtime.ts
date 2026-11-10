@@ -30,7 +30,7 @@ import {
   type GapRoundSource,
   type TranscriptEntry,
 } from "../../shared/types";
-import { applyGapPractice } from "./gap-practice";
+import { applyGapPractice, practisesGap } from "./gap-practice";
 import type { PrivacyGuard } from "../guard/privacy";
 import type { CppRunner } from "../runner/cpp";
 import { applyProposal, planProposal } from "../study/bookkeeping";
@@ -375,6 +375,9 @@ export class SessionRuntime {
 
   async init(): Promise<void> {
     const s = this.session;
+    // A mark lost to a failed write or a stop between two saves is written again; the write does nothing when held.
+    const source = s.focus?.source;
+    if (source && practisesGap(s)) void this.deps.gapPractice?.(source, { sessionId: s.id, at: new Date().toISOString() }, s.id);
     this.boardElements = (await this.deps.store.readBoard(s.id)).elements;
     if (Object.keys(s.checklist).length === 0 && (s.status === "live" || s.status === "paused")) {
       s.checklist = deriveChecklist(s.track, this.problem.sections);
@@ -1452,6 +1455,8 @@ export class SessionRuntime {
     const source = this.session.focus?.source;
     if (!source || source.step !== phase) return;
     if ((this.session.assists ?? []).some((a) => a.phase === phase)) return;
+    // The pass is saved before the mark, so the source never points at a pass its gap round lost.
+    void this.saveNow();
     void this.deps.gapPractice?.(source, { sessionId: this.session.id, at: new Date().toISOString() }, this.session.id);
   }
 

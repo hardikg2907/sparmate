@@ -143,3 +143,37 @@ describe("a gap round and the gap it practises", () => {
     ).toBe(false);
   });
 });
+
+describe("a gap practised by two gap rounds", () => {
+  it("hands the mark to the other round when the one that holds it is discarded", async () => {
+    const id = await stack.manager.create({ problemId: "c2-url-shortener", mode: "guided" });
+    const rt = await stack.manager.open(id);
+    const peer = { id: "p", send() {}, close() {} };
+    rt!.attach(peer);
+    rt!.detach(peer);
+    await rt!.handle({ type: "session.end" }, peer);
+    await vi.waitFor(() => expect(rt!.session.status).toBe("debriefed"), { timeout: 5_000 });
+    const focus = { title: "Asking for the scale first", goodLooksLike: "Ask for the load first.", sourceSessionId: id };
+    const first = await stack.manager.create({ problemId: "c2-url-shortener", mode: "guided", focus });
+    const second = await stack.manager.create({ problemId: "c2-url-shortener", mode: "guided", focus });
+    for (const round of [first, second]) {
+      const s = (await stack.manager.session(round))!;
+      s.stepVerdicts = { requirements: { verdict: "pass", at: 1 } };
+      await stack.store.save(s);
+    }
+    const link = (await stack.manager.session(first))!.focus!.source!;
+    const record = (round: string) =>
+      (stack.manager as unknown as { recordPractice(s: typeof link, m: { sessionId: string; at: string } | null, r: string): Promise<void> }).recordPractice(
+        link,
+        { sessionId: round, at: "2026-11-11T10:00:00.000Z" },
+        round,
+      );
+    await record(first);
+    await record(second);
+    expect(rt!.session.gapPractice?.[focus.title]?.sessionId).toBe(first);
+    await stack.manager.discard(first);
+    expect(rt!.session.gapPractice?.[focus.title]?.sessionId).toBe(second);
+    await stack.manager.discard(second);
+    expect(rt!.session.gapPractice?.[focus.title]).toBeUndefined();
+  });
+});

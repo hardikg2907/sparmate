@@ -130,7 +130,7 @@ function useGapMarks(scorecard: Scorecard | null, session: PublicSession, coach:
   return useMemo(() => {
     const texts = coach.filter((item) => item.role === "candidate").map((item) => item.text);
     return gapMarks(scorecard?.gaps ?? [], session.gapProgress, texts, session.gapPractice ?? {});
-  }, [scorecard, session.gapProgress, coach]);
+  }, [scorecard, session.gapProgress, session.gapPractice, coach]);
 }
 
 /** The plan against the clock, worked out from the phase history while the judge is still busy. */

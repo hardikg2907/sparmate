@@ -30,12 +30,16 @@ const DRILL_STEP: Record<Track, Partial<Record<DrillType, string>>> = {
 };
 
 /**
- * The step a gap belongs to: the judge's tag when it names a step of the track, else the step its drill trains, else
- * null. A gap with no known step cannot be marked practised, because no single step's pass shows it was closed.
+ * The step a gap belongs to: the judge's tag (when it names a step of the track) and the step its drill trains, when
+ * they agree or only one of them is known. When they disagree there is no step, because a wrong step would mark a
+ * gap practised that the round never touched. A gap with no step is never marked practised.
  */
-export function gapStep(track: Track, gap: { step?: string | undefined; drill?: DrillType | undefined }): string | null {
+export function gapStep(track: Track, gap: { step?: string | undefined; drill?: DrillType | undefined; aboutTheRound?: boolean | undefined }): string | null {
+  // A gap about how the round was run is never closed by one step's answer.
+  if (gap.aboutTheRound) return null;
   const steps = phasesFor(track).map((p) => p.id);
-  if (gap.step && steps.includes(gap.step)) return gap.step;
-  const byDrill = gap.drill ? DRILL_STEP[track][gap.drill] : undefined;
-  return byDrill ?? null;
+  const tagged = gap.step && steps.includes(gap.step) ? gap.step : null;
+  const byDrill = (gap.drill ? DRILL_STEP[track][gap.drill] : undefined) ?? null;
+  if (tagged && byDrill && tagged !== byDrill) return null;
+  return tagged ?? byDrill;
 }

@@ -30,7 +30,7 @@ interface GapActions {
 
 const PRACTISE_HINT = "A 20-minute guided round on this problem, aimed at this gap";
 
-/** The mark that says where a gap stands: a tick only for done, so a tick never means "sent". */
+/** The mark that says where a gap stands: a tick only for done or practised, so a tick never means "sent". */
 function StateMark({ state }: { state: GapState }) {
   if (state === "done" || state === "practised") return <CheckIcon size={14} className="shrink-0 text-success" />;
   return (

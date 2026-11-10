@@ -111,6 +111,8 @@ describe("rules and checks", () => {
     );
     expect(tagged.gaps.map((g) => g.step)).toEqual(["requirements", undefined]);
     expect("step" in tagged.gaps[1]!).toBe(false);
+    const pace = enforceRules(card({ gaps: [{ ...gap, aboutTheRound: true, step: "requirements" }] }), { mode: "guided", track: "hld", tester: null });
+    expect(pace.gaps[0]?.step).toBeUndefined();
     const hld = enforceRules(card({ gaps: [] }), { mode: "interview", track: "hld", tester: null });
     expect(hld.trackerMark).toBe("[x]");
     expect(hld.lldScenarios).toEqual([]);

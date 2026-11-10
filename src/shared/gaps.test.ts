@@ -3,7 +3,8 @@ import { gapStep } from "./gaps";
 
 describe("gapStep", () => {
   it("takes the judge's tag when it names a step of the track", () => {
-    expect(gapStep("hld", { step: "api", drill: "capacity" })).toBe("api");
+    expect(gapStep("hld", { step: "api" })).toBe("api");
+    expect(gapStep("hld", { step: "requirements", drill: "requirements" })).toBe("requirements");
     expect(gapStep("lld", { step: "behaviour" })).toBe("behaviour");
   });
 
@@ -14,9 +15,15 @@ describe("gapStep", () => {
     expect(gapStep("lld", { drill: "lld_skeleton" })).toBe("skeleton");
   });
 
+  it("gives no step when the tag and the drill disagree, so a gap is never marked by a step it does not belong to", () => {
+    expect(gapStep("hld", { step: "requirements", drill: "walk" })).toBeNull();
+    expect(gapStep("hld", { step: "requirements", drill: "capacity" })).toBeNull();
+  });
+
   it("gives no step when neither the tag nor the drill names one", () => {
     expect(gapStep("hld", {})).toBeNull();
     expect(gapStep("lld", { drill: "tradeoff" })).toBeNull();
     expect(gapStep("hld", { step: "nowhere" })).toBeNull();
+    expect(gapStep("hld", { step: "requirements", drill: "requirements", aboutTheRound: true })).toBeNull();
   });
 });

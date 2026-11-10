@@ -285,7 +285,7 @@ export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; tra
 
   // A step tag is model output: one that names no step of this track is dropped rather than trusted.
   const stepIds = new Set(phasesFor(ctx.track).map((p) => p.id));
-  out.gaps = card.gaps.map(({ step, ...gap }) => (step !== undefined && stepIds.has(step) ? { ...gap, step } : gap));
+  out.gaps = card.gaps.map(({ step, ...gap }) => (step !== undefined && stepIds.has(step) && !gap.aboutTheRound ? { ...gap, step } : gap));
 
   const verdicts = verdictsFor(ctx.track, card.dimensions);
   const confidence = ctx.mode === "guided" && card.verdict.confidence === "high" ? "medium" : card.verdict.confidence;

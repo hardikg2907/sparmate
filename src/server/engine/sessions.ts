@@ -8,7 +8,7 @@ import { createAttemptFile, removeAttemptIfUntouched } from "../study/attempts";
 import { findBullet, tableTail } from "../study/tracker";
 import { localDate } from "./fsutil";
 import type { ProblemCatalog } from "./problems";
-import { applyGapPractice } from "./gap-practice";
+import { applyGapPractice, practisesGap } from "./gap-practice";
 import { toPublicSession } from "./public";
 import { buildProblemSummaries, lastTableRow, trackFromLogRow, type TrackerBullet } from "./recommend";
 import { ATTEMPT_PATH, SessionRuntime, type RuntimeDeps } from "./runtime";
@@ -95,6 +95,10 @@ export class SessionManager {
         return null;
       }
       this.runtimes.set(id, rt);
+      // A mark whose gap round is gone would link to nothing, for example when the clear on its discard failed.
+      for (const [title, mark] of Object.entries(session.gapPractice ?? {})) {
+        if (!this.deps.store.exists(mark.sessionId)) void this.recordPractice({ sessionId: id, gapTitle: title, step: null }, null, mark.sessionId);
+      }
       return rt;
     })().finally(() => this.opening.delete(id));
     this.opening.set(id, task);
@@ -117,7 +121,7 @@ export class SessionManager {
   private recordPractice(source: GapRoundSource, mark: GapPractice | null, roundId: string): Promise<void> {
     const before = this.practiceWrites.get(source.sessionId) ?? Promise.resolve();
     const next = before
-      .then(() => this.writePractice(source, mark, roundId))
+      .then(() => (mark === null ? this.clearPractice(source, roundId) : this.writePractice(source, mark, roundId)))
       .catch((err) => this.deps.log.warn(`Could not record a practised gap on session ${source.sessionId}`, err));
     this.practiceWrites.set(source.sessionId, next);
     void next.finally(() => {
@@ -144,6 +148,22 @@ export class SessionManager {
     await this.deps.store.save(saved);
     const late = this.runtimes.get(id) ?? (await this.opening.get(id));
     late?.setGapPractice(source.gapTitle, mark, roundId);
+  }
+
+  /**
+   * Clears a gap round's mark, then hands the mark to another gap round on the same gap that still practises it, so
+   * discarding one of two rounds that closed a gap keeps the gap practised.
+   */
+  private async clearPractice(source: GapRoundSource, roundId: string): Promise<void> {
+    await this.writePractice(source, null, roundId);
+    for (const item of this.deps.store.history()) {
+      if (!item.focus || item.id === roundId || this.discarding.has(item.id) || this.deps.store.isRemoved(item.id)) continue;
+      const round = await this.session(item.id);
+      const link = round?.focus?.source;
+      if (!round || link?.sessionId !== source.sessionId || link.gapTitle !== source.gapTitle || !practisesGap(round)) continue;
+      await this.writePractice(link, { sessionId: round.id, at: new Date().toISOString() }, round.id);
+      return;
+    }
   }
 
   /**
