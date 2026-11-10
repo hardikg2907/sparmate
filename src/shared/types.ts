@@ -173,6 +173,8 @@ export interface StepVerdict {
   verdict: "pass" | "not_yet";
   gap?: string;
   at: number;
+  /** How many "not yet" calls the step has had. Sessions saved before this existed count a held "not yet" as one. */
+  misses?: number;
 }
 
 /** A short note an AI role attached to one board element. */

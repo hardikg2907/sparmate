@@ -2091,6 +2091,61 @@ describe("guided step verdicts, assists and move-on offers", () => {
     rt.dispose();
   });
 
+  it("after a step's second 'Not yet', gives a count of what is open and pins nothing", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const items = session.checklist.requirements ?? [];
+    write(session, "requirements", "Draft");
+    session.stepVerdicts = { requirements: { verdict: "not_yet", gap: "What latency does a redirect need?", at: 1, misses: 2 } };
+    const covered = { state: "covered" as const, source: "notes" as const, at: null, quote: "Draft", detail: "" };
+    session.stepChecks = { ...session.stepChecks, requirements: { status: "done", checkedAt: 2, usedImage: false, items: { [items[0]!.id]: covered } } };
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(2_000);
+    const request = w.turns.find((x) => x.meta.request === "feedback")?.text ?? "";
+    expect(request).toContain(`so this check names nothing`);
+    expect(request).toContain(`say that ${items.length - 1} things are still open`);
+    expect(session.stepVerdicts?.requirements).toMatchObject({ verdict: "not_yet", gap: `${items.length - 1} things are still open. Press Hint to hear the next one.`, misses: 3 });
+    expect(session.pins).toEqual([]);
+
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(w.turns.find((x) => x.meta.request === "hint")?.text).toContain("this hint is how he hears the next open item");
+    rt.dispose();
+  });
+
+  it("names the gap on a step's first two checks", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    session.stepVerdicts = { requirements: { verdict: "not_yet", gap: "What latency does a redirect need?", at: 1 } };
+    write(session, "requirements", "Draft");
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.turns.find((x) => x.meta.request === "feedback")?.text).toContain("name the one most important gap");
+    expect(session.stepVerdicts?.requirements).toMatchObject({ verdict: "not_yet", gap: "What latency does the read path need to meet?", misses: 2 });
+    rt.dispose();
+  });
+
+  it("tells the guide after H3 to point at 'I'm stuck' instead of giving a model answer", async () => {
+    const w = watched();
+    const t = setup(w.driver, "guided");
+    const session = newSession("guided");
+    session.hints = [{ at: 1, level: 3, topic: "scale" }];
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const hint = w.turns.find((x) => x.meta.request === "hint")?.text ?? "";
+    expect(hint).toContain("Rungs already given on this step: H3.");
+    expect(hint).toContain(`Give no model answer`);
+    rt.dispose();
+  });
+
   it("tells the guide on every turn which steps passed, and tells an interviewer nothing of the kind", async () => {
     for (const mode of ["guided", "interview"] as const) {
       const w = watched();

@@ -41,9 +41,29 @@ export function recordStepVerdict(session: Pick<Session, "stepVerdicts">, input:
   if (held?.verdict === "pass" && input.verdict === "not_yet") {
     return { ok: false, error: "That step already passed. Do not raise it again, in this reply or any later one. Small items go to the debrief." };
   }
-  const entry: StepVerdict = input.verdict === "pass" ? { verdict: "pass", at } : { verdict: "not_yet", gap: input.gap ?? "", at };
+  const entry: StepVerdict = input.verdict === "pass" ? { verdict: "pass", at } : { verdict: "not_yet", gap: input.gap ?? "", at, misses: notYetCount(held) + 1 };
   session.stepVerdicts = { ...session.stepVerdicts, [input.phase]: entry };
   return { ok: true };
+}
+
+/** The "not yet" calls a step has had so far. */
+export function notYetCount(held: StepVerdict | undefined): number {
+  if (!held || held.verdict === "pass") return 0;
+  return held.misses ?? 1;
+}
+
+/** After this many "not yet" checks, a check gives only a count of what is open, so repeated presses cannot list the answer. */
+export const NAMED_CHECKS = 2;
+
+export function countOnly(held: StepVerdict | undefined): boolean {
+  return notYetCount(held) >= NAMED_CHECKS;
+}
+
+/** The gap a count-only check stores and shows: how much is open, never what. */
+export function openCountText(open: number | null): string {
+  if (open === null || open < 1) return "Some things are still open. Press Hint to hear the next one.";
+  if (open === 1) return "One thing is still open. Press Hint to hear it.";
+  return `${open} things are still open. Press Hint to hear the next one.`;
 }
 
 /** The fewest covered checklist items a guided pass needs on this step. */

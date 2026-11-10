@@ -216,7 +216,12 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   "passed" the candidate sees. The input is a strict schema (unknown fields are refused). `phase` must be a step of the
   round. For `not_yet`, `gap` is required: control characters and line breaks become spaces, it is trimmed, and it must
   be 1 to 200 characters of plain text; for `pass`, `gap` is dropped. It is stored in `Session.stepVerdicts[phase]` as
-  `{ verdict, gap?, at }` (`at` is round time in ms) and the session state is broadcast. A pass is final: a later
+  `{ verdict, gap?, at, misses? }` (`at` is round time in ms; `misses` counts the step's `not_yet` calls, and a
+  session saved without it counts a held `not_yet` as one) and the session state is broadcast. After a step's second
+  `not_yet` its checks give only a count (`countOnly`): the request tells the guide to name nothing that is missing,
+  `pin_note` is refused in that reply, and the server stores the gap as `openCountText` ("3 things are still open.
+  Press Hint to hear the next one."), from the items the checker has not read as covered, whatever gap the guide
+  wrote. A hint press is then how he hears the next open item. A pass is final: a later
   `not_yet` for a passed step is refused with an error that says the step already passed and must not be raised again.
   A `pass` may replace a `not_yet`. The guide calls it once per step check, and again with `not_yet` after a refused pass. In the reply to "I'm stuck" a `pass` is
   refused, so a model answer never earns one. Each check ends with a verdict. A new `pass` must be supported by the
@@ -712,7 +717,9 @@ scribe read them.
 - `phase.set`: validate, record, broadcast `phase.changed` and `session.state`; mention in the next envelope.
 - `guided.feedback` / `guided.hint` / `guided.stuck`: guided mode in a live round only (else an error, as for the
   others); send the guide a `<request>` turn naming the step and what is asked (feedback on this step, ending in a
-  `step_verdict`; the next rung of the hint ladder, recorded with `note_hint`; or, for `guided.stuck`, a short model
+  `step_verdict`; the next rung of the hint ladder, recorded with `note_hint`, aimed at the most important open item
+  once the step's checks give only a count, and after H3 a pointer to "I'm stuck" instead of a model answer; or, for
+  `guided.stuck`, a short model
   answer of at most about 150 words with no tables and no quizzes, then one line asking him to redo the step in his
   own words). The feedback turn waits for the step's check first ("Check this step" order, above). `guided.stuck` makes
   the server itself append `{ at, phase }` to `Session.assists`, so the record never depends on the model; the guide
@@ -1297,9 +1304,12 @@ Guide (guided mode), modelled on step-by-step guided practice:
   done". Otherwise it names exactly one gap, the most important, as a missing question or a missing decision and not
   its answer. It never raises a passed step again, and small items go to the debrief. In the deep dives, numbers need to
   be right to an order of magnitude, and only the numbers that drive a decision need their consequence.
-- Teaches short in the round: after H3, or on "no idea", "idk" or "teach me", a model answer of about 150 words for
-  the gap with no tables or quizzes, then the step goes back to him. An "I'm stuck" request gets the same answer plus
-  a line asking him to redo the step, never a `pass` and never a `note_hint`. Longer teaching waits for the coach after
+- Gives a model answer only through "I'm stuck": about 150 words with no tables or quizzes, a line asking him to redo
+  the step, never a `pass` and never a `note_hint`. A chat request for the answer ("just tell me", "teach me", "which
+  classes do I need") or "no idea" gets one "Give me your first try, even a wrong one", then the next rung of the
+  hint ladder; after H3 it points at "I'm stuck". In machine coding a syntax question is answered at once, and a
+  design question gets one question, then a hint rung. After a step's second "Not yet" it says how many things are
+  still open and names none. Longer teaching waits for the coach after
   the round (TEACHING.md section 1 and 5). Keeps TEACHING.md section 2's prose rules.
 - Knows how the step checklist works: a separate checker fills it from his chat in the step, the step's frame, his
   written answer for the step and, in LLD, the code he wrote while the step was on the rail (build steps read the
