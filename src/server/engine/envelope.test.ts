@@ -6,7 +6,10 @@ import {
   cleanReply,
   clockTurn,
   contextBlock,
+  MAX_TRANSCRIPT_CHARS,
   numberedCode,
+  parseStamp,
+  roundTranscript,
   runSummary,
   stepEntries,
   stepSummariesText,
@@ -197,5 +200,50 @@ describe("transcript and code text", () => {
         run: { exitCode: null, signal: "SIGKILL", stdout: "", stderr: "", timedOut: true, durationMs: 5000 },
       }),
     ).toBe("timed out after 5000 ms, 0 lines of output");
+  });
+});
+
+describe("roundTranscript", () => {
+  const entry = (at: number, role: TranscriptEntry["role"], text: string, channel: TranscriptEntry["channel"] = "interview"): TranscriptEntry => ({
+    id: `${at}-${role}`,
+    at,
+    wall: "2026-01-01T00:00:00.000Z",
+    channel,
+    role,
+    text,
+  });
+  const entries = [
+    entry(1 * MIN, "candidate", "Start with the write path."),
+    entry(20 * MIN, "interviewer", "What happens if the publish fails after the key is set?"),
+    entry(20 * MIN + 30_000, "candidate", "Then the retry sees the key and drops the event."),
+    entry(21 * MIN, "coach", "Coach line", "coach"),
+    entry(40 * MIN, "candidate", "Let me add a pending state."),
+  ];
+
+  it("reads mm:ss times and rejects anything else", () => {
+    expect(parseStamp("20:30")).toBe(20 * MIN + 30_000);
+    expect(parseStamp(" 5:07 ")).toBe(5 * MIN + 7_000);
+    expect(parseStamp("5:7")).toBeNull();
+    expect(parseStamp("12:60")).toBeNull();
+    expect(parseStamp("noon")).toBeNull();
+  });
+
+  it("shows the interview lines around one moment, with who said each", () => {
+    const text = roundTranscript(entries, 20 * MIN + 30_000);
+    expect(text).toBe("[20:00] interviewer: What happens if the publish fails after the key is set?\n[20:30] candidate: Then the retry sees the key and drops the event.");
+  });
+
+  it("shows the whole interview without a time, and never the coach channel", () => {
+    const text = roundTranscript(entries, null);
+    expect(text.split("\n")).toHaveLength(4);
+    expect(text).not.toContain("Coach line");
+  });
+
+  it("says so when nothing was said, and cuts a very long transcript", () => {
+    expect(roundTranscript(entries, 60 * MIN)).toBe("(nothing was said in the round around that time)");
+    const long = [entry(0, "candidate", "x".repeat(MAX_TRANSCRIPT_CHARS + 10))];
+    const text = roundTranscript(long, null);
+    expect(text.length).toBeLessThan(MAX_TRANSCRIPT_CHARS + 120);
+    expect(text).toContain("ask for a time");
   });
 });

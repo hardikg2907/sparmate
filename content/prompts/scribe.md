@@ -30,7 +30,11 @@ Use the notes path, the section heading and the bullet exactly as given. Never i
 
 ## Write only what is true
 
-For the tracker rows and the review entry, write only what the transcript, the coach conversation or the scorecard shows. For the notes, write only what the problem brief, the coach conversation or the scorecard's model answers support. Never invent a fact, a number, a quote, a design detail or a reading source. When a gap has no taught fix, record the gap and why it matters in the tracker, without a made-up fix.
+For the tracker rows and the review entry, write only what the transcript, the coach conversation or the scorecard shows. Credit a find to them only when the round transcript shows they made it unprompted: when the interviewer's question pointed at it, write "when asked, they ...", even if the scorecard or the coach said they found it. For the notes, write only what the problem brief, the coach conversation or the scorecard's model answers support. Never invent a fact, a number, a quote, a design detail or a reading source. When a gap has no taught fix, record the gap and why it matters in the tracker, without a made-up fix.
+
+## Words that stay out of the files
+
+These files are read without the app, months later. Never write "brief", "the brief's", "rubric", "checker", "the judge", a hint level code such as H1, H2 or H3, a dimension id such as `drive_time`, or a rubric level name such as "at bar" or "stretch signal". Write "the problem", "the reference design" and "a hint", and use each dimension's display name.
 
 ## The operations, and the formats to copy
 

@@ -183,7 +183,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 | guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note, recheck_step and step_verdict | chat text |
 | tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail,cause?}], notes }` structured |
 | judge | after the round (and the tester) | one-shot | pin_element (board PNG attached as an image block) | `ScorecardSchema` structured |
-| coach | after the debrief | streaming, persisted | view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
+| coach | after the debrief | streaming, persisted | read_transcript, view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
 | brief-writer | custom problem preparation | one-shot | WebSearch (<= 8), WebFetch (<= 6) | `{ meta: { title, difficulty, tags }, body, sources, confidence }` structured |
 | brief-checker | custom problem verification | one-shot | WebFetch, WebSearch (<= 3) | `{ body, corrections, unconfirmed? }` structured |
@@ -195,6 +195,10 @@ Tool definitions (zod input schemas, every input validated, size-capped):
 - `view_whiteboard()` -> asks the browser for a PNG (`board.png.request`, 15 s timeout), returns
   `[{type:"image", data, mimeType:"image/png"}, {type:"text", text: graphText}]`. If the browser does not
   answer, return the graph text alone and say the image was unavailable.
+- `read_transcript({ at? })` (coach only) -> the round's interview transcript, one `[mm:ss] role: text` line per entry
+  with app events as `(event)` lines. With `at` (`mm:ss`, at most 10 characters) it returns only the lines from three
+  minutes before to two minutes after that time; any other `at` is a short tool error. A transcript over 60,000
+  characters is cut, with a note to ask for a time.
 - `set_phase({ phase })` -> phase must belong to the track; records `phaseHistory` with `by: "interviewer"`.
 - `note_hint({ level: 1|2|3, topic })` -> appends to `session.hints`. Hidden from the candidate.
 - `end_interview({ reason })` -> ends the round (same path as the candidate's end).
