@@ -641,12 +641,19 @@ async function hldRound(dirs) {
   const png = await api.get(`/api/sessions/${id}/board-final.png`);
   check("final board PNG saved", png.status === 200 && png.headers["content-type"] === "image/png" && png.buf.subarray(1, 4).toString() === "PNG");
 
+  await new Promise((resolve) => setTimeout(resolve, 1_500));
+  check(
+    "the coach waits for the candidate after the debrief",
+    !c.msgs.slice(debrief.mark).some((m) => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach"),
+  );
+  const openMark = c.mark();
+  c.send({ type: "coach.open" });
   const coachOpen = await c.waitFor((m) => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach", {
-    since: debrief.mark,
+    since: openMark,
     timeout: 15_000,
     label: "coach opening",
   });
-  check("coach opens after the debrief", coachOpen.entry.text.includes("Let's start with"), coachOpen.entry.text.slice(0, 80));
+  check("coach opens on request", coachOpen.entry.text.includes("Let's start with"), coachOpen.entry.text.slice(0, 80));
   check("coach can read the round's transcript", /I read [1-9]\d* lines of the round/.test(coachOpen.entry.text), coachOpen.entry.text.slice(0, 200));
   mark = c.mark();
   c.send({ type: "chat.send", channel: "coach", clientMsgId: "k1", text: "Can you explain the first gap?" });

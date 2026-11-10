@@ -67,7 +67,7 @@ describe("the sweep that drops idle rounds from memory", () => {
     // With no page open, the debrief does not wait for a board image.
     rt!.detach(peer);
     await rt!.handle({ type: "session.end" }, peer);
-    await vi.waitFor(() => expect(rt!.session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true), { timeout: 5_000 });
+    await vi.waitFor(() => expect(rt!.isDormant()).toBe(true), { timeout: 5_000 });
     rt!.lastActivity = 0;
     sweep(stack.manager);
     expect(await stack.manager.open(id)).not.toBe(rt);

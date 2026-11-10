@@ -454,6 +454,10 @@ export function useSessionController(source: SessionSource): SessionController {
         if (send({ type: "debrief.retry" })) dispatch({ type: "debrief-retry" });
       },
 
+      openCoach() {
+        send({ type: "coach.open" });
+      },
+
       draftNotes() {
         if (!send({ type: "bookkeeping.draft" })) return;
         dispatch({ type: "notes-drafting" });

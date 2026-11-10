@@ -183,7 +183,7 @@ the zod schema in code. Never trust model JSON without the zod parse.
 | guide | live round, guided mode | streaming, persisted | same as interviewer, plus pin_note, recheck_step and step_verdict | chat text |
 | tester | LLD, after the round ends | one-shot | read_code, run_harness | `{ compiled, scenarios[{name,pass,detail,cause?}], notes }` structured |
 | judge | after the round (and the tester) | one-shot | pin_element (board PNG attached as an image block) | `ScorecardSchema` structured |
-| coach | after the debrief | streaming, persisted | read_transcript, view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
+| coach | after the debrief, when the candidate starts the chat | streaming, persisted | read_transcript, view_whiteboard, set_gap, read_code, run_code (LLD) | chat text on the `coach` channel |
 | scribe | when the user clicks "Draft study notes" | one-shot | none | `ScribeOutputSchema` structured |
 | brief-writer | custom problem preparation | one-shot | WebSearch (<= 8), WebFetch (<= 6) | `{ meta: { title, difficulty, tags }, body, sources, confidence }` structured |
 | brief-checker | custom problem verification | one-shot | WebFetch, WebSearch (<= 3) | `{ body, corrections, unconfirmed? }` structured |
@@ -458,8 +458,12 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 
 ### 5.8 Coach and bookkeeping
 
-- The coach starts when the debrief is ready, with one opening message written from the scorecard (summary in
-  two or three sentences, then "let's start with <top gap>"), following TEACHING.md section 2 and the problem
+- The coach waits for the candidate, because an opening nobody reads still costs a model turn. It starts when they
+  press "Start with the coach" in the empty coach panel (`coach.open`, which sends the opening once and only while the
+  chat has no coach or candidate line; after a failed opening, a second press runs it again), press "Teach me this" or
+  send a first message (after a failed opening, that runs the opening and then answers the message). Its first reply is the opening,
+  written from the scorecard (summary in two or three sentences, then "let's start with" the gap the first message
+  names, or the top gap), following TEACHING.md section 2 and the problem
   session step 6 (teach each gap directly, about ten minutes each). While
   the room has no connected sockets, the idle coach conversation process is closed after one minute and resumes
   from `session.sdk.coachSessionId` when activity continues.
@@ -753,6 +757,9 @@ scribe read them.
 - `session.discard`: discards the round (below). A refusal arrives as an `error` message with code `discard_refused`.
 - `session.end`: interview mode skips the closing line and starts the debrief at once.
 - `debrief.retry`, `bookkeeping.draft`, `bookkeeping.apply`: as in sections 5.7 and 10.
+- `coach.open`: asks for the coach's opening (section 5.8). Before the debrief it is refused. It runs a failed opening
+  again while the candidate has not written to the coach; once the opening landed or the candidate wrote, it changes
+  nothing.
 
 **Discard** (`session.discard` over the socket, `DELETE /api/sessions/:id` over REST; both call
 `SessionManager.discard`). It is refused while the status is `debriefing`, because the judge is running. Otherwise:
