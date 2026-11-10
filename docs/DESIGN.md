@@ -524,7 +524,7 @@ Today is one page for the whole day, and with data it fills the first screen at 
   different problems close a gap) and one line for the task, then the one primary
   button. A raised "Also due" card lists three more with a drill glyph, the problem of the next attempt, the same tag and
   the due day in amber. "All drills"
-  opens the side panel. A first run with no drills shows "Drills start after your first round". The hero carries a quiet
+  opens the side panel. A first run with no drills shows "Drills start after your first round", says a prepared question can be drilled at once, and offers "Prepare a question" beside "Pick a round in Practice". The hero carries a quiet
   outline "History" button beside "Start drill", and each "Also due" row ends in a small "History" link. Below the
   hero and the card, a "Closed drills" raised card lists the closed drills (a glyph, the drill, the gap, the round it came
   from and the day it closed; five rows, then "Show all N"). A "Recent attempts" raised card follows, with one row per
