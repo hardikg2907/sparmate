@@ -407,12 +407,14 @@ const NOTE_SENTENCE = [
   /\bif they (?:propose|suggest|ask|want)\b/i,
   /\blet them (?:argue|pick|choose|decide)\b/i,
   /\bthe candidate\b/i,
-  /^(?:if asked|accept|give (?:no|only))\b/i,
+  /^(?:if asked|accept (?:it|either|any|both|that|this|them)|give (?:no (?:figure|number)|only (?:if|when))|only give|never reveal)\b/i,
+  /\b(?:hold (?:it |this |them )?back|until asked|only when asked)\b/i,
   /\bscenarios? \d/i,
 ];
-const NOTE_ASIDE = /\b(?:if asked|candidate|extensions?|interviewer|curveballs?|do not mention|do not volunteer)\b/i;
-const NOTE_LABEL = /^(?:(?:future|later)\s+)?(?:extensions?|curveballs?)$|\b(?:interviewer|do not mention|note)\b/i;
-const ABBREVIATION = /\b(?:e\.g|i\.e|vs|etc|incl|approx)\.$/i;
+const NOTE_ASIDE = /\b(?:if asked|candidate|extension step|the extensions?|until an extension|interviewer|curveballs?|do not mention|do not volunteer)\b/i;
+const NOTE_LABEL = /^(?:(?:future|later)\s+)?(?:extensions?|curveballs?)$|^(?:interviewer\s+)?notes?$|\b(?:interviewer|do not mention)\b/i;
+const LABEL_NOTE = /,?\s*(?:only\s+)?if asked/i;
+const ABBREVIATION = /\b(?:e\.g|i\.e|vs|incl|approx)\.$/i;
 const MAX_FACT_CHARS = 2000;
 const MAX_FACTS = 60;
 const MAX_FACT_SECTION = 40_000;
@@ -446,7 +448,7 @@ export function factOnly(bullet: string): string | null {
     .filter((sentence) => !NOTE_SENTENCE.some((note) => note.test(sentence)))
     .join(" ")
     .trim();
-  const shownLead = withoutNotes(lead);
+  const shownLead = withoutNotes(lead).replace(LABEL_NOTE, "");
   if (kept === "") return null;
   if (shownLead === "") return kept;
   return /^[,.;:]/.test(kept) ? `${shownLead}${kept}` : `${shownLead} ${kept}`;
@@ -454,9 +456,20 @@ export function factOnly(bullet: string): string | null {
 
 /** The hidden-fact bullets as a drill may show them: facts only. */
 export function shownFacts(problem: Problem): string[] {
-  return bullets(section(problem, "Hidden facts").slice(0, MAX_FACT_SECTION))
-    .slice(0, MAX_FACTS)
-    .flatMap((b) => factOnly(b) ?? []);
+  const facts: string[] = [];
+  // An indented bullet belongs to the bullet above it, so it goes when that bullet is a note.
+  let parentShown = true;
+  for (const line of section(problem, "Hidden facts").slice(0, MAX_FACT_SECTION).split("\n")) {
+    const m = BULLET.exec(line);
+    if (!m?.[1]) continue;
+    const nested = /^\s/.test(line);
+    if (nested && !parentShown) continue;
+    const fact = factOnly(m[1].trim());
+    if (!nested) parentShown = fact !== null;
+    if (fact !== null) facts.push(fact);
+    if (facts.length >= MAX_FACTS) break;
+  }
+  return facts;
 }
 
 /** Hidden-fact bullets that carry a number: the scale facts a capacity estimate starts from. */

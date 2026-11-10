@@ -36,7 +36,7 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Callers:** other code calls `notify` directly.
 - **Threads:** yes. Many callers at once, up to about 16 threads. A real provider call takes 100 ms to 2 seconds. `main()` may stay single-threaded for the demo.
 - **Time:** the caller passes the time in as whole minutes on every call. Never the system clock. The first version uses it only for log rows.
-- **Size:** up to about 100,000 users, about 50 notifications per second, and a few million log rows. A scan over the log is fine for the demo. With 16 threads and slow providers, the synchronous version cannot keep up with 50 per second. That is known and accepted for the first version. A queue with a worker pool is the next step.
+- **Size:** up to about 100,000 users, about 50 notifications per second, and a few million log rows. A scan over the log is fine for the demo. With 16 threads and slow providers, the synchronous version cannot keep up with 50 per second. That is known and accepted for the first version.
 - **Not in the first version:** rate limits, priorities, quiet hours and suppressing duplicates.
 - **Out of scope:** real providers, bounces and delivery receipts, scheduling for later, batching or digests, unsubscribe links, translations, saving to disk, a UI, sign-in.
 
@@ -49,6 +49,8 @@ For the interviewer: on the retries, if the candidate proposes a delay between r
 For the interviewer: on the callers, if the candidate proposes Observer (event sources publish, the service subscribes), accept it, but do not require it.
 
 For the interviewer: on what is not in the first version, if the candidate asks, say "not in the first version".
+
+For the interviewer: on size, a queue with a worker pool is the next step.
 
 ## Expected requirements
 

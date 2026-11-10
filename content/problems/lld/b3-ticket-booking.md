@@ -37,7 +37,7 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Threads:** yes. Many users tap seats at the same moment, up to about 16 request threads in one process. `main()` may stay single-threaded.
 - **Time:** whole minutes from a fixed origin, passed in by the caller. Never the system clock.
 - **Rejections:** any style works (optional, bool, error code or exception). The reasons need not be told apart. A rejected call must change nothing.
-- **Scale:** the demo has 5 shows. Real bounds are about 300 seats per screen and a few thousand shows, all in memory. A scan over shows is fine for browse. An index by movie and city is a fine extra.
+- **Scale:** the demo has 5 shows. Real bounds are about 300 seats per screen and a few thousand shows, all in memory. A scan over shows is fine for browse.
 - **Out of scope:** user accounts, real payments, coupons, food, notifications, overlapping-show checks, editing or deleting shows, partial cancel, waitlists, extending a hold, listing a user's bookings (a booking is found by its id).
 
 For the interviewer: on the hold time, if the candidate wants the caller to pass the expiry as well as `now`, that is fine: `expiresAt = now + 5`.
@@ -45,6 +45,8 @@ For the interviewer: on the hold time, if the candidate wants the caller to pass
 For the interviewer: on booking closing at show start, do not test that a hold made before the start can still be confirmed inside its 5 minutes.
 
 For the interviewer: on the rejections, the candidate picks the style.
+
+For the interviewer: on scale, an index by movie and city is a fine extra.
 
 ## Expected requirements
 

@@ -22,7 +22,7 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Operations:** `get`, `put` and `size()`. No delete. On a miss the caller loads the value itself and calls `put`. `put` returns nothing the caller needs, and it does not report the evicted key.
 - **Types:** keys are `int`, any value, 0 and negatives included. Values are `std::string`, any string, the empty string included, usually under 100 characters. No templates.
 - **Capacity:** an `int` number of entries, fixed at construction. The demo uses 3. Real use goes up to 1,000,000.
-- **Bad capacity:** 0 or negative is invalid. The constructor rejects it with an error the caller can see, for example `std::invalid_argument`. It is never clamped to 1, and it never builds a cache that stores nothing.
+- **Bad capacity:** 0 or negative is invalid. The constructor rejects it with an error the caller can see, for example `std::invalid_argument`. The capacity is never clamped to 1, and the constructor never builds a cache that stores nothing.
 - **Use:** a `get` hit, and a `put` of a new or existing key even with the same value, make that key the most recently used. A miss changes nothing.
 - **Full cache:** a `put` of a new key first evicts exactly one entry, the least recently used. A `put` of an existing key replaces the value, refreshes the key and evicts nothing, even when the cache is full.
 - **Miss:** a normal result, not an error. The caller must tell it from a stored empty string.

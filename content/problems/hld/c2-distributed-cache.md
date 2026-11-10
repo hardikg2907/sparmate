@@ -22,7 +22,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Client libraries:** we can ship one client library per language. Any logic inside the client must be written four times. A proxy tier is allowed, but it is new infrastructure to run.
 - **When the cache fails:** a service retries once after refreshing its map. If that fails, it returns an error or a degraded answer for that call. It reads the database only after a clean miss, never after a cache error, because the databases could not take the extra load.
 - **Operations:** `GET`, `SET` with an optional TTL, and `DELETE`. Values are opaque bytes, and a `SET` replaces the whole value. No lists, counters, transactions or pub/sub.
-- **Batch reads:** a batch get of up to 50 keys is nice to have. Keys in one batch often share a user id. Placing them together is allowed, not required.
+- **Batch reads:** a batch get of up to 50 keys is nice to have. Keys in one batch often share a user id.
 - **Sizes:** keys average 50 bytes, at most 250 bytes. Values average 1 KB, at most 1 MB. Reject anything larger.
 - **Live data:** about 1 billion keys today. It doubles within a year.
 - **Traffic:** 1 million operations per second at peak, about half that on average. About 90% are reads. Traffic grows more slowly than data: about 50% in the next year.
@@ -37,12 +37,16 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Availability:** 99.99%. When a node dies, its keys may fail for up to 10 seconds. One node or one zone failing must never take the whole cluster down.
 - **Deploys:** every node restarts about once a week for a deploy or OS patch, one node at a time.
 - **Regions:** one region with three availability zones. A second region is out of scope.
-- **Tenancy:** many services share one cluster, each with its own key prefix. Per-service quotas are out of scope beyond a mention. There is no key listing, scan or delete by prefix. A service that wants a clean slate switches to a new prefix and lets the old keys expire or be evicted.
+- **Tenancy:** many services share one cluster, each with its own key prefix. Per-service quotas are out of scope. There is no key listing, scan or delete by prefix. A service that wants a clean slate switches to a new prefix and lets the old keys expire or be evicted.
 - **Security and operations:** the cluster sits on a private network. Each service authenticates with its own token, and TLS is on.
 
 For the interviewer: on the TTL, give the default TTL of 24 hours only if asked.
 
 For the interviewer: on security and operations, a one-line mention of each is enough: authentication, TLS, metrics and dashboards.
+
+For the interviewer: on tenancy, a mention of per-service quotas is enough.
+
+For the interviewer: on batch reads, placing the keys of one batch together is allowed, not required.
 
 ## Expected requirements
 

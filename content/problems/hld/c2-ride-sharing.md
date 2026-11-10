@@ -32,11 +32,13 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Durability and availability:** once the rider sees "requested", the ride survives any single server failure. Requesting and matching target 99.99%. Tracking and ETAs may lag first. Phones lose signal and retry requests.
 - **Cancels:** the rider may cancel until the trip starts. The driver may cancel before pickup, and the ride returns to matching without that driver, with a fresh 2-minute window. After 5 minutes at the pickup, the driver may report a no-show. Nobody cancels a trip in progress.
 - **Retention:** trip records live 2 years. The GPS trail of each trip, from accept to drop-off, lives 90 days, for disputes. Idle drivers' positions are not kept.
-- **Out of scope:** surge pricing, shared rides and scheduled rides. Nearby cars on the rider's map is a stretch goal that reads the same data.
+- **Out of scope:** surge pricing, shared rides and scheduled rides. Nearby cars on the rider's map is a stretch goal.
 
 For the interviewer: on the offers, if the candidate proposes offering to a few drivers at once, let them argue the trade-off.
 
 For the interviewer: on surge pricing, accept one sentence and move on.
+
+For the interviewer: on scope, the nearby-cars stretch goal reads the same data.
 
 ## Expected requirements
 

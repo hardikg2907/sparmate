@@ -162,8 +162,21 @@ describe("facts a drill shows", () => {
     for (const problem of all) {
       for (const line of (problem.sections["Hidden facts"] ?? "").split("\n")) {
         const bullet = /^\s*[-*]\s+(.+)$/.exec(line)?.[1]?.trim();
-        if (bullet) expect(factOnly(bullet), problem.meta.id).toBe(bullet);
+        if (!bullet) continue;
+        expect(factOnly(bullet), problem.meta.id).toBe(bullet);
+        // Notes the backstop does not know must stay out of the bullets too, because the briefs are the writer's example.
+        expect(bullet, problem.meta.id).not.toMatch(
+          /\b(?:if asked|beyond a (?:one-line )?mention|one line (?:each )?is enough|if they (?:ask|add|propose|want)|the candidate|their choice|a good design|is a fine extra|allowed, not required|is the next step|accept (?:it|either|any))\b/i,
+        );
       }
+    }
+  });
+
+  it("never shows a line for the interviewer in a drill", () => {
+    const elevator = all.find((p) => p.meta.id === "b3-elevator") as Problem;
+    expect(elevator.sections["Hidden facts"]).toContain("For the interviewer:");
+    for (const drill of ["lld_skeleton", "tradeoff"] as const) {
+      expect(JSON.stringify(buildDrill(elevator, drill)?.prompt.material)).not.toContain("For the interviewer");
     }
   });
 
@@ -174,6 +187,9 @@ describe("facts a drill shows", () => {
     ["a curveballs label", "**Curveballs:** a hot key later.", null],
     ["a fact after a quoted note", '**Moves:** if they ask, say "Not now." A move is final.', "**Moves:** A move is final."],
     ["a scenario note", "**Lapse:** a hold lapses after its day. Scenarios 1 to 4 check only that.", "**Lapse:** a hold lapses after its day."],
+    ["a number held back", "**Load:** 5,000 reads a second. Never reveal the peak of 20,000.", "**Load:** 5,000 reads a second."],
+    ["a note in the label", "**Numbers, if asked:** a node takes 5,000 writes.", "**Numbers:** a node takes 5,000 writes."],
+    ["a note after etc", "**Channels:** email, SMS, etc. The candidate picks the order.", "**Channels:** email, SMS, etc."],
   ])("drops %s", (_n, bullet, expected) => {
     expect(factOnly(bullet)).toBe(expected);
   });
@@ -184,8 +200,18 @@ describe("facts a drill shows", () => {
     "**Guests:** guests do not require an account.",
     "**Gate:** a guard can let them in after 10 PM.",
     "**Extension numbers:** 4 digits each.",
+    "**Bodies:** Accept only JSON bodies up to 1 MB.",
+    "**Refunds:** Give no refund after 30 days.",
+    "**Uploads:** images only (checked by file extension).",
+    "**Note size:** up to 1 MB.",
   ])("keeps the real fact %s", (bullet) => {
     expect(factOnly(bullet)).toBe(bullet);
+  });
+
+  it("drops the indented bullets under a note", () => {
+    const sections = { ...lld.sections, "Hidden facts": "- **Extensions:** later.\n  - undo\n  - replay\n- **Moves:** one per turn.\n  - a move is final" };
+    const known = buildDrill({ ...lld, sections }, "lld_skeleton")?.prompt.material.find((m) => m.heading === "What you know")?.markdown ?? "";
+    expect(known).toBe("- **Moves:** one per turn.\n- a move is final");
   });
 
   it("shows only facts in the capacity drill", () => {
