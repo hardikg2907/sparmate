@@ -103,6 +103,9 @@ export const SILENCE_WINDOW_MS: Record<Track, Record<Mode, number>> = {
   lld: { interview: 8 * MINUTE, guided: 10 * MINUTE },
 };
 
+/** How soon an overdue check-in comes once someone is back in the room, so the page has settled first. */
+export const SILENCE_SETTLE_MS = 5_000;
+
 /** A check-in that lands next to another clock event would make two lines in a row, so it keeps this distance. */
 export const SILENCE_GAP_MS = MINUTE;
 

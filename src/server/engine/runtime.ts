@@ -41,6 +41,7 @@ import {
   planCheckpoints,
   roundTimeMs,
   SILENCE_GAP_MS,
+  SILENCE_SETTLE_MS,
   SILENCE_WINDOW_MS,
   silenceCheckpoint,
   type Checkpoint,
@@ -222,6 +223,8 @@ interface QueuedTurn {
   /** Built when the turn is sent, so it carries the context of that moment. Null skips the turn. */
   build(): BuiltTurn | null;
   after?(storedText: string): Promise<void> | void;
+  /** For a clock turn: the checkpoint it answers. */
+  checkpoint?: Checkpoint["kind"];
 }
 
 interface ChannelState {
@@ -439,8 +442,6 @@ export class SessionRuntime {
     }
     this.peers.add(peer);
     this.lastActivity = Date.now();
-    // A check-in that fell while the room was empty was dropped; this brings the next one back to its proper time.
-    if (this.session.status === "live" && !this.disposed) this.armSilence();
     this.syncAwayTimer();
     this.syncCoachAwayTimer();
     peer.send({ type: "session.state", session: this.publicSession() });
@@ -448,6 +449,8 @@ export class SessionRuntime {
       if (ch.status !== "idle") peer.send({ type: "agent.status", channel: ch.name, state: ch.status, ...(ch.error ? { error: ch.error } : {}) });
     }
     if (this.session.status === "debriefing" && this.lastProgress) peer.send(this.lastProgress);
+    // A check-in that fell while the room was empty was dropped, so one that is now overdue comes back shortly.
+    if (this.session.status === "live" && !this.disposed) this.armSilence();
   }
 
   detach(peer: Peer): void {
@@ -898,7 +901,13 @@ export class SessionRuntime {
     if (s.status === "live" || s.status === "paused") {
       // A step nudge only speaks while he is still in that step, so only those can crowd the check-in.
       const others = this.checkpoints.filter((c) => c.phase === undefined || c.phase === s.phase);
-      this.checkpoints.push(silenceCheckpoint(this.quietSince(), this.silenceWindowMs, this.roundNow(), others, this.firedCheckpoints));
+      const now = this.roundNow();
+      // A stretch that is already a full window old and never had its check-in (it fell while nobody was in the room)
+      // gets it shortly, once someone is there to see it. One already waiting in the queue needs no second.
+      const queued = this.interview.queue.some((t) => t.checkpoint === "silence");
+      const overdue = this.peers.size > 0 && !queued && this.silenceSpentFor !== this.quietSince() && now - this.quietSince() >= this.silenceWindowMs;
+      const quietFrom = overdue ? now + SILENCE_SETTLE_MS - this.silenceWindowMs : this.quietSince();
+      this.checkpoints.push(silenceCheckpoint(quietFrom, this.silenceWindowMs, now, others, this.firedCheckpoints));
     }
     this.scheduler?.setCheckpoints(this.checkpoints);
     this.scheduler?.reschedule();
@@ -1470,8 +1479,11 @@ export class SessionRuntime {
   }
 
   private clockQueued(cp: Checkpoint, onSettled?: () => Promise<void> | void): QueuedTurn {
+    // The stretch this check-in answers, read when it is sent: work he does while it is out starts a new one.
+    let stretch: number | null = null;
     return {
       kind: "clock",
+      checkpoint: cp.kind,
       build: () => {
         const status = this.session.status;
         if (cp.kind === "time_up" ? status !== "ended" : status !== "live") return null;
@@ -1479,9 +1491,16 @@ export class SessionRuntime {
         // A step that already passed has the "Move on" button; an offer would only nag.
         if (cp.kind === "phase_over" && this.session.stepVerdicts?.[cp.phase ?? ""]?.verdict === "pass") return null;
         // He may have started work, or the interviewer may have spoken, while this turn waited in line.
-        if (cp.kind === "silence" && !this.silenceDue()) return null;
+        if (cp.kind === "silence") {
+          if (!this.silenceDue()) return null;
+          stretch = this.quietSince();
+        }
         // The planned-length line already asks him whether to go on, so a move-on offer next to it would only repeat it.
-        if (cp.kind === "phase_over" && Math.abs(this.roundNow() - this.session.durationMs) < SILENCE_GAP_MS) return null;
+        // Its hidden note still marks the step as offered, so a restart does not bring the offer back at once.
+        if (cp.kind === "phase_over" && Math.abs(this.roundNow() - this.session.durationMs) < SILENCE_GAP_MS) {
+          this.addEntry({ channel: "interview", role: "system", kind: "clock", hidden: true, text: clockLabel(cp) });
+          return null;
+        }
         const since = this.lastCandidateAt === null ? null : Math.max(0, this.roundNow() - this.lastCandidateAt);
         const detail = { quietMs: this.roundNow() - this.quietSince(), plannedMs: this.session.durationMs };
         return {
@@ -1490,9 +1509,9 @@ export class SessionRuntime {
         };
       },
       after: async (text) => {
-        // Marked only once the turn went through, so a failed send leaves the stretch its check-in. The check-in's
-        // own line is part of the stretch, so it never opens a new one.
-        if (cp.kind === "silence") this.silenceSpentFor = this.quietSince();
+        // Marked only once the turn went through, so a failed send leaves the stretch its check-in. A shown check-in
+        // line belongs to its stretch, so it never opens a new one; after a silent reply the stretch stays as it was sent.
+        if (cp.kind === "silence") this.silenceSpentFor = text ? this.quietSince() : stretch;
         this.addEntry({ channel: "interview", role: "system", kind: "clock", hidden: true, text: clockLabel(cp) });
         if (cp.kind === "extension" && text) {
           this.session.extension = { at: this.roundNow(), text };

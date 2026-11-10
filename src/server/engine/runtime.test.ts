@@ -372,6 +372,79 @@ describe("checking in on a quiet candidate", () => {
     rt.dispose();
   });
 
+  it("brings back a check-in that fell while the page was reconnecting", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    // Work at 2:00 puts the check-in at 6:00, clear of the requirements nudge at 5:00.
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    await rt.handle({ type: "board.update", version: 1, elements: [] }, t.peer);
+    await vi.advanceTimersByTimeAsync(3 * MIN + 50_000);
+    rt.detach(t.peer);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(checkIns(t.msgs)).toHaveLength(0);
+    rt.attach(t.peer);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    const at = session.transcript.find((e) => e.text === CHECK_IN)?.at ?? 0;
+    expect(at).toBeGreaterThan(6 * MIN + 10_000);
+    expect(at).toBeLessThan(6 * MIN + 20_000);
+    rt.dispose();
+  });
+
+  it("leaves the new stretch open when he starts work while a check-in turn answers with silence", async () => {
+    const inner = createFakeDriver({ chunkDelayMs: 0 });
+    let quietTurns = 0;
+    const driver: Driver = {
+      ...inner,
+      startConversation(s) {
+        const conv = inner.startConversation(s);
+        return {
+          sdkSessionId: () => conv.sdkSessionId(),
+          close: () => conv.close(),
+          async send(turn, handlers) {
+            if (turn.meta.checkpoint === "silence" && quietTurns++ === 0) {
+              await new Promise((resolve) => setTimeout(resolve, 10_000));
+              return { text: "<silent/>", stats: { durationMs: 1, costUsd: 0 } };
+            }
+            return conv.send(turn, handlers);
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 5_000);
+    await rt.handle({ type: "board.update", version: 1, elements: [] }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 5_000);
+    expect(quietTurns).toBe(2);
+    expect(checkIns(t.msgs)).toHaveLength(1);
+    rt.dispose();
+  });
+
+  it("does not repeat a planned-length line after a restart", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }));
+    const wall = new Date().toISOString();
+    const session: Session = {
+      ...newSession("guided"),
+      startedAt: new Date(Date.now() - 46 * MIN).toISOString(),
+      status: "paused",
+      pauseStartedAt: wall,
+      pauseReason: "restart",
+      transcript: [
+        { id: "o1", at: 1_000, wall, channel: "interview", role: "interviewer", text: "Let's begin." },
+        { id: "o2", at: 45 * MIN, wall, channel: "interview", role: "interviewer", text: "We've reached the planned time." },
+        { id: "o3", at: 45 * MIN, wall, channel: "interview", role: "system", kind: "clock", hidden: true, text: "clock: planned length reached" },
+      ],
+    };
+    const rt = await t.start(session);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(interviewerTexts(t.msgs).filter((x) => x.startsWith("We've reached the planned time"))).toHaveLength(0);
+    rt.dispose();
+  });
+
   it("gives a guided round a longer window and one line when it reaches its planned length", async () => {
     const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
     const session = newSession("guided");

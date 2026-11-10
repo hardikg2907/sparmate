@@ -370,8 +370,8 @@ if it is mid-reply, fire right after):
   activity when it falls: if the round was not quiet for the whole window, it re-arms at the end of the new window.
   It is armed a minute away from the other pending clock events of the current step and of the round, so the two
   rarely speak back to back. A check-in that falls while the interviewer is mid-reply waits for the reply, and is
-  dropped when that reply was shown; one that falls while nobody is in the room is dropped, and the next socket
-  re-arms it.
+  dropped when that reply was shown; one that falls while nobody is in the room is dropped, and it comes about five
+  seconds after someone is back.
 - Time up: status becomes `ended`; the interviewer gets a `<clock>` event to close in one or two sentences
   with no feedback; then the debrief starts. The page sends its last board and code edits as the clock reaches
   zero, so for 2 seconds after a time-up end the server still takes `board.update` and `code.update`, and the
