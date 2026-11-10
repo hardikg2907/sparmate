@@ -875,7 +875,8 @@ export class DrillService {
           schema: GraderOutputSchema,
           fake: { problem, track: problem.meta.track, drill: { kind: drill, key: content.key, answer } },
         });
-        return finishGrade(output, answer, { drill, key: content.key, redact: (line) => this.deps.guard.redact(line) });
+        const shown = [content.prompt.problem.title, content.prompt.task, ...content.prompt.material.map((m) => m.markdown)].join("\n");
+        return finishGrade(output, answer, { drill, key: content.key, shown, redact: (line) => this.deps.guard.redact(line) });
       } catch (err) {
         this.deps.log.warn(`Drill grader attempt ${attempt + 1} failed for ${problem.meta.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);
       }
