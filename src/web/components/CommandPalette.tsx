@@ -5,6 +5,7 @@ import { navigate } from "../router";
 import { CompassIcon, EnterIcon, ListIcon, PauseIcon, PlayFilledIcon, SearchIcon, SlidersIcon } from "./icons";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Kbd } from "./ui/kbd";
+import { scrollToInScroller } from "../lib/scrollInScroller";
 import { cn } from "./ui";
 
 const OPEN_EVENT = "sparmate-open-palette";
@@ -87,7 +88,7 @@ export function CommandPalette() {
   const current = Math.min(active, Math.max(0, items.length - 1));
 
   useEffect(() => {
-    list.current?.querySelector(`[data-index="${current}"]`)?.scrollIntoView({ block: "nearest" });
+    scrollToInScroller(list.current?.querySelector<HTMLElement>(`[data-index="${current}"]`), { block: "nearest", scroller: list.current });
   }, [current, items]);
 
   const run = useCallback((action: PaletteAction) => {

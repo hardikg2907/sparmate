@@ -144,7 +144,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   ) : null;
 
   return (
-    <div className="room-canvas flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="room-canvas flex h-full min-h-0 flex-col overflow-clip">
       <RoomHeader
         session={session}
         offsetMs={state.clockOffsetMs}
@@ -164,8 +164,8 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
       {ended ? <EndedBanner connected={connected} onStart={actions.retryDebrief} /> : null}
       <MessageBanners state={state} actions={actions} />
 
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" tabIndex={-1} inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-clip md:flex-row">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip" tabIndex={-1} inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
           <div className="room-toolbar flex min-h-9 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 max-md:py-1.5 md:h-9 md:flex-nowrap">
             <PhaseGoal session={session} />
             <div className="flex shrink-0 items-center gap-2">
@@ -215,8 +215,8 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="relative min-h-0 min-w-0 flex-1 bg-background overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-clip">
+            <div className="relative min-h-0 min-w-0 flex-1 bg-background overflow-clip">
               <Pane active={!lld || tab === "diagram"} id="pane-diagram" labelledBy={lld ? "tab-diagram" : undefined}>
                 {state.board ? (
                   <Board
@@ -253,7 +253,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                           />
                         </div>
                       </div>
-                      <div className="room-console h-56 shrink-0 overflow-hidden [&>*]:h-full">
+                      <div className="room-console h-56 shrink-0 overflow-clip [&>*]:h-full">
                         <Console
                           lastRun={state.code.lastRun}
                           running={state.code.running}
@@ -279,7 +279,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
-          className="room-side flex min-h-0 shrink-0 flex-col overflow-hidden max-md:h-[68%] max-md:w-full md:w-(--chat-w)"
+          className="room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:h-[68%] max-md:w-full md:w-(--chat-w)"
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}
         >

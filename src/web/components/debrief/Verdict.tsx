@@ -2,12 +2,13 @@ import { DEFAULT_TARGET } from "../../../shared/target";
 import type { Scorecard } from "../../../shared/types";
 import { VERDICT_TONE } from "../../lib/format";
 import { READINESS_TITLE, VERDICT_EXPLANATION, VERDICT_LABEL } from "../../lib/verdict";
+import { scrollToInScroller } from "../../lib/scrollInScroller";
 import { TONE_FILL, TONE_TEXT, Tooltip, cn } from "../ui";
 
 export function jumpTo(id: string): void {
   const target = document.getElementById(id);
   if (!target) return;
-  target.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  scrollToInScroller(target, { behavior: "smooth" });
 }
 
 /** The level names the round was judged at; a card saved without them was judged at the defaults. */

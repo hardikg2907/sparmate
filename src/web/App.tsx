@@ -38,7 +38,7 @@ export function App() {
         Skip to main content
       </a>
       <AppProviders>
-        <div className="h-full min-h-0 overflow-hidden">
+        <div className="h-full min-h-0 overflow-clip">
           <Shell />
         </div>
       </AppProviders>

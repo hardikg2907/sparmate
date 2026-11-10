@@ -72,7 +72,7 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
     root.render(
       <StrictMode>
         <AppProviders>
-          <div className="h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0 overflow-clip">
             <FixturePage
               name={name}
               theme={theme}
@@ -186,7 +186,7 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
   root.render(
     <StrictMode>
       <AppProviders>
-        <div className="h-full min-h-0 overflow-hidden">
+        <div className="h-full min-h-0 overflow-clip">
           <SessionRoot source={server.source()} theme={theme} studyRoot={fixtureBootstrap.studyRoot} />
         </div>
       </AppProviders>

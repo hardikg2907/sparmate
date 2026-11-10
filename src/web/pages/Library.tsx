@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, EmptyState, Segmented, Skeleton, TONE_TEXT,
 import { dayMonth } from "../lib/dates";
 import { MODE_LABEL } from "../lib/format";
 import { FILTER_LABEL, STATUS_LABEL, inTab, libraryGroups, openRoundFor, problemStatus, tabCounts, type LibraryFilter, type LibraryTab } from "../lib/library";
+import { scrollToInScroller } from "../lib/scrollInScroller";
 import { startKey, type StudyData } from "../lib/useStudyData";
 import { attemptBadge } from "../lib/verdict";
 import { modeFor } from "../../shared/today";
@@ -82,7 +83,7 @@ export function RoundsPanel({ data, ctx }: { data: StudyData; ctx: PageContext }
   const select = (id: string) => {
     setSelectedId(id);
     // On a narrow screen the detail sits below the list, so bring it into view.
-    if (typeof matchMedia === "function" && !matchMedia("(min-width: 1024px)").matches) panel.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (typeof matchMedia === "function" && !matchMedia("(min-width: 1024px)").matches) scrollToInScroller(panel.current, { behavior: "smooth" });
   };
 
   return (

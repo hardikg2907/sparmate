@@ -7,6 +7,7 @@ import { PageHeader, PageShell } from "../components/PageShell";
 import { Select } from "../components/Select";
 import { Alert, Button, Card, Input, Segmented, Switch, cn } from "../components/ui";
 import { DEFAULT_SETTINGS } from "../lib/contract";
+import { scrollToInScroller } from "../lib/scrollInScroller";
 import { DEFAULT_VOICE_SETTINGS, getVoiceSettings, saveVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 import type { Theme } from "../theme";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -147,7 +148,7 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
 
   const goTo = (id: string) => {
     setActive(id);
-    sections.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToInScroller(sections.current.get(id), { behavior: "smooth" });
   };
   // A link such as /settings#models opens the page on that section.
   const hashNav = useHash();
