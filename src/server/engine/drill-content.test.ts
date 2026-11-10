@@ -15,7 +15,6 @@ import {
   pickDeepDive,
   pickTradeoff,
   scaleFacts,
-  shownFacts,
   tradeoffEntries,
   variantEntries,
 } from "./drill-content";
@@ -159,13 +158,43 @@ describe("facts a drill shows", () => {
     expect(factOnly(fact)).toBe(fact);
   });
 
-  it("shows no note to the interviewer in any shipped brief", () => {
+  it("finds no note to the interviewer inside any shipped fact bullet", () => {
     for (const problem of all) {
-      for (const fact of shownFacts(problem)) {
-        expect(fact, problem.meta.id).not.toMatch(/\b(?:do not mention|do not volunteer|the candidate|let them|extension step|if they (?:ask|propose))\b/i);
-        expect(fact, problem.meta.id).not.toMatch(/^\**\s*extensions?\b/i);
+      for (const line of (problem.sections["Hidden facts"] ?? "").split("\n")) {
+        const bullet = /^\s*[-*]\s+(.+)$/.exec(line)?.[1]?.trim();
+        if (bullet) expect(factOnly(bullet), problem.meta.id).toBe(bullet);
       }
     }
+  });
+
+  it.each([
+    ["a curly apostrophe", "**Replay:** not in scope. Don\u2019t mention replay.", "**Replay:** not in scope."],
+    ["a note after an abbreviation", "**Splits:** equal and exact, e.g. three ways. Do not mention weighted splits.", "**Splits:** equal and exact, e.g. three ways."],
+    ["a label that is a note", "**Interviewer note:** accept a queue if proposed.", null],
+    ["a curveballs label", "**Curveballs:** a hot key later.", null],
+    ["a fact after a quoted note", '**Moves:** if they ask, say "Not now." A move is final.', "**Moves:** A move is final."],
+    ["a scenario note", "**Lapse:** a hold lapses after its day. Scenarios 1 to 4 check only that.", "**Lapse:** a hold lapses after its day."],
+  ])("drops %s", (_n, bullet, expected) => {
+    expect(factOnly(bullet)).toBe(expected);
+  });
+
+  it.each([
+    "**Scale:** 10,000 writes a second (we do not count retries).",
+    "**Riders:** any adult can ride (including volunteer drivers).",
+    "**Guests:** guests do not require an account.",
+    "**Gate:** a guard can let them in after 10 PM.",
+    "**Extension numbers:** 4 digits each.",
+  ])("keeps the real fact %s", (bullet) => {
+    expect(factOnly(bullet)).toBe(bullet);
+  });
+
+  it("shows only facts in the capacity drill", () => {
+    const sections = {
+      ...hld.sections,
+      "Hidden facts": "- **Load:** 5,000 reads a second. Do not mention the 20,000 peak.\n- **Spikes (give only if asked):** 3 times the average.",
+    };
+    const known = buildDrill({ ...hld, sections }, "capacity")?.prompt.material.find((m) => m.heading === "What you know")?.markdown ?? "";
+    expect(known).toBe("- **Load:** 5,000 reads a second.\n- **Spikes:** 3 times the average.");
   });
 
   it("shows only facts under What you know in the machine coding drills", () => {

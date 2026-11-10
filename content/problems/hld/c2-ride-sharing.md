@@ -19,11 +19,11 @@ Let's design a ride-sharing service, something like Uber. Where would you like t
 Reveal a fact only when the candidate asks about it, or asks a question whose honest answer needs it. Never volunteer the list.
 
 - **Scope:** riders and drivers, each with a phone app. One ride type, one rider per car, one pickup, one drop-off, each sent as a latitude and longitude. The system picks the driver: the free driver with the shortest pickup ETA. Sign-up, payments, fares, ratings, fraud and address search are out of scope.
-- **Scale:** 15 million trips a day worldwide, from about 10 million riders. About 500 ride requests per second in the busiest hour, nearly 3 times the daily average. Treat every request as a trip.
+- **Scale:** 15 million trips a day worldwide, from about 10 million riders. About 500 ride requests per second in the busiest hour, nearly 3 times the daily average. Every request counts as a trip.
 - **Drivers:** about 1 million online in the busiest hour, about 500,000 on average. A driver is busy about 20 minutes per trip: 5 minutes to the pickup, 15 riding.
 - **Location updates:** every online driver's app sends its position every 4 seconds, idle or on a trip. GPS error is 10 to 20 meters. A lost update does not matter, because the next one replaces it. A free driver silent for 15 seconds counts as offline. A driver who goes silent during a ride keeps that ride, and support handles it by hand.
 - **Geography:** the product is global, in about 500 cities. Every trip stays inside one city and cities never interact. The biggest city has about 5% of all trips, and the top 20 cities together about 40%. Start with one region sized for the full load. More regions come later.
-- **Offers:** the default is one offer at a time per ride, and 15 seconds to accept. If the candidate proposes offering to a few drivers at once, let them argue the trade-off. A driver sees at most one offer at a time, and none while on a trip. About half of all offers are accepted. The rest are declined or time out. A driver who passed on a ride is not offered it again.
+- **Offers:** the default is one offer at a time per ride, and 15 seconds to accept. A driver sees at most one offer at a time, and none while on a trip. About half of all offers are accepted. The rest are declined or time out. A driver who passed on a ride is not offered it again.
 - **Search:** look within 3 km of the pickup, then widen once to 6 km. After 2 minutes without an accept, the ride ends and the rider hears "no drivers nearby". In a busy area at the peak, about 200 free drivers are within 3 km of a pickup.
 - **ETA:** from an external routing service. One call takes up to 10 origin and destination pairs, answers in about 100 ms (300 ms at p99), bills per pair and can fail. If it is down, straight-line distance at 25 km/h is an acceptable estimate.
 - **Rider's view:** after the match, the map shows the driver's position every 4 seconds, and the pickup ETA refreshed every 30 seconds. A rider sees only their own driver. The driver app keeps a live connection while the driver is online. A rider's app may be in the background, so a push notification is fine for a status change.
@@ -32,7 +32,11 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Durability and availability:** once the rider sees "requested", the ride survives any single server failure. Requesting and matching target 99.99%. Tracking and ETAs may lag first. Phones lose signal and retry requests.
 - **Cancels:** the rider may cancel until the trip starts. The driver may cancel before pickup, and the ride returns to matching without that driver, with a fresh 2-minute window. After 5 minutes at the pickup, the driver may report a no-show. Nobody cancels a trip in progress.
 - **Retention:** trip records live 2 years. The GPS trail of each trip, from accept to drop-off, lives 90 days, for disputes. Idle drivers' positions are not kept.
-- **Out of scope:** surge pricing, shared rides and scheduled rides. Accept one sentence about surge and move on. Nearby cars on the rider's map is a stretch goal that reads the same data.
+- **Out of scope:** surge pricing, shared rides and scheduled rides. Nearby cars on the rider's map is a stretch goal that reads the same data.
+
+For the interviewer: on the offers, if the candidate proposes offering to a few drivers at once, let them argue the trade-off.
+
+For the interviewer: on surge pricing, accept one sentence and move on.
 
 ## Expected requirements
 

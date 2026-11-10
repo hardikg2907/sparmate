@@ -27,7 +27,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Live data:** about 1 billion keys today. It doubles within a year.
 - **Traffic:** 1 million operations per second at peak, about half that on average. About 90% are reads. Traffic grows more slowly than data: about 50% in the next year.
 - **Skew:** about 20% of keys take 80% of reads. During events, one key can spike far above the rest.
-- **TTL:** about 70% of keys have a TTL, from 1 minute to 24 hours. Second precision is enough. An expired key must never be returned, even if its memory is freed later. If asked, we can enforce a default TTL of 24 hours on keys sent without one.
+- **TTL:** about 70% of keys have a TTL, from 1 minute to 24 hours. Second precision is enough. An expired key must never be returned, even if its memory is freed later. A default TTL of 24 hours can be enforced on keys sent without one.
 - **Memory full:** evict something. Never reject a write and never crash. Any key may be evicted, with or without a TTL.
 - **Latency:** p99 under 2 milliseconds at the client for a 1 KB value, for reads and writes alike. A network round trip takes about 0.1 ms inside a zone and about 0.5 ms across zones.
 - **Hardware:** cache machines have 64 GB of RAM, 8 cores and a 10 Gbps network card. One core serves about 100,000 simple GET or SET operations per second.
@@ -38,7 +38,11 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Deploys:** every node restarts about once a week for a deploy or OS patch, one node at a time.
 - **Regions:** one region with three availability zones. A second region is out of scope.
 - **Tenancy:** many services share one cluster, each with its own key prefix. Per-service quotas are out of scope beyond a mention. There is no key listing, scan or delete by prefix. A service that wants a clean slate switches to a new prefix and lets the old keys expire or be evicted.
-- **Security and operations:** the cluster sits on a private network. Each service authenticates with its own token, and TLS is on. Treat both as one-line mentions. Metrics and dashboards are also a one-line mention.
+- **Security and operations:** the cluster sits on a private network. Each service authenticates with its own token, and TLS is on.
+
+For the interviewer: on the TTL, give the default TTL of 24 hours only if asked.
+
+For the interviewer: on security and operations, a one-line mention of each is enough: authentication, TLS, metrics and dashboards.
 
 ## Expected requirements
 

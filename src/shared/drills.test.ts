@@ -41,7 +41,7 @@ describe("drill catalogue", () => {
     expect(DRILL_INFO.tradeoff).toMatchObject({
       title: "Defend a trade-off",
       tracks: ["hld", "lld"],
-      about: "Pick a side of one design choice, or the patterns of a machine coding problem, and hold it under questions.",
+      about: "Choose a side of one design choice, or name the patterns to use and leave out, and defend your reasons under questions.",
     });
     expect(drillServesTrack("tradeoff", "lld")).toBe(true);
     expect(drillServesTrack("capacity", "lld")).toBe(false);

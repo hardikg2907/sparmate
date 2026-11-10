@@ -19,20 +19,30 @@ Let's design a video streaming service, something like YouTube. Where would you 
 Reveal a fact only when the candidate asks about it, or asks a question whose honest answer needs it. Never volunteer the list.
 
 - **What it is:** creators upload videos and anyone can watch them, like YouTube (not a licensed catalog like Netflix). Accounts and login are out of scope. Every video is public: no private or unlisted videos, no access control, no geo-blocking. Viewers and creators are global. Start with one home region for uploads and processing. A commercial CDN covers delivery.
-- **Core features:** upload with a title and description, adaptive playback, an approximate view count, one thumbnail that we cut from a frame of the video. Search by title exists, but a mention is enough. The video file cannot be edited or replaced after upload.
-- **Out of scope:** live streaming, DRM, recommendations, comments, ads, captions, 4K and HDR, offline downloads, creator payouts, subscriptions, likes, the home feed and notifications. Copyright and abuse scanning gets one line.
+- **Core features:** upload with a title and description, adaptive playback, an approximate view count, one thumbnail that we cut from a frame of the video. Search by title exists. The video file cannot be edited or replaced after upload.
+- **Out of scope:** live streaming, DRM, recommendations, comments, ads, captions, 4K and HDR, offline downloads, creator payouts, subscriptions, likes, the home feed and notifications. Copyright and abuse scanning is out of scope.
 - **Users:** about 100 million viewers a day, about 5 views each. About 2 million creators upload in a month.
 - **Views:** about 500 million a day. A view counts after 30 seconds of watching, or the whole video if it is shorter. The average view watches about 3 minutes. About 70% of views are on phones.
 - **Uploads:** about 500,000 new videos a day (1,000 views per upload). The average video is 5 minutes and 300 MB (about 8 Mbps). The limit is 12 hours and 50 GB. Creators often upload over weak connections. The same file uploaded twice makes two videos. Accepted inputs are MP4, MOV, MKV and WebM with common video codecs (H.264, HEVC, VP9).
-- **Peak and popularity:** the busiest hour is twice the daily average, for views and uploads. About 1% of videos get about 80% of views, and half of all videos are never watched after their first week. If asked about spikes: a big creator's release can send far more views to one video than the daily peak. Give no figure until the curveball.
-- **Quality ladder:** up to 1080p, in five renditions: 240p at 0.4 Mbps, 360p at 0.8, 480p at 1.3, 720p at 2.5 and 1080p at 5. That is 10 Mbps in total. The average delivered bitrate is about 2 Mbps. Audio is a separate 128 kbps track shared by all renditions. Ignore it in the totals. Playback is H.264 and AAC, which every device decodes, at up to 30 frames a second. Never upscale: a rendition above the source resolution is skipped, and a source above 1080p is scaled down. For the math, assume all five renditions.
+- **Peak and popularity:** the busiest hour is twice the daily average, for views and uploads. About 1% of videos get about 80% of views, and half of all videos are never watched after their first week. A big creator's release can send far more views to one video than the daily peak.
+- **Quality ladder:** up to 1080p, in five renditions: 240p at 0.4 Mbps, 360p at 0.8, 480p at 1.3, 720p at 2.5 and 1080p at 5. That is 10 Mbps in total. The average delivered bitrate is about 2 Mbps. Audio is a separate 128 kbps track shared by all renditions. It is not counted in the totals. Playback is H.264 and AAC, which every device decodes, at up to 30 frames a second. Never upscale: a rendition above the source resolution is skipped, and a source above 1080p is scaled down. The math assumes all five renditions.
 - **Playback:** starts in under 2 seconds at p95 on a good connection. Rebuffering stays under 1% of watch time. Seeking works anywhere.
 - **Processing:** for videos up to 1 hour, the lower renditions are watchable within 5 minutes of the upload finishing, and the full ladder within 15. A 12-hour video may take 2 hours. The creator sees "processing" at once. A corrupt or unsupported file ends as "failed", and the creator is told.
 - **Availability and durability:** playback 99.99%, upload and processing 99.9%. An original is never lost after "upload complete".
 - **View count:** it may lag a minute and be off by a few percent. Counting every report is fine, with no per-viewer dedup. It never goes down. Exact payout figures come from an offline job and are out of scope.
 - **Retention and takedown:** videos stay until deleted, and originals are kept. Plan for 5 years. A removed video stops playing for new viewers worldwide within 15 minutes. People already watching may finish. Its bytes can be deleted from storage within 30 days.
-- **CDN (give only if asked):** a commercial CDN gives about a 95% byte hit ratio at the edge before any shield tier.
-- **Cost (give only if asked):** standard storage $0.02 per GB-month, cold storage $0.004. CDN delivery $0.02 per GB. Spot compute $0.03 per vCPU-hour. With a common H.264 encoder, the full ladder takes about 10 vCPU-seconds per second of video. These are round assumptions.
+- **CDN:** a commercial CDN gives about a 95% byte hit ratio at the edge before any shield tier.
+- **Cost:** standard storage $0.02 per GB-month, cold storage $0.004. CDN delivery $0.02 per GB. Spot compute $0.03 per vCPU-hour. With a common H.264 encoder, the full ladder takes about 10 vCPU-seconds per second of video. These are round assumptions.
+
+For the interviewer: on search, a mention is enough.
+
+For the interviewer: on copyright and abuse scanning, one line is enough.
+
+For the interviewer: on spikes, give the spike fact only if asked, and give no figure until the curveball.
+
+For the interviewer: on the CDN, give the fact only if asked.
+
+For the interviewer: on the cost, give the numbers only if asked.
 
 ## Expected requirements
 

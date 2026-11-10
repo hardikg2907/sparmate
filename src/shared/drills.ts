@@ -27,7 +27,7 @@ export const DRILL_INFO: Record<DrillType, DrillInfo> = {
     title: "Defend a trade-off",
     minutes: 15,
     tracks: ["hld", "lld"],
-    about: "Pick a side of one design choice, or the patterns of a machine coding problem, and hold it under questions.",
+    about: "Choose a side of one design choice, or name the patterns to use and leave out, and defend your reasons under questions.",
     dialogue: true,
   },
   lld_skeleton: { title: "LLD skeleton", minutes: 15, tracks: ["lld"], about: "Name the classes, their fields and their method signatures, with no bodies." },

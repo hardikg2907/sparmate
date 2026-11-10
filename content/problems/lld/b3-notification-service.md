@@ -21,24 +21,34 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 
 - **What happens:** another part of the product tells the service that something happened to a user, for example an order shipped. The service decides which channels to use, builds the text for each, sends it, retries failures and keeps a log. The call is synchronous: it returns after every channel is done. No background threads in the first version.
 - **Channels:** email, SMS and push. One interface for all three. A notification goes to every channel the user has enabled for that type. It is not "first success wins" and there is no fallback to another channel. The service tries channels in the order email, SMS, push.
-- **Senders:** no real network. Each channel has a fake sender. It keeps every message it accepts in an outbox, counts its calls, and can be told to fail the next N calls and then succeed again. The demo must show a failure. A failed send means the provider refused the message. There is no error text, and every failure is retried the same way. Whether `send` shows it as a `bool`, a status or an exception is their choice.
+- **Senders:** no real network. Each channel has a fake sender. It keeps every message it accepts in an outbox, counts its calls, and can be told to fail the next N calls and then succeed again. The demo must show a failure. A failed send means the provider refused the message. There is no error text, and every failure is retried the same way. Any style works for how `send` shows a failure: a `bool`, a status or an exception.
 - **Types:** 3, fixed for the demo: `ORDER_SHIPPED`, `PAYMENT_FAILED`, `PROMO`. Adding a type must be new data (message templates), not a new code branch.
 - **Users:** set up before the demo; there is no sign-up flow. A user has an id and at most one contact per channel: an email address, a phone number, a push token. They are plain strings with no format check. A user may have no contact for a channel, for example no phone. Users and contacts do not change once `notify` calls start.
-- **Message templates:** one text per type and channel, with placeholders in curly braces such as `{orderId}`. They are set at setup. (Say "message templates" to the candidate, to avoid mixing them up with C++ templates.)
+- **Message templates:** one text per type and channel, with placeholders in curly braces such as `{orderId}`. They are set at setup.
 - **Rendering rules:** the caller passes the values as a map of name to string. Extra values are ignored. A placeholder with no value is an error. A placeholder may appear twice, and both are replaced. Templates are always well formed: every `{` starts a placeholder. Email has a body only, with no subject and no HTML. There is no length limit. Values go in as literal text and are never scanned again, so a value that contains `{orderId}` stays as written. No escaping and no formatting.
 - **Missing text:** a type and channel pair with no message template is a setup mistake. The call is rejected, the same as a missing value. Setup always covers every pair in the demo.
 - **Render before send:** the service renders the text for every channel it will try before it sends anything. One bad template or value rejects the whole call. Nothing is sent and nothing is logged. A channel that will be skipped is not rendered.
-- **Preferences:** per user, per channel, per type: on or off. The default is on. A change applies from the next notification, in both directions. There are no mandatory alerts in the first version. If they ask, say "not in the first version", and accept a `mandatory` flag on the type if they propose it.
+- **Preferences:** per user, per channel, per type: on or off. The default is on. A change applies from the next notification, in both directions. There are no mandatory alerts in the first version.
 - **Skipped channels:** a channel is skipped when the user switched it off for that type, or has no contact for it. A skipped channel is not tried, not retried, and gets no log row. If every channel is skipped, the call still succeeds and the log has no rows for it.
-- **Retries:** if a send fails, the service tries again at once. There is no waiting. **3 attempts in total per channel**: the first try plus 2 retries. The number must be configurable, and one value serves all channels. A success ends the loop. After the third failure the channel is `FAILED` and the call still returns normally. Channels are independent: one failing channel never stops the others. If they propose a delay between retries, accept it, but there is no sleeping and no system clock: the retry becomes a later call that carries the time.
+- **Retries:** if a send fails, the service tries again at once. There is no waiting. **3 attempts in total per channel**: the first try plus 2 retries. The number must be configurable, and one value serves all channels. A success ends the loop. After the third failure the channel is `FAILED` and the call still returns normally. Channels are independent: one failing channel never stops the others.
 - **Delivery log:** one row per send attempt: notification id, channel, attempt number (starting at 1), status `SENT` or `FAILED`, and the minute of the call. A test can read it by notification id. No error text. It lives in memory and grows without limit. Rows are never deleted.
 - **Ids and result:** every accepted call gets the next notification id, starting at 1 with no gaps. The call returns that id. The caller sees per-channel results only through the log. A rejected call returns an error the caller can see, uses no id, and changes nothing. One error style throughout: an empty `optional`, an error code or an exception.
-- **Callers:** other code calls `notify` directly. If they propose Observer (event sources publish, the service subscribes), accept it, but do not require it.
+- **Callers:** other code calls `notify` directly.
 - **Threads:** yes. Many callers at once, up to about 16 threads. A real provider call takes 100 ms to 2 seconds. `main()` may stay single-threaded for the demo.
 - **Time:** the caller passes the time in as whole minutes on every call. Never the system clock. The first version uses it only for log rows.
 - **Size:** up to about 100,000 users, about 50 notifications per second, and a few million log rows. A scan over the log is fine for the demo. With 16 threads and slow providers, the synchronous version cannot keep up with 50 per second. That is known and accepted for the first version. A queue with a worker pool is the next step.
-- **Not in the first version:** rate limits, priorities, quiet hours and suppressing duplicates. If they ask, say "not in the first version".
+- **Not in the first version:** rate limits, priorities, quiet hours and suppressing duplicates.
 - **Out of scope:** real providers, bounces and delivery receipts, scheduling for later, batching or digests, unsubscribe links, translations, saving to disk, a UI, sign-in.
+
+For the interviewer: on the message templates, say "message templates" to the candidate, to avoid mixing them up with C++ templates.
+
+For the interviewer: on the preferences, if the candidate asks about mandatory alerts, say "not in the first version", and accept a `mandatory` flag on the type if the candidate proposes it.
+
+For the interviewer: on the retries, if the candidate proposes a delay between retries, accept it, but there is no sleeping and no system clock: the retry becomes a later call that carries the time.
+
+For the interviewer: on the callers, if the candidate proposes Observer (event sources publish, the service subscribes), accept it, but do not require it.
+
+For the interviewer: on what is not in the first version, if the candidate asks, say "not in the first version".
 
 ## Expected requirements
 

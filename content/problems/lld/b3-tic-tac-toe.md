@@ -25,7 +25,7 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Players:** 2 or more. Each has a unique id, a name, and a unique one-character symbol. Any character is a legal symbol. Names are only for display: they may repeat and are never checked. Setup with fewer than 2 players, a repeated id, or a repeated symbol is invalid.
 - **Turn order:** the setup order, then around again. The first player listed moves first. Only an accepted move passes the turn.
 - **A move:** a player id, a row and a column. Both are 0-based, and `(0, 0)` is the top-left cell.
-- **Bad moves:** 5 reasons to reject: game over, unknown player, not that player's turn, row or column out of range (negatives included), cell already taken. The caller must be able to tell the reasons apart. An enum, a result struct or distinct errors all work. A bare `bool` does not. A rejected move changes nothing: no mark, no turn change, no state change. If a move breaks two rules at once, any one correct reason is fine, except that a finished game always answers "game over".
+- **Bad moves:** 5 reasons to reject: game over, unknown player, not that player's turn, row or column out of range (negatives included), cell already taken. The caller must be able to tell the reasons apart. A rejected move changes nothing: no mark, no turn change, no state change. A finished game always answers "game over", even when the move also breaks another rule.
 - **Game over:** WON or DRAW. Every later move is rejected, whatever the player or the cell. A finished game has no next player: the caller gets an empty answer, such as an empty `std::optional` or a sentinel.
 - **Draw:** all N times N cells are filled and nobody has won. A move that fills the last cell and completes a line is a win, not a draw. No early draw detection.
 - **Speed:** a move costs O(1) or O(K). It never scans the whole board. On a 1,000 by 1,000 board with K = 5, each move should still read only a few dozen cells.
@@ -33,7 +33,13 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Threads:** the players may call from different threads, one game shared by all of them. `main()` may stay single-threaded.
 - **Time:** none. The game has no clock and no move timer. A later rule that needs time gets it from the caller on every call. Never the system clock.
 - **Demo:** `main()` plays one full game from a scripted list of moves, printing the board after each move. It reads no keyboard input. The print layout is free.
-- **Not in the first version:** undo, computer players, other games, a UI, a reset (a rematch is a new game), scores across games, a network layer, a pass or resign, saving and loading a game, a lobby of many games. If they ask, say so and add nothing.
+- **Not in the first version:** undo, computer players, other games, a UI, a reset (a rematch is a new game), scores across games, a network layer, a pass or resign, saving and loading a game, a lobby of many games.
+
+For the interviewer: on the bad moves, an enum, a result struct or distinct errors all work. A bare `bool` does not.
+
+For the interviewer: on the bad moves, if a move breaks two rules at once, any one correct reason is fine, except that a finished game always answers "game over".
+
+For the interviewer: on what is not in the first version, if the candidate asks, say so and add nothing.
 
 ## Expected requirements
 

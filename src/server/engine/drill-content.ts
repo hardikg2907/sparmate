@@ -397,40 +397,66 @@ export function variantsFor(problem: Problem, drill: DrillType): VariantEntry[] 
   return numeric.length > 0 ? numeric : entries;
 }
 
-// A brief's fact bullets are written for the interviewer, and some carry notes to them inside a fact. A drill shows
-// the facts to the candidate, so a note, and any word about the extensions still to come, must not reach the page.
+// The fact bullets of a brief state facts, and notes to the interviewer sit on plain lines after the list. A brief
+// written before that rule, or a writer that slips, can still hide a note inside a fact. A drill shows the facts to
+// the candidate, so this backstop keeps a note, and any word about the extensions still to come, off the page.
 const NOTE_SENTENCE = [
-  /\b(?:do not|don't|never) (?:mention|volunteer|test|require|reveal|bring up|hint)\b/i,
-  /\bextension step\b/i,
-  /\bif they (?:propose|suggest|ask)\b/i,
-  /\blet them\b/i,
+  /^(?:do not|don't|never) (?:mention|volunteer|hint|bring up|test)\b/i,
+  /\b(?:do not|don't) (?:mention|volunteer)\b/i,
+  /\b(?:extension step|curveballs?)\b/i,
+  /\bif they (?:propose|suggest|ask|want)\b/i,
+  /\blet them (?:argue|pick|choose|decide)\b/i,
   /\bthe candidate\b/i,
+  /^(?:if asked|accept|give (?:no|only))\b/i,
+  /\bscenarios? \d/i,
 ];
-const NOTE_ASIDE = /\b(?:if asked|volunteer|candidate|extension|interviewer|do not|don't)\b/i;
-const EXTENSIONS_LEAD = /^\**\s*extensions?\b/i;
+const NOTE_ASIDE = /\b(?:if asked|candidate|extensions?|interviewer|curveballs?|do not mention|do not volunteer)\b/i;
+const NOTE_LABEL = /^(?:(?:future|later)\s+)?(?:extensions?|curveballs?)$|\b(?:interviewer|do not mention|note)\b/i;
+const ABBREVIATION = /\b(?:e\.g|i\.e|vs|etc|incl|approx)\.$/i;
 const MAX_FACT_CHARS = 2000;
+const MAX_FACTS = 60;
+const MAX_FACT_SECTION = 40_000;
+
+/** The sentences of a fact. A dot after an abbreviation, or one before a closing quote or bracket, is handled. */
+function factSentences(text: string): string[] {
+  const out: string[] = [];
+  for (const piece of text.split(/(?<=[.!?]["'*)”]{0,3})\s+/)) {
+    const last = out.at(-1);
+    if (last !== undefined && ABBREVIATION.test(last)) out[out.length - 1] = `${last} ${piece}`;
+    else out.push(piece);
+  }
+  return out;
+}
 
 /** One fact bullet without its notes to the interviewer, or null when nothing but a note or its label is left. */
 export function factOnly(bullet: string): string | null {
-  const text = bullet.slice(0, MAX_FACT_CHARS);
-  if (EXTENSIONS_LEAD.test(text)) return null;
-  const asides = text.replace(/\s*\([^()]{0,300}\)/g, (aside) => (NOTE_ASIDE.test(aside) ? "" : aside));
-  // The bold label names the fact, so it stays even when the sentence it opens is a note.
-  const lead = /^\*\*[^*]{1,120}\*\*:?/.exec(asides)?.[0] ?? "";
-  const kept = asides
-    .slice(lead.length)
-    .trim()
-    .split(/(?<=[.!?])\s+/)
+  const text = bullet.slice(0, MAX_FACT_CHARS).replace(/[‘’]/g, "'");
+  // The label names the fact, so it stays even when the sentence it opens is a note; a label that is itself a note
+  // takes its bullet with it.
+  const lead = /^\*\*[^*]{1,120}\*\*:?|^\*[^*]{1,120}\*:?/.exec(text)?.[0] ?? "";
+  const label = (lead || (/^[^:.]{1,40}:/.exec(text)?.[0] ?? "")).replace(/[*:]/g, "").trim();
+  if (NOTE_LABEL.test(label)) return null;
+  const withoutNotes = (part: string) =>
+    part
+      .replace(/\([^()]{0,300}\)/g, (aside) => (NOTE_ASIDE.test(aside) ? "" : aside))
+      .replace(/ {2,}/g, " ")
+      .replace(/ ([,.;:])/g, "$1")
+      .trim();
+  const kept = factSentences(withoutNotes(text.slice(lead.length)))
     .filter((sentence) => !NOTE_SENTENCE.some((note) => note.test(sentence)))
     .join(" ")
     .trim();
+  const shownLead = withoutNotes(lead);
   if (kept === "") return null;
-  return lead === "" ? kept : `${lead} ${kept}`;
+  if (shownLead === "") return kept;
+  return /^[,.;:]/.test(kept) ? `${shownLead}${kept}` : `${shownLead} ${kept}`;
 }
 
 /** The hidden-fact bullets as a drill may show them: facts only. */
 export function shownFacts(problem: Problem): string[] {
-  return bullets(section(problem, "Hidden facts")).flatMap((b) => factOnly(b) ?? []);
+  return bullets(section(problem, "Hidden facts").slice(0, MAX_FACT_SECTION))
+    .slice(0, MAX_FACTS)
+    .flatMap((b) => factOnly(b) ?? []);
 }
 
 /** Hidden-fact bullets that carry a number: the scale facts a capacity estimate starts from. */

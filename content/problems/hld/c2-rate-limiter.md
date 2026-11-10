@@ -32,8 +32,12 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Blocked requests:** `429` with `Retry-After`. A blocked request uses no quota and never reaches an API server. Every response should show the limit, what is left and when it resets. "Resets" means when the client is back to a full allowance.
 - **Rule changes:** staff change plans, limits and per-client overrides in an admin tool. A change applies everywhere within a minute. There are about 10 rules and a few hundred overrides.
 - **State:** counts need no durability. Losing a few seconds of them is fine.
-- **Numbers, if asked:** a Redis node does about 100,000 simple commands a second. A script that reads and writes one key costs about two of them. One gateway node takes about 20,000 requests a second. A Postgres node takes 5,000 to 10,000 simple writes a second. A datacenter round trip is about half a millisecond, and 1 to 2 milliseconds at p99.
-- **Out of scope:** multi-region (do not volunteer it), network-level attack protection, monthly quotas and billing, limits shared across keys, weighted request costs, a login limit per username, the admin UI.
+- **Numbers:** a Redis node does about 100,000 simple commands a second. A script that reads and writes one key costs about two of them. One gateway node takes about 20,000 requests a second. A Postgres node takes 5,000 to 10,000 simple writes a second. A datacenter round trip is about half a millisecond, and 1 to 2 milliseconds at p99.
+- **Out of scope:** multi-region, network-level attack protection, monthly quotas and billing, limits shared across keys, weighted request costs, a login limit per username, the admin UI.
+
+For the interviewer: on the numbers, give them only when asked.
+
+For the interviewer: on multi-region, do not volunteer it.
 
 ## Expected requirements
 

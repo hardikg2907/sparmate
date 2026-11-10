@@ -19,18 +19,24 @@ Design an LRU cache. Build it as a running, in-memory C++ program, with a `main(
 
 Reveal a fact only when the candidate asks about it. Never volunteer the list.
 
-- **Operations:** `get`, `put` and `size()`. No delete. If they add `erase(key)`, it takes O(1) and says whether the key was there. On a miss the caller loads the value itself and calls `put`. `put` returns nothing the caller needs, and it does not report the evicted key.
+- **Operations:** `get`, `put` and `size()`. No delete. On a miss the caller loads the value itself and calls `put`. `put` returns nothing the caller needs, and it does not report the evicted key.
 - **Types:** keys are `int`, any value, 0 and negatives included. Values are `std::string`, any string, the empty string included, usually under 100 characters. No templates.
 - **Capacity:** an `int` number of entries, fixed at construction. The demo uses 3. Real use goes up to 1,000,000.
-- **Bad capacity:** 0 or negative is invalid. The constructor rejects it with an error the caller can see, for example `std::invalid_argument`. They must not clamp it to 1 or build a cache that stores nothing.
+- **Bad capacity:** 0 or negative is invalid. The constructor rejects it with an error the caller can see, for example `std::invalid_argument`. It is never clamped to 1, and it never builds a cache that stores nothing.
 - **Use:** a `get` hit, and a `put` of a new or existing key even with the same value, make that key the most recently used. A miss changes nothing.
 - **Full cache:** a `put` of a new key first evicts exactly one entry, the least recently used. A `put` of an existing key replaces the value, refreshes the key and evicts nothing, even when the cache is full.
-- **Miss:** a normal result, not an error. The caller must tell it from a stored empty string. An `std::optional`, or a `bool` plus an out parameter, both work. A marker such as `""` or `-1` does not, and neither does an exception. A pointer or reference into the node does not either: it dangles after the next eviction, and it outlives the lock.
+- **Miss:** a normal result, not an error. The caller must tell it from a stored empty string.
 - **Speed:** O(1) average for `get` and `put`, at up to about 50,000 calls per second.
 - **Threads:** yes. One cache serves up to about 16 request threads at once. `main()` may stay single-threaded.
 - **Time:** the first version has none. A later rule that needs time gets it from the caller, in whole seconds, on every `get` and `put`. Never the system clock.
 - **Demo:** `main()` shows a hit, a miss, an eviction and an update.
-- **Not in the first version:** expiry, other eviction policies, persistence, eviction callbacks, hit statistics, a `peek` that does not refresh. If they ask, say so and add nothing.
+- **Not in the first version:** expiry, other eviction policies, persistence, eviction callbacks, hit statistics, a `peek` that does not refresh.
+
+For the interviewer: on the operations, if the candidate adds `erase(key)`, it takes O(1) and says whether the key was there.
+
+For the interviewer: on a miss, an `std::optional`, or a `bool` plus an out parameter, both work. A marker such as `""` or `-1` does not, and neither does an exception. A pointer or reference into the node does not either: it dangles after the next eviction, and it outlives the lock.
+
+For the interviewer: on what is not in the first version, if the candidate asks, say so and add nothing.
 
 ## Expected requirements
 

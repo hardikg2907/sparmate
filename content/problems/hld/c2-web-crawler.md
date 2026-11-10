@@ -35,12 +35,14 @@ Terms: a **host** is a host name such as `news.example.com`. A **fetch** is one 
 - **DNS:** a lookup that misses every cache takes about 50 ms. A few percent take over a second or fail. Record TTLs run from 5 minutes to 1 hour.
 - **Failures:** about 10% of fetches fail (DNS error, timeout or `5xx`). About 5% return `404` or `410`. About 15% answer with a redirect.
 - **Duplicates:** about 25% of fetched pages are exact or near copies of a page we already hold under another URL. Examples are mirrors, print views, tracking-parameter variants and syndicated text. One copy should reach the index. One page also has many URL forms: tracking parameters, session ids, trailing slashes, `http` and `https`, `www` and bare host names, fragments.
-- **Traps:** the open web has calendars with endless "next month" links, faceted search, session ids in URLs, repeating paths such as `/a/b/a/b/`, and wildcard subdomains that all answer. The product has agreed one limit: a URL is at most 2,000 characters. It has no view on depth or per-host budgets, so accept any reasonable limit that comes with a reason.
+- **Traps:** the open web has calendars with endless "next month" links, faceted search, session ids in URLs, repeating paths such as `/a/b/a/b/`, and wildcard subdomains that all answer. The product has agreed one limit: a URL is at most 2,000 characters. It has no view on depth or per-host budgets.
 - **Storage and output:** keep raw pages for 12 months so the indexer can rebuild from them. Object storage is available. For each fetch the crawler publishes an event with the URL, status, time, checksum and where the body is stored. The indexer wants each new or changed page within an hour of its fetch.
 - **Failure tolerance:** the crawler may pause for hours and then catch up. Fetching a page twice is fine. Breaking a politeness rule is not. Losing the list of known URLs is not acceptable either, because it took months to build.
 - **Operators:** a small team runs the crawler. They can set a host's delay or monthly budget, or block a host. A block takes effect at once, even for URLs already queued. They watch the fetch rate, the backlog and the error rates.
 - **Infrastructure:** one region with three availability zones. Kubernetes, Postgres, Kafka, Redis, object storage and a small etcd cluster for leases are available. Cost matters, so aim for tens of machines, not hundreds.
 - **Out of scope:** the indexer, ranking, JavaScript rendering, images and PDFs, logins, `noindex` and `nofollow` tags, and legal review beyond robots.txt.
+
+For the interviewer: on the traps, accept any reasonable limit that comes with a reason.
 
 ## Expected requirements
 

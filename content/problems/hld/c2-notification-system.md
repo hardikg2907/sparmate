@@ -36,8 +36,12 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Scheduling:** a caller can schedule a send up to 30 days ahead, and cancel it until it goes. It must go out within 1 minute of its time. About 30 million wait at any time. Times cluster on round minutes: about 1 million notifications, mostly push reminders, fall due at 9:00 AM. At 1.5 devices a user, that is up to 1.5 million pushes.
 - **Campaigns:** the marketing tool picks a segment: a stored list of up to 50 million user ids, built by the data team. It sits as a file in object storage, about 400 MB at 8 bytes an id, and the campaign service can read it in ranges. A cancelled campaign must stop sending within 1 minute. A full-size push broadcast is the 60 million devices above; opt-outs make it smaller.
 - **Status:** callers do not wait for delivery; they read a notification's status by id later. Support lists what a user got in the last 30 days. Marketing sees totals per campaign (targeted, suppressed, sent, delivered, opened, failed), at most 5 minutes old. Keep message status for 30 days and campaign totals for a year.
-- **Regions:** one country and one time zone today, served from one region. Store a time zone per user anyway.
-- **Out of scope:** an in-app inbox, A/B tests, building the segment and template tools, and rich media. One line each is enough.
+- **Regions:** one country and one time zone today, served from one region.
+- **Out of scope:** an in-app inbox, A/B tests, building the segment and template tools, and rich media.
+
+For the interviewer: on the regions, the design should still store a time zone per user.
+
+For the interviewer: on the out-of-scope items, one line each is enough.
 
 ## Expected requirements
 
