@@ -205,6 +205,14 @@ describe("queueGapDrills", () => {
     expect(none.items).toEqual([]);
   });
 
+  it("queues nothing for a gap the judge marked as about the round, even with a drill", async () => {
+    await stack.deps.problems.reload();
+    const draft = emptyState();
+    const gap = { title: "Totally unrelated words", goodLooksLike: "Be calm.", severity: "low" as const, done: false, drill: "walk" as const, aboutTheRound: true };
+    queueGapDrills(draft, [round({ gaps: [gap] })], problems(), "2026-11-03");
+    expect(draft.items).toEqual([]);
+  });
+
   it("makes a stable, path-safe id", () => {
     expect(drillItemId("s", "g")).toMatch(/^[a-f0-9]{16}$/);
     expect(drillItemId("s", "g")).toBe(drillItemId("s", "g"));

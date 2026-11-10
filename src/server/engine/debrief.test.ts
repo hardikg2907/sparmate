@@ -79,6 +79,8 @@ describe("rules and checks", () => {
     const tester = { compiled: true, scenarios: [{ name: "real", pass: false, detail: "d" }], notes: "" };
     const out = enforceRules(card(), { mode: "guided", track: "lld", tester });
     expect(out.trackerMark).toBe("[~]");
+    expect(out.trackerMarkReason).toContain("partly done");
+    expect(out.trackerMarkReason).not.toContain("[~]");
     expect(out.lldScenarios).toEqual([{ name: "real", pass: false, detail: "d" }]);
   });
 
@@ -87,6 +89,16 @@ describe("rules and checks", () => {
     const hld = enforceRules(card({ gaps: [] }), { mode: "interview", track: "hld", tester: null });
     expect(hld.trackerMark).toBe("[x]");
     expect(hld.lldScenarios).toEqual([]);
+  });
+
+  it("drops the least severe gaps over five, and keeps the judge's order", () => {
+    const gap = (title: string, severity: "high" | "medium" | "low") => ({ title, severity, whyItMatters: "w", whatGoodLooksLike: "g", teachMinutes: 5 });
+    const gaps = [gap("m1", "medium"), gap("l1", "low"), gap("h1", "high"), gap("m2", "medium"), gap("h2", "high"), gap("m3", "medium"), gap("l2", "low")];
+    const out = enforceRules(card({ gaps }), { mode: "interview", track: "hld", tester: null });
+    expect(out.gaps.map((g) => g.title)).toEqual(["m1", "h1", "m2", "h2", "m3"]);
+    const five = gaps.slice(0, 5);
+    expect(enforceRules(card({ gaps: five }), { mode: "interview", track: "hld", tester: null }).gaps).toEqual(five);
+    expect(gaps.map((g) => g.title)).toEqual(["m1", "l1", "h1", "m2", "h2", "m3", "l2"]);
   });
 
   it("computes the failed share and lists the failed quotes for the retry", () => {

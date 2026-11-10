@@ -143,7 +143,10 @@ export function queueGapDrills(draft: DrillState, history: readonly SessionHisto
     const first = firstDueDay(debriefDay);
     const dueOn = first < today ? today : first;
     for (const gap of round.gaps) {
-      const drill = drillForGap({ title: gap.title, ...(gap.whyItMatters ? { whyItMatters: gap.whyItMatters } : {}), drill: gap.drill }, round.track);
+      const drill = drillForGap(
+        { title: gap.title, ...(gap.whyItMatters ? { whyItMatters: gap.whyItMatters } : {}), drill: gap.drill, aboutTheRound: gap.aboutTheRound },
+        round.track,
+      );
       if (!drill || !drillFits(problem, drill)) continue;
       const id = drillItemId(round.id, gap.title);
       if (known.has(id)) continue;
