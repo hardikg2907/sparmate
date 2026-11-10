@@ -497,7 +497,12 @@ describe("a round the interviewer already closed", () => {
       await vi.advanceTimersByTimeAsync(1_000);
       expect(session.status).toBe("debriefed");
     });
-    expect(interviewerTexts(t.msgs).some((x) => x.includes("silent"))).toBe(false);
+    const texts = interviewerTexts(t.msgs);
+    expect(texts.every((x) => x.trim() !== "" && !x.includes("silent"))).toBe(true);
+    expect(texts.some((x) => x.startsWith("We're out of time"))).toBe(false);
+    const end = t.msgs.findIndex((m) => m.type === "chat.message" && m.entry.text === "Time is up.");
+    expect(end).toBeGreaterThan(-1);
+    expect(t.msgs.slice(end).some((m) => m.type === "chat.delta" && m.channel === "interview")).toBe(false);
     expect(session.transcript.some((e) => e.kind === "clock" && e.text === "clock: time up")).toBe(true);
     rt.dispose();
   });
