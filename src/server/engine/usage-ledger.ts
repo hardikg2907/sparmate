@@ -10,6 +10,9 @@ export interface UsageRecord {
   problemId: string | null;
   track: Track | null;
   mode: Mode | null;
+  /** Set on a drill's grader calls; absent on rows written before drills recorded attempts. */
+  drillAttemptId: string | null;
+  drillKind: string | null;
   role: string;
   model: string;
   effort: string;
@@ -41,6 +44,8 @@ export interface UsageTotals {
   /** Calls whose cost is priced from tokens, not reported by the SDK. */
   estimatedCalls: number;
   rounds: number;
+  /** Part of `cost` that drill grading spent. */
+  drillCost: number;
 }
 
 export interface SessionUsageSummary {
@@ -74,6 +79,9 @@ export interface ProblemUsageSummary {
   cacheHitRate: number;
   calls: number;
   rounds: number;
+  /** `roundCost` and `drillCost` add up to `cost`. */
+  roundCost: number;
+  drillCost: number;
 }
 
 export interface RoleUsageSummary {
@@ -112,8 +120,51 @@ export interface DayUsageSummary {
   calls: number;
 }
 
+export interface DrillKindUsage {
+  /** Null for rows written before drill kinds were recorded. */
+  kind: string | null;
+  cost: number;
+  calls: number;
+  attempts: number;
+}
+
+export interface DrillAttemptUsage {
+  attemptId: string;
+  kind: string | null;
+  problemId: string | null;
+  problemTitle: string;
+  date: string;
+  cost: number;
+  calls: number;
+  failedCalls: number;
+  durationMs: number;
+}
+
+export interface DrillUsageSummary {
+  cost: number;
+  calls: number;
+  failedCalls: number;
+  /** Attempts with an id. */
+  attempts: number;
+  byKind: DrillKindUsage[];
+  byAttempt: DrillAttemptUsage[];
+  /** Grader calls recorded before attempts had ids. */
+  earlier: { cost: number; calls: number };
+}
+
+export const MAX_DRILL_ATTEMPTS_LISTED = 200;
+
+const DRILL_ATTEMPT_ID = /^[a-f0-9]{16}$/;
+const DRILL_KIND = /^[a-z_]{1,40}$/;
+
+/** Grader calls are drill calls even on old rows that carry no attempt id. */
+export function isDrillRecord(r: Pick<UsageRecord, "role" | "drillAttemptId">): boolean {
+  return r.role === "grader" || r.drillAttemptId !== null;
+}
+
 export interface UsageSummaryResponse {
   totals: UsageTotals;
+  drills: DrillUsageSummary;
   bySession: SessionUsageSummary[];
   byProblem: ProblemUsageSummary[];
   byRole: RoleUsageSummary[];
@@ -173,12 +224,17 @@ export function parseUsageRecord(line: string): UsageRecord | null {
   const track = raw.track === "hld" || raw.track === "lld" ? raw.track : null;
   const mode = raw.mode === "interview" || raw.mode === "guided" ? raw.mode : null;
 
+  const drillAttemptId = typeof raw.drillAttemptId === "string" && DRILL_ATTEMPT_ID.test(raw.drillAttemptId) ? raw.drillAttemptId : null;
+  const drillKind = typeof raw.drillKind === "string" && DRILL_KIND.test(raw.drillKind) ? raw.drillKind : null;
+
   return {
     time,
     sessionId,
     problemId,
     track,
     mode,
+    drillAttemptId,
+    drillKind,
     role,
     model,
     effort,
@@ -289,7 +345,15 @@ export class UsageLedger {
     let totalCacheCreationTokens = 0;
     let failedCalls = 0;
     let estimatedCalls = 0;
+    let drillCostTotal = 0;
+    let drillCalls = 0;
+    let drillFailedCalls = 0;
+    let earlierCost = 0;
+    let earlierCalls = 0;
     const sessionIds = new Set<string>();
+
+    const kindMap = new Map<string | null, { cost: number; calls: number; attempts: Set<string> }>();
+    const attemptMap = new Map<string, { kind: string | null; problemId: string | null; date: string; cost: number; calls: number; failedCalls: number; durationMs: number }>();
 
     const sessionMap = new Map<
       string,
@@ -318,6 +382,8 @@ export class UsageLedger {
         cacheReadTokens: number;
         cacheCreationTokens: number;
         calls: number;
+        roundCost: number;
+        drillCost: number;
         sessions: Set<string>;
       }
     >();
@@ -368,6 +434,40 @@ export class UsageLedger {
       if (r.ok === false) failedCalls += 1;
       if (r.costEstimated) estimatedCalls += 1;
 
+      const isDrill = isDrillRecord(r);
+      if (isDrill) {
+        drillCostTotal += cost;
+        drillCalls += 1;
+        if (r.ok === false) drillFailedCalls += 1;
+        const k = kindMap.get(r.drillKind) ?? { cost: 0, calls: 0, attempts: new Set<string>() };
+        k.cost += cost;
+        k.calls += 1;
+        if (r.drillAttemptId) k.attempts.add(r.drillAttemptId);
+        kindMap.set(r.drillKind, k);
+        if (r.drillAttemptId) {
+          const a = attemptMap.get(r.drillAttemptId) ?? {
+            kind: r.drillKind,
+            problemId: r.problemId,
+            date: r.time,
+            cost: 0,
+            calls: 0,
+            failedCalls: 0,
+            durationMs: 0,
+          };
+          a.cost += cost;
+          a.calls += 1;
+          if (r.ok === false) a.failedCalls += 1;
+          a.durationMs += r.durationMs;
+          if (r.time < a.date) a.date = r.time;
+          if (!a.kind && r.drillKind) a.kind = r.drillKind;
+          if (!a.problemId && r.problemId) a.problemId = r.problemId;
+          attemptMap.set(r.drillAttemptId, a);
+        } else {
+          earlierCost += cost;
+          earlierCalls += 1;
+        }
+      }
+
       if (r.sessionId) {
         sessionIds.add(r.sessionId);
         const s = sessionMap.get(r.sessionId) ?? {
@@ -405,9 +505,13 @@ export class UsageLedger {
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
           calls: 0,
+          roundCost: 0,
+          drillCost: 0,
           sessions: new Set<string>(),
         };
         p.cost += cost;
+        if (isDrill) p.drillCost += cost;
+        else p.roundCost += cost;
         p.inputTokens += r.inputTokens;
         p.outputTokens += r.outputTokens;
         p.cacheReadTokens += r.cacheReadTokens;
@@ -502,6 +606,8 @@ export class UsageLedger {
         cacheHitRate: calcCacheHitRate(p.inputTokens, p.cacheReadTokens, p.cacheCreationTokens),
         calls: p.calls,
         rounds: p.sessions.size,
+        roundCost: p.roundCost,
+        drillCost: p.drillCost,
       }))
       .sort((a, b) => b.cost - a.cost);
 
@@ -532,6 +638,31 @@ export class UsageLedger {
         calls: mo.calls,
       }))
       .sort((a, b) => b.cost - a.cost);
+
+    const drills: DrillUsageSummary = {
+      cost: drillCostTotal,
+      calls: drillCalls,
+      failedCalls: drillFailedCalls,
+      attempts: attemptMap.size,
+      byKind: Array.from(kindMap.entries())
+        .map(([kind, k]) => ({ kind, cost: k.cost, calls: k.calls, attempts: k.attempts.size }))
+        .sort((a, b) => b.cost - a.cost),
+      byAttempt: Array.from(attemptMap.entries())
+        .map(([attemptId, a]) => ({
+          attemptId,
+          kind: a.kind,
+          problemId: a.problemId,
+          problemTitle: this.resolveProblemTitle(a.problemId),
+          date: a.date,
+          cost: a.cost,
+          calls: a.calls,
+          failedCalls: a.failedCalls,
+          durationMs: a.durationMs,
+        }))
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, MAX_DRILL_ATTEMPTS_LISTED),
+      earlier: { cost: earlierCost, calls: earlierCalls },
+    };
 
     // Walk back through calendar dates, not 24-hour steps, so a DST change cannot repeat or skip a day.
     const byDay: DayUsageSummary[] = [];
@@ -579,7 +710,9 @@ export class UsageLedger {
         failedCalls,
         estimatedCalls,
         rounds: sessionIds.size,
+        drillCost: drillCostTotal,
       },
+      drills,
       bySession,
       byProblem,
       byRole,
@@ -608,6 +741,7 @@ export class UsageLedger {
     let totalCacheCreationTokens = 0;
     let failedCalls = 0;
     let estimatedCalls = 0;
+    let drillCost = 0;
 
     const roleMap = new Map<
       string,
@@ -623,6 +757,7 @@ export class UsageLedger {
 
     for (const r of roundRecords) {
       const cost = r.costUsd ?? 0;
+      if (isDrillRecord(r)) drillCost += cost;
       totalCost += cost;
       totalInputTokens += r.inputTokens;
       totalOutputTokens += r.outputTokens;
@@ -677,6 +812,7 @@ export class UsageLedger {
         failedCalls,
         estimatedCalls,
         rounds: 1,
+        drillCost,
       },
       byRole,
     };

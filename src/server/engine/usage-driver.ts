@@ -1,4 +1,4 @@
-import type { Driver, OneShotSetup, TurnStats } from "./driver";
+import type { Driver, OneShotSetup, TurnStats, UsageContext } from "./driver";
 import { estimateCostUsd, failureStats } from "./usage-capture";
 import type { UsageLedger, UsageRecord } from "./usage-ledger";
 
@@ -6,7 +6,7 @@ interface UsageSetup {
   role: string;
   model: string;
   effort: string;
-  usage?: { sessionId?: string | null; problemId?: string | null; track?: UsageRecord["track"]; mode?: UsageRecord["mode"] };
+  usage?: UsageContext;
 }
 
 function toRecord(setup: UsageSetup, stats: TurnStats, ok: boolean): UsageRecord {
@@ -26,6 +26,8 @@ function toRecord(setup: UsageSetup, stats: TurnStats, ok: boolean): UsageRecord
     problemId: setup.usage?.problemId ?? null,
     track: setup.usage?.track ?? null,
     mode: setup.usage?.mode ?? null,
+    drillAttemptId: setup.usage?.drillAttemptId ?? null,
+    drillKind: setup.usage?.drillKind ?? null,
     role: setup.role,
     model,
     effort: setup.effort,

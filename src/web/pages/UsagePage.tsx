@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { DRILL_INFO, type DrillType } from "../../shared/drills";
 import { api, type UsageSummaryResponse } from "../backend";
 import { AppHeader } from "../components/AppHeader";
 import { Alert, Badge, Button, Card, EmptyState, SectionTitle, Skeleton, Tooltip, cn } from "../components/ui";
@@ -116,7 +117,7 @@ function EmptyUsage({ trackingSince }: { trackingSince: string | null }) {
 }
 
 function UsageContent({ data }: { data: UsageSummaryResponse }) {
-  const { bySession, byProblem, byRole, byModel, byDay, trackingSince } = data;
+  const { bySession, byProblem, byRole, byModel, byDay, trackingSince, drills } = data;
   const { totals } = data;
   const failedCalls = totals.failedCalls ?? 0;
   const estimatedCalls = totals.estimatedCalls ?? 0;
@@ -180,6 +181,8 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
         </Card>
       </section>
 
+      <DrillsSection drills={drills} />
+
       {/* 3. By Problem Table */}
       <section aria-labelledby="problems-heading">
         <SectionTitle id="problems-heading">Usage by problem</SectionTitle>
@@ -194,7 +197,9 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                   <th className="px-4 py-3 text-right">Input tokens</th>
                   <th className="px-4 py-3 text-right">Output tokens</th>
                   <th className="px-4 py-3 text-right">Cache hit rate</th>
-                  <th className="px-5 py-3 text-right">Cost</th>
+                  <th className="px-4 py-3 text-right">Rounds cost</th>
+                  <th className="px-4 py-3 text-right">Drills cost</th>
+                  <th className="px-5 py-3 text-right">Total cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -211,7 +216,9 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{p.inputTokens.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{p.outputTokens.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{(p.cacheHitRate * 100).toFixed(1)}%</td>
-                    <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">${p.costUsd < 0.01 ? p.costUsd.toFixed(4) : p.costUsd.toFixed(3)}</td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{usd(p.roundCost)}</td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{usd(p.drillCost)}</td>
+                    <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">{usd(p.costUsd)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -345,6 +352,118 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
 /** `scale` picks the precision, so a count running up to a total keeps the total's number of decimals. */
 function money(value: number, digits: number, scale = value): string {
   return `$${scale < 0.01 ? value.toFixed(4) : value.toFixed(digits)}`;
+}
+
+function usd(value: number): string {
+  return `$${value < 0.01 ? value.toFixed(4) : value.toFixed(3)}`;
+}
+
+const DRILLS_SHOWN = 20;
+
+function drillKindTitle(kind: string | null): string {
+  if (kind === null) return "Earlier drills";
+  return Object.hasOwn(DRILL_INFO, kind) ? DRILL_INFO[kind as DrillType].title : kind;
+}
+
+function DrillsSection({ drills }: { drills: UsageSummaryResponse["drills"] }) {
+  const [showAll, setShowAll] = useState(false);
+  const attempts = showAll ? drills.byAttempt : drills.byAttempt.slice(0, DRILLS_SHOWN);
+  return (
+    <section aria-labelledby="drills-heading" className="space-y-4">
+      <SectionTitle id="drills-heading">Drills</SectionTitle>
+      {drills.calls === 0 ? (
+        <p className="text-ui text-muted-foreground">No drills graded yet. Their cost will show here.</p>
+      ) : (
+        <>
+          <Card variant="raised" className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <StatCell index={0} label="Drill cost" value={usd(drills.cost)} subtext="Spent grading answers" />
+            <StatCell index={1} label="Attempts" value={drills.attempts.toLocaleString()} subtext="Drills graded with an id" />
+            <StatCell
+              index={2}
+              label="Grader calls"
+              value={drills.calls.toLocaleString()}
+              subtext={drills.failedCalls > 0 ? `${drills.failedCalls.toLocaleString()} failed` : "Each answer is one or more calls"}
+            />
+          </Card>
+
+          <h3 className="text-lead font-bold text-foreground">By drill kind</h3>
+          <Card variant="raised" className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-ui">
+                <thead className="border-b border-border bg-muted/60 text-meta font-semibold text-muted-foreground">
+                  <tr>
+                    <th className="px-5 py-3">Drill kind</th>
+                    <th className="px-4 py-3 text-right">Attempts</th>
+                    <th className="px-4 py-3 text-right">Calls</th>
+                    <th className="px-5 py-3 text-right">Cost</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {drills.byKind.map((k) => (
+                    <tr key={k.kind ?? "earlier"} className="transition-colors hover:bg-accent/40">
+                      <td className="px-5 py-3 font-semibold text-foreground">{drillKindTitle(k.kind)}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{k.attempts}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">{k.calls}</td>
+                      <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">{usd(k.cost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {drills.byAttempt.length > 0 ? (
+            <>
+              <h3 className="text-lead font-bold text-foreground">By attempt</h3>
+              <Card variant="raised" className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-ui">
+                    <thead className="border-b border-border bg-muted/60 text-meta font-semibold text-muted-foreground">
+                      <tr>
+                        <th className="px-5 py-3">Date</th>
+                        <th className="px-4 py-3">Drill kind</th>
+                        <th className="px-4 py-3">Problem</th>
+                        <th className="px-4 py-3 text-right">Calls</th>
+                        <th className="px-5 py-3 text-right">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {attempts.map((a) => (
+                        <tr key={a.attemptId} className="transition-colors hover:bg-accent/40">
+                          <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{formatDate(a.date)}</td>
+                          <td className="px-4 py-3 font-medium text-foreground">{drillKindTitle(a.kind)}</td>
+                          <td className="px-4 py-3 text-foreground">{a.problemTitle}</td>
+                          <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                            {a.calls}
+                            {a.failedCalls > 0 ? <span className="ml-2 text-meta font-normal">{a.failedCalls} failed</span> : null}
+                          </td>
+                          <td className="px-5 py-3 text-right font-mono font-semibold tabular-nums text-foreground">{usd(a.cost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {drills.byAttempt.length > DRILLS_SHOWN ? (
+                  <div className="border-t border-border px-5 py-3">
+                    <Button variant="default" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
+                      {showAll ? "Show fewer" : `Show all ${drills.byAttempt.length.toLocaleString()}`}
+                    </Button>
+                  </div>
+                ) : null}
+              </Card>
+            </>
+          ) : null}
+
+          {drills.earlier.calls > 0 ? (
+            <p className="text-meta text-muted-foreground">
+              {drills.earlier.calls.toLocaleString()} grader {drills.earlier.calls === 1 ? "call" : "calls"} ({usd(drills.earlier.cost)}) were recorded before drills had ids, so
+              they have no row by attempt.
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
 }
 
 function StatCell({ index, label, value, subtext, meter }: { index: number; label: string; value: string; subtext: string; meter?: number }) {

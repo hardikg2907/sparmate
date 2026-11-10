@@ -118,6 +118,9 @@ export interface UsageContext {
   problemId?: string | null;
   track?: Track | null;
   mode?: Mode | null;
+  /** Set for a drill's grader calls, so their cost can be shown per attempt and per drill kind. */
+  drillAttemptId?: string | null;
+  drillKind?: string | null;
 }
 
 export interface RoleSetup {

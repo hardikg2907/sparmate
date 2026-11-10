@@ -632,7 +632,10 @@ Today is one page for the whole day, and with data it fills the first screen at 
   chart for 30 days with bars in a light-to-violet gradient.
 - **Token strip.** One raised panel with input tokens, output tokens and the cache hit rate, with a meter,
   separated by hairlines.
-- **Tables.** Usage by problem, round, role and model sit in raised panels with a muted header row, under
+- **Drills.** Between the token strip and the tables: a raised panel of three figures (drill cost, attempts, grader
+  calls) separated by hairlines, then a "By drill kind" table and a "By attempt" table in raised panels. The attempt
+  table shows 20 rows and a button that shows the rest. With no drill call the section is one muted line.
+- **Tables.** Usage by problem (rounds cost, drills cost and total cost as three columns), round, role and model sit in raised panels with a muted header row, under
   sentence-case section headings.
 
 ### Settings

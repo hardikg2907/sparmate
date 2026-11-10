@@ -162,6 +162,7 @@ export interface UsageTotals {
   cacheHitRate: number;
   calls: number;
   rounds: number;
+  drillCost: number;
   /** Absent from a server that predates the counts. */
   failedCalls?: number;
   estimatedCalls?: number;
@@ -198,6 +199,8 @@ export interface ProblemUsageSummary {
   cacheHitRate: number;
   calls: number;
   rounds: number;
+  roundCost: number;
+  drillCost: number;
 }
 
 export interface RoleUsageSummary {
@@ -236,8 +239,29 @@ export interface DayUsageSummary {
   calls: number;
 }
 
+export interface DrillUsageSummary {
+  cost: number;
+  calls: number;
+  failedCalls: number;
+  attempts: number;
+  byKind: { kind: string | null; cost: number; calls: number; attempts: number }[];
+  byAttempt: {
+    attemptId: string;
+    kind: string | null;
+    problemId: string | null;
+    problemTitle: string;
+    date: string;
+    cost: number;
+    calls: number;
+    failedCalls: number;
+    durationMs: number;
+  }[];
+  earlier: { cost: number; calls: number };
+}
+
 export interface UsageSummaryResponse {
   totals: UsageTotals;
+  drills: DrillUsageSummary;
   bySession: SessionUsageSummary[];
   byProblem: ProblemUsageSummary[];
   byRole: RoleUsageSummary[];
