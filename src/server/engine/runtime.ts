@@ -222,6 +222,18 @@ function newChannel(name: Channel): ChannelState {
   };
 }
 
+/**
+ * A chat channel shows its error beside a prompt to try again, so the bare "Retry." that ends a driver message would
+ * read as part of the sentence. Other advice in the message stays.
+ */
+export function channelErrorText(message: string): string {
+  const text = message
+    .replace(/,\s*then retry\.\s*$/, ".")
+    .replace(/\s*\bRetry(?: in a moment)?\.\s*$/, "")
+    .trim();
+  return text || message;
+}
+
 function newEntryId(): string {
   return `${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
 }
@@ -1175,10 +1187,10 @@ export class SessionRuntime {
     }
     const message =
       err instanceof DriverError
-        ? err.message
+        ? channelErrorText(err.message)
         : err instanceof PromptError
           ? "The model could not start because a prompt file is missing or broken. See the server log."
-          : "The model could not answer. Retry.";
+          : "The model could not answer.";
     if (ch.name === "interview" && this.session.status === "live") {
       this.pauseClock("error");
       await this.saveNow();
