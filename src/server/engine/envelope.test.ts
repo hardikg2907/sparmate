@@ -113,6 +113,12 @@ describe("clock turn", () => {
     expect(text).not.toContain("<silent/>");
   });
 
+  it("lets time up stay silent when the interviewer already closed the round", () => {
+    const text = clockTurn(time, null, "time_up", "hld");
+    expect(text).toContain("Close the round in one or two sentences");
+    expect(text).toContain("If your last reply already closed the round, reply with exactly <silent/>.");
+  });
+
   it("names the right brief section for the extension", () => {
     expect(clockTurn(time, null, "extension", "hld")).toContain("Curveballs");
     expect(clockTurn(time, null, "extension", "lld")).toContain("Extensions");

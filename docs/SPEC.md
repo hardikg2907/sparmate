@@ -1278,9 +1278,9 @@ Interviewer (interview mode), from TEACHING.md section 10 and the research:
   Never invents a flaw; checks whether a point was already covered before raising it; raises each point once.
 - Accepts any valid design: judges against the requirements, not the reference design.
 - Uses the hint ladder only when the candidate is clearly stuck for a while (H1 points at an area, H2 names the
-  concern, H3 offers two options) and records each with `note_hint` at the level it reads as (a probe that names
-  the concern is an H2; the extension, the concurrency follow-up, "where does it break first" and a deeper probe are
-  not hints), calling it before the reply text.
+  concern, H3 offers two options) and records each with `note_hint` at the level it reads as (once it is
+  unsticking him, a line that names the concern is an H2; outside a stuck moment the extension, the concurrency
+  follow-up, "where does it break first" and a deeper probe are not hints), calling it before the reply text.
 - Time: nudges at phase overruns via clock events (in a guided round, one offer to move on once his time in a step reaches twice its plan); checks in once, with no hint, when the silence event says he has been quiet; delivers the extension when told; closes once, without feedback.
 - LLD: answers C++ syntax questions at once with a tiny snippet; never writes the candidate's design or
   code; may ask "run it and show me" and use `run_code`/`read_code` near the end; asks the concurrency
