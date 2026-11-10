@@ -141,7 +141,7 @@ Walk a cron fire: the dispatcher queues the 09:00 run of a schedule and inserts 
 - **Priority.** One ready queue per priority with a pull ratio (the reference), or a separate worker pool per priority sized to its share. Pools are simpler but waste idle slots, so the candidate should say how low and high borrow from each other.
 - **Lease granularity.** A lease per run (the reference), or liveness per worker: one heartbeat per pod, each run records its worker, and the reaper recovers the runs of a dead worker. A per-run timeout still catches a hung handler.
 - **Cron expansion.** One future run per schedule (the reference), or a periodic job that creates the next hour of runs for every schedule. Both need the unique `(jobId, fireAt)`. The periodic job is fine only if the overdue runs of one schedule collapse into one at dispatch.
-- **Existing engines.** Naming Quartz in cluster mode, Temporal or Airflow is fine as an aside. The candidate still designs the internals.
+- **Naming an existing scheduler engine.** Naming Quartz in cluster mode, Temporal or Airflow is fine as an aside. The candidate still designs the internals.
 
 ## Deep dives
 

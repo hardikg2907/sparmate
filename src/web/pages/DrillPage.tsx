@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { OUTCOME_LABEL, READY_TO_CLOSE, type DrillPrompt, type DrillResult, type DrillTarget } from "../../shared/drills";
+import {
+  CONVERSATION_MOVED,
+  DRILL_IN_PROGRESS,
+  DRILL_INFO,
+  OUTCOME_LABEL,
+  READY_TO_CLOSE,
+  type DrillOpen,
+  type DrillPrompt,
+  type DrillResult,
+  type DrillTarget,
+  type DrillTurn,
+  type DrillTurnResponse,
+} from "../../shared/drills";
 import { ApiError, api } from "../backend";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { DrillIcon } from "../components/DrillIcon";
@@ -16,13 +28,33 @@ import type { PageContext } from "./context";
 
 const MAX_ANSWER = 8000;
 
+export interface Conversation {
+  attemptId: string;
+  turns: DrillTurn[];
+  asked: number;
+  of: number;
+}
+
 function messageOf(error: unknown, fallback: string): string {
   return error instanceof ApiError && error.message ? error.message : fallback;
 }
 
+const asConversation = (open: DrillOpen): Conversation => ({ attemptId: open.attemptId, turns: open.turns, asked: open.asked, of: open.of });
+
+/** When a resumed conversation began, never later than now. */
+function openedAtMs(open: DrillOpen): number {
+  const at = Date.parse(open.openedAt);
+  return Number.isFinite(at) ? Math.min(at, Date.now()) : Date.now();
+}
+
+/** A failure that says the conversation on screen is not the one the server holds. */
+const conversationGone = (failure: unknown) => failure instanceof ApiError && (failure.status === 404 || (failure.status === 409 && failure.message === CONVERSATION_MOVED));
+const answerInProgress = (failure: unknown) => failure instanceof ApiError && failure.status === 409 && failure.message === DRILL_IN_PROGRESS;
+
 /**
  * One drill, full screen like a round: the prompt on the left, the answer on the right, and a soft timer that shows
- * overtime and never blocks. Submitting swaps the screen for the result.
+ * overtime and never blocks. Submitting swaps the screen for the result. The caller keys the page by its target, so a
+ * page never outlives the drill it was opened for.
  */
 export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget }) {
   const [prompt, setPrompt] = useState<DrillPrompt | null>(null);
@@ -36,35 +68,57 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
   // The answer that was graded. While revising, the box starts with it, and only a change counts as an unsent revision.
   const [graded, setGraded] = useState("");
   const [revising, setRevising] = useState(false);
+  // A dialogue drill keeps its conversation here from the first question on. A reload reads it back from the prompt.
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [restarting, setRestarting] = useState(false);
+  // Each call sends only the time since the previous one, so the server's sum over the calls is the real time.
+  const segmentStart = useRef<number | null>(null);
+  // False once the page is gone, so a response that lands late writes nothing.
+  const live = useRef(true);
   const typed = answer.trim().length > 0;
+  const dialogue = DRILL_INFO[target.drill].dialogue === true;
 
   useEffect(() => {
-    let live = true;
-    setPrompt(null);
-    setResult(null);
-    setAnswer("");
-    setGraded("");
-    setRevising(false);
-    setStartedAt(null);
-    setLoadError(null);
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+
+  // Shows what the server holds for this drill: the prompt, and the open conversation when there is one.
+  const loadPrompt = (onFail: (failure: unknown) => void, notice: string | null = null) => {
     api.gymPrompt(target).then(
       (p) => {
-        if (!live) return;
+        if (!live.current) return;
         setPrompt(p);
-        setStartedAt(Date.now());
+        setConversation(p.open ? asConversation(p.open) : null);
+        setReplyText("");
+        setSubmitError(notice);
+        setBusy(false);
+        setRestarting(false);
+        segmentStart.current = Date.now();
+        setStartedAt((held) => (p.open ? openedAtMs(p.open) : (held ?? Date.now())));
         document.title = `${p.title} · Sparmate`;
       },
-      (failure: unknown) => live && setLoadError(messageOf(failure, "The drill could not be loaded.")),
+      (failure: unknown) => {
+        if (live.current) onFail(failure);
+      },
     );
-    return () => {
-      live = false;
-    };
+  };
+  const reloadFailed = (failure: unknown) => {
+    setSubmitError(messageOf(failure, "The drill could not be loaded."));
+    setBusy(false);
+  };
+
+  useEffect(() => {
+    loadPrompt((failure) => setLoadError(messageOf(failure, "The drill could not be loaded.")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.drill, target.problemId, target.drillId]);
 
   // Leaving with an unsent answer or an edited, unsent revision asks first. The result screen and an empty box leave freely.
   const pending = useRef<(() => void) | null>(null);
-  const guarded = result === null ? typed : revising && answer.trim() !== graded.trim() && typed;
+  const guarded = result === null ? (conversation ? replyText.trim().length > 0 : typed) : revising && answer.trim() !== graded.trim() && typed;
   useEffect(() => {
     if (!guarded) return;
     guardNavigation((to, proceed) => {
@@ -74,22 +128,103 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
     return () => guardNavigation(null);
   }, [guarded]);
 
+  const sinceLastCall = () => {
+    const from = segmentStart.current ?? startedAt;
+    return from === null ? undefined : Math.min(7200, Math.max(0, Math.round((Date.now() - from) / 1000)));
+  };
+
+  // What the server answers to a submit or a reply: the next question, or the result that ends the drill.
+  const take = (response: DrillTurnResponse, sent: string, previous: DrillTurn[]) => {
+    segmentStart.current = Date.now();
+    if (response.kind === "question") {
+      setConversation({
+        attemptId: response.attemptId,
+        turns: [...previous, { role: "candidate", text: sent }, { role: "grader", text: response.question }],
+        asked: response.asked,
+        of: response.of,
+      });
+      setReplyText("");
+    } else {
+      setResult(response);
+      setGraded(sent);
+      setConversation(null);
+    }
+    setRevising(false);
+    setBusy(false);
+  };
+
   const submit = () => {
     if (!typed || busy) return;
     setBusy(true);
     setSubmitError(null);
-    const elapsed = startedAt === null ? undefined : Math.min(7200, Math.max(0, Math.round((Date.now() - startedAt) / 1000)));
+    const elapsed = sinceLastCall();
     const sent = answer;
-    const call = revising && result ? api.gymRevise(result.attemptId, sent, elapsed) : api.gymSubmit(target, sent, elapsed, prompt?.variant?.id ?? null);
-    call.then(
+    if (revising && result) {
+      api.gymRevise(result.attemptId, sent, elapsed).then(
+        (r) => {
+          if (live.current) take({ ...r, kind: "result" }, sent, []);
+        },
+        (failure: unknown) => {
+          if (!live.current) return;
+          setSubmitError(messageOf(failure, "The revision could not be graded. Try again."));
+          setBusy(false);
+        },
+      );
+      return;
+    }
+    api.gymSubmit(target, sent, elapsed, prompt?.variant?.id ?? null, prompt?.topic).then(
       (r) => {
-        setResult(r);
-        setGraded(sent);
-        setRevising(false);
+        if (live.current) take(r, sent, []);
+      },
+      (failure: unknown) => {
+        if (!live.current) return;
+        // Another tab opened the conversation first: show it and carry on there.
+        if (answerInProgress(failure)) return loadPrompt(reloadFailed);
+        setSubmitError(messageOf(failure, "The answer could not be graded. Try again."));
+        setBusy(false);
+      },
+    );
+  };
+
+  const sendReply = () => {
+    if (!conversation || replyText.trim().length === 0 || busy) return;
+    setBusy(true);
+    setSubmitError(null);
+    const sent = replyText;
+    api.gymReply(conversation.attemptId, conversation.asked, sent, sinceLastCall()).then(
+      (r) => {
+        if (live.current) take(r, sent, conversation.turns);
+      },
+      (failure: unknown) => {
+        if (!live.current) return;
+        // The conversation ended or moved on elsewhere: show what the server holds instead of a dead end.
+        if (conversationGone(failure)) return loadPrompt(reloadFailed, "That conversation changed in another window. This is how it stands now.");
+        setSubmitError(messageOf(failure, "The reply could not be sent. Try again."));
+        setBusy(false);
+      },
+    );
+  };
+
+  const startOver = () => {
+    if (!conversation) return;
+    setRestarting(false);
+    setBusy(true);
+    api.gymAbandon(conversation.attemptId).then(
+      () => {
+        if (!live.current) return;
+        const now = Date.now();
+        segmentStart.current = now;
+        setStartedAt(now);
+        setConversation(null);
+        setReplyText("");
+        setAnswer("");
+        setSubmitError(null);
         setBusy(false);
       },
       (failure: unknown) => {
-        setSubmitError(messageOf(failure, revising ? "The revision could not be graded. Try again." : "The answer could not be graded. Try again."));
+        if (!live.current) return;
+        if (failure instanceof ApiError && failure.status === 404) return loadPrompt(reloadFailed, "That conversation was already ended.");
+        setSubmitError(messageOf(failure, "The conversation could not be ended. Try again."));
         setBusy(false);
       },
     );
@@ -141,10 +276,32 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
           </div>
         ) : result ? (
           <ResultView prompt={prompt} result={result} onRevise={startRevision} />
+        ) : conversation ? (
+          <div className="reveal-children grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <PromptView prompt={prompt} />
+            <ConversationView
+              conversation={conversation}
+              reply={replyText}
+              onReply={setReplyText}
+              busy={busy}
+              error={submitError}
+              onSend={sendReply}
+              onStartOver={() => setRestarting(true)}
+            />
+          </div>
         ) : (
           <div className="reveal-children grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <PromptView prompt={prompt} />
-            <AnswerView answer={answer} onAnswer={setAnswer} hint={prompt.answerHint} busy={busy} error={submitError} onSubmit={submit} />
+            <AnswerView
+              answer={answer}
+              onAnswer={setAnswer}
+              hint={prompt.answerHint}
+              note={dialogue ? "One or two follow-up questions come before the result." : undefined}
+              busy={busy}
+              busyText={dialogue ? "The interviewer is reading your answer." : undefined}
+              error={submitError}
+              onSubmit={submit}
+            />
           </div>
         )}
       </main>
@@ -165,7 +322,18 @@ export function DrillPage({ target }: { ctx: PageContext; target: DrillTarget })
             go?.();
           }}
         >
-          <p>{result ? "Your revision has not been graded, and it will be lost." : "Your answer has not been graded, and it will be lost."}</p>
+          <p>
+            {conversation
+              ? "Your reply has not been sent, and it will be lost. The conversation stays open until the end of the day."
+              : result
+                ? "Your revision has not been graded, and it will be lost."
+                : "Your answer has not been graded, and it will be lost."}
+          </p>
+        </ConfirmModal>
+      ) : null}
+      {restarting ? (
+        <ConfirmModal title="Start this drill over?" confirmLabel="Start over" cancelLabel="Keep going" danger onCancel={() => setRestarting(false)} onConfirm={startOver}>
+          <p>The conversation so far is deleted and nothing is graded. Your schedule does not change.</p>
         </ConfirmModal>
       ) : null}
     </div>
@@ -209,7 +377,7 @@ function DrillTimer({ minutes, startedAt }: { minutes: number; startedAt: number
   );
 }
 
-function PromptView({ prompt }: { prompt: DrillPrompt }) {
+export function PromptView({ prompt }: { prompt: DrillPrompt }) {
   return (
     <section aria-labelledby="drill-heading" className="space-y-5">
       <div>
@@ -245,7 +413,9 @@ function AnswerView({
   answer,
   onAnswer,
   hint,
+  note,
   busy,
+  busyText = "The grader is reading your answer.",
   error,
   onSubmit,
   submitLabel = "Submit answer",
@@ -254,7 +424,10 @@ function AnswerView({
   answer: string;
   onAnswer: (text: string) => void;
   hint: string;
+  /** A second quiet line, for what happens after the answer. */
+  note?: string | undefined;
   busy: boolean;
+  busyText?: string | undefined;
   error: string | null;
   onSubmit: () => void;
   submitLabel?: string;
@@ -280,6 +453,7 @@ function AnswerView({
         disabled={busy}
       />
       <p className="text-ui text-muted-foreground">{hint}</p>
+      {note ? <p className="text-ui text-muted-foreground">{note}</p> : null}
       {error ? (
         <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
           {error}
@@ -294,10 +468,91 @@ function AnswerView({
       {busy ? (
         <p className="flex items-center gap-2 text-ui text-muted-foreground" role="status">
           <Spinner label="" />
-          The grader is reading your answer.
+          {busyText}
         </p>
       ) : null}
     </Card>
+  );
+}
+
+/** The short thread of a dialogue drill: your answer, the interviewer's question, and the box for your reply. */
+export function ConversationView({
+  conversation,
+  reply,
+  onReply,
+  busy,
+  error,
+  onSend,
+  onStartOver,
+}: {
+  conversation: Conversation;
+  reply: string;
+  onReply: (text: string) => void;
+  busy: boolean;
+  error: string | null;
+  onSend: () => void;
+  onStartOver: () => void;
+}) {
+  const ready = reply.trim().length > 0;
+  return (
+    <Card variant="raised" className="space-y-4 p-6 lg:sticky lg:top-20">
+      <h2 className="text-lead font-bold">Your conversation</h2>
+      <Thread turns={conversation.turns} />
+      <label htmlFor="drill-reply" className="block text-lead font-bold">
+        Your reply
+      </label>
+      <Textarea
+        id="drill-reply"
+        value={reply}
+        maxLength={MAX_ANSWER}
+        onChange={(event) => onReply(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) onSend();
+        }}
+        placeholder="Type here."
+        spellCheck={false}
+        className="min-h-[200px] resize-y font-mono text-ui leading-relaxed"
+        disabled={busy}
+      />
+      {error ? (
+        <Alert tone="bad" role="alert" icon={<WarnIcon size={16} />}>
+          {error}
+        </Alert>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-ui text-muted-foreground">
+          Question {conversation.asked} of up to {conversation.of}
+        </span>
+        <Button size="lg" variant="default" busy={busy} disabled={!ready} onClick={onSend}>
+          {busy ? "Sending…" : "Send reply"}
+        </Button>
+      </div>
+      {busy ? (
+        <p className="flex items-center gap-2 text-ui text-muted-foreground" role="status">
+          <Spinner label="" />
+          The interviewer is reading your reply.
+        </p>
+      ) : null}
+      <div>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={onStartOver}>
+          Start over
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/** Every line is shown as plain text, because the interviewer's words are model output. */
+export function Thread({ turns }: { turns: readonly DrillTurn[] }) {
+  return (
+    <ol className="space-y-3">
+      {turns.map((turn, i) => (
+        <li key={i} className={cn("rounded-lg border px-4 py-3", turn.role === "grader" ? "border-border bg-sunken" : "border-border-strong/60 bg-card")}>
+          <p className="text-meta font-semibold uppercase tracking-wide text-muted-foreground">{turn.role === "grader" ? "Interviewer" : "You"}</p>
+          <p className="mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap break-words text-body">{turn.text}</p>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -436,6 +691,12 @@ function ResultView({ prompt, result, onRevise }: { prompt: DrillPrompt; result:
         <h2 className="text-meta font-semibold uppercase tracking-wide text-muted-foreground">Your line</h2>
         <blockquote className="mt-3 rounded-lg border border-border bg-sunken px-4 py-3 text-lead">{result.yourLine || "You left the answer empty."}</blockquote>
       </Card>
+      {result.turns.length > 0 ? (
+        <Card variant="raised" className="p-6">
+          <h2 className="mb-3 text-meta font-semibold uppercase tracking-wide text-muted-foreground">The conversation</h2>
+          <Thread turns={result.turns} />
+        </Card>
+      ) : null}
     </div>
   );
 }

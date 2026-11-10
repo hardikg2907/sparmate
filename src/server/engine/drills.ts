@@ -4,7 +4,10 @@ import {
   addDays,
   DRILL_RUBRIC,
   MAX_ELAPSED_SECONDS,
+  MAX_FOLLOW_UPS,
   ATTEMPT_ID,
+  CONVERSATION_MOVED,
+  DRILL_IN_PROGRESS,
   applyOutcome,
   betterOutcome,
   isBetterOutcome,
@@ -22,18 +25,21 @@ import {
   type DrillPrompt,
   type DrillResult,
   type DrillTarget,
+  type DrillTurn,
+  type DrillTurnResponse,
   type GymDrillRow,
+  type WrittenDrill,
   type GymSummary,
 } from "../../shared/drills";
 import type { Problem } from "../../shared/problem";
 import type { SessionHistoryItem } from "../../shared/types";
 import type { PrivacyGuard } from "../guard/privacy";
-import { buildDrill, drillFits, drillsAvailable, variantEntries, type DrillContent } from "./drill-content";
+import { buildDrill, drillFits, drillsAvailable, topicTitles, variantEntries, type DrillContent } from "./drill-content";
 import { canVaryFrom, pickNext, repickStale } from "./drill-pick";
-import { GraderOutputSchema, finishGrade, graderMessage, type GradedAnswer } from "./drill-grader";
-import type { Driver } from "./driver";
+import { FirstQuestionSchema, GraderOutputSchema, NextQuestionSchema, cleanQuestion, finishGrade, followUpMessage, graderMessage, type GradedAnswer } from "./drill-grader";
+import type { Driver, FakeFacts } from "./driver";
 import { DriverError } from "./driver";
-import type { DrillState, DrillStore } from "./drill-store";
+import type { AttemptBody, DrillState, DrillStore } from "./drill-store";
 import { sha256Hex } from "./fsutil";
 import { describeError, type Logger } from "./log";
 import type { ProblemCatalog } from "./problems";
@@ -41,6 +47,7 @@ import { commonVars, type PromptLoader } from "./prompts";
 import { HttpError } from "./sessions";
 import type { SettingsStore } from "./settings";
 import { toApiSchema, toCompatSchema } from "./schemas";
+import type { z } from "zod";
 
 export interface DrillDeps {
   store: DrillStore;
@@ -56,6 +63,8 @@ export interface DrillDeps {
 }
 
 const MOVED = "This drill moved to another problem. Open it again from Practice.";
+const CANNOT_CONTINUE = "This conversation cannot continue. Start the drill again.";
+const isDialogue = (drill: DrillType) => DRILL_INFO[drill].dialogue === true;
 
 /** On the first build only, debriefs older than this many days queue no drills. */
 export const BACKFILL_DAYS = 14;
@@ -63,9 +72,29 @@ export const BACKFILL_DAYS = 14;
 /** A round counts as played once it has ended, because until then its hidden facts are still in use. */
 const OVER: ReadonlySet<SessionHistoryItem["status"]> = new Set(["ended", "debriefing", "debriefed", "failed"]);
 
-/** The criteria of a grade with their labels, for the page. */
+/** The criteria of a grade with their labels, for the page. A grade saved before a criterion existed shows only the criteria it has. */
 function describeScores(drill: DrillType, scores: readonly { id: string; score: number }[]): DrillResult["scores"] {
-  return DRILL_RUBRIC[drill].criteria.map((k) => ({ id: k.id, label: k.label, core: k.core, score: scores.find((s) => s.id === k.id)?.score ?? 1 }));
+  return DRILL_RUBRIC[drill].criteria
+    .filter((k) => !k.added || scores.some((s) => s.id === k.id))
+    .map((k) => ({ id: k.id, label: k.label, core: k.core, score: scores.find((s) => s.id === k.id)?.score ?? 1 }));
+}
+
+function gradeRecord(graded: GradedAnswer, at: Date): AttemptBody["grades"][number] {
+  return {
+    at: at.toISOString(),
+    outcome: graded.outcome,
+    scores: graded.scores,
+    wentWell: graded.wentWell,
+    improve: graded.improve,
+    yourLine: graded.yourLine,
+    strong: graded.strong,
+  };
+}
+
+/** Adds the time of one call to the time an attempt already holds, never above the longest a drill may report. */
+function addSeconds(current: number | null, more: number | undefined): number | null {
+  if (more === undefined && current === null) return null;
+  return Math.min(MAX_ELAPSED_SECONDS, (current ?? 0) + (more ?? 0));
 }
 
 /** The id of a queued drill. It comes from the round and the gap, so the same gap is never queued twice. */
@@ -132,8 +161,19 @@ export function playableProblems(all: readonly Problem[], history: readonly Pick
   return all.filter((p) => p.custom || played.has(p.meta.id));
 }
 
-function asRow(item: DrillItem, problem: Problem, originTitle: string, today: string): GymDrillRow {
-  const content = buildDrill(problem, item.drill, { gapTitle: item.gapTitle, hint: item.gapHint, ...(item.variant ? { variant: item.variant } : {}) });
+/**
+ * What a gap's topic rotates on when its title matches none. A queued drill moves on after each attempt that counted
+ * for it, so its topic holds until one is done. A free drill moves on after each finished attempt on the problem.
+ */
+function rotationOf(attempts: readonly DrillAttempt[], target: DrillTarget, item: DrillItem | null): number {
+  const done = attempts.filter((a) => a.status === "done");
+  if (target.drillId && item) return done.filter((a) => a.drillId === item.id).length;
+  return done.filter((a) => a.problemId === target.problemId && a.drill === target.drill).length;
+}
+
+function asRow(item: DrillItem, problem: Problem, originTitle: string, today: string, attempts: readonly DrillAttempt[]): GymDrillRow {
+  const rotation = rotationOf(attempts, { drill: item.drill, problemId: item.problemId, drillId: item.id }, item);
+  const content = buildDrill(problem, item.drill, { gapTitle: item.gapTitle, hint: item.gapHint, rotation, ...(item.variant ? { variant: item.variant } : {}) });
   return {
     id: item.id,
     gapTitle: item.gapTitle,
@@ -165,15 +205,27 @@ export class DrillService {
     return new Map(playableProblems(all, this.deps.history()).map((p) => [p.meta.id, p]));
   }
 
+  /** Attempts whose open row is being worked on right now, so the day-change cleanup never removes one under a running call. */
+  private readonly active = new Set<string>();
+
   private async sync(problems: ReadonlyMap<string, Problem>): Promise<DrillState> {
     const history = this.deps.history();
     const today = this.today();
+    const dropped: string[] = [];
     await this.deps.store.update((draft) => {
       const marked = draft.backfilledOn;
       const added = queueGapDrills(draft, history, problems, today);
       const moved = repickStale(draft.items, draft.attempts, problems);
-      return { save: added || moved || draft.backfilledOn !== marked, value: null };
+      // A conversation left open past its day can never be continued, so its row and body go.
+      const stale = draft.attempts.filter((a) => a.status === "open" && a.day < today && !this.active.has(a.id));
+      if (stale.length > 0) {
+        const ids = new Set(stale.map((a) => a.id));
+        draft.attempts = draft.attempts.filter((a) => !ids.has(a.id));
+        dropped.push(...ids);
+      }
+      return { save: added || moved || stale.length > 0 || draft.backfilledOn !== marked, value: null };
     });
+    for (const id of dropped) await this.deps.store.removeBody(id).catch(() => undefined);
     return this.deps.store.snapshot();
   }
 
@@ -184,7 +236,7 @@ export class DrillService {
     const queue = state.items
       .filter((i) => i.status === "open" && problems.has(i.problemId))
       .sort(byDueDay)
-      .map((i) => asRow(i, problems.get(i.problemId) as Problem, this.deps.problems.get(i.originProblemId)?.meta.title ?? i.originProblemId, today));
+      .map((i) => asRow(i, problems.get(i.problemId) as Problem, this.deps.problems.get(i.originProblemId)?.meta.title ?? i.originProblemId, today, state.attempts));
     return {
       today,
       queue,
@@ -196,11 +248,15 @@ export class DrillService {
     };
   }
 
-  /** Finds the problem and checks the drill fits it. Throws a 404 for anything the candidate may not drill. */
+  /**
+   * Finds the problem and checks the drill fits it. Throws a 404 for anything the candidate may not drill. A topic the
+   * page names must be one the brief offers for this drill, and then it is the topic of the content, so an answer is
+   * graded on the topic its writer saw.
+   */
   private async resolve(
     target: DrillTarget,
     state: DrillState,
-    requested?: { variant: string | null },
+    requested?: { variant: string | null; topic?: string | undefined },
   ): Promise<{ problem: Problem; item: DrillItem | null; content: DrillContent; variant: string | null }> {
     const problems = await this.playable();
     // The queue answers first: a stale problem on a queued drill is a conflict, not a missing problem.
@@ -216,10 +272,21 @@ export class DrillService {
     const problem = problems.get(target.problemId);
     if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
     if (!drillsForTrack(problem.meta.track).includes(target.drill)) throw new HttpError(400, "That drill does not fit this problem.");
-    // A queued drill never rotates: its topic follows the gap. Only a free drill moves on to the next topic.
-    const rotation = state.attempts.filter((a) => a.status === "done" && a.problemId === problem.meta.id && a.drill === target.drill).length;
-    const content = buildDrill(problem, target.drill, item ? { gapTitle: item.gapTitle, hint: item.gapHint, ...(item.variant ? { variant: item.variant } : {}) } : { rotation });
+    const rotation = rotationOf(state.attempts, target, item);
+    const base = item ? { gapTitle: item.gapTitle, hint: item.gapHint, ...(item.variant ? { variant: item.variant } : {}) } : {};
+    let content = buildDrill(problem, target.drill, { ...base, rotation });
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
+    const topic = requested?.topic;
+    if (topic !== undefined) {
+      // Behind a changed constraint the topic follows the change, so it must match what the brief builds now.
+      if (content.prompt.variant) {
+        if (content.prompt.topic !== topic) throw new HttpError(409, MOVED);
+      } else {
+        if (!topicTitles(problem, target.drill).includes(topic)) throw new HttpError(409, MOVED);
+        content = buildDrill(problem, target.drill, { ...base, rotation, topic });
+        if (!content) throw new HttpError(400, "This problem has no material for that drill.");
+      }
+    }
     return { problem, item, content, variant: content.prompt.variant && item ? item.variant : null };
   }
 
@@ -235,33 +302,99 @@ export class DrillService {
     return state.items.filter((i) => isDue(i, today) && i.problemId === target.problemId && i.drill === target.drill && i.variant === null).sort(byDueDay)[0] ?? null;
   }
 
+  /** The prompt for a drill. A dialogue with an open attempt shows the topic and changed constraint that attempt saved, so the page and the grader never disagree. */
   async prompt(target: DrillTarget): Promise<DrillPrompt> {
     const problems = await this.playable();
     const state = await this.sync(problems);
-    const { content } = await this.resolve(target, state);
-    return content.prompt;
+    const { problem, content, variant } = await this.resolve(target, state);
+    if (!isDialogue(target.drill)) return content.prompt;
+    const row = this.findOpen(state, target, variant);
+    if (!row) return content.prompt;
+    const body = await this.deps.store.readBody(row.id);
+    const conversation = this.conversationOf(body);
+    if (!body || !conversation) return content.prompt;
+    const saved = buildDrill(problem, target.drill, { ...(body.topic ? { topic: body.topic } : {}), ...(variant ? { variant } : {}) });
+    const shown = saved && (body.topic === null || saved.prompt.topic === body.topic) ? saved : content;
+    return { ...shown.prompt, open: { attemptId: row.id, openedAt: row.at, turns: conversation.turns, asked: conversation.asked, of: MAX_FOLLOW_UPS } };
   }
 
-  /** Drills being graded right now, so a second submit for the same drill cannot score it twice. */
+  /** The open attempt of today for exactly this target: same kind, problem, changed constraint and queued drill. */
+  private findOpen(state: DrillState, target: DrillTarget, variant: string | null): DrillAttempt | undefined {
+    const today = this.today();
+    return state.attempts.find(
+      (a) =>
+        a.status === "open" &&
+        !a.legacy &&
+        a.day === today &&
+        a.drill === target.drill &&
+        a.problemId === target.problemId &&
+        a.variant === variant &&
+        a.drillId === (target.drillId ?? null),
+    );
+  }
+
+  /** What a dialogue body says about its conversation, or null when the body cannot be continued. */
+  private conversationOf(body: AttemptBody | null): { turns: DrillTurn[]; asked: number } | null {
+    if (!body || body.grades.length > 0 || body.turns.length === 0 || body.turns.length % 2 !== 0) return null;
+    const turns = body.turns.map((t) => ({ role: t.role, text: t.text }));
+    const alternates = turns.every((t, i) => t.role === (i % 2 === 0 ? "candidate" : "grader"));
+    const asked = turns.length / 2;
+    return alternates && asked <= MAX_FOLLOW_UPS ? { turns, asked } : null;
+  }
+
+  /** Targets with a call in progress, so a submit, a reply and an abandon for one target never overlap. */
+  private readonly locks = new Set<string>();
+  /** Revisions being graded right now, so a second one for the same attempt cannot score it twice. */
   private readonly grading = new Set<string>();
 
-  async submit(target: DrillTarget, answer: string, elapsedSeconds?: number, variant?: string | null): Promise<DrillResult> {
+  private lockKey(t: { drill: DrillType; problemId: string; drillId?: string | null }): string {
+    return t.drillId ?? `${t.drill}:${t.problemId}`;
+  }
+
+  /** A written drill always answers with a result; a dialogue drill answers with its first question. */
+  submit(
+    target: DrillTarget & { drill: WrittenDrill },
+    answer: string,
+    elapsedSeconds?: number,
+    variant?: string | null,
+    topic?: string,
+  ): Promise<DrillTurnResponse & { kind: "result" }>;
+  submit(target: DrillTarget, answer: string, elapsedSeconds?: number, variant?: string | null, topic?: string): Promise<DrillTurnResponse>;
+  async submit(target: DrillTarget, answer: string, elapsedSeconds?: number, variant?: string | null, topic?: string): Promise<DrillTurnResponse> {
     if (answer.trim() === "") throw new HttpError(400, "Write an answer first.");
-    const key = target.drillId ?? `${target.drill}:${target.problemId}`;
-    if (this.grading.has(key)) throw new HttpError(409, "This drill is already being graded. Wait for the result.");
-    this.grading.add(key);
+    const key = this.lockKey(target);
+    if (this.locks.has(key)) throw new HttpError(409, "This drill is already being graded. Wait for the result.");
+    this.locks.add(key);
     try {
-      return await this.submitNow(target, answer, elapsedSeconds, variant ?? null);
+      return await this.submitNow(target, answer, elapsedSeconds, variant ?? null, topic);
     } finally {
-      this.grading.delete(key);
+      this.locks.delete(key);
     }
   }
 
-  private async submitNow(target: DrillTarget, answer: string, elapsedSeconds: number | undefined, requestedVariant: string | null): Promise<DrillResult> {
+  private async submitNow(
+    target: DrillTarget,
+    answer: string,
+    elapsedSeconds: number | undefined,
+    requestedVariant: string | null,
+    requestedTopic: string | undefined,
+  ): Promise<DrillTurnResponse> {
     const problems = await this.playable();
     const state = await this.sync(problems);
-    const { problem, content, variant } = await this.resolve(target, state, { variant: requestedVariant });
+    const { problem, content, variant } = await this.resolve(target, state, { variant: requestedVariant, topic: requestedTopic });
     const clock = this.deps.now ?? (() => new Date());
+    const dialogue = isDialogue(target.drill);
+    if (dialogue) {
+      const open = this.findOpen(state, target, variant);
+      if (open) {
+        if (this.active.has(open.id)) throw new HttpError(409, DRILL_IN_PROGRESS);
+        // A row whose body never got written belongs to a call that died; it must not lock the drill. A body that
+        // already holds a grade is an attempt being finished, and dropping it would lose the grade.
+        const body = await this.deps.store.readBody(open.id);
+        if (body && (body.grades.length > 0 || this.conversationOf(body))) throw new HttpError(409, DRILL_IN_PROGRESS);
+        await this.dropOpen(open.id);
+      }
+    }
     const opened = clock();
     const attemptId = randomBytes(8).toString("hex");
 
@@ -274,23 +407,21 @@ export class DrillService {
         drill: target.drill,
         problemId: target.problemId,
         variant,
-        drillId: null,
+        drillId: dialogue ? (target.drillId ?? null) : null,
         status: "open",
         outcome: null,
         firstOutcome: null,
         revised: false,
         scores: [],
-        seconds: null,
+        seconds: dialogue ? (elapsedSeconds ?? null) : null,
         legacy: false,
       });
       return { save: true, value: null };
     });
-
-    let graded: GradedAnswer;
+    this.active.add(attemptId);
     try {
-      graded = await this.grade(problem, content, answer, attemptId, target.drill);
-      await this.deps.store.writeBody({
-        version: 1,
+      const head = {
+        version: 1 as const,
         id: attemptId,
         drill: target.drill,
         problemId: problem.meta.id,
@@ -299,28 +430,62 @@ export class DrillService {
         topic: content.prompt.topic?.slice(0, 300) ?? null,
         ...(content.changed ? { changed: content.changed.slice(0, 2000) } : {}),
         answers: [{ at: opened.toISOString(), text: answer }],
-        turns: [],
-        grades: [
-          {
-            at: clock().toISOString(),
-            outcome: graded.outcome,
-            scores: graded.scores,
-            wentWell: graded.wentWell,
-            improve: graded.improve,
-            yourLine: graded.yourLine,
-            strong: graded.strong,
-          },
-        ],
-      });
+      };
+      if (dialogue) {
+        const asked = await this.ask(problem, content, [{ role: "candidate", text: answer }], 0, attemptId, target.drill);
+        await this.deps.store.writeBody({
+          ...head,
+          turns: [
+            { role: "candidate", at: opened.toISOString(), text: answer },
+            { role: "grader", at: clock().toISOString(), text: asked.question },
+          ],
+          grades: [],
+        });
+        return { kind: "question", attemptId, question: asked.question, asked: 1, of: MAX_FOLLOW_UPS };
+      }
+
+      let graded: GradedAnswer;
+      try {
+        graded = await this.grade(problem, content, answer, undefined, attemptId, target.drill);
+        await this.deps.store.writeBody({ ...head, turns: [], grades: [gradeRecord(graded, clock())] });
+      } catch (err) {
+        await this.dropOpen(attemptId);
+        throw err;
+      }
+      return await this.finishAttempt({ attemptId, target, variant, graded, turns: [], seconds: () => elapsedSeconds ?? null });
     } catch (err) {
-      await this.dropOpen(attemptId);
+      // A first question that failed leaves no row, as a failed grade does.
+      if (dialogue) await this.dropOpen(attemptId);
       throw err;
+    } finally {
+      this.active.delete(attemptId);
     }
+  }
+
+  /**
+   * Moves the schedule for a graded attempt and builds the result. It runs at grade time for every kind, so a dialogue
+   * attempt counts exactly as a written one does.
+   */
+  private async finishAttempt(input: {
+    attemptId: string;
+    target: DrillTarget;
+    variant: string | null;
+    graded: GradedAnswer;
+    turns: DrillTurn[];
+    /** The time the attempt reports once it is done, from the time its row holds now. */
+    seconds: (held: number | null) => number | null;
+  }): Promise<DrillTurnResponse> {
+    const { attemptId, target, variant, graded, turns } = input;
+    const clock = this.deps.now ?? (() => new Date());
+    const dialogue = isDialogue(target.drill);
     const today = localDay(clock());
     // The briefs may have changed while the grader worked, and the next pick must come from what is playable now.
     const latest = await this.playable();
 
-    return this.deps.store.update((draft) => {
+    const finished = await this.deps.store.update<DrillTurnResponse | null>((draft) => {
+      // The row is gone when the attempt was ended or dropped while it was graded, and then nothing may move.
+      const row = draft.attempts.find((a) => a.id === attemptId);
+      if (!row || row.status !== "open") return { save: false, value: null };
       // The queue may have changed while the grader worked, so the match is made again on the saved state.
       const item = this.matchLive(draft, target, today, variant);
       let readyCount: number | null = null;
@@ -329,14 +494,11 @@ export class DrillService {
       let itemBefore: DrillAttempt["itemBefore"];
       // An attempt before the drill's day is practice: it is logged and changes nothing.
       const counts = item !== null && isDue(item, today);
-      const row = draft.attempts.find((a) => a.id === attemptId);
-      if (row) {
-        row.status = "done";
-        row.outcome = graded.outcome;
-        row.scores = graded.scores;
-        row.drillId = counts ? (item?.id ?? null) : null;
-        row.seconds = elapsedSeconds ?? null;
-      }
+      row.status = "done";
+      row.outcome = graded.outcome;
+      row.scores = graded.scores;
+      row.drillId = counts ? (item?.id ?? null) : null;
+      row.seconds = input.seconds(row.seconds);
       if (item && counts) {
         itemBefore = { passes: item.passes, readyOn: [...item.readyOn] };
         // The pick is made with this attempt in the history, and saved with the schedule in the same update.
@@ -363,7 +525,7 @@ export class DrillService {
         closed = next.status === "closed";
         nextDueOn = closed ? null : next.dueOn;
       }
-      if (row && itemBefore) row.itemBefore = itemBefore;
+      if (itemBefore) row.itemBefore = itemBefore;
       const result: DrillResult = {
         attemptId,
         outcome: graded.outcome,
@@ -373,14 +535,123 @@ export class DrillService {
         wentWell: graded.wentWell,
         improve: graded.improve,
         yourLine: graded.yourLine,
-        canRevise: graded.outcome !== "ready",
+        canRevise: !dialogue && graded.outcome !== "ready",
+        turns,
         readyCount,
         closed,
         nextDueOn,
         next: this.nextDue(draft, latest, today, counts ? item?.id : undefined),
       };
-      return { save: true, value: result };
+      return { save: true, value: { kind: "result" as const, ...result } };
     });
+    if (!finished) throw new HttpError(409, CANNOT_CONTINUE);
+    return finished;
+  }
+
+  /**
+   * Takes the candidate's reply to the interviewer's question number `asked`. It asks the next question, or grades the
+   * whole conversation. The reply is saved only after the grader answered, so a failed call leaves the attempt as it was
+   * and the same reply can be sent again.
+   */
+  async reply(attemptId: string, asked: number, answer: string, elapsedSeconds?: number): Promise<DrillTurnResponse> {
+    if (answer.trim() === "") throw new HttpError(400, "Write an answer first.");
+    if (!ATTEMPT_ID.test(attemptId)) throw new HttpError(404, "That attempt was not found.");
+    const row = this.deps.store.snapshot().attempts.find((a) => a.id === attemptId);
+    if (!row) throw new HttpError(404, "That attempt was not found.");
+    const key = this.lockKey(row);
+    if (this.locks.has(key)) throw new HttpError(409, "This answer is already being graded. Wait for the result.");
+    this.locks.add(key);
+    this.active.add(attemptId);
+    try {
+      return await this.replyNow(attemptId, asked, answer, elapsedSeconds);
+    } finally {
+      this.active.delete(attemptId);
+      this.locks.delete(key);
+    }
+  }
+
+  private async replyNow(attemptId: string, asked: number, answer: string, elapsedSeconds: number | undefined): Promise<DrillTurnResponse> {
+    const clock = this.deps.now ?? (() => new Date());
+    const problems = await this.playable();
+    const state = await this.sync(problems);
+    const row = state.attempts.find((a) => a.id === attemptId);
+    if (!row) throw new HttpError(404, "That attempt was not found.");
+    if (row.status !== "open" || row.legacy || !isDialogue(row.drill) || row.day !== localDay(clock())) throw new HttpError(409, CANNOT_CONTINUE);
+    const body = await this.deps.store.readBody(attemptId);
+    const conversation = this.conversationOf(body);
+    if (!body || !conversation) throw new HttpError(409, CANNOT_CONTINUE);
+
+    // The reply is graded on the content saved for the attempt. A drill that moved on since is refused, as a submit is.
+    if (row.drillId) {
+      const item = state.items.find((i) => i.id === row.drillId);
+      if (!item || item.status !== "open") throw new HttpError(404, "That drill is no longer in the queue.");
+      if (item.problemId !== row.problemId || item.variant !== row.variant) throw new HttpError(409, MOVED);
+    }
+    const problem = problems.get(row.problemId);
+    if (!problem) throw new HttpError(404, "That problem is not available for drills yet. Play a round on it first.");
+    if (row.variant && !variantEntries(problem).some((e) => e.id === row.variant)) throw new HttpError(409, CANNOT_CONTINUE);
+    const content = buildDrill(problem, row.drill, { ...(body.topic ? { topic: body.topic } : {}), ...(row.variant ? { variant: row.variant } : {}) });
+    if (!content) throw new HttpError(400, "This problem has no material for that drill.");
+    // A topic that left the brief cannot be rebuilt, and asking about another one would be wrong.
+    if (body.topic !== null && content.prompt.topic !== body.topic) throw new HttpError(409, CANNOT_CONTINUE);
+
+    // The reply names the question it answers, so a second tab or a repeated request never answers one it did not see.
+    if (asked !== conversation.asked) throw new HttpError(409, CONVERSATION_MOVED);
+
+    const turns: DrillTurn[] = [...conversation.turns, { role: "candidate", text: answer }];
+    const at = clock().toISOString();
+    if (asked < MAX_FOLLOW_UPS) {
+      const next = await this.ask(problem, content, turns, asked, attemptId, row.drill);
+      if (next.another) {
+        await this.deps.store.writeBody({
+          ...body,
+          turns: [...body.turns, { role: "candidate", at, text: answer }, { role: "grader", at: clock().toISOString(), text: next.question }],
+        });
+        await this.deps.store.update((draft) => {
+          const live = draft.attempts.find((a) => a.id === attemptId);
+          if (live) live.seconds = addSeconds(live.seconds, elapsedSeconds);
+          return { save: live !== undefined, value: null };
+        });
+        return { kind: "question", attemptId, question: next.question, asked: asked + 1, of: MAX_FOLLOW_UPS };
+      }
+    }
+
+    const candidateText = turns
+      .filter((t) => t.role === "candidate")
+      .map((t) => t.text)
+      .join("\n");
+    const graded = await this.grade(problem, content, candidateText, turns, attemptId, row.drill);
+    await this.deps.store.writeBody({
+      ...body,
+      turns: [...body.turns, { role: "candidate", at, text: answer }],
+      grades: [gradeRecord(graded, clock())],
+    });
+    const target: DrillTarget = { drill: row.drill, problemId: row.problemId, ...(row.drillId ? { drillId: row.drillId } : {}) };
+    return this.finishAttempt({ attemptId, target, variant: row.variant, graded, turns, seconds: (held) => addSeconds(held, elapsedSeconds) });
+  }
+
+  /** Ends a conversation the candidate no longer wants, so the drill can start over. It changes no schedule. */
+  async abandon(attemptId: string): Promise<void> {
+    if (!ATTEMPT_ID.test(attemptId)) throw new HttpError(404, "That attempt was not found.");
+    const found = this.deps.store.snapshot().attempts.find((a) => a.id === attemptId);
+    if (!found) throw new HttpError(404, "That attempt was not found.");
+    const key = this.lockKey(found);
+    if (this.locks.has(key)) throw new HttpError(409, "This answer is being graded. Wait for it to finish.");
+    this.locks.add(key);
+    try {
+      const outcome = await this.deps.store.update((draft) => {
+        const row = draft.attempts.find((a) => a.id === attemptId);
+        if (!row) return { save: false, value: "missing" as const };
+        if (row.status !== "open" || row.legacy || !isDialogue(row.drill)) return { save: false, value: "refused" as const };
+        draft.attempts = draft.attempts.filter((a) => a.id !== attemptId);
+        return { save: true, value: "removed" as const };
+      });
+      if (outcome === "missing") throw new HttpError(404, "That attempt was not found.");
+      if (outcome === "refused") throw new HttpError(409, "Only a conversation in progress can be ended.");
+      await this.deps.store.removeBody(attemptId).catch(() => undefined);
+    } finally {
+      this.locks.delete(key);
+    }
   }
 
   private nextDue(draft: DrillState, problems: ReadonlyMap<string, Problem>, today: string, exceptId?: string): DrillTarget | null {
@@ -408,7 +679,7 @@ export class DrillService {
 
   private checkRevisable(row: DrillAttempt | undefined, today: string): DrillAttempt {
     if (!row) throw new HttpError(404, "That attempt was not found.");
-    if (row.status !== "done" || row.legacy) throw new HttpError(409, "This attempt cannot be revised.");
+    if (row.status !== "done" || row.legacy || isDialogue(row.drill)) throw new HttpError(409, "This attempt cannot be revised.");
     if (row.revised) throw new HttpError(409, "This attempt was already revised.");
     if (row.outcome === "ready" || row.outcome === null) throw new HttpError(409, "This answer is already interview-ready, so there is nothing to revise.");
     if (row.day !== today) throw new HttpError(409, "A revision must come on the same day as the attempt.");
@@ -435,24 +706,13 @@ export class DrillService {
     if (!content) throw new HttpError(400, "This problem has no material for that drill.");
 
     const opened = clock();
-    const graded = await this.grade(problem, content, answer, attemptId, body.drill);
+    const graded = await this.grade(problem, content, answer, undefined, attemptId, body.drill);
     const better = isBetterOutcome(graded.outcome, firstGrade.outcome);
     const finalOutcome = betterOutcome(firstGrade.outcome, graded.outcome);
     await this.deps.store.writeBody({
       ...body,
       answers: [firstAnswer, { at: opened.toISOString(), text: answer }],
-      grades: [
-        firstGrade,
-        {
-          at: clock().toISOString(),
-          outcome: graded.outcome,
-          scores: graded.scores,
-          wentWell: graded.wentWell,
-          improve: graded.improve,
-          yourLine: graded.yourLine,
-          strong: graded.strong,
-        },
-      ],
+      grades: [firstGrade, gradeRecord(graded, clock())],
     });
     const today = localDay(clock());
 
@@ -493,6 +753,7 @@ export class DrillService {
         improve: shown.improve,
         yourLine: shown.yourLine,
         canRevise: false,
+        turns: [],
         readyCount,
         closed,
         nextDueOn,
@@ -502,13 +763,16 @@ export class DrillService {
     });
   }
 
-  /** Removes the open row of an attempt that never got a grade. A failed save is logged so the grader's error still reaches the caller. */
+  /** Removes the open row of an attempt that never got a grade, and its body file. A failed save is logged so the grader's error still reaches the caller. */
   private async dropOpen(attemptId: string): Promise<void> {
     try {
-      await this.deps.store.update((draft) => {
-        draft.attempts = draft.attempts.filter((a) => a.id !== attemptId);
-        return { save: true, value: null };
+      const dropped = await this.deps.store.update((draft) => {
+        const before = draft.attempts.length;
+        draft.attempts = draft.attempts.filter((a) => !(a.id === attemptId && a.status === "open"));
+        const removed = draft.attempts.length < before;
+        return { save: removed, value: removed };
       });
+      if (dropped) await this.deps.store.removeBody(attemptId).catch(() => undefined);
     } catch (err) {
       this.deps.log.warn(`Could not remove the open drill attempt ${attemptId}: ${describeError(err)}`);
     }
@@ -524,40 +788,104 @@ export class DrillService {
     }
   }
 
-  private async grade(problem: Problem, content: DrillContent, answer: string, attemptId: string, drill: DrillTarget["drill"]): Promise<GradedAnswer> {
+  /**
+   * One model call of the `grader` role. Every call of an attempt, the questions and the grade alike, carries the same
+   * attempt id and kind, so the cost shows per attempt and per drill kind.
+   */
+  private async callModel<T>(
+    problem: Problem,
+    content: DrillContent,
+    attemptId: string,
+    drill: DrillType,
+    spec: { prompt: "drill-grader" | "drill-follow-up"; text: string; candidateText: string; schema: z.ZodType<T>; fake: FakeFacts },
+  ): Promise<T> {
     const settings = this.deps.settings.get();
-    const text = graderMessage(content.prompt, content.key, answer);
+    const res = await this.deps.driver.runOnce({
+      role: "grader",
+      model: settings.models.grader,
+      effort: settings.effort.grader,
+      systemPrompt: async () =>
+        this.deps.prompts.render(
+          spec.prompt,
+          commonVars({
+            date: localDay(new Date()),
+            problemTitle: problem.meta.title,
+            track: problem.meta.track,
+            mode: "guided",
+            durationMin: content.prompt.minutes,
+            candidateProfile: await this.deps.prompts.candidateProfile(),
+          }),
+        ),
+      tools: [],
+      fake: spec.fake,
+      usage: { sessionId: null, problemId: problem.meta.id, track: problem.meta.track, mode: null, drillAttemptId: attemptId, drillKind: drill },
+      turn: { text: spec.text, meta: { kind: "oneshot", candidateText: spec.candidateText } },
+      output: { schema: spec.schema, jsonSchema: toApiSchema(spec.schema), fallbackJsonSchema: toCompatSchema(spec.schema) },
+      maxTurns: 3,
+    });
+    if (!res.output) throw new DriverError("The grader returned nothing.");
+    return res.output;
+  }
+
+  /** Grades one answer, or a whole conversation when `turns` is given. `answer` is then the candidate's turns joined. */
+  private async grade(
+    problem: Problem,
+    content: DrillContent,
+    answer: string,
+    turns: readonly DrillTurn[] | undefined,
+    attemptId: string,
+    drill: DrillType,
+  ): Promise<GradedAnswer> {
+    const text = graderMessage(content.prompt, content.key, turns ?? answer);
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const res = await this.deps.driver.runOnce({
-          role: "grader",
-          model: settings.models.grader,
-          effort: settings.effort.grader,
-          systemPrompt: async () =>
-            this.deps.prompts.render(
-              "drill-grader",
-              commonVars({
-                date: localDay(new Date()),
-                problemTitle: problem.meta.title,
-                track: problem.meta.track,
-                mode: "guided",
-                durationMin: content.prompt.minutes,
-                candidateProfile: await this.deps.prompts.candidateProfile(),
-              }),
-            ),
-          tools: [],
+        const output = await this.callModel(problem, content, attemptId, drill, {
+          prompt: "drill-grader",
+          text,
+          candidateText: answer,
+          schema: GraderOutputSchema,
           fake: { problem, track: problem.meta.track, drill: { kind: drill, key: content.key, answer } },
-          usage: { sessionId: null, problemId: problem.meta.id, track: problem.meta.track, mode: null, drillAttemptId: attemptId, drillKind: drill },
-          turn: { text, meta: { kind: "oneshot", candidateText: answer } },
-          output: { schema: GraderOutputSchema, jsonSchema: toApiSchema(GraderOutputSchema), fallbackJsonSchema: toCompatSchema(GraderOutputSchema) },
-          maxTurns: 3,
         });
-        if (!res.output) throw new DriverError("The grader returned nothing.");
-        return finishGrade(res.output, answer, { drill, key: content.key, redact: (text) => this.deps.guard.redact(text) });
+        return finishGrade(output, answer, { drill, key: content.key, redact: (line) => this.deps.guard.redact(line) });
       } catch (err) {
         this.deps.log.warn(`Drill grader attempt ${attempt + 1} failed for ${problem.meta.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);
       }
     }
     throw new HttpError(502, "The grader did not answer. Your answer is still in the box. Try again.");
+  }
+
+  /**
+   * The interviewer's next question for a dialogue drill. `asked` counts the questions in `turns`; with none, the first
+   * question is always asked, and after that the model decides whether another is needed. The question is model output:
+   * it is cleaned and checked against the key before it can reach the page.
+   */
+  private async ask(
+    problem: Problem,
+    content: DrillContent,
+    turns: readonly DrillTurn[],
+    asked: number,
+    attemptId: string,
+    drill: DrillType,
+  ): Promise<{ another: boolean; question: string }> {
+    const text = followUpMessage(content.prompt, content.key, turns, asked);
+    const candidateText = turns.filter((t) => t.role === "candidate").at(-1)?.text ?? "";
+    const redact = (line: string) => this.deps.guard.redact(line);
+    const fake: FakeFacts = { problem, track: problem.meta.track, drillFollowUp: { kind: drill, key: content.key, turns: [...turns], asked } };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (asked === 0) {
+          const out = await this.callModel(problem, content, attemptId, drill, { prompt: "drill-follow-up", text, candidateText, schema: FirstQuestionSchema, fake });
+          const question = cleanQuestion(out.question, content.key, redact);
+          if (question === null) throw new DriverError("The interviewer asked an empty question.");
+          return { another: true, question };
+        }
+        const out = await this.callModel(problem, content, attemptId, drill, { prompt: "drill-follow-up", text, candidateText, schema: NextQuestionSchema, fake });
+        const question = out.another ? cleanQuestion(out.question, content.key, redact) : null;
+        return { another: question !== null, question: question ?? "" };
+      } catch (err) {
+        this.deps.log.warn(`Drill interviewer attempt ${attempt + 1} failed for ${problem.meta.id}: ${err instanceof DriverError ? err.detail : describeError(err)}`);
+      }
+    }
+    throw new HttpError(502, "The interviewer did not answer. Your answer is still in the box. Try again.");
   }
 }

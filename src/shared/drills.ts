@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Track } from "./phases";
 import { weekStart } from "./week";
 
-export const DRILL_TYPES = ["capacity", "walk", "requirements", "deep_dive", "lld_skeleton"] as const;
+export const DRILL_TYPES = ["capacity", "walk", "requirements", "deep_dive", "tradeoff", "lld_skeleton"] as const;
 export type DrillType = (typeof DRILL_TYPES)[number];
 
 export const DrillTypeSchema = z.enum(DRILL_TYPES);
@@ -10,22 +10,41 @@ export const DrillTypeSchema = z.enum(DRILL_TYPES);
 export interface DrillInfo {
   title: string;
   minutes: number;
-  track: Track;
+  /** The tracks whose problems can supply the drill. */
+  tracks: Track[];
   /** One sentence for the picker: what the drill trains. */
   about: string;
+  /** True when the grader asks follow-up questions before the result. */
+  dialogue?: boolean;
 }
 
 export const DRILL_INFO: Record<DrillType, DrillInfo> = {
-  capacity: { title: "Capacity math", minutes: 10, track: "hld", about: "Turn the scale facts into numbers, and each number into a design decision." },
-  walk: { title: "Walk a request", minutes: 10, track: "hld", about: "Follow one request through every box of your design, in order." },
-  requirements: { title: "Requirements sprint", minutes: 10, track: "hld", about: "Say what to ask and what to settle before you draw anything." },
-  deep_dive: { title: "Pick a deep dive", minutes: 15, track: "hld", about: "Take one hard part of the design one level deeper than the first answer." },
-  lld_skeleton: { title: "LLD skeleton", minutes: 15, track: "lld", about: "Name the classes, their fields and their method signatures, with no bodies." },
+  capacity: { title: "Capacity math", minutes: 10, tracks: ["hld"], about: "Turn the scale facts into numbers, and each number into a design decision." },
+  walk: { title: "Walk a request", minutes: 10, tracks: ["hld"], about: "Follow one request through every box of your design, in order." },
+  requirements: { title: "Requirements sprint", minutes: 10, tracks: ["hld"], about: "Say what to ask and what to settle before you draw anything." },
+  deep_dive: { title: "Pick a deep dive", minutes: 15, tracks: ["hld"], about: "Take one hard part of the design one level deeper than the first answer.", dialogue: true },
+  tradeoff: { title: "Defend a trade-off", minutes: 15, tracks: ["hld", "lld"], about: "Pick a side of one design choice and hold it under questions.", dialogue: true },
+  lld_skeleton: { title: "LLD skeleton", minutes: 15, tracks: ["lld"], about: "Name the classes, their fields and their method signatures, with no bodies." },
 };
 
+/** The kinds that run as a dialogue (`DRILL_INFO[kind].dialogue`), and the kinds that are one written answer. */
+export type DialogueDrill = "deep_dive" | "tradeoff";
+export type WrittenDrill = Exclude<DrillType, DialogueDrill>;
+
 export function drillsForTrack(track: Track): DrillType[] {
-  return DRILL_TYPES.filter((d) => DRILL_INFO[d].track === track);
+  return DRILL_TYPES.filter((d) => DRILL_INFO[d].tracks.includes(track));
 }
+
+export function drillServesTrack(drill: DrillType, track: Track): boolean {
+  return DRILL_INFO[drill].tracks.includes(track);
+}
+
+/** Follow-up questions the grader may ask in one dialogue attempt. */
+export const MAX_FOLLOW_UPS = 2;
+
+/** What the server says when a dialogue moved on, so the page knows to load the conversation again. */
+export const CONVERSATION_MOVED = "This conversation moved on. Reload to continue.";
+export const DRILL_IN_PROGRESS = "This drill already has an answer in progress.";
 
 // ---------------------------------------------------------------------------
 // Gap to drill
@@ -33,6 +52,8 @@ export function drillsForTrack(track: Track): DrillType[] {
 interface Rule {
   drill: DrillType;
   pattern: RegExp;
+  /** A rule that reads the title alone: the reason a gap matters often names a topic it only touches on. */
+  titleOnly?: true;
 }
 
 const HLD_RULES: Rule[] = [
@@ -41,36 +62,47 @@ const HLD_RULES: Rule[] = [
   { drill: "requirements", pattern: /requirement|clarif|scoping|\bscope\b|non-functional|assumption|constraint|ask(ing)? (the )?(right )?questions/ },
   { drill: "walk", pattern: /walk(ed|ing|s)? (a |one |the |every )?(request|flow)|request (path|flow)|end[- ]to[- ]end|data flow|\b(read|write|miss) path\b|trace (a|the|one) / },
   {
+    drill: "tradeoff",
+    pattern:
+      /trade-?off|justif|alternative|unreason|rationale|\b(choice|chose|choos\w*|pick\w*) (without|with no|lacking|and no)\b|no (reason|why)|without (a |any |stating )?(reason|why)/,
+    titleOnly: true,
+  },
+  {
     drill: "deep_dive",
     pattern:
-      /trade-?off|cach|consisten|shard|partition|replica|failure|failover|stampede|hot (key|shard|spot)|idempoten|queue|rate limit|bottleneck|durab|availab|latency|ordering|fan-?out|backpressure|retry|\bttls?\b|click|\bcount|batch|analytics/,
+      /cach|consisten|shard|partition|replica|failure|failover|stampede|hot (key|shard|spot)|idempoten|queue|rate limit|bottleneck|durab|availab|latency|ordering|fan-?out|backpressure|retry|\bttls?\b|click|\bcount|batch|analytics/,
   },
 ];
 
-const LLD_RULE: Rule = {
-  drill: "lld_skeleton",
-  pattern: /entit|class|interface|skeleton|model(l)?ing|object|relationship|data shape|abstraction|pattern|strategy|extensib|responsib|encapsulat|\bapi\b|noun/,
-};
+const LLD_RULES: Rule[] = [
+  { drill: "tradeoff", pattern: /pattern|strategy|extensib|trade-?off|justif|alternative|unreason|rationale/, titleOnly: true },
+  { drill: "lld_skeleton", pattern: /entit|class|interface|skeleton|model(l)?ing|object|relationship|data shape|abstraction|responsib|encapsulat|\bapi\b|noun/ },
+];
 
 /** Gaps about how the round was run, not about what was designed. No drill trains them. */
-const ABOUT_THE_ROUND = /pacing|leading the round|time[- ]?(management|box)|drive the (round|interview)|communicat|running out of time|phase (timing|pacing)/;
+const ABOUT_THE_ROUND = /pacing|leading the round|time[- ]?(management|box)|drive the (round|interview)|running out of time|phase (timing|pacing)/;
+
+/** A gap about getting the idea across is trained by defending a choice aloud. */
+const ABOUT_EXPLAINING = /explain|explanation|communicat|articulat/;
 
 /**
  * Picks a drill for a scorecard gap. The judge's own choice wins when it fits the track. Otherwise the gap's title is
- * matched first, then its title with the reason it matters. A gap about pacing or communication gets none, and so does
- * a gap no rule fits: null queues nothing.
+ * matched first, then its title with the reason it matters; the trade-off rule reads the title only. A gap about
+ * explaining or communicating names no topic of its own, so it is the last resort: it gets the trade-off drill only
+ * when no topic rule matched, and it reads the title only. A gap about pacing or leading the round gets none, and
+ * neither does a gap no rule fits: null queues nothing.
  */
 export function drillForGap(gap: { title: string; whyItMatters?: string; drill?: DrillType | undefined }, track: Track): DrillType | null {
-  if (gap.drill && DRILL_INFO[gap.drill].track === track) return gap.drill;
+  if (gap.drill && drillServesTrack(gap.drill, track)) return gap.drill;
   const title = gap.title.toLowerCase();
   if (ABOUT_THE_ROUND.test(title)) return null;
-  const rules = track === "lld" ? [LLD_RULE] : HLD_RULES;
+  const rules = track === "lld" ? LLD_RULES : HLD_RULES;
   const full = `${title} ${(gap.whyItMatters ?? "").toLowerCase()}`;
   for (const text of [title, full]) {
-    const hit = rules.find((r) => r.pattern.test(text));
+    const hit = rules.find((r) => (text === title || !r.titleOnly) && r.pattern.test(text));
     if (hit) return hit.drill;
   }
-  return null;
+  return ABOUT_EXPLAINING.test(title) ? "tradeoff" : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,15 +164,19 @@ export interface DrillCriterion {
   label: string;
   /** A core criterion decides the outcome; the others only colour the feedback. */
   core: boolean;
+  /** Added after attempts were already saved: a saved row without a score for it is judged on the criteria it has. */
+  added?: boolean;
 }
 
 export interface DrillRubric {
   /** The round scorecard dimension the drill trains. */
   skill: string;
+  /** Tracks where the drill trains another dimension than `skill`. */
+  skillOn?: Partial<Record<Track, string>>;
   criteria: DrillCriterion[];
 }
 
-const c = (id: string, label: string, core = false): DrillCriterion => ({ id, label, core });
+const c = (id: string, label: string, core = false, added = false): DrillCriterion => ({ id, label, core, ...(added ? { added } : {}) });
 
 export const DRILL_RUBRIC: Record<DrillType, DrillRubric> = {
   capacity: {
@@ -172,7 +208,22 @@ export const DRILL_RUBRIC: Record<DrillType, DrillRubric> = {
   },
   deep_dive: {
     skill: "depth",
-    criteria: [c("naive", "Says what breaks in the naive way", true), c("mechanism", "A mechanism that works, one level deeper", true), c("cost", "States the cost")],
+    criteria: [
+      c("naive", "Says what breaks in the naive way", true),
+      c("mechanism", "A mechanism that works, one level deeper", true),
+      c("cost", "States the cost"),
+      c("follow_up", "Holds up under the follow-up", true, true),
+    ],
+  },
+  tradeoff: {
+    skill: "depth",
+    skillOn: { lld: "design" },
+    criteria: [
+      c("position", "Takes a clear position", true),
+      c("reason", "Reason uses this problem's needs", true),
+      c("other_side", "Says when the other option wins"),
+      c("holds", "Holds or changes position for a good reason", true),
+    ],
   },
   lld_skeleton: {
     skill: "design",
@@ -186,13 +237,20 @@ export const DRILL_RUBRIC: Record<DrillType, DrillRubric> = {
   },
 };
 
+/** The round scorecard dimension a drill trains on a track. */
+export function drillSkill(drill: DrillType, track: Track): string {
+  const rubric = DRILL_RUBRIC[drill];
+  return rubric.skillOn?.[track] ?? rubric.skill;
+}
+
 /**
  * Ready needs every core criterion at 3 or more and no criterion at 1. A core criterion at 1, or two core criteria
- * below 3, needs work. Everything else is getting there. A criterion with no score counts as 1.
+ * below 3, needs work. Everything else is getting there. A criterion with no score counts as 1, except one added after
+ * attempts were saved: a saved row that never had it is judged on the criteria it has.
  */
 export function outcomeFor(drill: DrillType, scores: readonly { id: string; score: number }[]): DrillOutcome {
   const byId = new Map(scores.map((s) => [s.id, s.score]));
-  const criteria = DRILL_RUBRIC[drill].criteria;
+  const criteria = DRILL_RUBRIC[drill].criteria.filter((k) => !k.added || byId.has(k.id));
   const score = (id: string) => byId.get(id) ?? 1;
   const core = criteria.filter((k) => k.core);
   if (core.some((k) => score(k.id) === 1)) return "needs_work";
@@ -337,6 +395,7 @@ export const DRILL_ID = /^[a-f0-9]{16}$/;
 export const ATTEMPT_ID = /^[a-f0-9]{16}$/;
 export const MAX_ELAPSED_SECONDS = 7200;
 export const MAX_ANSWER_CHARS = 8000;
+export const MAX_TOPIC_CHARS = 200;
 
 /** Names one drill to run. `drillId` is set when it comes from the queue. */
 export const DrillTargetSchema = z.strictObject({
@@ -350,6 +409,8 @@ export const DrillSubmitSchema = z.strictObject({
   ...DrillTargetSchema.shape,
   /** The changed constraint the prompt named, sent back so a tab that opened an older prompt is never graded on another one. */
   variant: z.string().max(MAX_VARIANT_ID).regex(VARIANT_ID).nullable().optional(),
+  /** The topic the prompt named, sent back so a drill whose topic moved since is never graded on another one. */
+  topic: z.string().min(1).max(MAX_TOPIC_CHARS).optional(),
   answer: z
     .string()
     .max(MAX_ANSWER_CHARS)
@@ -367,11 +428,23 @@ export const DrillReviseSchema = z.strictObject({
 });
 export type DrillRevise = z.infer<typeof DrillReviseSchema>;
 
+/** The candidate's answer to a follow-up question of a dialogue drill. */
+export const DrillReplySchema = z.strictObject({
+  attemptId: z.string().regex(ATTEMPT_ID),
+  /** The question the reply answers, counted from 1. A reply to a question the conversation moved past is refused. */
+  asked: z.number().int().min(1).max(MAX_FOLLOW_UPS),
+  answer: AnswerSchema,
+  elapsedSeconds: z.number().int().min(0).max(MAX_ELAPSED_SECONDS).optional(),
+});
+export type DrillReply = z.infer<typeof DrillReplySchema>;
+
+export const DrillAbandonSchema = z.strictObject({ attemptId: z.string().regex(ATTEMPT_ID) });
+
 export interface GymDrillRow {
   id: string;
   /** The scorecard gap this drill trains. */
   gapTitle: string;
-  /** The deep-dive topic, for a deep dive. */
+  /** The deep dive's or trade-off's topic. */
   topic: string | null;
   drill: DrillType;
   title: string;
@@ -406,7 +479,7 @@ export interface DrillPrompt {
   title: string;
   minutes: number;
   task: string;
-  /** The deep-dive topic, for a deep dive. */
+  /** The deep dive's or trade-off's topic. The browser sends it back with its answer. */
   topic?: string;
   problem: { id: string; title: string; track: Track };
   /** Set when the drill asks the problem with one changed constraint. The browser sends `id` back with its answer. */
@@ -414,7 +487,38 @@ export interface DrillPrompt {
   material: { heading: string; markdown: string }[];
   /** Short line under the answer box. */
   answerHint: string;
+  /** Set when a dialogue attempt for this drill is still open today, so the page can pick the conversation up again. */
+  open?: DrillOpen;
 }
+
+/** One line of a dialogue. The grader is the interviewer who asks the follow-up questions. */
+export interface DrillTurn {
+  role: "candidate" | "grader";
+  text: string;
+}
+
+export interface DrillOpen {
+  attemptId: string;
+  /** When the attempt was opened, as an ISO time, so a resumed page counts its time from then. */
+  openedAt: string;
+  turns: DrillTurn[];
+  /** Follow-up questions asked so far. */
+  asked: number;
+  /** Most follow-up questions this drill asks. */
+  of: number;
+}
+
+/** The interviewer's next question, sent instead of a result while a dialogue drill goes on. */
+export interface DrillQuestion {
+  kind: "question";
+  attemptId: string;
+  question: string;
+  asked: number;
+  of: number;
+}
+
+/** What submit and reply answer: a question while the dialogue goes on, then the result. */
+export type DrillTurnResponse = DrillQuestion | (DrillResult & { kind: "result" });
 
 export interface DrillResult {
   attemptId: string;
@@ -427,8 +531,10 @@ export interface DrillResult {
   wentWell: string[];
   improve: string[];
   yourLine: string;
-  /** One revision is allowed, on the day of the attempt, unless the first try was ready. */
+  /** One revision is allowed, on the day of the attempt, unless the first try was ready. A dialogue drill has none. */
   canRevise: boolean;
+  /** The whole conversation of a dialogue drill, in order; empty for a written drill. */
+  turns: DrillTurn[];
   /** Interview-ready results in a row for the queued drill; null for a free drill that matched none. */
   readyCount: number | null;
   closed: boolean;

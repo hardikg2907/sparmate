@@ -484,8 +484,26 @@ export function fakeGrade(facts: FakeFacts): GraderOutput {
         : `Say what ${missing ?? "the key point"} means for the design, and end with the decision it forces.`,
     ],
     yourLine: (lines[0] ?? "").slice(0, 200),
-    strong: "Each number or step ends with what it forces: a cache in front of the database, because reads outnumber writes by a hundred to one.",
+    strong: FAKE_STRONG_LINE,
   };
+}
+
+export const FAKE_STRONG_LINE = "Each number or step ends with what it forces: a cache in front of the database, because reads outnumber writes by a hundred to one.";
+export const FAKE_FIRST_QUESTION = "What does that cost, and when would you choose the other way?";
+export const FAKE_SECOND_QUESTION = "Give one number or one failure case that backs it.";
+/** A reply shorter than this many words earns a second question. */
+const FAKE_SHORT_REPLY_WORDS = 12;
+
+/**
+ * A scripted interviewer. It always asks one fixed first question. After the first reply it asks a second question only
+ * when that reply is short, so the flow can be tried with a one-line and a longer answer.
+ */
+export function fakeFollowUp(facts: FakeFacts): { question: string } | { another: boolean; question: string } {
+  const follow = facts.drillFollowUp;
+  if (!follow || follow.asked === 0) return { question: FAKE_FIRST_QUESTION };
+  const reply = follow.turns.filter((t) => t.role === "candidate").at(-1)?.text ?? "";
+  const words = reply.split(/\s+/).filter((w) => w !== "").length;
+  return words < FAKE_SHORT_REPLY_WORDS ? { another: true, question: FAKE_SECOND_QUESTION } : { another: false, question: "" };
 }
 
 async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
@@ -519,7 +537,7 @@ async function fakeOneShot(setup: OneShotSetup<unknown>): Promise<unknown> {
     case "scribe":
       return { ops: fakeScribeOps(facts) };
     case "grader":
-      return fakeGrade(facts);
+      return facts.drillFollowUp ? fakeFollowUp(facts) : fakeGrade(facts);
     case "brief-writer": {
       const example = facts.exampleProblem;
       if (!example) throw new DriverError("No example problem to copy.");

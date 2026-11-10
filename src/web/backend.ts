@@ -1,6 +1,6 @@
 import type { BootstrapResponse, ClientMsg, CreateSessionRequest, CustomProblemJobStatus, ServerMsg } from "../shared/protocol";
 import type { DsaResponse } from "../shared/dsa";
-import type { DrillPrompt, DrillResult, DrillTarget, GymSummary } from "../shared/drills";
+import type { DrillPrompt, DrillResult, DrillTarget, DrillTurnResponse, GymSummary } from "../shared/drills";
 import type { Mode, Track } from "../shared/phases";
 import type { ProblemSummary, PublicSession, SessionHistoryItem, Settings } from "../shared/types";
 
@@ -114,8 +114,17 @@ export const api = {
   boardPngUrl: (id: string) => `/api/sessions/${enc(id)}/board-final.png`,
   gym: () => request<GymSummary>("GET", "/api/gym"),
   gymPrompt: (target: DrillTarget) => request<DrillPrompt>("POST", "/api/gym/prompt", target),
-  gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number, variant: string | null = null) =>
-    request<DrillResult>("POST", "/api/gym/submit", { ...target, variant, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
+  gymSubmit: (target: DrillTarget, answer: string, elapsedSeconds?: number, variant: string | null = null, topic?: string) =>
+    request<DrillTurnResponse>("POST", "/api/gym/submit", {
+      ...target,
+      variant,
+      ...(topic === undefined ? {} : { topic }),
+      answer,
+      ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
+    }),
+  gymReply: (attemptId: string, asked: number, answer: string, elapsedSeconds?: number) =>
+    request<DrillTurnResponse>("POST", "/api/gym/reply", { attemptId, asked, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
+  gymAbandon: (attemptId: string) => request<{ ok: true }>("POST", "/api/gym/abandon", { attemptId }),
   gymRevise: (attemptId: string, answer: string, elapsedSeconds?: number) =>
     request<DrillResult>("POST", "/api/gym/revise", { attemptId, answer, ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }) }),
   settings: () => request<Settings>("GET", "/api/settings"),

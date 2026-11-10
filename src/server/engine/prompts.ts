@@ -43,6 +43,7 @@ export const PROMPT_VARS = {
   "brief-checker": ["example_problem"],
   checker: [],
   "drill-grader": [],
+  "drill-follow-up": [],
 } as const;
 
 function levelVars(vars: Readonly<Record<string, string>>): Record<string, string> {

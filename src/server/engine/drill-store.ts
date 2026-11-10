@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import {
@@ -264,6 +264,12 @@ export class DrillStore {
       this.log.warn(`Could not read attempt file ${id}.json`, err);
     }
     return null;
+  }
+
+  /** Deletes the saved record of an attempt. A missing file or a bad id is not an error. */
+  async removeBody(id: string): Promise<void> {
+    const file = this.bodyPath(id);
+    if (file) await rm(file, { force: true });
   }
 
   /** A copy, so a caller can never change the schedule without going through `update`. */

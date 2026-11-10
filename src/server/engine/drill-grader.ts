@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DRILL_INFO, DRILL_RUBRIC, outcomeFor, type DrillOutcome, type DrillPrompt, type DrillType } from "../../shared/drills";
+import { DRILL_INFO, DRILL_RUBRIC, MAX_FOLLOW_UPS, outcomeFor, type DrillOutcome, type DrillPrompt, type DrillTurn, type DrillType } from "../../shared/drills";
 import { quoteIn } from "../../shared/quotes";
 
 const MAX_TEXT = 600;
@@ -23,6 +23,28 @@ export const GraderOutputSchema = z.strictObject({
   strong: Line.describe("One short line of what a strong answer says for this problem, written as the candidate would say it."),
 });
 export type GraderOutput = z.infer<typeof GraderOutputSchema>;
+
+const MAX_QUESTION_RAW = 800;
+/** What the page shows of a follow-up question. */
+const SHOWN_QUESTION_CHARS = 300;
+
+/** The question the interviewer asks when the model's own question would hand back the key. */
+export const FALLBACK_QUESTION = "What is the weakest part of what you just said, and how would you fix it?";
+
+export const FirstQuestionSchema = z.strictObject({
+  question: z
+    .string()
+    .min(1)
+    .max(MAX_QUESTION_RAW)
+    .describe("One short question that probes the weakest or least supported part of the answer. Never reveal or quote the reference."),
+});
+export type FirstQuestion = z.infer<typeof FirstQuestionSchema>;
+
+export const NextQuestionSchema = z.strictObject({
+  another: z.boolean().describe("True only when a core point is still open after the candidate's reply."),
+  question: z.string().max(MAX_QUESTION_RAW).describe("The next short question when another is true, else an empty string. Never reveal or quote the reference."),
+});
+export type NextQuestion = z.infer<typeof NextQuestionSchema>;
 
 export interface GradedAnswer {
   scores: { id: string; score: number }[];
@@ -69,6 +91,17 @@ export function dropKeyCopies(lines: readonly string[], key: string, run = KEY_C
     }
     return true;
   });
+}
+
+/**
+ * Cleans a follow-up question from the model. Control characters go, the length is capped, private names are redacted,
+ * and a question that shares `KEY_COPY_WORDS` or more words in a row with the answer key is replaced by a fixed one, so
+ * a question never hands the key back. Null when nothing is left.
+ */
+export function cleanQuestion(raw: string, key: string, redact: (text: string) => string): string | null {
+  const text = redact(clip(raw, SHOWN_QUESTION_CHARS));
+  if (text === "") return null;
+  return dropKeyCopies([text], key).length === 0 ? FALLBACK_QUESTION : text;
 }
 
 export interface FinishOptions {
@@ -120,11 +153,17 @@ export function escapeBlock(text: string): string {
   return text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** The user message for one grading call. The key and the answer are data, never instructions. */
-export function graderMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">, key: string, answer: string): string {
+const ROLE_NAME: Record<DrillTurn["role"], string> = { candidate: "candidate", grader: "interviewer" };
+
+/** Every turn of a dialogue in order. Text is escaped, so a turn can never close the block or open another. */
+function transcriptBlock(turns: readonly DrillTurn[]): string[] {
+  return ["<transcript>", ...turns.map((t) => `<turn role="${ROLE_NAME[t.role]}">${escapeBlock(t.text)}</turn>`), "</transcript>"];
+}
+
+function messageHead(prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">, key: string): string[] {
   return [
     `<drill>${DRILL_INFO[prompt.drill].title}</drill>`,
-    `<problem>${prompt.problem.title}</problem>`,
+    `<problem>${escapeBlock(prompt.problem.title)}</problem>`,
     `<task>${escapeBlock(prompt.task)}</task>`,
     "<shown_to_candidate>",
     ...prompt.material.map((m) => escapeBlock(`${m.heading}:\n${m.markdown}`)),
@@ -135,9 +174,35 @@ export function graderMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "prob
     "<answer_key>",
     escapeBlock(key),
     "</answer_key>",
+  ];
+}
+
+/**
+ * The user message for one grading call. The key and the answer are data, never instructions. A dialogue drill sends
+ * the whole conversation as a transcript instead of one answer.
+ */
+export function graderMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">, key: string, answer: string | readonly DrillTurn[]): string {
+  if (typeof answer !== "string") {
+    return [
+      ...messageHead(prompt, key),
+      ...transcriptBlock(answer),
+      "Score each criterion from 1 to 4 on how the candidate reasons across the whole conversation, using the key as a reference. Changing position for a good reason scores as well as holding it. Return the scores, what went well, what to improve, the candidate's line and what a strong answer says.",
+    ].join("\n");
+  }
+  return [
+    ...messageHead(prompt, key),
     "<answer>",
     escapeBlock(answer),
     "</answer>",
     "Score each criterion from 1 to 4 on the candidate's reasoning, using the key as a reference. Return the scores, what went well, what to improve, the candidate's line and what a strong answer says.",
   ].join("\n");
+}
+
+/** The user message for the interviewer's question calls. `asked` is how many questions the transcript already holds. */
+export function followUpMessage(prompt: Pick<DrillPrompt, "drill" | "task" | "problem" | "material">, key: string, turns: readonly DrillTurn[], asked: number): string {
+  const last =
+    asked === 0
+      ? "Ask the first follow-up question. Return it in `question`."
+      : `You asked ${asked} of at most ${MAX_FOLLOW_UPS} questions. Decide whether one more question is needed: only when a core point is still open. Return \`another\`, and the question in \`question\` (an empty string when another is false).`;
+  return [...messageHead(prompt, key), ...transcriptBlock(turns), last].join("\n");
 }

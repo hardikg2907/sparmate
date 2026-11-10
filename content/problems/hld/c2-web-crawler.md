@@ -157,7 +157,7 @@ Walk one refresh. A hot page's `nextFetchAt` passes, and the sweep sets its row 
 - **Content dedup.** an exact checksum is enough at the hire bar if the candidate says that near copies pass through, because a changed ad or timestamp changes the hash. Simhash or MinHash with shingles is the full answer.
 - **Page storage.** Archive files in object storage, WARC-style (the reference). One object per page is fine if the candidate states the request count. HDFS is fine. A relational table or a wide-column store that holds 5 MB bodies is not.
 - **DNS and recrawl.** DNS: a cache in the host record plus a caching resolver on each node (the reference), a shared resolver fleet, or an in-process cache. The plain OS resolver on every fetch is not fine unless it stays off the fetch path. Recrawl: an adaptive interval per URL (the reference), or fixed tiers by page class if the class comes from observed change. Sitemap `lastmod`, feeds and push pings are extra signals.
-- **Order and tools.** Plain breadth first is fine for a first version if per-host politeness holds. Naming Scrapy, Nutch, Heritrix or StormCrawler is fine as an aside. The candidate still designs the internals.
+- **Other choices: crawl order and named tools.** Plain breadth first is fine for a first version if per-host politeness holds. Naming Scrapy, Nutch, Heritrix or StormCrawler is fine as an aside. The candidate still designs the internals.
 
 ## Deep dives
 

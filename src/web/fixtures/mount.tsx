@@ -38,7 +38,7 @@ const FIXTURE_PATH: Record<string, string> = {
   gym: "/practice/drills",
   dsa: "/progress#dsa",
 };
-export const FIXTURES = ["home", "room-hld", "room-lld", "debrief-hld", "debrief-lld", "usage"] as const;
+export const FIXTURES = ["home", "room-hld", "room-lld", "debrief-hld", "debrief-lld", "usage", "drill-dialogue"] as const;
 
 type DebriefStatus = PublicSession["status"];
 
@@ -98,6 +98,18 @@ export async function mountFixture(root: Root, name: string, params: URLSearchPa
       <StrictMode>
         <AppProviders>
           <UsagePage initial={fixtureUsage} />
+        </AppProviders>
+      </StrictMode>,
+    );
+    return;
+  }
+
+  if (name === "drill-dialogue") {
+    const { DrillDialogueFixture } = await import("./drillDialogue");
+    root.render(
+      <StrictMode>
+        <AppProviders>
+          <DrillDialogueFixture />
         </AppProviders>
       </StrictMode>,
     );
