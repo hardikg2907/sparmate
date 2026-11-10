@@ -1850,6 +1850,32 @@ describe("saving study notes", () => {
     expect((await study.read("TRACKER.md")).match(/notes\/c2-url-shortener\.md/g)).toHaveLength(1);
     rt.dispose();
   });
+
+  it("keeps the time of the last save when a new draft starts", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "interview", study.root);
+    const session = newSession("interview");
+    session.status = "debriefed";
+    session.scorecard = {
+      verdict: { sde2: "hire", senior: "lean_no_hire", confidence: "medium", summary: "s" },
+      dimensions: [],
+      steps: [],
+      strengths: [],
+      gaps: [],
+      timeline: [],
+      practiceTask: "p",
+      trackerMark: "[~]",
+      trackerMarkReason: "r",
+      lldScenarios: [],
+    };
+    session.studyNotes = { proposalId: "old", status: "applied", appliedCount: 2, savedAt: "2026-10-30T10:00:00.000Z" };
+    const rt = new SessionRuntime(t.deps, session, await urlShortener());
+    await rt.init();
+    rt.attach(t.peer);
+    await rt.handle({ type: "bookkeeping.draft" }, t.peer);
+    await vi.waitFor(() => expect(t.msgs.some((m) => m.type === "bookkeeping.proposal" || m.type === "error")).toBe(true));
+    expect(session.studyNotes).toMatchObject({ appliedCount: 0, savedAt: "2026-10-30T10:00:00.000Z" });
+    rt.dispose();
+  });
 });
 
 describe("step quotes in the debrief", () => {

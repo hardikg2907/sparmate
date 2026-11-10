@@ -52,9 +52,12 @@ export const MARK_LABEL: Record<TrackerMark, string> = { "[ ]": "Not done", "[~]
 
 export const MARK_TONE: Record<TrackerMark, Tone> = { "[ ]": "neutral", "[~]": "warn", "[x]": "good" };
 
-/** Text with each tracker mark written out, for a reason saved before the judge was asked to use words. */
+/**
+ * Text with each tracker mark written out, for text saved by an older version that wrote marks as brackets. A mark
+ * must stand alone, so code such as `grid[x]` keeps its brackets.
+ */
 export function marksInWords(text: string): string {
-  return text.replace(/\[(~|x| )\]/g, (mark) => MARK_LABEL[mark as TrackerMark].toLowerCase());
+  return text.replace(/(?<![\w\]])\[(~|x| )\](?!\w)/g, (mark) => MARK_LABEL[mark as TrackerMark].toLowerCase());
 }
 
 export const TRACK_LABEL: Record<Track, string> = { hld: "HLD", lld: "LLD" };

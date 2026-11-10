@@ -15,6 +15,15 @@ const components: Components = {
     );
   },
   img: ({ alt }) => (alt ? <span className="italic text-muted-foreground">[image: {alt}]</span> : null),
+  // A wide block scrolls sideways, and only an element that takes focus can be scrolled from the keyboard.
+  pre: ({ node, children, ...rest }) => {
+    void node;
+    return (
+      <pre {...rest} tabIndex={0} role="region" aria-label="Code block">
+        {children}
+      </pre>
+    );
+  },
 };
 
 const PLUGINS = [remarkGfm];

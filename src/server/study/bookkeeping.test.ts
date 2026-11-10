@@ -188,6 +188,19 @@ describe("op summaries", () => {
   });
 });
 
+describe("op summaries and privacy", () => {
+  it("writes the tracker mark in words", async () => {
+    const proposal = await plan([{ kind: "tracker_update_bullet", section: C2, bullet: "URL Shortener", mark: "[~]" }]);
+    expect(proposal.ops[0]?.summary).toBe('Update "URL Shortener" (mark it partly done)');
+  });
+
+  it("redacts a blocked term before the summary is cut, so no part of it shows", async () => {
+    const g = await makeGuard(["globexcorp"]);
+    const proposal = await plan([{ kind: "tracker_add_subbullet", section: C2, parentBullet: "URL Shortener", text: `${"y".repeat(50)} globexcorp` }], g);
+    expect(proposal.ops[0]?.summary).not.toMatch(/globex/i);
+  });
+});
+
 describe("tracker_add_subbullet", () => {
   const subOp = (extra: Partial<Extract<BookkeepingOp, { kind: "tracker_add_subbullet" }>> = {}): BookkeepingOp => ({
     kind: "tracker_add_subbullet",

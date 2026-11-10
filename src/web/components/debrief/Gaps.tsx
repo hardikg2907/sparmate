@@ -157,13 +157,13 @@ function GapRow({ gap, index, state, mark, severity, actions }: { gap: Gap; inde
   const panel = `gap-panel-${index}`;
   return (
     <div className="px-1 py-1">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <button
           type="button"
           aria-expanded={open}
           aria-controls={open ? panel : undefined}
           onClick={() => setOpen((value) => !value)}
-          className="flex min-w-0 flex-1 items-center gap-2.5 rounded py-1 text-left text-ui"
+          className="flex min-w-0 flex-1 basis-60 items-center gap-2.5 rounded py-1 text-left text-ui"
         >
           <StateMark state={state} />
           {severity ? <Badge>{SEVERITY_LABEL[gap.severity]}</Badge> : null}
@@ -173,7 +173,11 @@ function GapRow({ gap, index, state, mark, severity, actions }: { gap: Gap; inde
           <ChevronDownIcon size={14} className={cn("shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
         </button>
         {/* The lesson starts from the row, so a gap never has to be opened to be taught. The open body has its own. */}
-        {open || state === "done" ? null : <PrimaryAction gap={gap} state={state} actions={actions} size="sm" />}
+        {open || state === "done" ? null : (
+          <span className="ml-auto">
+            <PrimaryAction gap={gap} state={state} actions={actions} size="sm" />
+          </span>
+        )}
       </div>
       {open ? (
         <div id={panel} className="pb-2">

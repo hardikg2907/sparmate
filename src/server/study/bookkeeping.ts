@@ -40,7 +40,8 @@ export async function planProposal(studyRoot: string, sessionId: string, ops: Bo
     }
     const op = parsed.data;
     const file = targetFile(op);
-    const summary = guard.redact(describe(op));
+    // Redacting before the summary is shortened keeps a cut never splitting a blocked term into a part that slips past.
+    const summary = guard.redact(describe(redactStrings(op, guard)));
 
     let result: OpResult;
     if (index >= LIMITS.proposalOps) {
@@ -368,12 +369,15 @@ function trimBlock(text: string): string {
   return text.replace(/\r\n?/g, "\n").replace(/^\n+/, "").trimEnd();
 }
 
+/** The summary is read on the page, where a bracket mark means nothing. */
+const MARK_WORDS = { "[ ]": "not done", "[~]": "partly done", "[x]": "done" } as const;
+
 function describe(op: BookkeepingOp): string {
   const short = (text: string, max = 60): string => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
   switch (op.kind) {
     case "tracker_update_bullet": {
       const parts: string[] = [];
-      if (op.mark !== undefined) parts.push(`mark ${op.mark}`);
+      if (op.mark !== undefined) parts.push(`mark it ${MARK_WORDS[op.mark]}`);
       if (op.appendSuffix !== undefined) parts.push(`add "${short(oneLine(op.appendSuffix), 50)}"`);
       return `Update "${short(op.bullet)}"${parts.length > 0 ? ` (${parts.join(", ")})` : ""}`;
     }

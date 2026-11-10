@@ -50,5 +50,7 @@ describe("marksInWords", () => {
       "Guided rounds earn at most partly done. A done needs every dimension at 3, and not done means not tried.",
     );
     expect(marksInWords("No marks here [y].")).toBe("No marks here [y].");
+    expect(marksInWords("Indexed grid[x] without a bounds check, and int arr[ ] then [x]2.")).toBe("Indexed grid[x] without a bounds check, and int arr[ ] then [x]2.");
+    expect(marksInWords("(mark [~], add notes)")).toBe("(mark partly done, add notes)");
   });
 });

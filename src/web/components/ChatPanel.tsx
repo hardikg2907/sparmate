@@ -325,8 +325,8 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
   // The card sits on an inner element because `attention` and the enter animation both set `animation`.
   const extension = item.kind === "extension";
   return (
-    <li className={cn("flex min-w-0 flex-col", ENTER, !extension && "pr-2")} aria-busy={item.state === "streaming" ? true : undefined}>
-      <div className={cn("flex min-w-0 flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 attention")}>
+    <li className={cn("flex flex-col", ENTER, !extension && "pr-2")} aria-busy={item.state === "streaming" ? true : undefined}>
+      <div className={cn("flex flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 attention")}>
         <div className="mb-1 flex items-center gap-2 text-meta text-muted-foreground">
           <span aria-hidden="true" className="chat-avatar size-2 rounded-full" />
           <span className="font-semibold text-foreground">{speaker}</span>

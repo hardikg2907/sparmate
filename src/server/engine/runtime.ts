@@ -2429,7 +2429,8 @@ export class SessionRuntime {
       if (!res.output) throw new DriverError("The scribe returned nothing.");
       const proposal = await planProposal(this.deps.config.studyRoot, s.id, res.output.ops, this.deps.guard);
       await this.deps.store.saveProposal(s.id, proposal);
-      s.studyNotes = { proposalId: proposal.id, status: proposal.status, appliedCount: 0, savedAt: null };
+      // A new draft has saved nothing yet, but the page still needs to know that notes were saved before.
+      s.studyNotes = { proposalId: proposal.id, status: proposal.status, appliedCount: 0, savedAt: s.studyNotes?.savedAt ?? null };
       this.saveSoon();
       this.log.info(`scribe drafted ${proposal.ops.length} ops in ${res.stats.durationMs} ms for session ${s.id}`);
       this.broadcast({ type: "bookkeeping.proposal", proposal });

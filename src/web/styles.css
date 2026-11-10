@@ -459,9 +459,6 @@ body {
 .md {
   line-height: 1.6;
   overflow-wrap: anywhere;
-  /* A flex item never shrinks below its content, so a wide diagram would push the chat past its panel. */
-  min-width: 0;
-  max-width: 100%;
 }
 .md > :first-child {
   margin-top: 0;
@@ -531,8 +528,11 @@ body {
   border-radius: 5px;
   padding: 0.05em 0.35em;
 }
+/*
+ * Overlay scrollbars hide until a scroll starts, so a wide diagram looked cut off at the edge. A styled bar always
+ * shows; the standard scrollbar properties are reset first, because a browser that sees them ignores the styled one.
+ */
 .md pre {
-  max-width: 100%;
   background: var(--muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
@@ -540,6 +540,15 @@ body {
   overflow-x: auto;
   margin: 0.8em 0;
   line-height: 1.45;
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+.md pre::-webkit-scrollbar {
+  height: 8px;
+}
+.md pre::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
 }
 .md pre code {
   background: none;
