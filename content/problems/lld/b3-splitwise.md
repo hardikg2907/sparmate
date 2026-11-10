@@ -24,17 +24,25 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Users:** each has an id and a name. The caller passes the user id and the group id. The system assigns expense ids, counting from 1. A repeated user id or group id is rejected. Names may repeat. Users are never deleted. Real use goes up to 10,000 users and about 100,000 expenses.
 - **Groups:** a group has a name and 2 or more members, fixed at creation. A group with fewer than 2 members, a repeated member or an unknown user is rejected. Real groups hold up to 50. A user may be in many groups.
 - **Expense:** it belongs to one group and has exactly one payer. An unknown group is rejected. The payer and every participant must be members of that group. The participant list has 1 or more people, with no duplicates. Its order matters only for leftover paise. The payer may be outside the list. The payer's own share creates no debt, and a payer who is the only participant is accepted and changes no balance.
-- **Split types:** equal, exact amounts, percentages. Do not mention share-based splits.
-- **Leftover paise (one rule for every split that divides):** floor each share, then hand out the leftover paise one each, in the listed order, to participants with a non-zero weight, until none are left. The shares always add up to the total exactly. For an equal split, the first `total % n` listed participants pay one paisa extra: 1000 among 3 gives 334, 333, 333. If they propose another rule that is fixed, written down and always adds up (the last participant with a non-zero weight absorbs the difference, or largest remainder with ties to the earlier listed participant), accept it and adjust scenarios 2, 4, 10b and 11. A zero weight must still owe nothing.
+- **Split types:** equal, exact amounts, percentages.
+- **Leftover paise (one rule for every split that divides):** floor each share, then hand out the leftover paise one each, in the listed order, to participants with a non-zero weight, until none are left. The shares always add up to the total exactly. For an equal split, the first `total % n` listed participants pay one paisa extra: 1000 among 3 gives 334, 333, 333. A zero weight must still owe nothing.
 - **Exact:** one amount per participant, in paise, adding up to the total. A zero entry means that person owes nothing. A negative entry is rejected.
-- **Percent:** one percentage per participant, up to 2 decimals (33.33 is allowed), none negative, totalling exactly 100.00. 33.33 three times is 99.99 and is rejected. A zero entry is allowed. Integer hundredths of a percent (3333) is best. A `double` is accepted only if the total check uses a tolerance and the shares still add up in paise.
+- **Percent:** one percentage per participant, up to 2 decimals (33.33 is allowed), none negative, totalling exactly 100.00. 33.33 three times is 99.99 and is rejected. A zero entry is allowed.
 - **Rejection:** an invalid call is rejected with an error the caller can see, in one style (a result with a reason, or an exception). A rejected call changes nothing: no expense, no balance.
 - **Balances:** tracked per pair of users, across all groups together, not per group. Each pair has one netted balance: if Bob owes Alice 300 and then Alice owes Bob 250, the system shows only "Bob owes Alice 50". A pair at 0 shows nothing. The caller can list every balance and ask for one user's balances. A user's list shows every line where the user owes or is owed. Line order does not matter. A user's net position is what others owe the user minus what the user owes, and all net positions add up to 0.
 - **Settle-up:** `from` pays `to` an amount, and that reduces what `from` owes `to`. Partial payments are fine. The amount must be above 0 and at most what `from` currently owes `to`. Paying someone you owe nothing is rejected, and so is overpaying. An unknown user is rejected. It is not tied to a group. Paying the full debt removes the pair.
 - **Time:** the caller passes a whole number (minutes is fine) on each expense and each settle-up. The system stores it for history. Nothing in the first version depends on it. Do not read the system clock.
 - **Threads:** yes, up to 8 threads and about 100 calls per second. `main()` may stay single-threaded for the demo.
-- **Out of scope:** several payers, other currencies, recurring expenses, notifications, login, persistence, a UI, per-group balance views, adding or removing group members. Editing or deleting an expense and simplifying debts are not in the first version either. If they ask, say "not now" and add nothing.
+- **Out of scope:** several payers, other currencies, recurring expenses, notifications, login, persistence, a UI, per-group balance views, adding or removing group members. Editing or deleting an expense and simplifying debts are not in the first version either.
 - **Demo:** `main()` shows an equal split, an exact split, a percent split, the balance list, a settle-up and one rejected expense.
+
+For the interviewer: on the split types, do not mention share-based splits.
+
+For the interviewer: on the leftover paise, if the candidate proposes another rule that is fixed, written down and always adds up (the last participant with a non-zero weight absorbs the difference, or largest remainder with ties to the earlier listed participant), accept it and adjust scenarios 2, 4, 10b and 11.
+
+For the interviewer: on the percent split, integer hundredths of a percent (3333) is best. A `double` is accepted only if the total check uses a tolerance and the shares still add up in paise.
+
+For the interviewer: on what is out of scope, if the candidate asks, say "not now" and add nothing.
 
 ## Expected requirements
 

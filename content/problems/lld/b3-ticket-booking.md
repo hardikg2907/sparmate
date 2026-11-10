@@ -26,19 +26,27 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Who picks seats:** the user names the exact seats. The system does not assign them.
 - **Seat state:** a seat is free, held or booked **for one show**. Seat A1 in the 6 pm show and in the 9 pm show are two separate things.
 - **Hold:** 1 to 6 seats of one show, all or nothing. If any seat is not free, the whole request is rejected and nothing changes. Duplicate seats in one request and seats that are not on the screen are invalid. A held seat is not free for anyone, including the user who holds it. One user may have many holds and bookings at once, on the same show too. A hold cannot be extended or renewed. After it ends, the user makes a new hold.
-- **Hold time:** 5 minutes, configurable. A hold made at minute 10 is valid at minutes 10 to 14 and is over at minute 15. The caller passes `now` on every call. If they want the caller to pass the expiry as well as `now`, that is fine: `expiresAt = now + 5`.
+- **Hold time:** 5 minutes, configurable. A hold made at minute 10 is valid at minutes 10 to 14 and is over at minute 15. The caller passes `now` on every call.
 - **Expiry:** no timer thread. A seat counts as free the moment `now` reaches its expiry, even if nothing cleaned it up. An explicit `releaseExpired(now)` is allowed as an extra, never as the only mechanism.
 - **Payment:** outside the system. The caller reports the result. Success calls confirm with the hold id. Failure calls release with the hold id. The hold id is the booking id that `hold` returns. Confirm and release have no user check, because they are payment callbacks.
 - **Amount:** the sum of the seat prices for that show, fixed when the hold is made. Hold returns it with the hold id. Confirm returns the same number.
 - **Confirm:** works only on a hold that is still held and not expired. It is rejected for an unknown id, an expired hold, a released hold or an already confirmed one.
 - **Cancel:** only the owner, only a confirmed booking, only while `now` is before the show start. The seats become free at once. The refund is the full amount paid. Money movement is out of scope. A hold that is not confirmed is ended by release or expiry, not by cancel.
 - **Browse:** shows of a movie in a city, ordered by start time (show id breaks ties). A show with `start <= now` is not listed, the same rule as hold. Browse also has to give the free seats of one show at time `now`, in layout order (A1 to C5). Free seats of a started show are still readable. Browse takes only a movie and a city: no filter by date, language, genre or theatre. An unknown show, movie or city gives an empty list.
-- **Booking closes at show start:** a hold at `now >= start` is rejected. A hold made before the start may still be confirmed inside its 5 minutes. Do not test that.
+- **Booking closes at show start:** a hold at `now >= start` is rejected. A hold made before the start may still be confirmed inside its 5 minutes.
 - **Threads:** yes. Many users tap seats at the same moment, up to about 16 request threads in one process. `main()` may stay single-threaded.
 - **Time:** whole minutes from a fixed origin, passed in by the caller. Never the system clock.
-- **Rejections:** the candidate picks the style (optional, bool, error code or exception). The candidate does not need to tell the reasons apart. A rejected call must change nothing.
-- **Scale:** the demo has 5 shows. Real bounds are about 300 seats per screen and a few thousand shows, all in memory. A scan over shows is fine for browse. An index by movie and city is a fine extra.
+- **Rejections:** any style works (optional, bool, error code or exception). The reasons need not be told apart. A rejected call must change nothing.
+- **Scale:** the demo has 5 shows. Real bounds are about 300 seats per screen and a few thousand shows, all in memory. A scan over shows is fine for browse.
 - **Out of scope:** user accounts, real payments, coupons, food, notifications, overlapping-show checks, editing or deleting shows, partial cancel, waitlists, extending a hold, listing a user's bookings (a booking is found by its id).
+
+For the interviewer: on the hold time, if the candidate wants the caller to pass the expiry as well as `now`, that is fine: `expiresAt = now + 5`.
+
+For the interviewer: on booking closing at show start, do not test that a hold made before the start can still be confirmed inside its 5 minutes.
+
+For the interviewer: on the rejections, the candidate picks the style.
+
+For the interviewer: on scale, an index by movie and city is a fine extra.
 
 ## Expected requirements
 

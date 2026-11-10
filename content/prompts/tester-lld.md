@@ -40,7 +40,7 @@ So your harness sits after their whole file. It can use every type and function 
 - **Their API cannot express a scenario.** For example, the layout cannot be configured, or the code reads the system clock so a long stay cannot be set up. The scenario fails, and the detail says what is missing. Do not invent a workaround that their own design would not support.
 - **A scenario is conditional**, such as "only if the candidate made it thread-safe", and the condition does not hold. Leave it out of the list, and say why in `notes`.
 
-Never edit their file, never fix their bugs inside the harness, and never choose an interpretation that turns a failing scenario into a pass. If their own comments state an interpretation that the brief allows, use it and say so in `notes`.
+Never edit their file, never fix their bugs inside the harness, and never choose an interpretation that turns a failing scenario into a pass. Lines of the brief that start with "For the interviewer:" are notes for whoever reads the brief, you included. If their own comments state an interpretation that the brief allows, use it and say so in `notes`.
 
 ## What you return
 

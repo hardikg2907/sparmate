@@ -29,16 +29,21 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Nearest suitable car:** distance is the number of floors between the car and the call floor. A car with no stops and doors closed is free, and a free car is suitable for any call. A busy car is suitable only when it is heading the same way as the call and the call floor is still ahead of it. A car with its doors open is never suitable. A car that holds a stop at its own floor and has not opened its doors yet counts the same way. The call floor must lie strictly ahead, so a moving car that is already at the call floor is not suitable. The nearest suitable car wins. Ties go to the lowest car id. So a press at the floor where a car stands with its doors open goes to another car, or waits.
 - **Heading of a busy car:** a free car takes its heading the moment it gets its first stop. The car counts as moving toward that stop at once, even before the first tick. After that, the heading changes only when the car reverses.
 - **No suitable car:** the call waits. A new call is tried at once. Waiting calls are retried at the start of every tick, before any car moves, oldest first. A press that has to wait is still a valid press: it is accepted, not rejected. The return value tells valid from invalid, not assigned from waiting.
-- **Order of stops (SCAN):** a car keeps its heading while any stop lies ahead. When none lies ahead and one lies behind, it reverses. When none remain, it goes idle. Stops are served in sweep order, never in the order pressed. A car never reverses between stops. This is the LOOK variant of SCAN: the car turns at its last stop, not at the end of the shaft. Accept either name.
+- **Order of stops (SCAN):** a car keeps its heading while any stop lies ahead. When none lies ahead and one lies behind, it reverses. When none remain, it goes idle. Stops are served in sweep order, never in the order pressed. A car never reverses between stops. This is the LOOK variant of SCAN: the car turns at its last stop, not at the end of the shaft.
 - **Idle cars:** an idle car stays where it is. There is no parking at the ground floor.
 - **Time:** simulated. `main()` calls `tick()`. The system never reads the clock, sleeps or starts a timer thread. One call is one step, and a car moves one floor per step.
-- **Doors:** a car that arrives at a stop opens its doors in that same tick. In the next tick the doors close and the car does not move. The tick after that, it moves on if it has stops. The door time is 1 tick in the demo. A good design makes it a setup value.
+- **Doors:** a car that arrives at a stop opens its doors in that same tick. In the next tick the doors close and the car does not move. The tick after that, it moves on if it has stops. The door time is 1 tick in the demo.
 - **Same floor:** a hall call for the floor where a free car stands goes to that car (distance 0), and its doors open on the next tick. A car call for the floor the car is on is invalid. For a moving car, that means the floor it just reached. A car call for a floor behind the car is valid, and the car serves it after it reverses.
 - **Pressing a lit button:** pressing the same hall call or the same car call twice is not an error. It adds no second stop and moves no second car.
-- **Invalid input:** floor out of range, unknown car id, a missing button, the car's own floor. The call is rejected and nothing changes. The error style is the candidate's choice, but it must be one style.
+- **Invalid input:** floor out of range, unknown car id, a missing button, the car's own floor. The call is rejected and nothing changes. Any error style works, but use one style for every rejected call.
 - **Threads:** in a real building many floors press at once while a timer calls `tick()`. `main()` may stay single-threaded.
 - **Out of scope:** passengers, destination dispatch (choosing a car at the lobby), fire and emergency modes, door sensors, acceleration, energy, a UI, more than one building, load balancing, a guarantee that a waiting call is served within a set time.
-- **Extensions:** maintenance mode, an express car, a weight limit. Do not mention them until the extension step.
+
+For the interviewer: on the order of stops, accept either name, SCAN or LOOK.
+
+For the interviewer: on the doors, a good design makes the door time a setup value.
+
+For the interviewer: do not mention the extensions until the extension step.
 
 ## Expected requirements
 

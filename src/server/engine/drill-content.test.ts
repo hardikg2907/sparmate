@@ -8,6 +8,7 @@ import {
   deepDiveEntries,
   drillFits,
   drillsAvailable,
+  factOnly,
   interviewerNotesIn,
   matchDeepDive,
   matchTradeoff,
@@ -123,6 +124,116 @@ describe("drill content from the shipped briefs", () => {
     expect(built?.key).toContain("`Ticket`");
     expect(built?.key).toContain("enter(type, time)");
     expect(built?.prompt.minutes).toBe(15);
+  });
+});
+
+describe("facts a drill shows", () => {
+  it.each([
+    ["an extensions bullet", "**Extensions:** undo, a second board. Do not mention them until the extension step.", null],
+    ["an extensions bullet with no note", "**Extension:** undo.", null],
+    ["a sentence that tells the interviewer what to hold back", "**Split types:** equal and exact. Do not mention weighted splits.", "**Split types:** equal and exact."],
+    ["a sentence about the candidate", "**Names:** `open`, `close`. The names are the candidate's choice.", "**Names:** `open`, `close`."],
+    ["an aside for the interviewer", "**Out of scope:** billing (do not volunteer it), a UI.", "**Out of scope:** billing, a UI."],
+    ["an aside in the label", "**Cost (give only if asked):** storage is cheap.", "**Cost:** storage is cheap."],
+    [
+      "a note about what to accept",
+      "**Callers:** code calls `send` directly. If they propose a queue, accept it, but do not require it.",
+      "**Callers:** code calls `send` directly.",
+    ],
+    ["what to say when asked", "**Not now:** undo, replay. If they ask, say so and add nothing.", "**Not now:** undo, replay."],
+  ])("drops %s", (_n, bullet, expected) => {
+    expect(factOnly(bullet)).toBe(expected);
+  });
+
+  it("keeps the label when the sentence it opens is a note", () => {
+    expect(factOnly("**Errors:** the candidate picks the style. A rejected call changes nothing.")).toBe("**Errors:** A rejected call changes nothing.");
+  });
+
+  it("drops a bullet with nothing left but its label", () => {
+    expect(factOnly("**Style:** the candidate picks it.")).toBeNull();
+  });
+
+  it("keeps a plain fact, an aside that is part of it, and a rule for the candidate's code", () => {
+    const fact = "**Time:** the caller passes minutes in (an int). Do not read the system clock.";
+    expect(factOnly(fact)).toBe(fact);
+  });
+
+  it("finds no note to the interviewer inside any shipped fact bullet", () => {
+    for (const problem of all) {
+      for (const line of (problem.sections["Hidden facts"] ?? "").split("\n")) {
+        const bullet = /^\s*[-*]\s+(.+)$/.exec(line)?.[1]?.trim();
+        if (!bullet) continue;
+        expect(factOnly(bullet), problem.meta.id).toBe(bullet);
+        // Notes the backstop does not know must stay out of the bullets too, because the briefs are the writer's example.
+        expect(bullet, problem.meta.id).not.toMatch(
+          /\b(?:if asked|beyond a (?:one-line )?mention|one line (?:each )?is enough|if they (?:ask|add|propose|want)|the candidate|their choice|a good design|is a fine extra|allowed, not required|is the next step|accept (?:it|either|any))\b/i,
+        );
+      }
+    }
+  });
+
+  it("never shows a line for the interviewer in a drill", () => {
+    const elevator = all.find((p) => p.meta.id === "b3-elevator") as Problem;
+    expect(elevator.sections["Hidden facts"]).toContain("For the interviewer:");
+    for (const drill of ["lld_skeleton", "tradeoff"] as const) {
+      expect(JSON.stringify(buildDrill(elevator, drill)?.prompt.material)).not.toContain("For the interviewer");
+    }
+  });
+
+  it.each([
+    ["a curly apostrophe", "**Replay:** not in scope. Don\u2019t mention replay.", "**Replay:** not in scope."],
+    ["a note after an abbreviation", "**Splits:** equal and exact, e.g. three ways. Do not mention weighted splits.", "**Splits:** equal and exact, e.g. three ways."],
+    ["a label that is a note", "**Interviewer note:** accept a queue if proposed.", null],
+    ["a curveballs label", "**Curveballs:** a hot key later.", null],
+    ["a fact after a quoted note", '**Moves:** if they ask, say "Not now." A move is final.', "**Moves:** A move is final."],
+    ["a scenario note", "**Lapse:** a hold lapses after its day. Scenarios 1 to 4 check only that.", "**Lapse:** a hold lapses after its day."],
+    ["a number held back", "**Load:** 5,000 reads a second. Never reveal the peak of 20,000.", "**Load:** 5,000 reads a second."],
+    ["a note in the label", "**Numbers, if asked:** a node takes 5,000 writes.", "**Numbers:** a node takes 5,000 writes."],
+    ["a note after etc", "**Channels:** email, SMS, etc. The candidate picks the order.", "**Channels:** email, SMS, etc."],
+  ])("drops %s", (_n, bullet, expected) => {
+    expect(factOnly(bullet)).toBe(expected);
+  });
+
+  it.each([
+    "**Scale:** 10,000 writes a second (we do not count retries).",
+    "**Riders:** any adult can ride (including volunteer drivers).",
+    "**Guests:** guests do not require an account.",
+    "**Gate:** a guard can let them in after 10 PM.",
+    "**Extension numbers:** 4 digits each.",
+    "**Bodies:** Accept only JSON bodies up to 1 MB.",
+    "**Refunds:** Give no refund after 30 days.",
+    "**Uploads:** images only (checked by file extension).",
+    "**Note size:** up to 1 MB.",
+  ])("keeps the real fact %s", (bullet) => {
+    expect(factOnly(bullet)).toBe(bullet);
+  });
+
+  it("drops the indented bullets under a note", () => {
+    const sections = { ...lld.sections, "Hidden facts": "- **Extensions:** later.\n  - undo\n  - replay\n- **Moves:** one per turn.\n  - a move is final" };
+    const known = buildDrill({ ...lld, sections }, "lld_skeleton")?.prompt.material.find((m) => m.heading === "What you know")?.markdown ?? "";
+    expect(known).toBe("- **Moves:** one per turn.\n- a move is final");
+  });
+
+  it("shows only facts in the capacity drill", () => {
+    const sections = {
+      ...hld.sections,
+      "Hidden facts": "- **Load:** 5,000 reads a second. Do not mention the 20,000 peak.\n- **Spikes (give only if asked):** 3 times the average.",
+    };
+    const known = buildDrill({ ...hld, sections }, "capacity")?.prompt.material.find((m) => m.heading === "What you know")?.markdown ?? "";
+    expect(known).toBe("- **Load:** 5,000 reads a second.\n- **Spikes:** 3 times the average.");
+  });
+
+  it("shows only facts under What you know in the machine coding drills", () => {
+    const sections = {
+      ...lld.sections,
+      "Hidden facts": `${lld.sections["Hidden facts"] ?? ""}\n- **Extensions:** night rates, a second gate. Do not mention them until the extension step.\n- **Spots:** three sizes. The names are the candidate's choice.`,
+    };
+    const problem = { ...lld, sections };
+    for (const drill of ["lld_skeleton", "tradeoff"] as const) {
+      const known = buildDrill(problem, drill)?.prompt.material.find((m) => m.heading === "What you know")?.markdown ?? "";
+      expect(known, drill).toContain("- **Spots:** three sizes.");
+      expect(known, drill).not.toMatch(/Extensions|night rates|candidate/);
+    }
   });
 });
 

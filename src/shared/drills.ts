@@ -23,7 +23,13 @@ export const DRILL_INFO: Record<DrillType, DrillInfo> = {
   walk: { title: "Walk a request", minutes: 10, tracks: ["hld"], about: "Follow one request through every box of your design, in order." },
   requirements: { title: "Requirements sprint", minutes: 10, tracks: ["hld"], about: "Say what to ask and what to settle before you draw anything." },
   deep_dive: { title: "Pick a deep dive", minutes: 15, tracks: ["hld"], about: "Take one hard part of the design one level deeper than the first answer.", dialogue: true },
-  tradeoff: { title: "Defend a trade-off", minutes: 15, tracks: ["hld", "lld"], about: "Pick a side of one design choice and hold it under questions.", dialogue: true },
+  tradeoff: {
+    title: "Defend a trade-off",
+    minutes: 15,
+    tracks: ["hld", "lld"],
+    about: "Choose a side of one design choice, or name the patterns to use and leave out, and defend your reasons under questions.",
+    dialogue: true,
+  },
   lld_skeleton: { title: "LLD skeleton", minutes: 15, tracks: ["lld"], about: "Name the classes, their fields and their method signatures, with no bodies." },
 };
 

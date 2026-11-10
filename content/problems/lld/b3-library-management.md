@@ -24,21 +24,31 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Who calls:** a librarian desk calls the system. No logins, no roles, no UI.
 - **Size:** up to about 10,000 books and 50,000 copies in memory. The demo has 4 books. A linear scan for search is fine.
 - **Ids:** the system hands out ints, in the order things are added. Books, copies, members, loans and reservations each count from 1 on their own. Copy ids run across the whole library, not per book.
-- **Time:** whole days as an `int`. Day 0 is the first day of the demo. Every call that can see or change availability takes the day: borrow, return, renew, reserve, cancel, add copy and search. Calls never go back in time. Do not spend time defending against it. Never read the system clock.
+- **Time:** whole days as an `int`. Day 0 is the first day of the demo. Every call that can see or change availability takes the day: borrow, return, renew, reserve, cancel, add copy and search. Calls never go back in time. Never read the system clock.
 - **Loan period:** 14 days. Due day = borrow day + 14. A copy returned on its due day is on time. It is late from the day after.
 - **Fine:** 2 per whole day after the due day. Due day 14: returned on day 14 costs 0, on day 15 costs 2, on day 20 costs 12. No cap. The return call reports the fine. Paying fines and keeping a debt balance are out of scope. The rate must be configurable.
 - **Borrow limit:** 3 open loans per member at once. Configurable.
 - **Config:** the limit, loan days, fine rate, renewal count and hold days must all live in one place, not as literals in the code. The demo uses 3, 14, 2, 2 and 3.
-- **Borrow rules:** the member and the book must exist. The member must have no overdue open loan (an open loan is overdue when today is after its due day). The member must have fewer than 3 open loans. The member must not already hold a copy of the same book. A copy must be free for this member. A rejected call changes nothing. The reason is not graded, but the candidate must use one error style.
+- **Borrow rules:** the member and the book must exist. The member must have no overdue open loan (an open loan is overdue when today is after its due day). The member must have fewer than 3 open loans. The member must not already hold a copy of the same book. A copy must be free for this member. A rejected call changes nothing. Any error style works, but use one style for every rejected call.
 - **Which copy:** the lowest copy id among the book's copies that sit on the shelf. A member with a ready hold on the book gets the held copy instead.
-- **Return:** by copy id, because the copy is the thing in the hand. Return by loan id is equally fine. An unknown copy, or a copy that is not on loan, is rejected.
+- **Return:** by copy id, because the copy is the thing in the hand. An unknown copy, or a copy that is not on loan, is rejected.
 - **Renew:** at most 2 renewals per loan. Allowed only on or before the due day. Rejected while any member is waiting in the book's queue. New due day = renewal day + 14, not old due day + 14. Other loans of the member do not matter. A member whose hold is ready is not waiting, so a held copy does not block renewals.
 - **Search:** case-insensitive substring match on title or author, as one call or two. It returns books, not copies. Each hit shows how many copies sit on the shelf. Hits come in book-id order. An empty query returns nothing. A copy on loan or on hold is not on the shelf.
 - **Reservations:** per book, first in first out in the order of the calls, not the day value. A member may reserve only when no copy of that book is on the shelf. A member may not reserve a book they hold, and may not have 2 active reservations for the same book. "Active" means waiting or ready. Reserving has no overdue check and no limit check, and there is no cap on reservations per member. A book with no copies yet cannot be borrowed, and a member may reserve it. Cancelling an active reservation is allowed, whether waiting or ready. Cancelling an unknown or finished one is rejected.
 - **Hold:** when a copy comes free (a return, a cancelled hold, a lapsed hold, a new copy) and a member is waiting, the copy is held for the first waiting member. They may borrow it up to and including `day + 3`. Nobody else may take it. Borrowing it ends their reservation. A held copy is not on the shelf. A member at the borrow limit still gets the hold and loses it at the lapse.
-- **Lapse:** no timer runs. A call that touches a book checks that book's holds first. A hold lapses when the day is after its last day. The member leaves the queue. The copy then goes to the next waiting member with a fresh 3 days counted from the day of the call that noticed it. With nobody waiting, it goes back to the shelf. Scenarios 1 to 11 only check that the next member can borrow on the day of the lapse, which holds under either rule. Accept a next hold counted from the old hold's last day if the candidate states it.
+- **Lapse:** no timer runs. A call that touches a book checks that book's holds first. A hold lapses when the day is after its last day. The member leaves the queue. The copy then goes to the next waiting member with a fresh 3 days counted from the day of the call that noticed it. With nobody waiting, it goes back to the shelf.
 - **Threads:** several desks may call at once. `main()` may stay single-threaded.
-- **Out of scope:** fine payment, deleting books, copies or members, branches, e-books, barcodes, reserving a specific copy, persistence. If asked about lost books, member types or notifications, say "not in the first version" and add nothing.
+- **Out of scope:** fine payment, deleting books, copies or members, branches, e-books, barcodes, reserving a specific copy, persistence.
+
+For the interviewer: on the time, do not spend time defending against calls that go back in time.
+
+For the interviewer: on the borrow rules, the rejection reason is not graded.
+
+For the interviewer: on returns, return by loan id is equally fine.
+
+For the interviewer: on the lapse, scenarios 1 to 11 only check that the next member can borrow on the day of the lapse, which holds under either rule. Accept a next hold counted from the old hold's last day if the candidate states it.
+
+For the interviewer: on what is out of scope, if asked about lost books, member types or notifications, say "not in the first version" and add nothing.
 
 ## Expected requirements
 

@@ -23,8 +23,8 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Order of steps:** select first, then pay. The customer inserts one piece at a time. A piece inserted before any selection is refused and comes straight back.
 - **Money:** coins 1, 2, 5, 10 and notes 20, 50, 100. One currency, whole units, no decimals. No other value is accepted. The machine only cares about the face value. The stock of pieces starts empty and has no upper limit. The operator fills it with `loadMoney`.
 - **Sale completes by itself:** the moment the inserted total reaches the price or more, the machine dispenses and returns change in the same call. There is no "confirm" or "dispense" call. Dispensing means the call returns the product; there is no hardware in the first version. Not enough money yet is waiting, not an error.
-- **Cancel:** allowed any time before the product drops. The customer gets back the exact pieces they put in, not the same amount in other pieces. Cancel with nothing selected does nothing and returns nothing. Either no error or a no-slot-selected error is fine.
-- **Change:** it comes from the machine's own stock of pieces. The pieces the customer just inserted count as stock for that same sale. Largest piece first is accepted for the first version. Change is always under 100: the money held before the last piece was below the price, and a piece is at most 100. A switch to a cheaper slot releases money held below the old price, which is at most 99.
+- **Cancel:** allowed any time before the product drops. The customer gets back the exact pieces they put in, not the same amount in other pieces. Cancel with nothing selected does nothing and returns nothing.
+- **Change:** it comes from the machine's own stock of pieces. The pieces the customer just inserted count as stock for that same sale. Change is always under 100: the money held before the last piece was below the price, and a piece is at most 100. A switch to a cheaper slot releases money held below the old price, which is at most 99.
 - **No exact change:** the sale is cancelled. The customer gets back exactly the pieces they inserted, no product is dispensed, the product quantity and the stock stay as they were, and the machine goes back to idle.
 - **Changing the selection:** while a sale is open, the customer may select another slot. The money stays. The machine checks again at once, so a switch can complete the sale. A bad choice (invalid slot or sold out) is refused, and the open sale stays as it was. Selecting the slot that is already selected changes nothing.
 - **Slots:** the count is fixed when the machine is built. The demo uses 4. Ids run from 0 to count minus 1. Each slot holds one product and a quantity. All slots start empty. Two slots may hold the same product. No limit on quantity per slot. A count of 0 or less is invalid at construction.
@@ -36,8 +36,14 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Customers:** one customer at a time. The operator is a different caller, not a stored "user type".
 - **Threads:** two callers can run at the same moment: the keypad (customer calls) and the operator's service tablet (operator calls). `main()` may stay single-threaded for the demo.
 - **Time:** the first version has none. If a rule ever needs time, the caller passes it in whole seconds. Never the system clock. A customer who walks away: nothing happens, and the sale stays open until someone cancels or pays.
-- **Demo:** `main()` shows an exact-money sale, a sale with change, a cancel, a sold-out slot, a refused operator call and a restock. Read-only getters (quantity of a slot, count of a piece in stock) are fine but not required.
+- **Demo:** `main()` shows an exact-money sale, a sale with change, a cancel, a sold-out slot, a refused operator call and a restock.
 - **Out of scope:** cards and other payment, a screen, collecting the cash, the operator taking products or pieces out, hardware faults, price changes during a sale, receipts, several products in one sale, saving state to disk.
+
+For the interviewer: on the change, largest piece first is accepted for the first version.
+
+For the interviewer: on the cancel, either no error or a no-slot-selected error is fine for a cancel with nothing selected.
+
+For the interviewer: on the demo, read-only getters (quantity of a slot, count of a piece in stock) are fine but not required.
 
 ## Expected requirements
 

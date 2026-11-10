@@ -32,7 +32,9 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Custom alias taken:** reject with an error.
 - **Deletion:** a deleted link must stop redirecting within a minute.
 - **Regions:** users are global. Start with one region; a CDN in front is fine.
-- **Abuse and malware scanning:** out of scope beyond a one-line mention.
+- **Abuse and malware scanning:** out of scope.
+
+For the interviewer: on abuse and malware scanning, a one-line mention is enough.
 
 ## Expected requirements
 

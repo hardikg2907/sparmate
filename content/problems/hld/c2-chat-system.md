@@ -24,7 +24,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Volume:** each daily user sends about 50 messages a day. 75% go to one-to-one chats and 25% to groups.
 - **Chats:** an average daily user is active in about 8 chats a day. That is about 550 million active conversations a day, 50 million of them groups. An average group sends about 50 messages a day and an average one-to-one chat about 15.
 - **Busiest chats:** a very active group sends about 1,000 messages a day. A busy one-to-one chat sends about 100.
-- **Message size:** text up to 4,000 characters, about 100 bytes on average. Photos and video are out of scope beyond one line (upload to object storage, send a link).
+- **Message size:** text up to 4,000 characters, about 100 bytes on average. Photos and video are out of scope.
 - **Peak:** the evening peak is about 3 times the daily average. About 50 million phones are online at once at the peak.
 - **Offline recipients:** about half of all deliveries find the recipient offline.
 - **Latency:** an online recipient gets a message within 500 milliseconds at p99, counted from when our servers receive it. A page of 50 older messages loads in under 200 milliseconds on our side.
@@ -38,9 +38,11 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Offline phones:** a phone can be offline for weeks. On reconnect it gets everything it missed, in order within each chat. The server holds undelivered messages for 30 days. After that, the phone restores the chat from history. Meanwhile the user gets push notifications. A push is a short alert with the chat id and no message text.
 - **History:** the server keeps messages for 1 year. Users scroll back through it, and a new phone restores it. Older messages are deleted.
 - **Devices:** one phone per account. Linked web or desktop devices come later.
-- **Encryption:** end-to-end encryption comes later. Treat the message body as opaque bytes the server never reads.
+- **Encryption:** end-to-end encryption comes later. The message body is opaque bytes that the server never reads.
 - **Out of scope:** calls, editing or deleting messages, search, stories, and spam control beyond a per-user send limit.
 - **Regions:** one region with three availability zones. Most users live in one part of the world.
+
+For the interviewer: on media, one line is enough: upload to object storage and send a link.
 
 ## Expected requirements
 
