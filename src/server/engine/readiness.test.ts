@@ -79,14 +79,14 @@ describe("computeReadiness", () => {
     expect(two.reasons).toEqual(["Core entities and API were assisted."]);
   });
 
-  it("counts every hint and the level 3 ones", () => {
+  it("counts every hint and the ones that offered two options", () => {
     const hints = [
       { at: 1, level: 1 as const, topic: "a" },
       { at: 2, level: 2 as const, topic: "b" },
       { at: 3, level: 3 as const, topic: "c" },
     ];
-    expect(computeReadiness(round({ hints }), PLAN).reasons).toEqual(["3 hints, including 1 at level 3."]);
-    expect(computeReadiness(round({ hints: [hints[2]!] }), PLAN).reasons).toEqual(["1 hint, including 1 at level 3."]);
+    expect(computeReadiness(round({ hints }), PLAN).reasons).toEqual(["3 hints, and 1 of them gave you two options to pick from."]);
+    expect(computeReadiness(round({ hints: [hints[2]!] }), PLAN).reasons).toEqual(["1 hint, and it gave you two options to pick from."]);
   });
 
   it("flags active time above 1.5 times the plan, and not before", () => {

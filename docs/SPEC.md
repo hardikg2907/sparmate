@@ -202,7 +202,8 @@ Tool definitions (zod input schemas, every input validated, size-capped):
   that time; an `at` that is not a time is a tool error. A transcript over 60,000 characters is cut, with a note to ask
   for a time.
 - `set_phase({ phase })` -> phase must belong to the track; records `phaseHistory` with `by: "interviewer"`.
-- `note_hint({ level: 1|2|3, topic })` -> appends to `session.hints`. Hidden from the candidate.
+- `note_hint({ level: 1|2|3, topic })` -> appends to `session.hints`, after a leading level code is cut from the topic
+  (`plainHintTopic`). Hidden from the candidate.
 - `end_interview({ reason })` -> ends the round (same path as the candidate's end).
 - `pin_note({ elementId, note })` (guide only, so an interview round has no pins) and `pin_element({ elementId, note,
   verdict: "held"|"gap" })` (judge) -> attach a note of at most `LIMITS.pinNoteChars` (200) characters to one board
@@ -446,7 +447,7 @@ On end: status `debriefing`, `debrief.progress` updates, then:
 5. **Readiness (guided rounds only).** The server computes `scorecard.readiness = { call: "ready"|"not_yet", reasons[] }`
    with a fixed rule (`computeReadiness` in `src/server/engine/readiness.ts`), never the model. Each failed condition adds
    one plain sentence: the steps that have no `pass` in `Session.stepVerdicts` (named by their labels); the steps in
-   `Session.assists` (named by label); any hint at level 3 ("3 hints, including 1 at level 3."); and an active time
+   `Session.assists` (named by label); any hint at level 3 ("3 hints, and 1 of them gave you two options to pick from."); and an active time
    (end minus start minus pauses) above 1.5 times the round's planned duration ("The round took 80 minutes against a
    45-minute plan."). The call is `ready` only when there are no reasons. The judge, the dimension scores, the gaps, the
    coach and the tracker mark (`[~]`) work as before, and `verdict.sde2` stays in the data, but the page shows no hire
