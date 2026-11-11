@@ -87,6 +87,7 @@ describe("computeReadiness", () => {
     ];
     expect(computeReadiness(round({ hints }), PLAN).reasons).toEqual(["3 hints, and 1 of them gave you two options to pick from."]);
     expect(computeReadiness(round({ hints: [hints[2]!] }), PLAN).reasons).toEqual(["1 hint, and it gave you two options to pick from."]);
+    expect(computeReadiness(round({ hints: [hints[2]!, { ...hints[2]!, at: 4 }] }), PLAN).reasons).toEqual(["2 hints, and each of them gave you two options to pick from."]);
   });
 
   it("flags active time above 1.5 times the plan, and not before", () => {

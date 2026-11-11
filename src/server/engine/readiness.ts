@@ -30,7 +30,8 @@ export function computeReadiness(
   const hints = session.hints ?? [];
   const deep = hints.filter((h) => h.level === 3).length;
   if (deep > 0) {
-    reasons.push(hints.length === 1 ? "1 hint, and it gave you two options to pick from." : `${hints.length} hints, and ${deep} of them gave you two options to pick from.`);
+    const which = hints.length === 1 ? "it" : deep === hints.length ? "each of them" : `${deep} of them`;
+    reasons.push(`${hints.length === 1 ? "1 hint" : `${hints.length} hints`}, and ${which} gave you two options to pick from.`);
   }
 
   const activeMin = Math.round(roundTimeMs(session, nowMs) / 60_000);

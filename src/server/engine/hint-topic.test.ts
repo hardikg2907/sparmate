@@ -16,7 +16,16 @@ describe("plainHintTopic", () => {
     expect(plainHintTopic("Levels of caching")).toBe("Levels of caching");
   });
 
+  it("keeps the capitals of a topic that has no code", () => {
+    expect(plainHintTopic("gRPC retries")).toBe("gRPC retries");
+    expect(plainHintTopic("iOS push tokens")).toBe("iOS push tokens");
+  });
+
   it("keeps the text when the code is all there is", () => {
     expect(plainHintTopic("H2")).toBe("H2");
+  });
+
+  it("never returns an empty topic", () => {
+    expect(plainHintTopic("   ")).toBe("No topic given");
   });
 });
