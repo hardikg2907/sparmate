@@ -35,7 +35,7 @@ export function UsagePage({ initial }: { initial?: UsageSummaryResponse } = {}) 
     <div className="page-canvas flex h-full min-h-0 flex-col overflow-y-auto">
       <AppHeader />
 
-      <main tabIndex={-1} className="reveal-children mx-auto w-full max-w-6xl flex-1 space-y-8 px-4 pb-16 pt-8 sm:px-8">
+      <main tabIndex={-1} className="reveal-children mx-auto w-full max-w-[1224px] flex-1 space-y-8 px-4 pb-16 pt-8 sm:px-8">
         <div className="space-y-1">
           <h1 className="text-display font-bold tracking-[-0.015em] text-foreground">Model usage and costs</h1>
           <p className="text-ui text-muted-foreground">Model calls, token counts and API-equivalent costs for your practice rounds.</p>

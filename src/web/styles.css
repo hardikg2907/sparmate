@@ -446,7 +446,7 @@ body {
 }
 
 /*
- * A hidden work pane keeps its size, so Excalidraw and Monaco need no re-layout when it comes back.
+ * A hidden work pane stays mounted, so the board and the editor keep their state when it comes back.
  * Excalidraw sets visibility on its own controls, so hiding the pane alone leaves them painted.
  */
 .pane-hidden,

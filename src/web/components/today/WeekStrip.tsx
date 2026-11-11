@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { DayKind } from "../../../shared/week";
 import type { DayState, WeekDay, WeekSummary } from "../../lib/weekDays";
 import { MinusIcon, CheckIcon } from "../icons";
@@ -58,30 +58,25 @@ function Mark({ day }: { day: WeekDay }) {
   );
 }
 
-/** Seven cells for the week, Monday first. On a phone the row scrolls sideways inside its own box. */
+/** Seven cells for the week, Monday first. On a phone each cell is a narrow column, so the whole week fits the screen. */
 export function WeekStrip({ days }: { days: readonly WeekDay[] }) {
-  const list = useRef<HTMLOListElement>(null);
-  // Bring today into view when the row scrolls, so a phone does not open on Monday with today off screen.
-  useEffect(() => {
-    const row = list.current;
-    const today = row?.querySelector<HTMLElement>('[aria-current="date"]');
-    if (row && today) row.scrollLeft = today.offsetLeft - (row.clientWidth - today.offsetWidth) / 2;
-  }, []);
   return (
-    <ol
-      ref={list}
-      aria-label="This week's plan"
-      className="no-scrollbar relative -mx-4 flex gap-2 overflow-x-auto px-4 py-1 sm:mx-0 sm:grid sm:grid-cols-7 sm:overflow-visible sm:px-0"
-    >
+    <ol aria-label="This week's plan" className="grid grid-cols-7 gap-1.5 py-1 sm:gap-2">
       {days.map((day) => (
         <li
           key={day.name}
           aria-current={day.isToday ? "date" : undefined}
-          className={cn("flex min-w-[104px] flex-1 items-start justify-between gap-2 rounded-xl border px-3.5 py-2 sm:min-w-0", CELL[day.state])}
+          className={cn(
+            "flex min-w-0 flex-col items-center gap-1 rounded-xl border px-1 py-2 text-center sm:flex-row sm:items-start sm:justify-between sm:gap-2 sm:px-3.5 sm:text-left",
+            CELL[day.state],
+          )}
         >
           <span className="min-w-0">
-            <span className={cn("block text-meta", day.state === "today" ? "text-white/85" : "text-faint")}>{day.isToday ? `${day.name} (today)` : day.name}</span>
-            <span className={cn("block text-lead font-bold", day.state === "missed" && "line-through decoration-1")}>{KIND_LABEL[day.kind]}</span>
+            <span className={cn("block text-meta", day.state === "today" ? "text-white/85" : "text-faint")}>
+              {day.name}
+              {day.isToday ? <span className="max-sm:hidden"> (today)</span> : null}
+            </span>
+            <span className={cn("block text-ui font-bold sm:text-lead", day.state === "missed" && "line-through decoration-1")}>{KIND_LABEL[day.kind]}</span>
           </span>
           <Mark day={day} />
           <span className="sr-only">{stateText(day)}</span>

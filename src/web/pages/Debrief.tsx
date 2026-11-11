@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { ApiError, api } from "../backend";
 import type { PublicSession, Scorecard } from "../../shared/types";
 import { ChatPanel } from "../components/ChatPanel";
@@ -36,6 +37,7 @@ interface DebriefViewProps {
 export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewProps) {
   const { state, actions } = ctl;
   const [chatWidth, setChatWidth] = useChatWidth();
+  const stacked = useMediaQuery("(width < 48rem)");
   const scorecard = session.scorecard;
   const debriefed = session.status === "debriefed";
   const connected = state.connection === "open";
@@ -78,8 +80,8 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
       <ConnectionBanner status={state.connection} onRetry={actions.reconnect} />
       <MessageBanners state={state} actions={actions} />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-clip md:flex-row">
-        <main className="page-canvas relative min-w-0 flex-1 overflow-y-auto" tabIndex={-1}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-clip">
+        <main className="page-canvas relative min-w-0 flex-1 overflow-y-auto max-md:flex-none max-md:overflow-visible" tabIndex={-1}>
           <div className="reveal-children mx-auto max-w-4xl space-y-6 px-4 pb-20 pt-6 sm:px-8">
             {session.status === "debriefing" ? (
               <DebriefProgress track={session.track} debrief={state.debrief}>
@@ -98,10 +100,11 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
         <div className="hidden md:flex">
           <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         </div>
-        {/* Below the md breakpoint the coach sits under the scorecard instead of beside it, so the score stays reachable on a phone. */}
+        {/* Below the md breakpoint the coach sits under the scorecard, at the end of one scrolling page, so the score gets the whole screen on a phone. */}
         <aside
+          data-nested-scroll={stacked ? "" : undefined}
           style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
-          className="flex h-[42dvh] min-h-0 shrink-0 flex-col border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0"
+          className="flex h-[80dvh] min-h-0 shrink-0 flex-col border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0"
         >
           {coach.state === "error" ? (
             <Banner tone="bad" role="alert">
@@ -169,6 +172,13 @@ function WhileYouWait({ session }: { session: PublicSession }) {
   );
 }
 
+/** On a phone the coach is the last section of a scrolling page, so the page itself moves to it. Beside the scorecard there is nothing to move. */
+function revealCoach(): HTMLElement | null {
+  const coach = document.querySelector<HTMLElement>('section[aria-label="Coach"]');
+  scrollToInScroller(coach, { behavior: "smooth", block: "start" });
+  return coach;
+}
+
 /**
  * Brings the coach chat to the divider where the gap began, or to the chat itself when the round has no divider.
  * The gap's newest divider is often already on screen at the foot of the chat, so scrolling alone shows no change.
@@ -176,7 +186,7 @@ function WhileYouWait({ session }: { session: PublicSession }) {
  */
 function showGapInChat(title: string): void {
   const text = gapDividerText(title);
-  const coach = document.querySelector<HTMLElement>('section[aria-label="Coach"]');
+  const coach = revealCoach();
   const dividers = [...document.querySelectorAll<HTMLElement>("[data-gap-divider]")].filter((el) => el.dataset.gapDivider === text);
   const divider = dividers.at(-1);
   scrollToInScroller(divider ?? coach, { behavior: "smooth", block: divider ? "nearest" : "start" });
@@ -237,7 +247,11 @@ function ScorecardBody({
   const counts = gapCounts(gaps, marks);
   const notesSaved = (state.notes.result?.applied.length ?? 0) > 0 || notesWereSaved(session.studyNotes);
   const next = nextAction({ gaps, marks, notesSaved, mode: session.mode, readiness: scorecard.readiness?.call ?? null });
-  const teach = (gap: Scorecard["gaps"][number]) => actions.sendChat("coach", teachMessage(gap));
+  const teach = (gap: Scorecard["gaps"][number]) => {
+    const sent = actions.sendChat("coach", teachMessage(gap));
+    revealCoach();
+    return sent;
+  };
   const act = () => {
     if (next.kind === "answer_coach") showGapInChat(next.gap.title);
     else if (next.kind === "start_gap") teach(next.gap);

@@ -15,7 +15,7 @@ import { PlanTrack } from "../components/PlanTrack";
 import { StepChecklist, StepNeeds } from "../components/StepChecklist";
 import { StepVerdictNote } from "../components/StepVerdictNote";
 import { Timer } from "../components/Timer";
-import { Banner, Button, Badge, EmptyState, Tooltip, cn, toast } from "../components/ui";
+import { Banner, Button, Badge, EmptyState, Segmented, Tooltip, cn, toast } from "../components/ui";
 import { phasesFor } from "../../shared/phases";
 import { evidenceStepFor } from "../../shared/stepFrames";
 import { isTimedRound, planDelta, type PlanDelta } from "../lib/plan";
@@ -23,6 +23,7 @@ import { revealFor } from "../lib/reveal";
 import { phaseSpentMs } from "../lib/timing";
 import { useRoundMs } from "../hooks/useClock";
 import { useDelayed } from "../hooks/useDelayed";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatClock } from "../lib/format";
 import { ERROR_PAUSE_TEXT, pauseText } from "../lib/pause";
 import { Link, navigate } from "../router";
@@ -57,6 +58,10 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   const [confirm, setConfirm] = useState<"end" | "leave" | "discard" | null>(null);
   const [reveal, setReveal] = useState<{ line: number; column: number; nonce: number } | null>(null);
   const [chatWidth, setChatWidth] = useChatWidth();
+  // On a phone the chat shrinks to a strip while the work area shows, and the work area gives way while the chat is opened.
+  const [phoneView, setPhoneView] = useState<"work" | "chat">("work");
+  const phone = useMediaQuery("(width < 48rem)");
+  const workHidden = phone && phoneView === "chat";
 
   const errored = agent.state === "error";
   // A model error offers Retry; every other pause is the user's to lift with Resume.
@@ -112,6 +117,8 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
 
   // A click moves the rail and the effect above reveals it; the step already on the rail has no move to react to.
   const selectPhase = (phase: string) => {
+    // The rail stays in the header while the chat fills a phone, so a tap on it brings the work area back.
+    setPhoneView("work");
     if (phase === session.phase) showPhase(phase);
     else actions.setPhase(phase);
   };
@@ -164,8 +171,26 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
       {ended ? <EndedBanner connected={connected} onStart={actions.retryDebrief} /> : null}
       <MessageBanners state={state} actions={actions} />
 
+      <div className="flex shrink-0 justify-center border-b border-border/70 px-3 py-1.5 md:hidden">
+        <Segmented
+          label="Room view"
+          size="sm"
+          value={phoneView}
+          onChange={setPhoneView}
+          options={[
+            { value: "work", label: lld ? "Code and board" : "Board" },
+            { value: "chat", label: `${speaker} chat` },
+          ]}
+        />
+      </div>
+
       <div className="relative flex min-h-0 flex-1 flex-col overflow-clip md:flex-row">
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip" tabIndex={-1} inert={pauseCover !== null} aria-hidden={pauseCover !== null}>
+        <main
+          className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-clip", workHidden && "pane-hidden absolute inset-0")}
+          tabIndex={-1}
+          inert={pauseCover !== null || workHidden}
+          aria-hidden={pauseCover !== null || workHidden}
+        >
           <div className="room-toolbar flex min-h-9 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 max-md:py-1.5 md:h-9 md:flex-nowrap">
             <PhaseGoal session={session} />
             <div className="flex shrink-0 items-center gap-2">
@@ -253,7 +278,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                           />
                         </div>
                       </div>
-                      <div className="room-console h-56 shrink-0 overflow-clip [&>*]:h-full">
+                      <div className="room-console h-56 shrink-0 max-md:h-28 overflow-clip [&>*]:h-full">
                         <Console
                           lastRun={state.code.lastRun}
                           running={state.code.running}
@@ -279,7 +304,10 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
         <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
         <aside
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
-          className="room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:h-[68%] max-md:w-full md:w-(--chat-w)"
+          className={cn(
+            "room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:w-full md:w-(--chat-w)",
+            phoneView === "chat" ? "max-md:flex-1" : "max-md:h-64 max-md:flex-none",
+          )}
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}
         >
