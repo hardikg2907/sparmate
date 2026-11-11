@@ -24,7 +24,7 @@ const HLD_FRAMES: readonly StepFrameDef[] = [
 // The code editor holds most of a machine-coding answer; the board keeps the two parts that are drawn.
 const LLD_FRAMES: readonly StepFrameDef[] = [
   { step: "entities", name: "Entities", x: 40, y: 40, width: 1400, height: 1040 },
-  { step: "behaviour", name: "States", x: 1500, y: 40, width: 1160, height: 1040 },
+  { step: "behaviour", name: "Behaviour", x: 1500, y: 40, width: 1160, height: 1040 },
 ];
 
 export function stepFramesFor(track: Track): readonly StepFrameDef[] {

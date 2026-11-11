@@ -116,7 +116,6 @@ export interface CustomProblemJobRecord {
   problemId?: string;
   title?: string;
   sourcesCount?: number;
-  checksCount?: number;
   corrections?: BriefCorrection[];
   confidence?: string;
   costUsd?: number;
@@ -205,7 +204,6 @@ export class CustomProblemJobManager {
       title: this.currentJob.title,
       track: this.currentJob.track,
       sourcesCount: this.currentJob.sourcesCount,
-      checksCount: this.currentJob.checksCount,
       corrections: this.currentJob.corrections,
       confidence: this.currentJob.confidence,
       costUsd: this.currentJob.costUsd,
@@ -418,7 +416,6 @@ export class CustomProblemJobManager {
       job.problemId = id;
       job.title = meta.title;
       job.sourcesCount = meta.sources?.length ?? 0;
-      job.checksCount = (meta.sources?.length ?? 0) + (corrections.length > 0 ? corrections.length : 1);
       job.corrections = meta.corrections ?? [];
       job.confidence = meta.confidence;
     } catch (err) {

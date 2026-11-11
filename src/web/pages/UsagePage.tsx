@@ -3,7 +3,8 @@ import { DRILL_INFO, type DrillType } from "../../shared/drills";
 import { api, type UsageSummaryResponse } from "../backend";
 import { AppHeader } from "../components/AppHeader";
 import { Alert, Badge, Button, Card, EmptyState, SectionTitle, Skeleton, Tooltip, cn } from "../components/ui";
-import { TRACK_LABEL, formatDate } from "../lib/format";
+import { dayMonth } from "../lib/dates";
+import { TRACK_LABEL, formatDate, roleLabel } from "../lib/format";
 import { Link } from "../router";
 import { useCountUp } from "../hooks/useCountUp";
 
@@ -324,7 +325,7 @@ function UsageContent({ data }: { data: UsageSummaryResponse }) {
                 <tbody className="divide-y divide-border">
                   {byRole.map((r) => (
                     <tr key={r.role} className="transition-colors hover:bg-accent/40">
-                      <td className="px-4 py-2 font-medium text-foreground capitalize">{r.role}</td>
+                      <td className="px-4 py-2 font-medium text-foreground">{roleLabel(r.role)}</td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{r.calls}</td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{(r.inputTokens + r.outputTokens).toLocaleString()}</td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{(r.cacheHitRate * 100).toFixed(1)}%</td>
@@ -530,6 +531,9 @@ function StatCell({ index, label, value, subtext, meter }: { index: number; labe
   );
 }
 
+/** A calendar day in the app's date style; anything else is shown as it came. */
+const axisDay = (day?: string): string => (day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? dayMonth(day) : (day ?? ""));
+
 function DailyCostChart({ days }: { days: UsageSummaryResponse["byDay"] }) {
   const maxCost = Math.max(0.001, ...days.map((d) => d.costUsd));
   const height = 120;
@@ -544,7 +548,7 @@ function DailyCostChart({ days }: { days: UsageSummaryResponse["byDay"] }) {
             <Tooltip
               key={day.date}
               side="top"
-              content={`${day.date}: $${day.costUsd.toFixed(4)} (${day.calls} calls, ${(day.inputTokens + day.outputTokens).toLocaleString()} tokens)`}
+              content={`${axisDay(day.date)}: $${day.costUsd.toFixed(4)} (${day.calls} calls, ${(day.inputTokens + day.outputTokens).toLocaleString()} tokens)`}
             >
               <div className="flex h-full flex-1 flex-col items-center justify-end">
                 <div
@@ -559,10 +563,10 @@ function DailyCostChart({ days }: { days: UsageSummaryResponse["byDay"] }) {
           );
         })}
       </div>
-      <div className="flex justify-between border-t border-hero-foreground/25 pt-2 font-mono text-meta tabular-nums text-hero-muted">
-        <span>{days[0]?.date}</span>
+      <div className="flex justify-between border-t border-hero-foreground/25 pt-2 text-meta tabular-nums text-hero-muted">
+        <span>{axisDay(days[0]?.date)}</span>
         <span>Past 30 days</span>
-        <span>{days[days.length - 1]?.date}</span>
+        <span>{axisDay(days[days.length - 1]?.date)}</span>
       </div>
     </div>
   );

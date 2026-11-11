@@ -159,7 +159,6 @@ export interface CustomProblemJobStatus {
   title?: string;
   track?: "hld" | "lld";
   sourcesCount?: number;
-  checksCount?: number;
   corrections?: { section: string; claim: string; fix: string; source: string }[];
   confidence?: string;
   costUsd?: number;

@@ -20,6 +20,12 @@ const DAY_ONLY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "shor
 const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_TIME = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 
+/** "brief-writer" as "Brief writer": a model role in plain words. */
+export function roleLabel(role: string): string {
+  const words = role.replace(/[-_]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;

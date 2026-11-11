@@ -6,6 +6,7 @@ import { ArrowLeftIcon, CheckIcon, WarnIcon } from "../components/icons";
 import { PageHeader, PageShell } from "../components/PageShell";
 import { GUIDED_HINT } from "../components/study";
 import { Alert, Badge, Button, Card, Segmented, Spinner, Textarea, Tooltip, cn } from "../components/ui";
+import { isFactualCorrection, lookupNote, preparedSummary, prepProgress } from "../lib/customPrep";
 import { TRACK_LABEL, TRACK_TITLE } from "../lib/format";
 import { useStudyData, type StudyData } from "../lib/useStudyData";
 import { Link } from "../router";
@@ -41,6 +42,8 @@ function CustomPrompt({
   const [preparing, setPreparing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
+  const progress = prepProgress(job);
+  const factual = (job?.corrections ?? []).filter(isFactualCorrection);
 
   const onReloadProblemsRef = useRef(onReloadProblems);
   useEffect(() => {
@@ -159,19 +162,17 @@ function CustomPrompt({
                   <h3 className="text-lead font-semibold text-foreground">{job.title}</h3>
                   <Badge title={TRACK_TITLE[job.track ?? track]}>{TRACK_LABEL[job.track ?? track]}</Badge>
                 </div>
-                <p className="mt-1 text-ui text-muted-foreground">
-                  {job.sourcesCount ?? 0} {job.sourcesCount === 1 ? "source" : "sources"}, {job.checksCount ?? 0} {job.checksCount === 1 ? "fact checked" : "facts checked"}
-                </p>
+                <p className="mt-1 text-ui text-muted-foreground">{preparedSummary(job, factual.length)}</p>
               </div>
             </div>
 
-            {job.corrections && job.corrections.length > 0 ? (
+            {factual.length > 0 ? (
               <div className="rounded-md border border-border bg-muted/40 p-3 space-y-2">
                 <p className="text-ui font-medium text-foreground">
-                  {job.corrections.length} {job.corrections.length === 1 ? "correction applied" : "corrections applied"}:
+                  {factual.length} {factual.length === 1 ? "correction applied" : "corrections applied"}:
                 </p>
                 <ul className="space-y-1 text-meta text-muted-foreground">
-                  {job.corrections.map((c, i) => (
+                  {factual.map((c, i) => (
                     <li key={i}>
                       <span className="font-semibold text-foreground">[{c.section}]</span> {c.claim} → <span className="text-success">{c.fix}</span>
                     </li>
@@ -241,45 +242,30 @@ function CustomPrompt({
           <Card className="flex flex-col gap-4 p-5">
             <h3 className="text-ui font-semibold text-foreground">Preparing the interviewer brief</h3>
             <ol className="space-y-2.5 text-ui">
-              <li
-                className={cn(
-                  "flex items-center gap-2.5 transition-colors duration-200",
-                  job?.stage === "researching" ? "font-semibold text-foreground" : job?.stage === "writing" || job?.stage === "checking" ? "text-muted-foreground" : "text-faint",
-                )}
-              >
-                {job?.stage === "researching" ? (
-                  <Spinner label="" className="size-4" />
-                ) : job?.stage === "writing" || job?.stage === "checking" ? (
-                  <CheckIcon size={16} className="text-success" />
-                ) : (
-                  <span className="size-4 rounded-full border border-border inline-block" />
-                )}
-                <span>
-                  Researching
-                  {job && job.searches + job.pages > 0 ? `: ${job.searches} ${job.searches === 1 ? "search" : "searches"}, ${job.pages} ${job.pages === 1 ? "page" : "pages"}` : ""}
-                </span>
-              </li>
-              <li
-                className={cn(
-                  "flex items-center gap-2.5 transition-colors duration-200",
-                  job?.stage === "writing" ? "font-semibold text-foreground" : job?.stage === "checking" ? "text-muted-foreground" : "text-faint",
-                )}
-              >
-                {job?.stage === "writing" ? (
-                  <Spinner label="" className="size-4" />
-                ) : job?.stage === "checking" ? (
-                  <CheckIcon size={16} className="text-success" />
-                ) : (
-                  <span className="size-4 rounded-full border border-border inline-block" />
-                )}
-                <span>Writing the brief</span>
-              </li>
-              <li className={cn("flex items-center gap-2.5 transition-colors duration-200", job?.stage === "checking" ? "font-semibold text-foreground" : "text-faint")}>
-                {job?.stage === "checking" ? <Spinner label="" className="size-4" /> : <span className="size-4 rounded-full border border-border inline-block" />}
-                <span>Checking facts</span>
-              </li>
+              {progress.steps.map((step, index) => {
+                const activeIndex = progress.steps.indexOf(progress.active);
+                const state = index < activeIndex ? "done" : index === activeIndex ? "active" : "waiting";
+                return (
+                  <li
+                    key={step}
+                    className={cn(
+                      "flex items-center gap-2.5 transition-colors duration-200",
+                      state === "active" ? "font-semibold text-foreground" : state === "done" ? "text-muted-foreground" : "text-faint",
+                    )}
+                  >
+                    {state === "active" ? (
+                      <Spinner label="" className="size-4" />
+                    ) : state === "done" ? (
+                      <CheckIcon size={16} className="text-success" />
+                    ) : (
+                      <span className="size-4 rounded-full border border-border inline-block" />
+                    )}
+                    <span>{step === "writing" ? "Writing the brief" : "Checking facts"}</span>
+                  </li>
+                );
+              })}
             </ol>
-            <p className="text-meta text-faint">Web search and verification take about a minute.</p>
+            <p className="text-meta text-faint">{[lookupNote(job), "Preparing a brief can take a few minutes."].filter(Boolean).join(" ")}</p>
             <div className="pt-1">
               <Button variant="ghost" disabled={busy || cancelling} busy={cancelling} onClick={cancelPreparation}>
                 Cancel
@@ -338,7 +324,7 @@ export function LibraryNewView({ data, ctx }: { data: StudyData; ctx: PageContex
         </Link>
         <PageHeader title="Practise any question" />
         <p className="-mt-2 max-w-[60ch] text-body text-muted-foreground">
-          Paste a question from a list or a past interview. The app researches real systems, writes a private brief, and checks its facts before you start.
+          Paste a question from a list or a past interview. The app can look up real systems, writes a private brief, and checks its facts before you start.
         </p>
         {data.startError ? <ErrorLine text={data.startError} /> : null}
         <CustomPrompt starting={data.starting} busy={data.starting !== null} onStart={(id, mode) => data.start(id, mode)} onReloadProblems={data.reload} />
