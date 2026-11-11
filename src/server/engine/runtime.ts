@@ -31,6 +31,7 @@ import {
   type TranscriptEntry,
 } from "../../shared/types";
 import { applyGapPractice, practisesGap } from "./gap-practice";
+import { plainHintTopic } from "./hint-topic";
 import type { PrivacyGuard } from "../guard/privacy";
 import type { CppRunner } from "../runner/cpp";
 import { applyProposal, planProposal } from "../study/bookkeeping";
@@ -1786,12 +1787,13 @@ export class SessionRuntime {
       ),
       defineTool(
         "note_hint",
-        "Record the hint you are giving in this reply, before you write the reply text, so the debrief can count it. Level 1 points at an area, level 2 names the concern, level 3 offers two options. The candidate never sees this record.",
+        "Record the hint you are giving in this reply, before you write the reply text, so the debrief can count it. Level 1 points at an area, level 2 names the concern, level 3 offers two options. Write the topic in plain words with no level code in it. The candidate never sees this record.",
         { level: z.number().int().min(1).max(3), topic: z.string().min(1).max(200) },
         async ({ level, topic }) => {
           const at = this.roundNow();
-          this.session.hints.push({ at, level: level as 1 | 2 | 3, topic });
-          this.addEntry({ channel: "interview", role: "system", kind: "hint", hidden: true, text: `hint H${level}: ${topic}` });
+          const plain = plainHintTopic(topic);
+          this.session.hints.push({ at, level: level as 1 | 2 | 3, topic: plain });
+          this.addEntry({ channel: "interview", role: "system", kind: "hint", hidden: true, text: `hint H${level}: ${plain}` });
           return textOutput("Recorded.");
         },
       ),

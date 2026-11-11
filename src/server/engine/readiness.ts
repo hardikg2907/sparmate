@@ -9,12 +9,8 @@ function list(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
-
 /**
- * The readiness call for a guided round: ready only when every step passed on his own, he took no level-3 hint,
+ * The readiness call for a guided round: ready only when every step passed on his own, he took no hint that offered two options,
  * and the round stayed near its plan. It is a fixed rule so the same round always gets the same call.
  */
 export function computeReadiness(
@@ -33,7 +29,10 @@ export function computeReadiness(
 
   const hints = session.hints ?? [];
   const deep = hints.filter((h) => h.level === 3).length;
-  if (deep > 0) reasons.push(`${plural(hints.length, "hint", "hints")}, including ${deep} at level 3.`);
+  if (deep > 0) {
+    const which = hints.length === 1 ? "it" : deep === hints.length ? "each of them" : `${deep} of them`;
+    reasons.push(`${hints.length === 1 ? "1 hint" : `${hints.length} hints`}, and ${which} gave you two options to pick from.`);
+  }
 
   const activeMin = Math.round(roundTimeMs(session, nowMs) / 60_000);
   const planMin = Math.round(session.durationMs / 60_000);
