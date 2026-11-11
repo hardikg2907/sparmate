@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Mode } from "../../shared/phases";
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
 import { ApiError, api } from "../backend";
 import { navigate } from "../router";
+import { useLocalDay } from "./useNow";
 
 export interface GapFocus {
   title: string;
@@ -51,18 +52,24 @@ export function useStudyData(): StudyData {
   const [working, setWorking] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Reads can overlap (a discard just before midnight, then the day change), and an older answer must not replace a
+  // newer one.
+  const latest = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++latest.current;
     setError(null);
     const [p, h] = await Promise.allSettled([api.problems(), api.history()]);
+    if (mine !== latest.current) return;
     if (p.status === "fulfilled") setProblems(p.value);
     else setError(messageOf(p.reason, "The problem list could not be loaded."));
     // History is secondary: an empty list is better than blocking the page.
     setHistory(h.status === "fulfilled" ? h.value : []);
   }, []);
 
+  const day = useLocalDay();
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, day]);
 
   const start = useCallback((problemId: string, mode: Mode, focus?: GapFocus) => {
     setStarting(startKey(problemId, mode, focus));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { msToNextDay } from "./useNow";
+import { dayKey, msToNextDay } from "./useNow";
 
 describe("msToNextDay", () => {
   it("counts to the next local midnight and one second more", () => {
@@ -9,5 +9,17 @@ describe("msToNextDay", () => {
 
   it("crosses a month end", () => {
     expect(msToNextDay(new Date(2026, 10, 30, 23, 59, 59))).toBe(2000);
+  });
+});
+
+describe("dayKey", () => {
+  it("names the local day, with two digits for month and day", () => {
+    expect(dayKey(new Date(2026, 0, 5, 9, 30))).toBe("2026-01-05");
+    expect(dayKey(new Date(2026, 10, 30, 23, 59, 59))).toBe("2026-11-30");
+  });
+
+  it("changes at local midnight and not before", () => {
+    expect(dayKey(new Date(2026, 10, 8, 23, 59, 59))).toBe("2026-11-08");
+    expect(dayKey(new Date(2026, 10, 9, 0, 0, 0))).toBe("2026-11-09");
   });
 });

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import type { GymSummary } from "../../shared/drills";
 import { ApiError, api } from "../backend";
+import { dayKey, useLocalDay } from "./useNow";
 
 export interface GymData {
   gym: GymSummary | null;
@@ -30,6 +31,7 @@ function set(next: GymState): void {
 export function refreshGym(): void {
   if (inflight) return;
   inflight = true;
+  const askedOn = dayKey(new Date());
   set({ gym: state.gym, error: null });
   api
     .gym()
@@ -39,6 +41,8 @@ export function refreshGym(): void {
     )
     .finally(() => {
       inflight = false;
+      // Callers on the new day were turned away while this read ran, and its answer is for the old day.
+      if (dayKey(new Date()) !== askedOn) refreshGym();
     });
 }
 
@@ -60,9 +64,10 @@ export function useGym(): GymData {
     () => state,
     () => state,
   );
+  const day = useLocalDay();
   useEffect(() => {
     refreshGym();
-  }, []);
+  }, [day]);
   return { gym: current.gym, error: current.error, reload: refreshGym };
 }
 

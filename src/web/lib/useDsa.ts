@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DsaResponse } from "../../shared/dsa";
 import { api } from "../backend";
+import { useLocalDay } from "./useNow";
 
 export interface DsaData {
   /** Null until the first answer arrives, or when the server could not be reached. */
@@ -19,6 +20,10 @@ export function useDsa(enabled = true, username?: string): DsaData {
   const [unreachable, setUnreachable] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const alive = useRef(true);
+  // The server counts the week of the day it is asked on, so a page open across midnight asks again. The numbers it
+  // already shows stay up while it does.
+  const day = useLocalDay();
+  const shown = useRef(false);
 
   useEffect(() => {
     alive.current = true;
@@ -28,10 +33,11 @@ export function useDsa(enabled = true, username?: string): DsaData {
         alive.current = false;
       };
     }
-    setLoading(true);
+    if (!shown.current) setLoading(true);
     api.dsa().then(
       (value) => {
         if (!alive.current) return;
+        shown.current = true;
         setResponse(value);
         setUnreachable(false);
         setLoading(false);
@@ -45,7 +51,7 @@ export function useDsa(enabled = true, username?: string): DsaData {
     return () => {
       alive.current = false;
     };
-  }, [enabled, username]);
+  }, [enabled, username, day]);
 
   const refresh = useCallback(() => {
     setRefreshing(true);
