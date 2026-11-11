@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { ApiError, api } from "../backend";
 import type { PublicSession, Scorecard } from "../../shared/types";
 import { ChatPanel } from "../components/ChatPanel";
@@ -36,6 +37,7 @@ interface DebriefViewProps {
 export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewProps) {
   const { state, actions } = ctl;
   const [chatWidth, setChatWidth] = useChatWidth();
+  const stacked = useMediaQuery("(width < 48rem)");
   const scorecard = session.scorecard;
   const debriefed = session.status === "debriefed";
   const connected = state.connection === "open";
@@ -100,7 +102,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
         </div>
         {/* Below the md breakpoint the coach sits under the scorecard, at the end of one scrolling page, so the score gets the whole screen on a phone. */}
         <aside
-          data-nested-scroll=""
+          data-nested-scroll={stacked ? "" : undefined}
           style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
           className="flex h-[80dvh] min-h-0 shrink-0 flex-col border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0"
         >

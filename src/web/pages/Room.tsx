@@ -60,7 +60,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   const [chatWidth, setChatWidth] = useChatWidth();
   // On a phone the chat shrinks to a strip while the work area shows, and the work area gives way while the chat is opened.
   const [phoneView, setPhoneView] = useState<"work" | "chat">("work");
-  const phone = useMediaQuery("(max-width: 767px)");
+  const phone = useMediaQuery("(width < 48rem)");
   const workHidden = phone && phoneView === "chat";
 
   const errored = agent.state === "error";
@@ -117,6 +117,8 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
 
   // A click moves the rail and the effect above reveals it; the step already on the rail has no move to react to.
   const selectPhase = (phase: string) => {
+    // The rail stays in the header while the chat fills a phone, so a tap on it brings the work area back.
+    setPhoneView("work");
     if (phase === session.phase) showPhase(phase);
     else actions.setPhase(phase);
   };
@@ -304,7 +306,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
           style={{ "--chat-w": `${chatWidth}px` } as CSSProperties}
           className={cn(
             "room-side flex min-h-0 shrink-0 flex-col overflow-clip max-md:w-full md:w-(--chat-w)",
-            phoneView === "chat" ? "max-md:flex-1" : "max-md:h-56 max-md:flex-none",
+            phoneView === "chat" ? "max-md:flex-1" : "max-md:h-64 max-md:flex-none",
           )}
           inert={pauseCover !== null}
           aria-hidden={pauseCover !== null}

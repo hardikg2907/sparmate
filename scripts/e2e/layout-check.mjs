@@ -268,18 +268,86 @@ try {
     await checkFrame(`settings#folder ${at}`);
   }
 
-  // On a phone the chat column must keep room for the conversation.
+  // On a phone the board or code shows above a chat strip, and the "chat" option of the Room view gives the chat the screen.
+  const logHeightNow = () => page.evaluate(() => document.querySelector('[role="log"]')?.getBoundingClientRect().height ?? 0);
   for (const name of ["room-hld", "room-lld"]) {
     await page.setViewport({ width: 390, height: 844 });
     await page.goto(`${BASE}/?fixture=${name}&theme=dark`, { waitUntil: "networkidle0" });
     await sleep(350);
-    const logHeight = await page.evaluate(() => document.querySelector('[role="log"]')?.getBoundingClientRect().height ?? 0);
+    const stripHeight = await logHeightNow();
+    if (stripHeight < 80) {
+      totalFailures += 1;
+      console.error(`FAIL: ${name} @ 390x844: the chat strip under the work area is ${Math.round(stripHeight)}px tall, under 80px`);
+    } else {
+      console.log(`PASS: ${name} @ 390x844: chat strip ${Math.round(stripHeight)}px tall`);
+    }
+    await page.evaluate(() => [...document.querySelectorAll('[role="radio"]')].find((el) => /chat$/.test(el.textContent ?? ""))?.click());
+    await sleep(350);
+    const logHeight = await logHeightNow();
     if (logHeight < 120) {
       totalFailures += 1;
       console.error(`FAIL: ${name} @ 390x844: the message list is ${Math.round(logHeight)}px tall, under 120px`);
     } else {
       console.log(`PASS: ${name} @ 390x844: message list ${Math.round(logHeight)}px tall`);
     }
+  }
+
+  // The symptoms the phone and tablet widths showed: a header box over a tab, a clipped week, one-letter plan cells, cut skill names.
+  const fail = (message) => {
+    totalFailures += 1;
+    console.error(`FAIL: ${message}`);
+  };
+  for (const width of [640, 768, 1024]) {
+    await page.setViewport({ width, height: 900 });
+    await page.goto(`${BASE}/?fixture=home&theme=dark`, { waitUntil: "networkidle0" });
+    await sleep(350);
+    const overlap = await page.evaluate(() => {
+      const jump = [...document.querySelectorAll("header button")].find((b) => /Jump to/.test(b.textContent ?? ""))?.getBoundingClientRect();
+      if (!jump) return "no Jump box";
+      for (const a of document.querySelectorAll('header nav[aria-label="Main"] a')) {
+        const r = a.getBoundingClientRect();
+        if (r.right > jump.left && r.left < jump.right) return `"${a.textContent}" runs under the Jump box`;
+      }
+      return "";
+    });
+    if (overlap) fail(`header @ ${width}px: ${overlap}`);
+    else console.log(`PASS: header tabs clear of the Jump box @ ${width}px`);
+  }
+
+  await page.setViewport({ width: 390, height: 844 });
+  await page.goto(`${BASE}/?fixture=home&theme=dark`, { waitUntil: "networkidle0" });
+  await sleep(350);
+  const week = await page.evaluate(() =>
+    [...document.querySelectorAll('ol[aria-label="This week\'s plan"] > li')].map((li) => {
+      const r = li.getBoundingClientRect();
+      return { left: r.left, right: r.right };
+    }),
+  );
+  if (week.length !== 7 || week.some((c) => c.left < 0 || c.right > 390)) fail(`today @ 390px: the week strip shows ${week.length} cells and some leave the screen`);
+  else console.log("PASS: today @ 390px: the whole week fits the screen");
+
+  await page.goto(`${BASE}/?fixture=settings&theme=dark`, { waitUntil: "networkidle0" });
+  await sleep(350);
+  const planWidths = await page.evaluate(() =>
+    [...([...document.querySelectorAll("span")].find((el) => el.textContent === "Mon")?.parentElement?.parentElement?.children ?? [])].map(
+      (el) => el.getBoundingClientRect().width,
+    ),
+  );
+  if (planWidths.length !== 7 || planWidths.some((w) => w < 90))
+    fail(`settings @ 390px: the weekly plan has ${planWidths.length} cells, ${planWidths.map(Math.round).join(", ")}px wide, under 90px`);
+  else console.log("PASS: settings @ 390px: the weekly plan is readable");
+
+  for (const width of [390, 768, 1024]) {
+    await page.setViewport({ width, height: 900 });
+    await page.goto(`${BASE}/?fixture=debrief-hld&theme=dark`, { waitUntil: "networkidle0" });
+    await sleep(500);
+    const cut = await page.evaluate(() =>
+      [...document.querySelectorAll('[role="group"][aria-label="Scores by dimension"] button > span:first-child')]
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => el.textContent),
+    );
+    if (cut.length > 0) fail(`debrief @ ${width}px: skill names are cut: ${cut.join(", ")}`);
+    else console.log(`PASS: debrief @ ${width}px: skill names are whole`);
   }
 } finally {
   await browser.close();

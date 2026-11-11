@@ -100,10 +100,10 @@ export function AppHeader({ testMode }: { testMode?: boolean }) {
           <button
             type="button"
             onClick={openPalette}
-            className="flex h-9 items-center gap-2 rounded-lg sm:w-36 lg:w-64 border border-border bg-muted/60 px-3 text-ui text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground max-sm:hidden"
+            className="flex h-9 items-center gap-2 rounded-lg border border-border bg-muted/60 px-3 text-ui max-md:w-9 max-md:justify-center max-md:px-0 md:w-36 lg:w-64 text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground max-sm:hidden"
           >
             <SearchIcon size={15} />
-            <span className="flex-1 text-left">Jump to…</span>
+            <span className="flex-1 text-left max-md:sr-only">Jump to…</span>
             <span className="flex items-center gap-0.5 max-lg:hidden" aria-hidden="true">
               {PALETTE_KEYS.map((key) => (
                 <Kbd key={key}>{key}</Kbd>
