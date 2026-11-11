@@ -6,6 +6,12 @@ export function msToNextDay(now: Date): number {
   return next.getTime() - now.getTime() + 1000;
 }
 
+/** The local calendar day of `date` as YYYY-MM-DD. */
+export function dayKey(date: Date): string {
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+}
+
 /**
  * The current time, refreshed when the tab becomes visible again and when the local day changes. A page left open
  * overnight then shows the right day and applies the 24-hour rules to the right moment.
@@ -33,4 +39,12 @@ export function useNow(): Date {
     };
   }, []);
   return now;
+}
+
+/**
+ * The local day, which changes only at midnight. The server works out what is due for the day it is asked on, so a
+ * list read yesterday must be read again when this changes.
+ */
+export function useLocalDay(): string {
+  return dayKey(useNow());
 }

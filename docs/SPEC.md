@@ -555,7 +555,9 @@ tracker marks (section 10.1) and app history:
 
 `selectToday` in `src/shared/today.ts` is a pure function of the clock, the weekly plan (`Settings.weeklyPlan`, Monday
 first), the problem list and the history. It answers with the day's kind, one hero, the other unfinished rounds and the
-redo queue. The order of its rules:
+redo queue. The server works out each problem's badge and each drill's due state for the day it is asked on, so a page
+that stays open reads the problem list, the history and the drill queue again when the local day changes
+(`useLocalDay`). The order of its rules:
 
 1. A round paused within the last 24 hours (or still marked live) is the hero on any day, including a rest day. The
    primary action is Finish. When several qualify, the newest wins and the rest go to the Unfinished card.

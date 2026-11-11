@@ -3,6 +3,7 @@ import type { Mode } from "../../shared/phases";
 import type { ProblemSummary, SessionHistoryItem } from "../../shared/types";
 import { ApiError, api } from "../backend";
 import { navigate } from "../router";
+import { useLocalDay } from "./useNow";
 
 export interface GapFocus {
   title: string;
@@ -60,9 +61,10 @@ export function useStudyData(): StudyData {
     setHistory(h.status === "fulfilled" ? h.value : []);
   }, []);
 
+  const day = useLocalDay();
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, day]);
 
   const start = useCallback((problemId: string, mode: Mode, focus?: GapFocus) => {
     setStarting(startKey(problemId, mode, focus));

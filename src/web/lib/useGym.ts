@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import type { GymSummary } from "../../shared/drills";
 import { ApiError, api } from "../backend";
+import { useLocalDay } from "./useNow";
 
 export interface GymData {
   gym: GymSummary | null;
@@ -60,9 +61,10 @@ export function useGym(): GymData {
     () => state,
     () => state,
   );
+  const day = useLocalDay();
   useEffect(() => {
     refreshGym();
-  }, []);
+  }, [day]);
   return { gym: current.gym, error: current.error, reload: refreshGym };
 }
 
