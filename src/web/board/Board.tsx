@@ -111,6 +111,10 @@ function reducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
 
+const STYLE_PANEL_WIDTH = 232;
+/** Below this width Excalidraw docks the panel elsewhere, so the view keeps the whole width. */
+const STYLE_PANEL_MIN_WIDTH = 720;
+
 function showStepOn(api: ExcalidrawImperativeAPI, step: string | null, animate: boolean): void {
   const elements = api.getSceneElements();
   const frame = step ? findStepFrame(elements as unknown as Record<string, unknown>[], step) : null;
@@ -123,6 +127,8 @@ function showStepOn(api: ExcalidrawImperativeAPI, step: string | null, animate: 
   const target = frame ? (drawn.length > 0 ? (drawn as unknown as ExcalidrawElement[]) : [frame as unknown as ExcalidrawElement]) : elements;
   api.scrollToContent(target, {
     fitToViewport: true,
+    // Excalidraw's style panel opens on the left once a shape or tool is picked, and would cover the first frame.
+    canvasOffsets: { left: api.getAppState().width >= STYLE_PANEL_MIN_WIDTH ? STYLE_PANEL_WIDTH : 0 },
     viewportZoomFactor: frame && drawn.length === 0 ? 0.92 : 0.9,
     // Without a cap a single small box would open at several hundred percent.
     maxZoom: 1,

@@ -131,9 +131,14 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
     if (!attemptPath) return;
     // The session keeps the path relative to the study folder, but the file endpoint can return an absolute one.
     const full = attemptPath.startsWith("/") || !studyRoot ? attemptPath : `${studyRoot.replace(/\/$/, "")}/${attemptPath}`;
-    void navigator.clipboard?.writeText(full).then(
+    const copied = navigator.clipboard?.writeText(full);
+    if (!copied) {
+      toast.error("This browser cannot copy here");
+      return;
+    }
+    copied.then(
       () => toast.success("Path copied"),
-      () => {},
+      () => toast.error("The path could not be copied"),
     );
   };
 
@@ -268,8 +273,8 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                       {attemptPath ? (
                         <div className="flex h-7 shrink-0 items-center gap-2 border-b border-border/70 px-3 text-meta text-muted-foreground">
                           <span className="shrink-0">Your file</span>
-                          <code className="min-w-0 flex-1 truncate font-mono" title={attemptPath}>
-                            {attemptPath}
+                          <code className="min-w-0 flex-1 truncate text-left font-mono [direction:rtl]" title={attemptPath}>
+                            <bdi>{attemptPath}</bdi>
                           </code>
                           <Button variant="ghost" size="sm" className="h-6 shrink-0 gap-1 px-1.5 text-meta" onClick={copyAttemptPath}>
                             <CopyIcon size={12} />

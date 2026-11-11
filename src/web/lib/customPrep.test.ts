@@ -9,12 +9,15 @@ describe("isFactualCorrection", () => {
   it("does not count a fix of wording", () => {
     expect(isFactualCorrection({ fix: "'An answer' (grammar only)", source: "Editorial" })).toBe(false);
     expect(isFactualCorrection({ fix: "Fixed the spelling of the title", source: "Spelling" })).toBe(false);
+    expect(isFactualCorrection({ fix: "Moved the note to a 'For the interviewer:' line", source: "Brief format rules" })).toBe(false);
   });
   it("keeps a fact that only mentions a word like style or typo", () => {
     expect(isFactualCorrection({ fix: "Instagram-style fan-out on write for 500M DAU", source: "https://example.com/feeds" })).toBe(true);
     expect(isFactualCorrection({ fix: "Search needs typo tolerance, so use an n-gram index", source: "Search engine docs" })).toBe(true);
     expect(isFactualCorrection({ fix: "Path-style URLs are deprecated", source: "https://example.com/date-formatting/guide" })).toBe(true);
     expect(isFactualCorrection({ fix: "Use 429", source: "Google API style guide" })).toBe(true);
+    expect(isFactualCorrection({ fix: "Search needs typo tolerance (typo-tolerant index)", source: "Search engine docs" })).toBe(true);
+    expect(isFactualCorrection({ fix: "Use 429", source: "Style guide: Google API design" })).toBe(true);
   });
 });
 

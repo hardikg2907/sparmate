@@ -2,9 +2,10 @@ import type { CustomProblemJobStatus } from "../../shared/protocol";
 
 type Correction = NonNullable<CustomProblemJobStatus["corrections"]>[number];
 
-/** The checker labels a wording fix by its source ("Editorial") or marks it in the fix itself ("(grammar only)"). */
-const WORDING_SOURCE = /^\s*(editorial|copy[- ]?edit(ing)?|grammar|spelling|typo(graphical)?|style|formatting|n\/a)\b/i;
-const WORDING_FIX = /\((?:grammar|spelling|typo|wording|punctuation)[^)]*\)|\b(?:grammar|spelling|punctuation|wording)\s+(?:only|fix|change)\b/i;
+/** The checker labels a wording fix by its whole source ("Editorial") or marks it in the fix itself ("(grammar only)"). */
+const WORDING_SOURCE = /^\s*(?:editorial(?: edit)?|copy[- ]?edit(?:ing)?|grammar|spelling|typo(?:graphical)?|style(?: only)?|formatting|n\/a)\s*\.?\s*$/i;
+const WORDING_FIX =
+  /\((?:grammar|spelling|typo|wording|punctuation)(?:\s+(?:only|fix|change|correction)s?)?\)|\b(?:grammar|spelling|punctuation|wording)\s+(?:only|fix|change)\b|\bfor the interviewer\b/i;
 
 export function isFactualCorrection(correction: Pick<Correction, "fix" | "source">): boolean {
   return !WORDING_SOURCE.test(correction.source) && !WORDING_FIX.test(correction.fix);
