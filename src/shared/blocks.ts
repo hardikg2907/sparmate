@@ -413,8 +413,8 @@ function markUsed(folded: string, spans: readonly [number, number][]): string {
 /**
  * The option texts in a candidate message, from the latest unsettled `options` block on `channel` (an assistant turn
  * with no non-system turn after it). A whole message that equals any option is a pick. A click on a `send` option
- * sends its text unchanged, so only a `prefill` starter can sit inside longer text; matching a send label inside
- * typed text would take the candidate's own words away from them.
+ * sends its text unchanged, so only a written `prefill` starter (`reply`) can sit inside longer text. A bare label
+ * is a name the candidate may type by chance, so finding one inside typed text would take their own words away.
  */
 export function matchUnsettledOptionTexts(
   entries: readonly { channel: string; role: string; blocks?: readonly ChatBlock[] }[],
@@ -425,15 +425,14 @@ export function matchUnsettledOptionTexts(
     const entry = entries[i];
     if (!entry || entry.channel !== channel || entry.role === "system") continue;
     if (entry.role !== "interviewer" && entry.role !== "coach") return undefined;
-    const options: { text: string; folded: string; prefill: boolean }[] = [];
+    const options: { text: string; folded: string; starter: boolean }[] = [];
     for (const block of entry.blocks ?? []) {
       if (block.kind !== "options") continue;
       for (const item of block.items) {
         const text = (item.reply ?? item.label).trim();
         const folded = foldForMatch(text).folded;
-        if (folded && !options.some((o) => o.folded === folded && o.prefill === (block.action === "prefill"))) {
-          options.push({ text, folded, prefill: block.action === "prefill" });
-        }
+        const starter = block.action === "prefill" && item.reply !== undefined;
+        if (folded && !options.some((o) => o.folded === folded && o.starter === starter)) options.push({ text, folded, starter });
       }
     }
     if (options.length === 0) return undefined;
@@ -441,7 +440,7 @@ export function matchUnsettledOptionTexts(
     const whole = options.find((o) => o.folded === remaining);
     if (whole) return [whole.text];
     const matched: string[] = [];
-    for (const o of options.filter((x) => x.prefill).sort((a, b) => b.folded.length - a.folded.length)) {
+    for (const o of options.filter((x) => x.starter).sort((a, b) => b.folded.length - a.folded.length)) {
       const spans = foldedSpans(remaining, o.folded);
       if (spans.length === 0) continue;
       if (!matched.includes(o.text)) matched.push(o.text);

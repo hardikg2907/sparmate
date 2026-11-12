@@ -66,6 +66,10 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
       const skipsCountOnly = hintRequested || isStuck || isClockOffer;
 
       if (ctx.channel === "interview") {
+        // A starter in the composer would put the guide's words into the candidate's answer, which is round evidence.
+        if (block.kind === "options" && block.action === "prefill") {
+          return textOutput('Options in a round must use action "send"; "prefill" would put your words into the candidate\'s answer.', true);
+        }
         if (ctx.countOnlyVerdictThisTurn?.()) {
           return textOutput("Checks of this step give only a count of what is open, so emit no blocks in this reply.", true);
         }

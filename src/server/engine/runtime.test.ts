@@ -3426,7 +3426,7 @@ describe("rich chat blocks", () => {
     }
   });
 
-  it("treats pure send and unedited prefill option picks as empty step evidence so the checker never runs", async () => {
+  it("treats option picks as empty step evidence so the checker never runs", async () => {
     const baseFake = createFakeDriver({ chunkDelayMs: 0 });
     let checkerCalls = 0;
     const sendReply = "Create a short link for a long URL with optional custom alias and optional expiry.";
@@ -3453,14 +3453,14 @@ describe("rich chat blocks", () => {
         await emit.run({
           block: {
             kind: "options",
-            action: "prefill",
+            action: "send",
             items: [
               { label: "Redirect behaviour", reply: prefillReply },
               { label: "Analytics", reply: "Count total clicks per link." },
             ],
           },
         });
-        return "Still empty; extend a starter in your own words.";
+        return "Still empty; pick where to start.";
       }
       return "Ok.";
     });
@@ -3488,8 +3488,8 @@ describe("rich chat blocks", () => {
     expect(checkerCalls).toBe(0);
     expect(session.stepChecks.requirements).toBeUndefined();
 
-    // 2. Unedited prefill option submission (unmarked on the wire) followed by leaving the phase -> built.empty === true, checker still never runs.
-    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "pure-prefill", text: prefillReply }, t.peer);
+    // 2. A second option click (unmarked on the wire) followed by leaving the phase -> built.empty === true, checker still never runs.
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "second-pick", text: prefillReply }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(session.transcript.findLast((e) => e.role === "candidate")?.optionTexts).toEqual([prefillReply]);
 
@@ -3501,7 +3501,7 @@ describe("rich chat blocks", () => {
     rt.dispose();
   });
 
-  it("strips optionTexts from fake.candidateLines on pure and extended prefill picks so FakeDriver credits notes and own words instead of unverified option quotes", async () => {
+  it("leaves option picks out of fake.candidateLines so FakeDriver credits notes and typed words instead of unverified option quotes", async () => {
     const baseFake = createFakeDriver({ chunkDelayMs: 0 });
     const pureOptReply = "Every code is unique forever and two generated codes never collide.";
     const prefillOptReply = "Create a short link for a long URL with optional custom alias and optional expiry.";
@@ -3527,14 +3527,14 @@ describe("rich chat blocks", () => {
         await emit.run({
           block: {
             kind: "options",
-            action: "prefill",
+            action: "send",
             items: [
               { label: "Functional starter", reply: prefillOptReply },
               { label: "Alternative starter", reply: "Another starter." },
             ],
           },
         });
-        return "Extend this starter with your latency target.";
+        return "Pick one, then add your latency target.";
       }
       return "Ok.";
     });
@@ -3558,8 +3558,8 @@ describe("rich chat blocks", () => {
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "opt-pure", text: pureOptReply }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
 
-    // 2. Candidate writes a 5-keyword note in stepNotes covering item 1 (fewer keyword hits than prefillOptReply's 7 hits!)
-    //    AND sends the prefill option extended with their own latency target sentence.
+    // 2. Candidate writes a 5-keyword note in stepNotes covering item 1 (fewer keyword hits than prefillOptReply's 7 hits!),
+    //    clicks the second option, and then types their own latency target sentence.
     await rt.handle(
       {
         type: "notes.update",
@@ -3573,11 +3573,13 @@ describe("rich chat blocks", () => {
       {
         type: "chat.send",
         channel: "interview",
-        clientMsgId: "opt-ext",
-        text: `${prefillOptReply} ${candidateAddedSentence}`,
+        clientMsgId: "opt-second",
+        text: prefillOptReply,
       },
       t.peer,
     );
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "typed", text: candidateAddedSentence }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
 
     // Trigger step check by moving off requirements.
@@ -3587,7 +3589,7 @@ describe("rich chat blocks", () => {
       expect(session.stepChecks.requirements?.status).toBe("done");
     });
 
-    // fake.candidateLines omitted the pure option pick completely and stripped prefillOptReply from the extended prefill.
+    // fake.candidateLines left out both option picks and kept the typed sentence.
     expect(seenCandidateLines).toEqual([[candidateAddedSentence]]);
 
     const reqItems = session.checklist.requirements ?? [];

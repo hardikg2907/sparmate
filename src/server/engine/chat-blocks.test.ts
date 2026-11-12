@@ -107,6 +107,22 @@ describe("chat-blocks", () => {
     expect(firstText(rejected[0]!)).toContain("At most 4 blocks");
   });
 
+  it("refuses prefill options in a round and allows them in the coach", async () => {
+    const block = { kind: "options", action: "prefill", items: [{ label: "A", reply: "I'd pick A because" }, { label: "B" }] };
+    const round = makeHarness({ meta: { kind: "candidate", candidateText: "hello" } });
+    const refused = await round.tool.run({ block });
+    expect(refused.isError).toBe(true);
+    expect(firstText(refused)).toContain('must use action "send"');
+    expect(round.blocks).toHaveLength(0);
+    const sendOk = await round.tool.run({ block: { ...block, action: "send" } });
+    expect(sendOk.isError).toBeUndefined();
+
+    const coach = makeHarness({ channel: "coach" });
+    const allowed = await coach.tool.run({ block });
+    expect(allowed.isError).toBeUndefined();
+    expect(coach.blocks).toHaveLength(1);
+  });
+
   it("rejects invalid schema inputs before queueing", async () => {
     const { tool, blocks } = makeHarness({ channel: "coach" });
     const bad = await tool.run({

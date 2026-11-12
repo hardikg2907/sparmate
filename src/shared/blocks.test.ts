@@ -248,6 +248,24 @@ describe("ChatBlockSchema", () => {
     expect(candidateOwnText({ text, optionTexts: matched })).toBe("Writes are hot.");
   });
 
+  it("matches a bare prefill label only as the whole message", () => {
+    const entries: { channel: string; role: string; blocks: ChatBlock[] }[] = [
+      { channel: "coach", role: "coach", blocks: [{ kind: "options", action: "prefill", items: [{ label: "Queue" }, { label: "Cache" }] }] },
+    ];
+    expect(matchUnsettledOptionTexts(entries, "coach", "Put a queue in front")).toBeUndefined();
+    expect(matchUnsettledOptionTexts(entries, "coach", "queue")).toEqual(["Queue"]);
+  });
+
+  it("strips starters across whitespace runs and when two sit side by side", () => {
+    expect(stripOptionTexts("I'd   shard\n\nby user id because hot rows", ["I'd shard by user id because"])).toBe("hot rows");
+    expect(stripOptionTexts("Start: I'd shard by user id becauseI'd shard by region because end", ["I'd shard by user id because", "I'd shard by region because"])).toBe(
+      "Start: I'd shard by user id becauseI'd shard by region because end",
+    );
+    expect(stripOptionTexts("Start: I'd shard by user id because I'd shard by region because end", ["I'd shard by user id because", "I'd shard by region because"])).toBe(
+      "Start: end",
+    );
+  });
+
   it("leaves a message without option texts untouched", () => {
     expect(candidateOwnText({ text: "  . " })).toBe("  . ");
     expect(stripOptionTexts("Fan-out on read", ["Fan-out on write"])).toBe("Fan-out on read");
