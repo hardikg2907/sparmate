@@ -9,6 +9,7 @@
 // PORT sets the port; when it is unset the script picks a free port from 4750 to 4799 (not 4780).
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -20,7 +21,18 @@ import { copyStudyKit } from "../lib/tempStudy.mjs";
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PORT = process.env.PORT ? Number(process.env.PORT) : await pickFreePort();
 const BASE = `http://127.0.0.1:${PORT}`;
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+// CHROME_PATH overrides the usual install path for the platform.
+const CHROME =
+  process.env.CHROME_PATH ??
+  {
+    darwin: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    linux: "/usr/bin/google-chrome",
+    win32: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  }[process.platform];
+if (!CHROME || !existsSync(CHROME)) {
+  console.error(`Google Chrome was not found at ${CHROME ?? "(no default for this platform)"}. Install it, or set CHROME_PATH.`);
+  process.exit(1);
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const VIEWPORTS = [

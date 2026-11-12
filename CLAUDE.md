@@ -17,7 +17,7 @@ Sparmate is a TypeScript app (Fastify server, React and Vite web app). Read `CON
 
 ## Before you open a pull request
 
-- Run `npm run verify`. It runs typecheck, lint, format check, tests, `vite build`, the fake-agent end-to-end round and the layout and scroll check (needs Google Chrome). Paste the result in the pull request body while CI is not running.
+- Run `npm run verify`. It runs typecheck, lint, format check, tests, `vite build`, the fake-agent end-to-end round and the layout and scroll check (needs Google Chrome; set `CHROME_PATH` if it is not in the usual place). Paste the result in the pull request body while CI is not running.
 - Run `npx tsx scripts/privacy-scan.ts` before you push.
 
 ## Commits
