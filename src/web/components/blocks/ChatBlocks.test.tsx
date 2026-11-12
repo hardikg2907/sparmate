@@ -1,10 +1,42 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { ChatBlockSchema, MAX_BLOCKS_PER_TURN, type ChatBlock } from "../../../shared/blocks";
+import { describe, expect, it, vi } from "vitest";
+import { ChatBlockSchema, MAX_BLOCKS_PER_TURN, blockToPlainText, type ChatBlock, type DiagramBlock as DiagramBlockType } from "../../../shared/blocks";
+import { ClientMsgSchema, type ClientMsg } from "../../../shared/protocol";
 import { hldDebrief, hldRoom, lldDebrief } from "../../fixtures/rooms";
+import { chatItems, initialState, reducer } from "../../session/reducer";
+import type { ChatItem } from "../../session/types";
+import { dispatchSendChat } from "../../session/useSession";
+import { ChatPanel } from "../ChatPanel";
+import { TooltipProvider } from "../ui/tooltip";
 import { ChatBlocks } from "./ChatBlocks";
+import { applyOptionChoice, applyPrefillToComposer, focusComposerInput, mergePrefillDraft, resolveOptionsState } from "./optionsState";
 
 const noopChoose = () => true;
+
+function decodeHtmlEntities(html: string): string {
+  return html
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function renderChatPanelMarkup(items: ChatItem[]): string {
+  return renderToStaticMarkup(
+    <TooltipProvider>
+      <ChatPanel
+        heading="Guide"
+        speaker="Guide"
+        items={items}
+        agent={{ state: "idle", error: null }}
+        onSend={() => true}
+        inputLabel="Message to the guide"
+        placeholder="Reply to the guide…"
+      />
+    </TooltipProvider>,
+  );
+}
 
 describe("ChatBlocks", () => {
   it("renders nothing when blocks array is empty and adjusts top margin for prose", () => {
@@ -18,7 +50,34 @@ describe("ChatBlocks", () => {
     expect(blocksOnly).toContain("mt-0.5");
   });
 
-  it("renders unsettled options as buttons with action affordances and collapses when settled", () => {
+  it("renders KvBlock as a heading-free definition list with exact dt/dd pairs and long-token wrapping", () => {
+    const kv: ChatBlock = {
+      kind: "kv",
+      rows: [
+        { key: "Lookup signature", value: "std::unordered_map< TicketId, std::shared_ptr<ParkingTicket> >::const_iterator" },
+        { key: "Peak redirect QPS", value: "40,000/s" },
+      ],
+    };
+
+    const kvHtml = renderToStaticMarkup(<ChatBlocks blocks={[kv]} settled={false} disabled={false} onChoose={noopChoose} />);
+    expect(kvHtml).toContain("<dl");
+    expect(kvHtml).not.toMatch(/<h[1-6]\b/i);
+
+    const dts = [...kvHtml.matchAll(/<dt\b([^>]*)>([\s\S]*?)<\/dt>/g)];
+    const dds = [...kvHtml.matchAll(/<dd\b([^>]*)>([\s\S]*?)<\/dd>/g)];
+    expect(dts).toHaveLength(2);
+    expect(dds).toHaveLength(2);
+    expect(decodeHtmlEntities(dts[0]![2]!)).toBe("Lookup signature");
+    expect(decodeHtmlEntities(dds[0]![2]!)).toBe("std::unordered_map< TicketId, std::shared_ptr<ParkingTicket> >::const_iterator");
+    expect(decodeHtmlEntities(dts[1]![2]!)).toBe("Peak redirect QPS");
+    expect(decodeHtmlEntities(dds[1]![2]!)).toBe("40,000/s");
+    for (const match of [...dts, ...dds]) {
+      expect(match[1]).toContain("min-w-0");
+      expect(match[1]).toContain("[overflow-wrap:anywhere]");
+    }
+  });
+
+  it("renders unsettled options as buttons, wraps long tokens across blocks, and collapses cleanly when settled", () => {
     const sendOptions: ChatBlock = {
       kind: "options",
       items: [
@@ -28,27 +87,31 @@ describe("ChatBlocks", () => {
     };
 
     const unsettledSend = renderToStaticMarkup(<ChatBlocks blocks={[sendOptions]} settled={false} disabled={false} onChoose={noopChoose} />);
-    expect(unsettledSend).toContain("<button");
+    expect([...unsettledSend.matchAll(/<button\b/g)]).toHaveLength(2);
     expect(unsettledSend).toContain("↵");
-    expect(unsettledSend).not.toContain("CHOOSE ONE");
+    expect(unsettledSend).toContain("[overflow-wrap:anywhere]");
 
     const prefillOptions: ChatBlock = { ...sendOptions, action: "prefill" };
     const unsettledPrefill = renderToStaticMarkup(<ChatBlocks blocks={[prefillOptions]} settled={false} disabled onChoose={noopChoose} />);
     expect(unsettledPrefill).toContain("✎");
     expect(unsettledPrefill).toContain("disabled");
 
-    const settledHtml = renderToStaticMarkup(
+    const settledPicked = renderToStaticMarkup(
       <ChatBlocks blocks={[sendOptions]} settled disabled={false} answeredText="I choose 302 Found so we count clicks." onChoose={noopChoose} />,
     );
-    expect(settledHtml).not.toContain("<button");
-    expect(settledHtml).toContain("Selected: ");
-    expect(settledHtml).toContain("opacity-60");
+    expect(settledPicked).not.toContain("<button");
+    expect(settledPicked).toContain("Selected: ");
+    expect(settledPicked).toContain("opacity-60");
+
+    const settledUnanswered = renderToStaticMarkup(<ChatBlocks blocks={[sendOptions]} settled disabled={false} answeredText={null} onChoose={noopChoose} />);
+    expect(settledUnanswered).not.toContain("<button");
+    expect(settledUnanswered).not.toContain("Selected: ");
   });
 
-  it("renders board and code anchors as buttons when onAnchor is provided and static cards otherwise", () => {
+  it("renders board and code anchors with anywhere wrapping as buttons when onAnchor is provided and static cards otherwise", () => {
     const anchors: ChatBlock[] = [
       { kind: "anchor", target: { kind: "board", elementId: "redis" }, label: "Redis cache", note: "Hot set" },
-      { kind: "anchor", target: { kind: "code", line: 60, endLine: 65 }, label: "ParkingLot::exit" },
+      { kind: "anchor", target: { kind: "code", line: 60, endLine: 65 }, label: "ParkingLot::exit(std::unordered_map<int,Ticket>&)" },
       { kind: "anchor", target: { kind: "code", line: 12 }, label: "Spot struct" },
     ];
 
@@ -57,46 +120,56 @@ describe("ChatBlocks", () => {
     expect(interactive).toContain("L60–65");
     expect(interactive).toContain("L12");
     expect(interactive).toContain("→");
+    expect(interactive).toContain("[overflow-wrap:anywhere]");
 
     const passive = renderToStaticMarkup(<ChatBlocks blocks={anchors} settled={false} disabled={false} onChoose={noopChoose} />);
     expect(passive).not.toContain("<button");
     expect(passive).not.toContain("→");
   });
 
-  it("renders callout markdown, kv definition lists, and flow/sequence SVG diagrams cleanly", () => {
-    const blocks: ChatBlock[] = [
-      { kind: "callout", label: "Invariant", text: "Use `tickets_.find(id)` before mutating `spots_`." },
-      { kind: "callout", text: "Unlabelled note still renders cleanly." },
-      {
-        kind: "diagram",
-        layout: "flow",
-        title: "Redirect path",
-        nodes: [
-          { id: "c", label: "Client" },
-          { id: "r", label: "Redis", detail: "TTL 24h" },
-        ],
-        edges: [{ from: "c", to: "r", label: "GET" }],
-      },
-      {
-        kind: "diagram",
-        layout: "sequence",
-        actors: [
-          { id: "a", label: "API" },
-          { id: "db", label: "Postgres" },
-        ],
-        steps: [{ from: "a", to: "db", label: "SELECT url", style: "dashed" }],
-      },
-    ];
+  it("wires DiagramBlock aria-describedby to a visually-hidden plain-text description matching blockToPlainText(block)", () => {
+    const flowDiagram: DiagramBlockType = {
+      kind: "diagram",
+      layout: "flow",
+      title: "Redirect path",
+      nodes: [
+        { id: "c", label: "Client" },
+        { id: "r", label: "Redis", detail: "TTL 24h" },
+      ],
+      edges: [{ from: "c", to: "r", label: "GET" }],
+    };
+    const seqDiagram: DiagramBlockType = {
+      kind: "diagram",
+      layout: "sequence",
+      actors: [
+        { id: "a", label: "API" },
+        { id: "db", label: "Postgres" },
+      ],
+      steps: [{ from: "a", to: "db", label: "SELECT url", style: "dashed" }],
+    };
+    const callout: ChatBlock = {
+      kind: "callout",
+      label: "Invariant",
+      text: "Use `tickets_.find(id)` before mutating `spots_`.",
+    };
 
-    const html = renderToStaticMarkup(<ChatBlocks blocks={blocks} settled={false} disabled={false} onChoose={noopChoose} />);
-    expect(html).toContain("Invariant");
-    expect(html).toContain("<code");
-    expect(html).toContain("tickets_.find(id)");
-    expect(html).toContain("<figcaption");
-    expect(html).toContain("Redirect path");
-    expect(html).toContain('role="img"');
-    expect(html).toContain("TTL 24h");
-    expect(html).toContain("SELECT url");
+    for (const diagram of [flowDiagram, seqDiagram]) {
+      const html = renderToStaticMarkup(<ChatBlocks blocks={[diagram]} settled={false} disabled={false} onChoose={noopChoose} />);
+      const svgMatch = html.match(/<svg\b[^>]*\baria-describedby="([^"]+)"[^>]*>/);
+      expect(svgMatch).not.toBeNull();
+      const descId = svgMatch![1]!;
+      const descRegex = new RegExp(`<div\\b[^>]*\\bid="${descId}"[^>]*>([\\s\\S]*?)<\\/div>`);
+      const descMatch = html.match(descRegex);
+      expect(descMatch).not.toBeNull();
+      expect(html).toContain("sr-only");
+      expect(decodeHtmlEntities(descMatch![1]!)).toBe(blockToPlainText(diagram));
+    }
+
+    const calloutHtml = renderToStaticMarkup(<ChatBlocks blocks={[callout]} settled={false} disabled={false} onChoose={noopChoose} />);
+    expect(calloutHtml).toContain("Invariant");
+    expect(calloutHtml).toContain("<code");
+    expect(calloutHtml).toContain("tickets_.find(id)");
+    expect(calloutHtml).toContain("[overflow-wrap:anywhere]");
   });
 
   it("keeps interview room fixtures free of blocks while validating guided and debrief fixture blocks", () => {
@@ -113,5 +186,184 @@ describe("ChatBlocks", () => {
         }
       }
     }
+  });
+});
+
+describe("options settlement, send metadata, focus, and non-destructive prefill", () => {
+  const optionBlocks: ChatBlock[] = [
+    {
+      kind: "options",
+      items: [
+        { label: "302 Found", reply: "I pick 302 Found." },
+        { label: "301 Moved Permanently", reply: "I pick 301 Moved Permanently." },
+      ],
+    },
+  ];
+
+  const openingTurn: ChatItem = {
+    id: "g1",
+    role: "interviewer",
+    text: "Which redirect status fits click analytics?",
+    blocks: optionBlocks,
+    at: 0,
+    state: "done",
+  };
+
+  it("settles options on candidate or later assistant turns, ignores system notes, and unfreezes if a pending send is lost on reconnect", () => {
+    const withSystemNote: ChatItem[] = [openingTurn, { id: "sys-1", role: "system", text: "Moved to API", at: 10_000, state: "done" }];
+    expect(resolveOptionsState(withSystemNote, 0)).toEqual({ settled: false, answeredText: null });
+    const unsettledPanelHtml = renderChatPanelMarkup(withSystemNote);
+    expect(unsettledPanelHtml).not.toContain("Selected: ");
+    expect(unsettledPanelHtml).toContain("302 Found");
+    expect(unsettledPanelHtml).toContain("↵");
+
+    const afterCandidate: ChatItem[] = [...withSystemNote, { id: "c-1", role: "candidate", text: "I pick 302 Found.", at: 12_000, state: "pending" }];
+    expect(resolveOptionsState(afterCandidate, 0)).toEqual({ settled: true, answeredText: "I pick 302 Found." });
+    const candidateHtml = renderChatPanelMarkup(afterCandidate);
+    expect(candidateHtml).toContain("Selected: ");
+    expect(candidateHtml).not.toContain("↵");
+
+    // A later guide/coach message from Check step, "I'm stuck", or a silence check-in settles old options with answeredText: null.
+    const afterGuideCheckIn: ChatItem[] = [...withSystemNote, { id: "g-2", role: "interviewer", text: "Let's check your step so far.", at: 20_000, state: "streaming" }];
+    expect(resolveOptionsState(afterGuideCheckIn, 0)).toEqual({ settled: true, answeredText: null });
+    const guideHtml = renderChatPanelMarkup(afterGuideCheckIn);
+    expect(guideHtml).not.toContain("Selected: ");
+    expect(guideHtml).not.toContain("↵");
+    expect(guideHtml).toContain("opacity-60");
+
+    // Simulate clicking a "send" option -> pending candidate item -> socket reconnects without having received it -> options unfreeze back to buttons.
+    const guidedSession = hldRoom("guided");
+    const sessionWithOptions = {
+      ...guidedSession,
+      transcript: [
+        {
+          id: "g1",
+          at: 0,
+          wall: new Date(1_700_000_000_000).toISOString(),
+          role: "interviewer" as const,
+          channel: "interview" as const,
+          text: openingTurn.text,
+          blocks: optionBlocks,
+        },
+      ],
+    };
+
+    let state = reducer(initialState, {
+      type: "loaded",
+      session: sessionWithOptions,
+      board: null,
+      code: null,
+      now: 1_700_000_005_000,
+    });
+
+    dispatchSendChat(
+      "interview",
+      "I pick 302 Found.",
+      { fromOption: true },
+      {
+        now: 1_700_000_006_000,
+        clientMsgId: "opt-msg-1",
+        dispatch: (action) => {
+          state = reducer(state, action);
+        },
+        send: () => true,
+      },
+    );
+
+    const whilePending = chatItems(state, "interview");
+    expect(resolveOptionsState(whilePending, 0)).toEqual({ settled: true, answeredText: "I pick 302 Found." });
+    expect(renderChatPanelMarkup(whilePending)).toContain("Selected: ");
+    expect(renderChatPanelMarkup(whilePending)).not.toContain("↵");
+
+    // Socket drops and re-opens (carrying earlier pending messages), then receives fresh server state lacking opt-msg-1.
+    state = reducer(state, { type: "connection", status: "reconnecting" });
+    state = reducer(state, { type: "connection", status: "open" });
+    state = reducer(state, {
+      type: "server",
+      msg: { type: "session.state", session: sessionWithOptions },
+      now: 1_700_000_008_000,
+      fresh: true,
+    });
+
+    const afterReconnect = chatItems(state, "interview");
+    expect(resolveOptionsState(afterReconnect, 0)).toEqual({ settled: false, answeredText: null });
+    const unfrozenHtml = renderChatPanelMarkup(afterReconnect);
+    expect(unfrozenHtml).toContain("↵");
+    expect(unfrozenHtml).not.toContain("Selected: ");
+  });
+
+  it("forwards fromOption: true on send option clicks and moves focus to the composer textarea", () => {
+    const sentMessages: ClientMsg[] = [];
+    const focusInput = { focus: vi.fn() };
+    let focusBumps = 0;
+
+    const ok = applyOptionChoice("I pick 302 Found.", "send", {
+      disabled: false,
+      onSend: (text, opts) =>
+        dispatchSendChat("interview", text, opts, {
+          clientMsgId: "cid-42",
+          dispatch: () => {},
+          send: (msg) => {
+            sentMessages.push(msg);
+            return true;
+          },
+        }),
+      onPrefill: () => {},
+      onFocusComposer: () => {
+        focusBumps += 1;
+        focusComposerInput(false, focusInput);
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(sentMessages).toEqual([
+      {
+        type: "chat.send",
+        channel: "interview",
+        clientMsgId: "cid-42",
+        text: "I pick 302 Found.",
+        fromOption: true,
+      },
+    ]);
+    expect(ClientMsgSchema.safeParse(sentMessages[0]).success).toBe(true);
+    expect(focusBumps).toBe(1);
+    expect(focusInput.focus).toHaveBeenCalledTimes(1);
+
+    // Regular typed messages omit fromOption.
+    dispatchSendChat("interview", "Plain typed message", undefined, {
+      clientMsgId: "cid-43",
+      dispatch: () => {},
+      send: (msg) => {
+        sentMessages.push(msg);
+        return true;
+      },
+    });
+    expect("fromOption" in sentMessages[1]!).toBe(false);
+  });
+
+  it("merges prefill options into existing composer drafts without wiping typed text and places caret at the end", () => {
+    expect(mergePrefillDraft("", "Return std::nullopt.")).toBe("Return std::nullopt.");
+    expect(mergePrefillDraft("   ", "Return std::nullopt.")).toBe("Return std::nullopt.");
+    expect(mergePrefillDraft("Return std::nullopt.", "  Return std::nullopt. ")).toBe("Return std::nullopt.");
+    expect(mergePrefillDraft("First check ticketId:   ", "Return std::nullopt.")).toBe("First check ticketId: Return std::nullopt.");
+    expect(mergePrefillDraft("Plan:\n", "Return std::nullopt.")).toBe("Plan:\nReturn std::nullopt.");
+
+    const focus = vi.fn();
+    const setSelectionRange = vi.fn();
+    let draft = "My note so far:";
+
+    const ok = applyOptionChoice("Use tickets_.find(ticketId).", "prefill", {
+      disabled: false,
+      onSend: () => false,
+      onPrefill: (incoming) => {
+        draft = applyPrefillToComposer(draft, incoming, false, { focus, setSelectionRange });
+      },
+      onFocusComposer: () => {},
+    });
+
+    expect(ok).toBe(true);
+    expect(draft).toBe("My note so far: Use tickets_.find(ticketId).");
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(setSelectionRange).toHaveBeenCalledWith(draft.length, draft.length);
   });
 });

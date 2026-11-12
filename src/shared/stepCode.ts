@@ -16,7 +16,7 @@ export function codeScopeFor(track: Track, phase: string): "step" | "file" | nul
   return null;
 }
 
-function fileLines(content: string): string[] {
+export function fileLines(content: string): string[] {
   return content.replace(/\n$/, "").split("\n");
 }
 

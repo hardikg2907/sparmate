@@ -269,7 +269,7 @@ interface ChannelState {
   pendingBlocks: ChatBlock[];
   currentTurnMeta: TurnMeta | null;
   checkedPhaseThisTurn: string | null;
-  hintNotedThisTurn: boolean;
+  hintLevelThisTurn: 1 | 2 | 3 | null;
   countOnlyVerdictThisTurn: boolean;
   namedVerdictPhasesThisTurn: Set<string>;
 }
@@ -291,7 +291,7 @@ function newChannel(name: Channel): ChannelState {
     pendingBlocks: [],
     currentTurnMeta: null,
     checkedPhaseThisTurn: null,
-    hintNotedThisTurn: false,
+    hintLevelThisTurn: null,
     countOnlyVerdictThisTurn: false,
     namedVerdictPhasesThisTurn: new Set(),
   };
@@ -301,7 +301,7 @@ function resetTurnBlocks(ch: ChannelState): void {
   ch.pendingBlocks = [];
   ch.currentTurnMeta = null;
   ch.checkedPhaseThisTurn = null;
-  ch.hintNotedThisTurn = false;
+  ch.hintLevelThisTurn = null;
   ch.countOnlyVerdictThisTurn = false;
   ch.namedVerdictPhasesThisTurn.clear();
 }
@@ -645,7 +645,7 @@ export class SessionRuntime {
         case "hello":
           return;
         case "chat.send":
-          return this.onChat(msg.channel, msg.text, msg.clientMsgId);
+          return this.onChat(msg.channel, msg.text, msg.clientMsgId, msg.fromOption);
         case "board.update":
           return await this.onBoardUpdate(msg.version, msg.elements);
         case "notes.update":
@@ -702,17 +702,17 @@ export class SessionRuntime {
     if (s !== "live") throw new UserError("not_live", "The round is over.");
   }
 
-  private onChat(channel: Channel, text: string, clientMsgId: string): void {
+  private onChat(channel: Channel, text: string, clientMsgId: string, fromOption?: boolean): void {
     if (channel === "coach") {
       if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
-      this.addEntry({ channel: "coach", role: "candidate", text }, clientMsgId);
+      this.addEntry({ channel: "coach", role: "candidate", text, ...(fromOption ? { fromOption: true } : {}) }, clientMsgId);
       this.noteTeachRequest(text);
       if (this.coach.status === "error") this.retry(this.coach);
       this.enqueue(this.coach, this.coachCandidateTurn(text));
       return;
     }
     this.requireLiveRound();
-    const entry = this.addEntry({ channel: "interview", role: "candidate", text }, clientMsgId);
+    const entry = this.addEntry({ channel: "interview", role: "candidate", text, ...(fromOption ? { fromOption: true } : {}) }, clientMsgId);
     this.lastCandidateAt = entry.at;
     this.markActive();
     this.enqueue(this.interview, this.candidateTurn(text));
@@ -996,7 +996,7 @@ export class SessionRuntime {
     const codeText =
       scope === "step" ? stepCodeText(this.codeContent, s.stepCode[phase] ?? []) : scope === "file" && this.codeContent.trim() !== "" ? numberedCode(this.codeContent) : "";
     const notesText = (s.stepNotes[phase] ?? "").trim();
-    const said = chat.some((e) => e.role === "candidate") || notesText !== "";
+    const said = chat.some((e) => e.role === "candidate" && !e.fromOption) || notesText !== "";
     const drawn = unframed ? s.board.graphText.trim() !== "" : frame !== null && !frame.empty;
     return {
       evidence: { stepLabel: def.label, goal: def.goal, items, chat, boardText, codeText, notesText, imageAttached: false },
@@ -1077,7 +1077,7 @@ export class SessionRuntime {
           track: s.track,
           mode: s.mode,
           checkItems: evidence.items,
-          candidateLines: evidence.chat.filter((e) => e.role === "candidate").map((e) => e.text),
+          candidateLines: evidence.chat.filter((e) => e.role === "candidate" && !e.fromOption).map((e) => e.text),
           frameText: evidence.boardText,
           codeText: unnumberedCode(evidence.codeText),
           notesText: evidence.notesText,
@@ -1294,7 +1294,9 @@ export class SessionRuntime {
       }
       const text = f.finish();
       const silent = isSilentReply(reply.text);
-      const blocks = silent ? [] : [...ch.pendingBlocks];
+      // A hint turn that skipped note_hint may still be on the first two rungs, where option chips give too much away.
+      const unrecordedHint = ch.name === "interview" && built.turn.meta.request === "hint" && ch.hintLevelThisTurn === null;
+      const blocks = silent ? [] : unrecordedHint ? stripDisallowedHintBlocks(ch.pendingBlocks, 1) : [...ch.pendingBlocks];
       ch.queue.shift();
       built.commit();
       ch.freshResume = false;
@@ -1830,11 +1832,12 @@ export class SessionRuntime {
         "Record the hint you are giving in this reply, before you write the reply text, so the debrief can count it. Level 1 points at an area, level 2 names the concern, level 3 offers two options. Write the topic in plain words with no level code in it. The candidate never sees this record.",
         { level: z.number().int().min(1).max(3), topic: z.string().min(1).max(200) },
         async ({ level, topic }) => {
-          ch.hintNotedThisTurn = true;
-          ch.pendingBlocks = stripDisallowedHintBlocks(ch.pendingBlocks);
+          const rung = level as 1 | 2 | 3;
+          ch.hintLevelThisTurn = rung;
+          ch.pendingBlocks = stripDisallowedHintBlocks(ch.pendingBlocks, rung);
           const at = this.roundNow();
           const plain = plainHintTopic(topic);
-          this.session.hints.push({ at, level: level as 1 | 2 | 3, topic: plain });
+          this.session.hints.push({ at, level: rung, topic: plain });
           this.addEntry({ channel: "interview", role: "system", kind: "hint", hidden: true, text: `hint H${level}: ${plain}` });
           return textOutput("Recorded.");
         },
@@ -1926,7 +1929,7 @@ export class SessionRuntime {
             return ch.pendingBlocks.length;
           },
           turnMeta: () => ch.currentTurnMeta,
-          hintNotedThisTurn: () => ch.hintNotedThisTurn,
+          hintLevelThisTurn: () => ch.hintLevelThisTurn,
           currentPhase: () => ch.checkedPhaseThisTurn ?? this.session.phase,
           isCountOnly: (phase) => this.countsOnly(phase) && !ch.namedVerdictPhasesThisTurn.has(phase),
           countOnlyVerdictThisTurn: () => ch.countOnlyVerdictThisTurn,
@@ -2078,7 +2081,7 @@ export class SessionRuntime {
           return ch.pendingBlocks.length;
         },
         turnMeta: () => ch.currentTurnMeta,
-        hintNotedThisTurn: () => false,
+        hintLevelThisTurn: () => null,
         currentPhase: () => this.session.phase,
         isCountOnly: () => false,
         boardElements: () => this.boardElements,
@@ -2622,6 +2625,7 @@ export class SessionRuntime {
       blocks?: ChatBlock[];
       kind?: TranscriptEntry["kind"];
       hidden?: boolean;
+      fromOption?: boolean;
     },
     clientMsgId?: string,
   ): TranscriptEntry {
@@ -2635,6 +2639,7 @@ export class SessionRuntime {
       ...(e.blocks && e.blocks.length > 0 ? { blocks: e.blocks } : {}),
       ...(e.kind ? { kind: e.kind } : {}),
       ...(e.hidden ? { hidden: true } : {}),
+      ...(e.fromOption ? { fromOption: true } : {}),
     };
     this.session.transcript.push(entry);
     if (entry.channel === "interview" && entry.role === "interviewer" && !entry.hidden) this.spokeAt = entry.at;

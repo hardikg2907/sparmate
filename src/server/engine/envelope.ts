@@ -299,7 +299,10 @@ export function transcriptLines(entries: readonly TranscriptEntry[], channel: Tr
     .map((e) => {
       const stamp = `[${formatStamp(e.at)}]`;
       const content = entryText(e);
-      return e.role === "system" ? `${stamp} (event) ${content}` : `${stamp} ${e.role}: ${content}`;
+      if (e.role === "system") return `${stamp} (event) ${content}`;
+      // Guide-written option labels are never the candidate's own words, so neither checker nor judge credits them.
+      if (e.role === "candidate" && e.fromOption) return `${stamp} (event) candidate picked option: ${content}`;
+      return `${stamp} ${e.role}: ${content}`;
     })
     .join("\n");
 }
@@ -323,6 +326,7 @@ export function parseStamp(stamp: string): number | null {
 function readableLine(e: TranscriptEntry): string | null {
   const stamp = `[${formatStamp(e.at)}]`;
   const body = (text: string) => text.replace(/\r\n?|[\n\u0085\u2028\u2029]/g, "\n    ");
+  if (e.role === "candidate" && e.fromOption) return `${stamp} (event) candidate picked option: ${body(entryText(e))}`;
   if (e.role !== "system") return `${stamp} ${e.role}: ${body(entryText(e))}`;
   if (e.kind === "hint") return `${stamp} (event) The interviewer gave a hint on: ${body(e.text.replace(/^hint H\d:\s*/, ""))}`;
   if (e.hidden) return null;

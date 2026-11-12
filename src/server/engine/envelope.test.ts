@@ -168,6 +168,15 @@ describe("transcript and code text", () => {
     expect(transcriptLines(entries, "interview")).toBe("[00:00] interviewer: Let's start.\n[01:05] candidate: Requirements first.\n[01:10] (event) clock: phase end");
   });
 
+  it("formats option-chip candidate clicks as events rather than candidate speech", () => {
+    const entries: TranscriptEntry[] = [
+      { id: "1", at: 65_000, wall: "", channel: "interview", role: "candidate", text: "Requirements first." },
+      { id: "2", at: 90_000, wall: "", channel: "interview", role: "candidate", text: "Fan-out on write — Fast reads", fromOption: true },
+    ];
+    expect(transcriptLines(entries, "interview")).toBe("[01:05] candidate: Requirements first.\n[01:30] (event) candidate picked option: Fan-out on write — Fast reads");
+    expect(roundTranscript(entries, null)).toBe("[01:05] candidate: Requirements first.\n[01:30] (event) candidate picked option: Fan-out on write — Fast reads");
+  });
+
   it("keeps only the interview chat from every visit to a step", () => {
     const e = (id: string, at: number, extra: Partial<TranscriptEntry> = {}): TranscriptEntry => ({
       id,

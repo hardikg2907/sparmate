@@ -19,7 +19,7 @@ import {
   type CodeText,
 } from "./codeSync";
 import { chatItems, initialState, reducer, type Action } from "./reducer";
-import type { SessionActions, SessionController, SessionSource } from "./types";
+import type { SendChatOptions, SessionActions, SessionController, SessionSource } from "./types";
 
 /** A long answer takes minutes to write; one signal this often keeps the quiet check from interrupting it. */
 const COMPOSING_EVERY_MS = 30_000;
@@ -57,6 +57,38 @@ type Timer = ReturnType<typeof setTimeout>;
 function newId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function dispatchSendChat(
+  channel: Channel,
+  text: string,
+  opts: SendChatOptions | undefined,
+  deps: {
+    now?: number;
+    clientMsgId?: string;
+    dispatch: (action: Action) => void;
+    send: (msg: ClientMsg) => boolean;
+  },
+): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (trimmed.length > CHAT_MAX_CHARS) {
+    deps.dispatch({ type: "notice", message: "That message is too long to send." });
+    return false;
+  }
+  const clientMsgId = deps.clientMsgId ?? newId();
+  // The local copy goes in first so the server's echo always finds it, however fast it answers.
+  deps.dispatch({ type: "pending-add", message: { clientMsgId, channel, text: trimmed, sentAt: deps.now ?? Date.now() } });
+  const msg: ClientMsg = {
+    type: "chat.send",
+    channel,
+    clientMsgId,
+    text: trimmed,
+    ...(opts?.fromOption ? { fromOption: true } : {}),
+  };
+  if (deps.send(msg)) return true;
+  deps.dispatch({ type: "pending-drop", clientMsgId });
+  return false;
 }
 
 /** Everything the socket handlers and actions share but that must not cause a render when it changes. */
@@ -351,19 +383,8 @@ export function useSessionController(source: SessionSource): SessionController {
         // Silent on failure: this is a hint for the server's quiet check, and no user action depends on it.
         if (socketRef.current?.send({ type: "chat.composing" })) lastComposing = now;
       },
-      sendChat(channel: Channel, text: string) {
-        const trimmed = text.trim();
-        if (!trimmed) return false;
-        if (trimmed.length > CHAT_MAX_CHARS) {
-          dispatch({ type: "notice", message: "That message is too long to send." });
-          return false;
-        }
-        const clientMsgId = newId();
-        // The local copy goes in first so the server's echo always finds it, however fast it answers.
-        dispatch({ type: "pending-add", message: { clientMsgId, channel, text: trimmed, sentAt: Date.now() } });
-        if (send({ type: "chat.send", channel, clientMsgId, text: trimmed })) return true;
-        dispatch({ type: "pending-drop", clientMsgId });
-        return false;
+      sendChat(channel: Channel, text: string, opts?: SendChatOptions) {
+        return dispatchSendChat(channel, text, opts, { dispatch, send });
       },
 
       setPhase(phase) {

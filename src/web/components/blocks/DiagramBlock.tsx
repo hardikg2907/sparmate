@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { DiagramBlock as DiagramBlockType } from "../../../shared/blocks";
+import { blockToPlainText, type DiagramBlock as DiagramBlockType } from "../../../shared/blocks";
 import { layoutFlowDiagram, layoutSequenceDiagram, type PositionedEdgeLabel } from "./diagramLayout";
 
 export interface DiagramBlockProps {
@@ -25,7 +25,9 @@ function EdgePill({ pill }: { pill: PositionedEdgeLabel }) {
 
 export function DiagramBlock({ block }: DiagramBlockProps) {
   const rawId = useId();
-  const markerId = `diag-arrow-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const markerId = `diag-arrow-${safeId}`;
+  const descId = `diag-desc-${safeId}`;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
 
@@ -34,6 +36,7 @@ export function DiagramBlock({ block }: DiagramBlockProps) {
   const width = flow?.width ?? seq?.width ?? 280;
   const height = flow?.height ?? seq?.height ?? 120;
   const ariaLabel = flow?.ariaLabel ?? seq?.ariaLabel ?? "Diagram";
+  const plainDescription = useMemo(() => blockToPlainText(block), [block]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -48,10 +51,14 @@ export function DiagramBlock({ block }: DiagramBlockProps) {
   return (
     <figure className="m-0 rounded-lg border border-border bg-raised/60 p-3">
       {block.title ? <figcaption className="mb-2 text-meta font-semibold text-muted-foreground">{block.title}</figcaption> : null}
+      <div id={descId} className="sr-only whitespace-pre-wrap">
+        {plainDescription}
+      </div>
       <div ref={scrollRef} className="max-w-full overflow-x-auto" {...(wide ? { tabIndex: 0, role: "region", "aria-label": `${ariaLabel}, scrolls sideways` } : {})}>
         <svg
           role="img"
           aria-label={ariaLabel}
+          aria-describedby={descId}
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}

@@ -148,6 +148,32 @@ describe("mergeCheck", () => {
       '[Requirements]\n- covered: Create a short link (said "Users create short links")\n- missing: Redirect adds under 50 ms at p99\n- missing: 99.99% availability for redirects',
     );
   });
+
+  it("ignores option-chip candidate entries in evidenceKey and chat quote verification, and marks them as events in checkerMessage", () => {
+    const base = evidence({
+      chat: [entry("a", 10_000, "interviewer", "Pick one option.")],
+    });
+    const withOptionClick = evidence({
+      chat: [
+        entry("a", 10_000, "interviewer", "Pick one option."),
+        { ...entry("opt", 20_000, "candidate", "Users create short links and redirects add under 50 ms at p99."), fromOption: true },
+      ],
+    });
+
+    expect(evidenceKey(withOptionClick)).toBe(evidenceKey(base));
+    expect(checkerMessage(withOptionClick)).toContain("[00:20] (event) candidate picked option: Users create short links");
+    expect(checkerMessage(withOptionClick)).not.toContain("[00:20] candidate:");
+
+    const check = mergeCheck(
+      undefined,
+      {
+        items: [claim("requirements-1", "covered", "chat", "Users create short links"), claim("requirements-2", "covered", "chat", "under 50 ms at p99")],
+      },
+      withOptionClick,
+      30_000,
+    );
+    expect(check.items).toEqual({});
+  });
 });
 
 describe("checklist for a step that was not read", () => {

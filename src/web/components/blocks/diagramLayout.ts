@@ -137,8 +137,68 @@ function cubicMidpoint(x0: number, y0: number, x1: number, y1: number, x2: numbe
   };
 }
 
-function boxesOverlap(a: PositionedEdgeLabel, b: PositionedEdgeLabel, gap = 3): boolean {
+interface BoxRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function boxesOverlap(a: BoxRect, b: BoxRect, gap = 3): boolean {
   return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
+}
+
+function placeFlowEdgeLabel(
+  lines: string[],
+  size: { width: number; height: number },
+  anchor: { x: number; y: number },
+  horizDir: 1 | -1,
+  nodes: readonly PositionedFlowNode[],
+  placedLabels: readonly PositionedEdgeLabel[],
+): PositionedEdgeLabel {
+  const baseX = round(anchor.x - size.width / 2);
+  const baseY = round(anchor.y - size.height / 2);
+  const isClear = (cand: BoxRect): boolean => cand.y >= 4 && !nodes.some((node) => boxesOverlap(cand, node, 4)) && !placedLabels.some((other) => boxesOverlap(cand, other, 3));
+
+  const tryPos = (x: number, y: number): PositionedEdgeLabel | null => {
+    const cand: PositionedEdgeLabel = { lines, x: round(x), y: round(y), width: size.width, height: size.height };
+    return isClear(cand) ? cand : null;
+  };
+
+  const direct = tryPos(baseX, baseY);
+  if (direct) return direct;
+
+  // Skip-rank curves run alongside an intermediate node, so nudging outward toward the detour side keeps the pill on the arc.
+  for (const node of nodes) {
+    if (!boxesOverlap({ x: baseX, y: baseY, width: size.width, height: size.height }, node, 4)) continue;
+    const primaryX = horizDir > 0 ? node.x + node.width + 6 : node.x - size.width - 6;
+    const oppositeX = horizDir > 0 ? node.x - size.width - 6 : node.x + node.width + 6;
+    for (const dy of [0, -12, 12, -24, 24]) {
+      const hit = tryPos(primaryX, baseY + dy) ?? tryPos(oppositeX, baseY + dy);
+      if (hit) return hit;
+    }
+  }
+
+  const dxSteps = [0, horizDir * 24, -horizDir * 24, horizDir * 48, -horizDir * 48, horizDir * 76, -horizDir * 76, horizDir * 108, -horizDir * 108];
+  const dySteps = [0, -12, 12, -24, 24, -36, 36, -48, 48];
+  for (const dy of dySteps) {
+    for (const dx of dxSteps) {
+      const hit = tryPos(baseX + dx, baseY + dy);
+      if (hit) return hit;
+    }
+  }
+
+  const minNodeLeft = nodes.reduce((acc, n) => Math.min(acc, n.x), 0);
+  const maxNodeRight = nodes.reduce((acc, n) => Math.max(acc, n.x + n.width), 0);
+  const railX = horizDir > 0 ? maxNodeRight + 8 : minNodeLeft - size.width - 8;
+  const stepY = size.height + 5;
+  for (let slot = 0; slot < 24; slot++) {
+    const offset = slot === 0 ? 0 : (slot % 2 === 1 ? 1 : -1) * Math.ceil(slot / 2) * stepY;
+    const hit = tryPos(railX, Math.max(4, baseY + offset));
+    if (hit) return hit;
+  }
+
+  return { lines, x: round(railX), y: Math.max(4, baseY), width: size.width, height: size.height };
 }
 
 export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
@@ -403,6 +463,7 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
 
   const positionedEdges: PositionedFlowEdge[] = [];
   const placedLabels: PositionedEdgeLabel[] = [];
+  const curveMidXs: number[] = [];
   let backEdgeSlot = 0;
 
   for (const edge of validEdges) {
@@ -413,6 +474,7 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
     const isBack = backEdgeIndices.has(edge.index) || fromNode.row >= toNode.row;
     let path: string;
     let labelAnchor: { x: number; y: number };
+    let horizDir: 1 | -1;
 
     if (isBack) {
       const x0 = round(fromNode.x + fromNode.width);
@@ -423,6 +485,7 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
       backEdgeSlot++;
       path = `M ${x0} ${y0} C ${railX} ${y0}, ${railX} ${y3}, ${x3} ${y3}`;
       labelAnchor = cubicMidpoint(x0, y0, railX, y0, railX, y3, x3, y3);
+      horizDir = 1;
     } else {
       const x0 = round(outPortX.get(edge.index) ?? fromNode.x + fromNode.width / 2);
       const y0 = round(fromNode.y + fromNode.height);
@@ -431,20 +494,26 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
       const dy = Math.max(16, (y3 - y0) * 0.45);
       let cx1 = x0;
       let cx2 = x3;
+      horizDir = x3 >= x0 ? 1 : -1;
 
-      // Detour multi-row edges gently around intermediate boxes that sit directly between endpoints.
+      // Bow skip-row curves far enough that the t=0.5 cubic midpoint clears every intermediate box in between.
       if (toNode.row - fromNode.row > 1) {
-        for (const midNode of positionedNodes) {
-          if (midNode.row <= fromNode.row || midNode.row >= toNode.row) continue;
+        const blocking = positionedNodes.filter((midNode) => {
+          if (midNode.row <= fromNode.row || midNode.row >= toNode.row) return false;
           const t = (midNode.y + midNode.height / 2 - y0) / Math.max(1, y3 - y0);
           const lineX = x0 + (x3 - x0) * t;
-          if (lineX >= midNode.x - 6 && lineX <= midNode.x + midNode.width + 6) {
-            const center = midNode.x + midNode.width / 2;
-            const detour = lineX < center ? midNode.x - 16 : midNode.x + midNode.width + 16;
-            cx1 = round(detour);
-            cx2 = round(detour);
-            break;
-          }
+          return lineX >= midNode.x - 6 && lineX <= midNode.x + midNode.width + 6;
+        });
+        if (blocking.length > 0) {
+          const first = blocking[0]!;
+          const tFirst = (first.y + first.height / 2 - y0) / Math.max(1, y3 - y0);
+          const lineX = x0 + (x3 - x0) * tFirst;
+          const goLeft = lineX < first.x + first.width / 2;
+          horizDir = goLeft ? -1 : 1;
+          const targetMidX = goLeft ? Math.min(...blocking.map((n) => n.x)) - 14 : Math.max(...blocking.map((n) => n.x + n.width)) + 14;
+          const detour = (targetMidX - 0.125 * (x0 + x3)) / 0.75;
+          cx1 = round(detour);
+          cx2 = round(detour);
         }
       }
 
@@ -454,24 +523,14 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
       labelAnchor = cubicMidpoint(x0, y0, cx1, cy1, cx2, cy2, x3, y3);
     }
 
+    curveMidXs.push(labelAnchor.x);
+
     let label: PositionedEdgeLabel | null = null;
     if (edge.label) {
       const lines = wrapDiagramText(edge.label, 18, 2);
       const size = measurePill(lines);
-      const candidate: PositionedEdgeLabel = {
-        lines,
-        x: round(labelAnchor.x - size.width / 2),
-        y: round(labelAnchor.y - size.height / 2),
-        width: size.width,
-        height: size.height,
-      };
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const clash = placedLabels.find((other) => boxesOverlap(candidate, other));
-        if (!clash) break;
-        candidate.y = round(clash.y + clash.height + 4);
-      }
-      placedLabels.push(candidate);
-      label = candidate;
+      label = placeFlowEdgeLabel(lines, size, labelAnchor, horizDir, positionedNodes, placedLabels);
+      placedLabels.push(label);
     }
 
     positionedEdges.push({
@@ -493,6 +552,10 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
     if (node.x < minX + 4) minX = node.x - 4;
     if (node.x + node.width + 4 > maxX) maxX = node.x + node.width + 4;
     if (node.y + node.height + padY > maxY) maxY = node.y + node.height + padY;
+  }
+  for (const midX of curveMidXs) {
+    if (midX - 6 < minX) minX = midX - 6;
+    if (midX + 6 > maxX) maxX = midX + 6;
   }
   for (const edge of positionedEdges) {
     if (edge.label) {
@@ -544,15 +607,36 @@ function shiftSvgPathX(path: string, dx: number): string {
   return out.join("");
 }
 
+function sequenceColumnMetrics(count: number): {
+  actorWidth: number;
+  baseSpacing: number;
+  maxSpacing: number;
+  padX: number;
+  actorChars: number;
+} {
+  // Shrink columns monotonically with actor count so 2–4 lifelines fit inside the narrow chat column without horizontal scroll.
+  if (count <= 2) return { actorWidth: 96, baseSpacing: 156, maxSpacing: 176, padX: 12, actorChars: 14 };
+  if (count === 3) return { actorWidth: 78, baseSpacing: 104, maxSpacing: 112, padX: 8, actorChars: 11 };
+  if (count === 4) return { actorWidth: 66, baseSpacing: 76, maxSpacing: 82, padX: 8, actorChars: 10 };
+  if (count === 5) return { actorWidth: 58, baseSpacing: 62, maxSpacing: 66, padX: 6, actorChars: 9 };
+  return { actorWidth: 52, baseSpacing: 54, maxSpacing: 56, padX: 6, actorChars: 8 };
+}
+
+function clampSequencePillX(rawX: number, pillWidth: number, padX: number, totalWidth: number): number {
+  const innerWidth = totalWidth - padX * 2;
+  if (pillWidth <= innerWidth) {
+    return round(Math.max(padX, Math.min(totalWidth - padX - pillWidth, rawX)));
+  }
+  return round(Math.max(4, rawX));
+}
+
 export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiagramLayout {
   const actorList = block.actors;
   const count = actorList.length;
-  const actorWidth = count <= 2 ? 104 : 86;
-  const baseSpacing = count <= 2 ? 156 : count === 3 ? 98 : 104;
-  const padX = count <= 2 ? 12 : 8;
+  const { actorWidth, baseSpacing, maxSpacing, padX, actorChars } = sequenceColumnMetrics(count);
   const padY = 8;
 
-  const actorWrapped = actorList.map((actor) => wrapDiagramText(actor.label, count <= 2 ? 15 : 12, 2));
+  const actorWrapped = actorList.map((actor) => wrapDiagramText(actor.label, actorChars, 2));
   let headerHeight = 32;
   for (const lines of actorWrapped) {
     if (lines.length > 1) headerHeight = 44;
@@ -563,7 +647,7 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
     actorIndex.set(actor.id, idx);
   }
 
-  // Widen column spacing slightly when adjacent-actor step labels need a little extra room, capped to stay compact.
+  // Allow slight breathing room up to maxSpacing when labels are wordy, without ever shrinking below baseSpacing.
   let colSpacing = baseSpacing;
   for (const step of block.steps) {
     const a = actorIndex.get(step.from);
@@ -572,11 +656,10 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
     const span = Math.abs(b - a);
     const lines = wrapDiagramText(step.label, 22, 2);
     const pill = measurePill(lines);
-    const neededPerCol = Math.ceil((pill.width + 20) / span);
-    if (neededPerCol > colSpacing) {
-      colSpacing = Math.min(144, neededPerCol);
-    }
+    const neededPerCol = Math.ceil((pill.width + 16) / span);
+    colSpacing = Math.max(colSpacing, Math.min(maxSpacing, neededPerCol));
   }
+  colSpacing = Math.max(baseSpacing, Math.min(maxSpacing, colSpacing));
 
   const actors: PositionedActor[] = actorList.map((actor, idx) => {
     const x = round(padX + idx * colSpacing);
@@ -597,7 +680,8 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
   const actorById = new Map(actors.map((a) => [a.id, a]));
   const steps: PositionedSequenceStep[] = [];
   let cursorY = padY + headerHeight + 16;
-  let maxX = padX * 2 + actorWidth + Math.max(0, count - 1) * colSpacing;
+  const totalWidth = padX * 2 + actorWidth + Math.max(0, count - 1) * colSpacing;
+  let maxX = totalWidth;
 
   for (const [idx, step] of block.steps.entries()) {
     const fromActor = actorById.get(step.from);
@@ -608,15 +692,15 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
     const dashed = step.style === "dashed";
 
     if (self) {
-      const lines = wrapDiagramText(step.label, 20, 2);
+      const lines = wrapDiagramText(step.label, count <= 2 ? 20 : 16, 2);
       const pill = measurePill(lines);
-      const loopW = 30;
+      const loopW = 26;
       const loopH = 18;
       const topY = round(cursorY + pill.height + 3);
       const bottomY = round(topY + loopH);
       const cx = fromActor.cx;
       const path = `M ${cx} ${topY} H ${round(cx + loopW - 4)} Q ${round(cx + loopW)} ${topY} ${round(cx + loopW)} ${round(topY + 4)} V ${round(bottomY - 4)} Q ${round(cx + loopW)} ${bottomY} ${round(cx + loopW - 4)} ${bottomY} H ${round(cx + 2)}`;
-      const pillX = round(Math.max(4, cx - 6));
+      const pillX = clampSequencePillX(cx - 6, pill.width, padX, totalWidth);
       const label: PositionedEdgeLabel = {
         lines,
         x: pillX,
@@ -624,8 +708,8 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
         width: pill.width,
         height: pill.height,
       };
-      if (cx + loopW + 10 > maxX) maxX = cx + loopW + 10;
-      if (label.x + label.width + 6 > maxX) maxX = label.x + label.width + 6;
+      if (cx + loopW + 6 > maxX) maxX = cx + loopW + 6;
+      if (label.x + label.width + padX > maxX) maxX = label.x + label.width + padX;
       steps.push({
         index: idx,
         from: step.from,
@@ -638,8 +722,9 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
       cursorY = bottomY + 16;
     } else {
       const dist = Math.abs(toActor.cx - fromActor.cx);
-      const maxChars = Math.max(20, Math.min(34, Math.floor((dist - 12) / LABEL_CHAR_W)));
-      const lines = wrapDiagramText(step.label, maxChars, 2);
+      const availablePx = Math.max(48, dist - 10);
+      const maxChars = Math.max(8, Math.min(28, Math.floor(availablePx / LABEL_CHAR_W)));
+      const lines = wrapDiagramText(step.label, maxChars, maxChars < 16 ? 3 : 2);
       const pill = measurePill(lines);
       const arrowY = round(cursorY + pill.height + 4);
       const dir = toActor.cx > fromActor.cx ? 1 : -1;
@@ -647,7 +732,7 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
       const x2 = round(toActor.cx - dir * 2);
       const path = `M ${x1} ${arrowY} L ${x2} ${arrowY}`;
       const midX = (fromActor.cx + toActor.cx) / 2;
-      const pillX = round(Math.max(4, midX - pill.width / 2));
+      const pillX = clampSequencePillX(midX - pill.width / 2, pill.width, padX, totalWidth);
       const label: PositionedEdgeLabel = {
         lines,
         x: pillX,
@@ -655,7 +740,7 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
         width: pill.width,
         height: pill.height,
       };
-      if (label.x + label.width + 6 > maxX) maxX = label.x + label.width + 6;
+      if (label.x + label.width + padX > maxX) maxX = label.x + label.width + padX;
       steps.push({
         index: idx,
         from: step.from,

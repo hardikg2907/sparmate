@@ -490,7 +490,6 @@ async function hldRound(dirs) {
     first.deltas.length >= 2 && first.deltas.map((d) => d.textDelta).join("") === first.reply.entry.text,
     `${first.deltas.length} deltas`,
   );
-  check("interview mode never attaches rich blocks", first.reply.entry.blocks === undefined, JSON.stringify(first.reply.entry.blocks));
   check(
     "a second tab receives the broadcast",
     second.msgs.some((m) => m.type === "chat.message" && m.clientMsgId === "c1"),
@@ -509,6 +508,7 @@ async function hldRound(dirs) {
   const look = await say(c, "Can you look at the board?", "c2");
   const pngAsked = c.msgs.slice(look.mark).some((m) => m.type === "board.png.request");
   check("view_whiteboard asks the browser for a PNG and the model sees it", pngAsked && look.reply.entry.text.startsWith("I can see your board"), look.reply.entry.text);
+  check("interview mode never attaches rich blocks even when the driver attempts emit_block", !look.reply.entry.blocks?.length, JSON.stringify(look.reply.entry.blocks));
 
   // The step checker: chat and frame evidence, the leave-time frame image, and the interview-mode filter.
   c.send({ type: "board.update", version: 2, elements: framedScene() });
@@ -810,6 +810,19 @@ async function guidedRound() {
   );
   check("a live guided round sends no checklist", Object.keys(pinned.session.steps).length === 0);
 
+  // Clicking a guide-supplied option chip must stay marked and never count as the candidate's own evidence.
+  mark = c.mark();
+  c.send({
+    type: "chat.send",
+    channel: "interview",
+    clientMsgId: "opt-req",
+    fromOption: true,
+    text: "Option-chip pick: create a short link for a long URL with custom alias and expiry, redirect in under 50 ms at p99, 100 million new links a month and 100 redirects per link.",
+  });
+  const optEcho = await c.waitFor((m) => m.type === "chat.message" && m.clientMsgId === "opt-req", { since: mark, label: "option-chip echo" });
+  check("an option-chip reply is echoed with fromOption", optEcho.entry.fromOption === true, JSON.stringify(optEcho.entry));
+  await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to option-chip click" });
+
   mark = c.mark();
   c.send({ type: "guided.feedback" });
   const held = await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to a check with nothing new" });
@@ -838,6 +851,16 @@ async function guidedRound() {
   });
   check("a pass replaces a not_yet and drops its gap", passed.session.stepVerdicts.requirements.gap === undefined);
   await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to the second check" });
+
+  const guidedLook = await say(c, "Can you look at the board?", "g-look");
+  check(
+    "guided look-at-board attaches a board anchor block",
+    Array.isArray(guidedLook.reply.entry.blocks) &&
+      guidedLook.reply.entry.blocks[0]?.kind === "anchor" &&
+      guidedLook.reply.entry.blocks[0]?.target?.kind === "board" &&
+      guidedLook.reply.entry.blocks[0]?.target?.elementId === "lb",
+    JSON.stringify(guidedLook.reply.entry.blocks),
+  );
 
   mark = c.mark();
   c.send({ type: "guided.stuck" });
@@ -872,6 +895,7 @@ async function guidedRound() {
     debrief.scorecard.readiness?.call === "not_yet" && debrief.scorecard.readiness.reasons.includes("Requirements was assisted.") && Boolean(debrief.scorecard.verdict.sde2),
     JSON.stringify(debrief.scorecard.readiness),
   );
+  check("debrief does not quote option-chip text as candidate evidence", !JSON.stringify(debrief.scorecard.dimensions).includes("Option-chip pick"));
   check("hints show up once the round is over", debrief.state.hints.length === 1 && debrief.state.hints[0].level === 1);
   const judgePins = debrief.state.pins.filter((p) => p.by === "judge");
   check(

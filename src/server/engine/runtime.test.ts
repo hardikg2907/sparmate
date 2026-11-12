@@ -2815,11 +2815,17 @@ describe("rich chat blocks", () => {
   });
 
   it("discards queued blocks when the reply is <silent/>, and keeps blocks-only replies when prose is empty", async () => {
+    let clockFired = 0;
     const s = scriptedDriver(async (_role, turn, tools) => {
       const emit = tools.find((x) => x.name === "emit_block")!;
       if (turn.meta.kind === "start") return "Start.";
       if (turn.meta.kind === "clock") {
-        await emit.run({ block: { kind: "callout", text: "Should be dropped on silent." } });
+        if (turn.meta.checkpoint !== "phase_over") return "<silent/>";
+        clockFired += 1;
+        const res = await emit.run({
+          block: { kind: "options", items: [{ label: "Move on" }, { label: "Stay on requirements" }] },
+        });
+        expect(res.isError).toBeUndefined();
         return "<silent/>";
       }
       await emit.run({ block: { kind: "callout", label: "Constraint", text: "Peak traffic is 10x average." } });
@@ -2830,10 +2836,16 @@ describe("rich chat blocks", () => {
     const rt = await t.start(session);
     await vi.advanceTimersByTimeAsync(1_000);
 
-    // Planned end of requirements fires a clock turn at 5:00; its <silent/> reply drops the queued block.
+    // Advance to phase_over (2x planned minutes) while keeping candidate activity inside the guided silence window.
+    const plannedMin = rt.publicSession().phasePlan[0]!.minutes;
     await rt.handle({ type: "notes.update", phase: "requirements", text: "Active work", version: 1 }, t.peer);
-    await vi.advanceTimersByTimeAsync(5 * MIN + 1_000);
-    expect(session.transcript.filter((e) => e.role === "interviewer")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(plannedMin * MIN);
+    await rt.handle({ type: "notes.update", phase: "requirements", text: "Still working", version: 2 }, t.peer);
+    await vi.advanceTimersByTimeAsync(plannedMin * MIN + 1_000);
+    expect(clockFired).toBe(1);
+    const afterClock = session.transcript.filter((e) => e.role === "interviewer");
+    expect(afterClock).toHaveLength(1);
+    expect(afterClock[0]?.blocks).toBeUndefined();
 
     // Candidate message gets a blocks-only reply (empty prose, non-silent).
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "m1", text: "Give me a curveball." }, t.peer);
@@ -2875,8 +2887,9 @@ describe("rich chat blocks", () => {
     rt.dispose();
   });
 
-  it("enforces hint, stuck, and count-only guardrails across turns, including mid-turn note_hint stripping", async () => {
+  it("enforces hint rung, stuck, and count-only guardrails across turns, including mid-turn note_hint stripping", async () => {
     const toolResults: boolean[] = [];
+    let hintTurnNumber = 0;
     const s = scriptedDriver(async (_role, turn, tools) => {
       const emit = tools.find((x) => x.name === "emit_block")!;
       const noteHint = tools.find((x) => x.name === "note_hint")!;
@@ -2884,6 +2897,25 @@ describe("rich chat blocks", () => {
       if (turn.meta.kind === "start") return "Start.";
 
       if (turn.meta.request === "hint") {
+        hintTurnNumber += 1;
+        if (hintTurnNumber === 1) {
+          // Unrecorded hint turn (never calls note_hint): pump strips options while keeping callout.
+          const rOpts = await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
+          const rCallout = await emit.run({ block: { kind: "callout", text: "Check read traffic." } });
+          toolResults.push(Boolean(rOpts.isError), Boolean(rCallout.isError));
+          return "Unrecorded hint reply.";
+        }
+        if (hintTurnNumber === 2) {
+          // Recorded H2 hint: strips pre-note_hint options and refuses post-note_hint options.
+          await emit.run({ block: { kind: "options", items: [{ label: "Early A" }, { label: "Early B" }] } });
+          await emit.run({ block: { kind: "callout", text: "Hot keys skew one shard." } });
+          await noteHint.run({ level: 2, topic: "hot key skew" });
+          const rPostOpts = await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
+          toolResults.push(Boolean(rPostOpts.isError));
+          return "H2 hint reply.";
+        }
+        // Recorded H3 hint: refuses diagram and kv, allows options.
+        await noteHint.run({ level: 3, topic: "fan-out model" });
         const r1 = await emit.run({
           block: {
             kind: "diagram",
@@ -2898,11 +2930,11 @@ describe("rich chat blocks", () => {
         const r2 = await emit.run({ block: { kind: "kv", rows: [{ key: "k", value: "v" }] } });
         const r3 = await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
         toolResults.push(Boolean(r1.isError), Boolean(r2.isError), Boolean(r3.isError));
-        return "Hint reply.";
+        return "H3 hint reply.";
       }
 
       if (turn.meta.candidateText === "give me a hint in chat") {
-        // Emit a diagram and a callout BEFORE calling note_hint, then try kv AFTER note_hint.
+        // Emit diagram, options, and callout BEFORE calling H1 note_hint, then try kv and options AFTER note_hint.
         await emit.run({
           block: {
             kind: "diagram",
@@ -2914,10 +2946,12 @@ describe("rich chat blocks", () => {
             edges: [{ from: "a", to: "b" }],
           },
         });
+        await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
         await emit.run({ block: { kind: "callout", text: "Think about write amplification." } });
         await noteHint.run({ level: 1, topic: "write amplification" });
-        const afterHint = await emit.run({ block: { kind: "kv", rows: [{ key: "QPS", value: "10k" }] } });
-        toolResults.push(Boolean(afterHint.isError));
+        const afterKv = await emit.run({ block: { kind: "kv", rows: [{ key: "QPS", value: "10k" }] } });
+        const afterOpts = await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
+        toolResults.push(Boolean(afterKv.isError), Boolean(afterOpts.isError));
         return "Nudge in chat.";
       }
 
@@ -2940,6 +2974,16 @@ describe("rich chat blocks", () => {
       }
 
       if (turn.meta.request === "feedback") {
+        const countOnlyAtStart = (session.stepVerdicts?.requirements?.misses ?? 0) >= 2;
+        if (countOnlyAtStart) {
+          // Calling note_hint mid-turn on a count-only step check must NOT bypass the count-only block guard.
+          await noteHint.run({ level: 3, topic: "latency target" });
+          const rBeforeVerdict = await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
+          await verdict.run({ phase: "requirements", verdict: "not_yet", gap: "" });
+          const rAfterVerdict = await emit.run({ block: { kind: "callout", text: "Latency target open" } });
+          toolResults.push(Boolean(rBeforeVerdict.isError), Boolean(rAfterVerdict.isError));
+          return "Count-only check.";
+        }
         await verdict.run({ phase: "requirements", verdict: "not_yet", gap: "What latency target must redirects meet?" });
         const rCallout = await emit.run({ block: { kind: "callout", text: "Latency target open" } });
         const rHldCode = await emit.run({ block: { kind: "anchor", target: { kind: "code", line: 1 }, label: "main" } });
@@ -2955,16 +2999,28 @@ describe("rich chat blocks", () => {
     const rt = await t.start(session);
     await vi.advanceTimersByTimeAsync(1_000);
 
-    // 1. Explicit hint button turn
+    // 1a. Unrecorded hint button turn: options stripped at turn completion, callout preserved.
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(toolResults.splice(0)).toEqual([false, false]);
+    expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks?.map((b) => b.kind)).toEqual(["callout"]);
+
+    // 1b. Recorded H2 hint button turn: options stripped by note_hint and refused afterward.
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(toolResults.splice(0)).toEqual([true]);
+    expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks?.map((b) => b.kind)).toEqual(["callout"]);
+
+    // 1c. Recorded H3 hint button turn: diagram and kv refused, options kept.
     await rt.handle({ type: "guided.hint" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(toolResults.splice(0)).toEqual([true, true, false]);
     expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks?.map((b) => b.kind)).toEqual(["options"]);
 
-    // 2. Candidate asks for a hint in chat: note_hint strips the earlier diagram while keeping callout, and blocks kv after.
+    // 2. Candidate asks for a hint in chat: H1 note_hint strips diagram and options while keeping callout, and blocks kv/options after.
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "h-chat", text: "give me a hint in chat" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(toolResults.splice(0)).toEqual([true]);
+    expect(toolResults.splice(0)).toEqual([true, true]);
     expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks).toEqual([{ kind: "callout", text: "Think about write amplification." }]);
 
     // 3a. Second "Not yet" (misses 1 -> 2) is still a named check: callout succeeds after step_verdict, HLD code anchor is refused.
@@ -2974,7 +3030,7 @@ describe("rich chat blocks", () => {
     expect(toolResults.splice(0)).toEqual([false, true]);
     expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks?.map((b) => b.kind)).toEqual(["callout"]);
 
-    // 3b. Third check (misses >= 2 at turn start) is count-only and refuses emit_block.
+    // 3b. Third check (misses >= 2 at turn start) is count-only even if note_hint(3) runs mid-turn.
     await rt.handle({ type: "guided.feedback" }, t.peer);
     await vi.advanceTimersByTimeAsync(2_000);
     expect(toolResults.splice(0)).toEqual([true, true]);
@@ -3084,5 +3140,149 @@ describe("rich chat blocks", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("allows options only on phase_over and overtime clock turns, even on count-only steps, and refuses blocks on silence and phase_end", async () => {
+    const seen: Record<string, boolean[]> = {};
+    const s = scriptedDriver(async (_role, turn, tools) => {
+      const emit = tools.find((x) => x.name === "emit_block")!;
+      if (turn.meta.kind === "start") return "Start.";
+      if (turn.meta.kind === "clock") {
+        const cp = turn.meta.checkpoint ?? "unknown";
+        const rOpts = await emit.run({ block: { kind: "options", items: [{ label: "Move on" }, { label: "Stay here" }] } });
+        const rCallout = await emit.run({ block: { kind: "callout", text: "Clock callout" } });
+        const rAnchor = await emit.run({
+          block: { kind: "anchor", target: { kind: "board", elementId: "box-req" }, label: "Req box" },
+        });
+        seen[cp] = [Boolean(rOpts.isError), Boolean(rCallout.isError), Boolean(rAnchor.isError)];
+        return cp === "phase_end" ? "<silent/>" : `Clock ${cp}.`;
+      }
+      return "Ok.";
+    });
+
+    const t = setup(s.driver, "guided");
+    t.store.board = {
+      version: 1,
+      elements: [
+        { id: "f-req", type: "frame", name: "Requirements", x: 0, y: 0, width: 400, height: 300, customData: { step: "requirements" } },
+        { id: "box-req", type: "rectangle", frameId: "f-req", x: 20, y: 40, width: 120, height: 60 },
+        { id: "txt-req", type: "text", containerId: "box-req", text: "Req", originalText: "Req", x: 30, y: 55, width: 60, height: 20 },
+      ],
+    };
+    const session: Session = {
+      ...newSession("guided"),
+      board: { version: 1, graphText: "Nodes:\n- [Req]", updatedAt: 0 },
+      stepVerdicts: {
+        requirements: { verdict: "not_yet", gap: "2 open", at: 1, misses: 2 },
+        deep_dives: { verdict: "not_yet", gap: "1 open", at: 1, misses: 2 },
+      },
+    };
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // At 5:00 phase_end fires; at 6:00 silence fires (because SILENCE_GAP_MS pushes silence past phase_end).
+    await vi.advanceTimersByTimeAsync(6 * MIN + 5_000);
+    expect(seen.phase_end).toEqual([true, true, true]);
+    expect(seen.silence).toEqual([true, true, true]);
+    const silenceMsg = session.transcript.find((e) => e.role === "interviewer" && e.text === "Clock silence.");
+    expect(silenceMsg?.blocks).toBeUndefined();
+
+    // Keep candidate active so phase_over fires at 10:00 on count-only requirements.
+    await rt.handle({ type: "notes.update", phase: "requirements", text: "Working", version: 1 }, t.peer);
+    await vi.advanceTimersByTimeAsync(4 * MIN + 5_000);
+    expect(seen.phase_over).toEqual([false, true, true]);
+    const phaseOverMsg = session.transcript.find((e) => e.role === "interviewer" && e.text === "Clock phase_over.");
+    expect(phaseOverMsg?.blocks?.map((b) => b.kind)).toEqual(["options"]);
+
+    // Move to the last step (deep_dives, also count-only) and advance to 45:00 for overtime.
+    await rt.handle({ type: "phase.set", phase: "deep_dives" }, t.peer);
+    for (let v = 2; v <= 8; v++) {
+      await vi.advanceTimersByTimeAsync(5 * MIN);
+      await rt.handle({ type: "notes.update", phase: "deep_dives", text: `Note ${v}`, version: v }, t.peer);
+    }
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(seen.overtime).toEqual([false, true, true]);
+    const overtimeMsg = session.transcript.find((e) => e.role === "interviewer" && e.text === "Clock overtime.");
+    expect(overtimeMsg?.blocks?.map((b) => b.kind)).toEqual(["options"]);
+
+    rt.dispose();
+  });
+
+  it("marks option-chip candidate clicks with fromOption and excludes them from step checks and debrief quotes", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await rt.handle(
+      {
+        type: "chat.send",
+        channel: "interview",
+        clientMsgId: "opt-1",
+        fromOption: true,
+        text: "Option-chip answer: create a short link for a long URL with custom alias and expiry, redirect in under 50 ms at p99, 100 million new links a month and 100 redirects per link.",
+      },
+      t.peer,
+    );
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    const optEntry = session.transcript.find((e) => e.role === "candidate" && e.text.startsWith("Option-chip answer:"));
+    expect(optEntry?.fromOption).toBe(true);
+    const echoed = t.msgs.find((m): m is Extract<ServerMsg, { type: "chat.message" }> => m.type === "chat.message" && m.clientMsgId === "opt-1");
+    expect(echoed?.entry.fromOption).toBe(true);
+    // With only an option-chip click and no typed chat/board/notes, stepEvidence treats the step as empty.
+    expect(session.stepChecks.requirements).toBeUndefined();
+
+    // Even after a real typed message triggers runStepCheck, the option-chip text never covers checklist items.
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "typed-1", text: "Let me think through the problem first." }, t.peer);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(session.stepVerdicts?.requirements?.verdict).toBe("not_yet");
+    expect(session.stepChecks.requirements?.items ?? {}).toEqual({});
+
+    await rt.handle({ type: "session.end" }, t.peer);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(session.status).toBe("debriefed");
+    });
+    expect(JSON.stringify(session.scorecard)).not.toContain("Option-chip answer");
+
+    rt.dispose();
+  });
+
+  it("attaches a board anchor on look-at-board in guided mode and never in interview mode", async () => {
+    const board = [
+      { id: "lb", type: "rectangle", x: 0, y: 0, width: 160, height: 60 },
+      { id: "lb-t", type: "text", containerId: "lb", text: "Load balancer", originalText: "Load balancer", x: 10, y: 20, width: 140, height: 20 },
+    ];
+
+    const interviewSetup = setup(createFakeDriver({ chunkDelayMs: 0 }), "interview");
+    const interviewSession = newSession("interview");
+    const interviewRt = await interviewSetup.start(interviewSession);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await interviewRt.handle({ type: "board.update", version: 1, elements: board }, interviewSetup.peer);
+    await interviewRt.handle({ type: "chat.send", channel: "interview", clientMsgId: "i1", text: "Can you look at the board?" }, interviewSetup.peer);
+    await vi.advanceTimersByTimeAsync(7_000);
+    const interviewReply = interviewSession.transcript.findLast((e) => e.role === "interviewer");
+    expect(interviewReply?.blocks).toBeUndefined();
+    interviewRt.dispose();
+
+    const guidedSetup = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const guidedSession = newSession("guided");
+    const guidedRt = await guidedSetup.start(guidedSession);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await guidedRt.handle({ type: "board.update", version: 1, elements: board }, guidedSetup.peer);
+    await guidedRt.handle({ type: "chat.send", channel: "interview", clientMsgId: "g1", text: "Can you look at the board?" }, guidedSetup.peer);
+    await vi.advanceTimersByTimeAsync(7_000);
+    const guidedReply = guidedSession.transcript.findLast((e) => e.role === "interviewer");
+    expect(guidedReply?.blocks).toEqual([
+      {
+        kind: "anchor",
+        target: { kind: "board", elementId: "lb" },
+        label: "Load balancer",
+      },
+    ]);
+    guidedRt.dispose();
   });
 });

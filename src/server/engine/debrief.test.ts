@@ -4,6 +4,8 @@ import type { Problem } from "../../shared/problem";
 import { ScorecardSchema, type Session } from "../../shared/types";
 import { checkStepQuotes } from "../../shared/quotes";
 import {
+  candidateLines,
+  candidateText,
   enforceRules,
   failedQuoteNote,
   failedRatio,
@@ -423,6 +425,42 @@ describe("stepSources", () => {
     const by = stepSources(session, null, { endMs: 20 * MIN });
     const stepCard = { steps: [{ phase: "api", took: [{ evidence: { quote: "latency under 50 ms", source: "candidate" as const } }] }] };
     expect(checkStepQuotes(stepCard, (phase) => by[phase] ?? { candidate: "", board: "", code: "" })).toEqual([{ phase: "api", index: 0, verified: false }]);
+  });
+
+  it("excludes option-chip candidate entries from candidateText, stepSources, and candidateLines, and marks them as events in judgeMessage", () => {
+    const withOption = {
+      ...session,
+      mode: "guided",
+      hints: [],
+      extension: null,
+      transcript: [entry("1", MIN, "latency under 50 ms"), { ...entry("opt", 2 * MIN, "Fan-out on write — Fast reads"), fromOption: true }],
+    } as unknown as Session;
+
+    expect(candidateText(withOption)).toContain("latency under 50 ms");
+    expect(candidateText(withOption)).not.toContain("Fan-out on write");
+    expect(candidateLines(withOption)).toEqual(["latency under 50 ms"]);
+
+    const by = stepSources(withOption, null, { endMs: 20 * MIN });
+    expect(by.requirements?.candidate).toContain("latency under 50 ms");
+    expect(by.requirements?.candidate).not.toContain("Fan-out on write");
+    expect(
+      checkStepQuotes(
+        { steps: [{ phase: "requirements", took: [{ evidence: { quote: "Fan-out on write", source: "candidate" as const } }] }] },
+        (phase) => by[phase] ?? { candidate: "", board: "", code: "" },
+      ),
+    ).toEqual([{ phase: "requirements", index: 0, verified: false }]);
+
+    const msg = judgeMessage({
+      session: withOption,
+      problem: { meta: { title: "URL Shortener" } } as unknown as Problem,
+      timing: [],
+      finalGraphText: "",
+      finalCode: null,
+      tester: null,
+      hasImage: false,
+    });
+    expect(msg).toContain("[02:00] (event) candidate picked option: Fan-out on write — Fast reads");
+    expect(msg).not.toContain("[02:00] candidate:");
   });
 });
 

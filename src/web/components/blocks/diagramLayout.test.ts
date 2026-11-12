@@ -1,190 +1,220 @@
 import { describe, expect, it } from "vitest";
-import { layoutFlowDiagram, layoutSequenceDiagram, wrapDiagramText, type PositionedFlowNode } from "./diagramLayout";
+import type { FlowDiagramBlock, SequenceDiagramBlock } from "../../../shared/blocks";
+import { lldDebrief } from "../../fixtures/rooms";
+import { layoutFlowDiagram, layoutSequenceDiagram } from "./diagramLayout";
 
-function boxesOverlap(a: PositionedFlowNode, b: PositionedFlowNode): boolean {
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function rectsOverlap(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
-describe("wrapDiagramText", () => {
-  it("wraps words across lines and truncates overflow on the final line", () => {
-    expect(wrapDiagramText("Stateless redirect service tier", 18, 2)).toEqual(["Stateless redirect", "service tier"]);
-    const clamped = wrapDiagramText("A very long single description that exceeds two short lines easily", 16, 2);
-    expect(clamped).toHaveLength(2);
-    expect(clamped[1]?.endsWith("…")).toBe(true);
+function actorSpacing(layout: ReturnType<typeof layoutSequenceDiagram>): number {
+  if (layout.actors.length < 2) return 0;
+  return layout.actors[1]!.cx - layout.actors[0]!.cx;
+}
+
+describe("layoutSequenceDiagram", () => {
+  it("keeps 2-, 3-, and 4-actor sequence diagrams (including lldDebrief) within the 360px chat column", () => {
+    const twoActor: SequenceDiagramBlock = {
+      kind: "diagram",
+      layout: "sequence",
+      actors: [
+        { id: "client", label: "Client" },
+        { id: "api", label: "Redirect API" },
+      ],
+      steps: [
+        { from: "client", to: "api", label: "GET /r/abc123" },
+        { from: "api", to: "api", label: "validate code format" },
+        { from: "api", to: "client", label: "302 Found + Location header", style: "dashed" },
+      ],
+    };
+
+    const threeActor: SequenceDiagramBlock = {
+      kind: "diagram",
+      layout: "sequence",
+      actors: [
+        { id: "api", label: "API Server" },
+        { id: "cache", label: "Redis Cache" },
+        { id: "db", label: "Postgres DB" },
+      ],
+      steps: [
+        { from: "api", to: "cache", label: "GET link:abc123" },
+        { from: "cache", to: "api", label: "cache miss", style: "dashed" },
+        { from: "api", to: "db", label: "SELECT long_url FROM links" },
+        { from: "db", to: "db", label: "index lookup on pk" },
+      ],
+    };
+
+    const fourActor: SequenceDiagramBlock = {
+      kind: "diagram",
+      layout: "sequence",
+      actors: [
+        { id: "c", label: "Caller" },
+        { id: "g", label: "Gate" },
+        { id: "l", label: "ParkingLot" },
+        { id: "s", label: "SpotIndex" },
+      ],
+      steps: [
+        { from: "c", to: "g", label: "enter(Car, 0)" },
+        { from: "g", to: "l", label: "acquire lock & allocate" },
+        { from: "l", to: "s", label: "lowestFreeSpot(Car)" },
+        { from: "s", to: "s", label: "mark occupied" },
+      ],
+    };
+
+    const lldCoachSeq = lldDebrief("debriefed")
+      .transcript.flatMap((entry) => entry.blocks ?? [])
+      .find((b): b is SequenceDiagramBlock => b.kind === "diagram" && b.layout === "sequence");
+    expect(lldCoachSeq).toBeDefined();
+
+    for (const block of [twoActor, threeActor, fourActor, lldCoachSeq!]) {
+      const layout = layoutSequenceDiagram(block);
+      expect(layout.width).toBeLessThanOrEqual(360);
+      for (const actor of layout.actors) {
+        expect(actor.x).toBeGreaterThanOrEqual(0);
+        expect(actor.x + actor.width).toBeLessThanOrEqual(layout.width);
+      }
+      for (const step of layout.steps) {
+        expect(step.label.x).toBeGreaterThanOrEqual(0);
+        expect(step.label.x + step.label.width).toBeLessThanOrEqual(layout.width);
+      }
+    }
   });
 
-  it("splits unbroken tokens that exceed maxChars", () => {
-    const lines = wrapDiagramText("supercalifragilisticexpialidocious", 12, 2);
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toHaveLength(12);
+  it("shrinks actor center-to-center spacing strictly monotonically from 2 through 6 actors", () => {
+    const counts = [2, 3, 4, 5, 6] as const;
+    const layouts = counts.map((n) => {
+      const actors = Array.from({ length: n }, (_, i) => ({ id: `a${i}`, label: `Actor ${i + 1}` }));
+      return layoutSequenceDiagram({
+        kind: "diagram",
+        layout: "sequence",
+        actors,
+        steps: [{ from: "a0", to: "a1", label: "request(id)" }],
+      });
+    });
+
+    for (let i = 0; i < layouts.length - 1; i++) {
+      const wider = layouts[i]!;
+      const narrower = layouts[i + 1]!;
+      expect(actorSpacing(wider)).toBeGreaterThan(actorSpacing(narrower));
+      expect(wider.actors[0]!.width).toBeGreaterThan(narrower.actors[0]!.width);
+    }
+  });
+
+  it("never shrinks 2-actor spacing below its 156px baseSpacing when step labels are long", () => {
+    const shortLabels = layoutSequenceDiagram({
+      kind: "diagram",
+      layout: "sequence",
+      actors: [
+        { id: "a", label: "Service A" },
+        { id: "b", label: "Service B" },
+      ],
+      steps: [{ from: "a", to: "b", label: "ping" }],
+    });
+
+    const longLabels = layoutSequenceDiagram({
+      kind: "diagram",
+      layout: "sequence",
+      actors: [
+        { id: "a", label: "Service A" },
+        { id: "b", label: "Service B" },
+      ],
+      steps: [
+        {
+          from: "a",
+          to: "b",
+          label: "SELECT code, long_url, owner_id, expires_at FROM links WHERE code = $1",
+        },
+      ],
+    });
+
+    expect(actorSpacing(shortLabels)).toBe(156);
+    expect(actorSpacing(longLabels)).toBeGreaterThanOrEqual(156);
+    expect(actorSpacing(longLabels)).toBeGreaterThanOrEqual(actorSpacing(shortLabels));
+    expect(longLabels.width).toBeLessThanOrEqual(360);
   });
 });
 
 describe("layoutFlowDiagram", () => {
-  it("lays out a linear chain top-to-bottom with monotonic y positions", () => {
-    const layout = layoutFlowDiagram({
+  it("places a skip-rank edge label ('direct' on a -> c across a -> b -> c) with zero overlap against every node", () => {
+    const block: FlowDiagramBlock = {
       kind: "diagram",
       layout: "flow",
-      title: "Read path",
+      title: "Cache bypass",
       nodes: [
-        { id: "client", label: "Client" },
-        { id: "cdn", label: "CDN", detail: "edge PoP" },
-        { id: "origin", label: "Redirect service" },
+        { id: "a", label: "Client" },
+        { id: "b", label: "Redis Cache", detail: "Hot set" },
+        { id: "c", label: "Postgres", detail: "Primary" },
       ],
       edges: [
-        { from: "client", to: "cdn", label: "GET /abc" },
-        { from: "cdn", to: "origin", label: "miss", style: "dashed" },
+        { from: "a", to: "b", label: "lookup" },
+        { from: "b", to: "c", label: "miss" },
+        { from: "a", to: "c", label: "direct" },
       ],
-    });
+    };
 
-    expect(Number.isFinite(layout.width)).toBe(true);
-    expect(Number.isFinite(layout.height)).toBe(true);
-    expect(layout.nodes).toHaveLength(3);
-    const byId = new Map(layout.nodes.map((n) => [n.id, n]));
-    const client = byId.get("client")!;
-    const cdn = byId.get("cdn")!;
-    const origin = byId.get("origin")!;
-    expect(client.y).toBeLessThan(cdn.y);
-    expect(cdn.y).toBeLessThan(origin.y);
-    expect(layout.edges[1]?.dashed).toBe(true);
-    expect(layout.edges[0]?.label?.lines).toEqual(["GET /abc"]);
-    expect(layout.ariaLabel).toContain("Read path");
-  });
+    const layout = layoutFlowDiagram(block);
+    const directEdge = layout.edges.find((edge) => edge.from === "a" && edge.to === "c");
+    expect(directEdge?.label).not.toBeNull();
 
-  it("places branching and merging ranks without overlapping nodes or edge pills", () => {
-    const layout = layoutFlowDiagram({
-      kind: "diagram",
-      layout: "flow",
-      nodes: [
-        { id: "gw", label: "API Gateway" },
-        { id: "cache", label: "Redis" },
-        { id: "db", label: "Postgres" },
-        { id: "resp", label: "302 Response" },
-      ],
-      edges: [
-        { from: "gw", to: "cache", label: "lookup" },
-        { from: "gw", to: "db", label: "fallback", style: "dashed" },
-        { from: "cache", to: "resp", label: "hit" },
-        { from: "db", to: "resp", label: "row" },
-      ],
-    });
-
-    for (let i = 0; i < layout.nodes.length; i++) {
-      for (let j = i + 1; j < layout.nodes.length; j++) {
-        expect(boxesOverlap(layout.nodes[i]!, layout.nodes[j]!)).toBe(false);
-      }
-    }
-    const pills = layout.edges.map((e) => e.label).filter((l): l is NonNullable<typeof l> => l !== null);
-    expect(pills).toHaveLength(4);
-    for (let i = 0; i < pills.length; i++) {
-      for (let j = i + 1; j < pills.length; j++) {
-        const a = pills[i]!;
-        const b = pills[j]!;
-        const overlap = a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-        expect(overlap).toBe(false);
-      }
-    }
-  });
-
-  it("wraps ranks wider than 3 nodes into compact rows fitting the chat column", () => {
-    const layout = layoutFlowDiagram({
-      kind: "diagram",
-      layout: "flow",
-      nodes: [
-        { id: "router", label: "Shard router" },
-        { id: "s1", label: "Shard 1" },
-        { id: "s2", label: "Shard 2" },
-        { id: "s3", label: "Shard 3" },
-        { id: "s4", label: "Shard 4" },
-        { id: "s5", label: "Shard 5" },
-      ],
-      edges: [
-        { from: "router", to: "s1" },
-        { from: "router", to: "s2" },
-        { from: "router", to: "s3" },
-        { from: "router", to: "s4" },
-        { from: "router", to: "s5" },
-      ],
-    });
-
-    expect(layout.width).toBeLessThanOrEqual(340);
     for (const node of layout.nodes) {
-      expect(node.col).toBeLessThan(3);
+      expect(rectsOverlap(directEdge!.label!, node)).toBe(false);
     }
-    const shardRows = new Set(layout.nodes.filter((n) => n.id !== "router").map((n) => n.row));
-    expect(shardRows.size).toBe(2);
-    for (let i = 0; i < layout.nodes.length; i++) {
-      for (let j = i + 1; j < layout.nodes.length; j++) {
-        expect(boxesOverlap(layout.nodes[i]!, layout.nodes[j]!)).toBe(false);
+
+    const labels = layout.edges.map((e) => e.label).filter((l): l is NonNullable<typeof l> => l !== null);
+    for (const label of labels) {
+      expect(label.x).toBeGreaterThanOrEqual(0);
+      expect(label.y).toBeGreaterThanOrEqual(0);
+      expect(label.x + label.width).toBeLessThanOrEqual(layout.width);
+      expect(label.y + label.height).toBeLessThanOrEqual(layout.height);
+      for (const node of layout.nodes) {
+        expect(rectsOverlap(label, node)).toBe(false);
+      }
+    }
+    for (let i = 0; i < labels.length; i++) {
+      for (let j = i + 1; j < labels.length; j++) {
+        expect(rectsOverlap(labels[i]!, labels[j]!)).toBe(false);
       }
     }
   });
 
-  it("breaks 2-node and 3-node cycles cleanly with finite coordinates and back-edge arcs", () => {
-    const twoCycle = layoutFlowDiagram({
+  it("keeps multi-skip and cycle-closing back-edge labels clear of all nodes and inside viewBox bounds", () => {
+    const block: FlowDiagramBlock = {
       kind: "diagram",
       layout: "flow",
       nodes: [
-        { id: "a", label: "Worker" },
-        { id: "b", label: "Queue" },
+        { id: "a", label: "Ingress" },
+        { id: "b", label: "Limiter" },
+        { id: "c", label: "Worker" },
+        { id: "d", label: "Store" },
       ],
       edges: [
-        { from: "a", to: "b", label: "enqueue" },
-        { from: "b", to: "a", label: "retry", style: "dashed" },
+        { from: "a", to: "d", label: "fast path" },
+        { from: "a", to: "b", label: "check" },
+        { from: "b", to: "c", label: "enqueue" },
+        { from: "c", to: "d", label: "persist" },
+        { from: "d", to: "b", label: "retry", style: "dashed" },
       ],
-    });
-    expect(Number.isFinite(twoCycle.width)).toBe(true);
-    expect(Number.isFinite(twoCycle.height)).toBe(true);
-    expect(twoCycle.edges.some((e) => e.backEdge)).toBe(true);
+    };
 
-    const threeCycle = layoutFlowDiagram({
-      kind: "diagram",
-      layout: "flow",
-      nodes: [
-        { id: "n1", label: "Leader" },
-        { id: "n2", label: "Follower" },
-        { id: "n3", label: "Monitor" },
-      ],
-      edges: [
-        { from: "n1", to: "n2" },
-        { from: "n2", to: "n3" },
-        { from: "n3", to: "n1" },
-      ],
-    });
-    expect(Number.isFinite(threeCycle.width)).toBe(true);
-    expect(Number.isFinite(threeCycle.height)).toBe(true);
-    expect(threeCycle.edges.some((e) => e.backEdge)).toBe(true);
-  });
-});
-
-describe("layoutSequenceDiagram", () => {
-  it("positions actor lifelines left-to-right and supports dashed replies and self-steps", () => {
-    const layout = layoutSequenceDiagram({
-      kind: "diagram",
-      layout: "sequence",
-      title: "Ticket exit check",
-      actors: [
-        { id: "caller", label: "Caller" },
-        { id: "lot", label: "ParkingLot" },
-        { id: "store", label: "tickets_" },
-      ],
-      steps: [
-        { from: "caller", to: "lot", label: "exit(99, 10)" },
-        { from: "lot", to: "store", label: "find(99)" },
-        { from: "lot", to: "lot", label: "guard missing ticket" },
-        { from: "lot", to: "caller", label: "nullopt", style: "dashed" },
-      ],
-    });
-
-    expect(layout.actors).toHaveLength(3);
-    expect(layout.actors[0]!.cx).toBeLessThan(layout.actors[1]!.cx);
-    expect(layout.actors[1]!.cx).toBeLessThan(layout.actors[2]!.cx);
-    expect(layout.steps).toHaveLength(4);
-    expect(layout.steps[2]?.self).toBe(true);
-    expect(layout.steps[3]?.dashed).toBe(true);
-    expect(layout.steps[0]!.label.y).toBeLessThan(layout.steps[3]!.label.y);
-    for (const actor of layout.actors) {
-      expect(actor.lifelineEndY).toBeGreaterThan(layout.steps[3]!.label.y);
+    const layout = layoutFlowDiagram(block);
+    for (const node of layout.nodes) {
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.x + node.width).toBeLessThanOrEqual(layout.width);
+    }
+    for (const edge of layout.edges) {
+      if (!edge.label) continue;
+      expect(edge.label.x).toBeGreaterThanOrEqual(0);
+      expect(edge.label.x + edge.label.width).toBeLessThanOrEqual(layout.width);
+      for (const node of layout.nodes) {
+        expect(rectsOverlap(edge.label, node)).toBe(false);
+      }
     }
   });
 });

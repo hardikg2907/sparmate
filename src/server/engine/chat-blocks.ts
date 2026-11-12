@@ -1,6 +1,7 @@
 import { ChatBlockSchema, MAX_BLOCKS_PER_TURN, sanitizeChatBlock, type ChatBlock } from "../../shared/blocks";
 import { pinTargets, stepFrames, stepOfElement } from "../../shared/graph/frames";
 import type { Track } from "../../shared/phases";
+import { fileLines } from "../../shared/stepCode";
 import type { Channel } from "../../shared/types";
 import { defineTool, textOutput, type RoomTool, type TurnMeta } from "./driver";
 
@@ -11,9 +12,12 @@ export function isSilentReply(rawText: string): boolean {
   return SILENT_ONLY.test(rawText);
 }
 
-/** Drops blocks that would over-explain a hint when `note_hint` is called after `emit_block` in the same turn. */
-export function stripDisallowedHintBlocks(blocks: readonly ChatBlock[]): ChatBlock[] {
-  return blocks.filter((b) => b.kind !== "diagram" && b.kind !== "kv");
+/**
+ * Drops blocks that would over-explain a hint, or frame binary choices before the third rung, when `note_hint` runs
+ * after `emit_block` in the same turn.
+ */
+export function stripDisallowedHintBlocks(blocks: readonly ChatBlock[], level: 1 | 2 | 3): ChatBlock[] {
+  return blocks.filter((b) => b.kind !== "diagram" && b.kind !== "kv" && (level === 3 || b.kind !== "options"));
 }
 
 export interface EmitBlockContext {
@@ -22,7 +26,7 @@ export interface EmitBlockContext {
   pendingCount(): number;
   pushBlock(block: ChatBlock): number;
   turnMeta(): TurnMeta | null;
-  hintNotedThisTurn(): boolean;
+  hintLevelThisTurn(): 1 | 2 | 3 | null;
   currentPhase(): string;
   isCountOnly(phase: string): boolean;
   countOnlyVerdictThisTurn?(): boolean;
@@ -51,18 +55,35 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
       }
 
       const meta = ctx.turnMeta();
-      const isHint = ctx.channel === "interview" && (meta?.request === "hint" || ctx.hintNotedThisTurn());
+      const hintRequested = ctx.channel === "interview" && meta?.request === "hint";
+      const hintLevel = ctx.channel === "interview" ? ctx.hintLevelThisTurn() : null;
+      const isHint = hintRequested || hintLevel !== null;
       const isStuck = ctx.channel === "interview" && meta?.request === "stuck";
       const isClock = ctx.channel === "interview" && meta?.kind === "clock";
+      const isClockOffer = isClock && (meta?.checkpoint === "phase_over" || meta?.checkpoint === "overtime") && block.kind === "options";
+      // Only an explicit Hint press, an "I'm stuck" press, or a valid clock offer may speak with blocks on a count-only step.
+      const skipsCountOnly = hintRequested || isStuck || isClockOffer;
 
       if (ctx.channel === "interview") {
+        if (ctx.countOnlyVerdictThisTurn?.()) {
+          return textOutput("Checks of this step give only a count of what is open, so emit no blocks in this reply.", true);
+        }
+        if (isClock && !isClockOffer) {
+          if (meta?.checkpoint === "phase_over" || meta?.checkpoint === "overtime") {
+            return textOutput(`"${block.kind}" blocks are not allowed on clock offers. Only "options" may be attached.`, true);
+          }
+          return textOutput("Blocks are not allowed on this clock turn; only move-on and planned-length offers may attach options.", true);
+        }
         if (isHint && (block.kind === "diagram" || block.kind === "kv")) {
           return textOutput(`"${block.kind}" blocks are not allowed on hint replies. Use prose, callout, anchor, or (on H3) options.`, true);
+        }
+        if (hintLevel !== null && hintLevel < 3 && block.kind === "options") {
+          return textOutput(`"options" blocks are only allowed on third-rung (H3) hints, not H${hintLevel}.`, true);
         }
         if (isStuck && (block.kind === "options" || block.kind === "kv")) {
           return textOutput(`"${block.kind}" blocks are not allowed on model-answer ("I'm stuck") replies. Model answers have no quizzes and no tables.`, true);
         }
-        if (!isHint && !isStuck && !isClock && (ctx.countOnlyVerdictThisTurn?.() || ctx.isCountOnly(ctx.currentPhase()))) {
+        if (!skipsCountOnly && ctx.isCountOnly(ctx.currentPhase())) {
           return textOutput("Checks of this step give only a count of what is open, so emit no blocks in this reply.", true);
         }
       }
@@ -77,7 +98,7 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
             );
           }
           // Even when the rail sits on another step, an anchor into a count-only step frame would give away what is missing there.
-          if (ctx.channel === "interview" && !isHint && !isStuck && !isClock && found.step && ctx.isCountOnly(found.step)) {
+          if (ctx.channel === "interview" && !skipsCountOnly && found.step && ctx.isCountOnly(found.step)) {
             return textOutput("Checks of that step give only a count of what is open, so do not anchor to elements in it.", true);
           }
         } else {
@@ -88,7 +109,7 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
           if (!code || code.trim() === "") {
             return textOutput("The code file is empty, so code line anchors cannot be attached.", true);
           }
-          const lineCount = code.split("\n").length;
+          const lineCount = fileLines(code).length;
           const endLine = block.target.endLine ?? block.target.line;
           if (block.target.line > lineCount || endLine > lineCount) {
             const range = block.target.endLine !== undefined ? `L${block.target.line}-L${block.target.endLine}` : `L${block.target.line}`;
@@ -97,6 +118,13 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
         }
       }
 
+      if (ctx.channel === "interview" && ctx.countOnlyVerdictThisTurn?.()) {
+        return textOutput("Checks of this step give only a count of what is open, so emit no blocks in this reply.", true);
+      }
+      // Parallel tool calls can all pass the entry check while awaiting readCode(), so re-verify before queueing.
+      if (ctx.pendingCount() >= MAX_BLOCKS_PER_TURN) {
+        return textOutput(`At most ${MAX_BLOCKS_PER_TURN} blocks may be emitted per reply.`, true);
+      }
       const count = ctx.pushBlock(block);
       return textOutput(`Queued ${block.kind} block (${count}/${MAX_BLOCKS_PER_TURN}).`);
     },

@@ -169,3 +169,29 @@ describe("scribe prompt", () => {
     expect(await loader.render("scribe", vars as never)).toContain(`at most ${LIMITS.proposalOps} operations`);
   });
 });
+
+describe("structured block rules in guide and coach prompts", () => {
+  it("keeps guide-hld, guide-lld, and coach aligned with clock offers, hint rungs, count-only guards, and pin target shapes", async () => {
+    const loader = new PromptLoader(join(APP_ROOT, "content"), APP_ROOT);
+    const base = commonVars({ date: "2026-01-01", problemTitle: "Cache", track: "hld", mode: "guided", durationMin: 45, candidateProfile: "" });
+
+    for (const name of ["guide-hld", "guide-lld"] as const) {
+      const extra = Object.fromEntries(PROMPT_VARS[name].map((k) => [k, "x"]));
+      const out = await loader.render(name, { ...base, ...extra } as never);
+      expect(out, name).toContain("third-rung hint");
+      expect(out, name).toContain("twice-the-planned-time step clock offer");
+      expect(out, name).toContain("planned-length clock offer");
+      expect(out, name).toContain("Never emit `options` on the first two hint rungs");
+      expect(out, name).toContain("never anchor into a count-only step from another step");
+      expect(out, name).toContain('except on a "Hint" press, an "I\'m stuck" press, or `options` on those two clock offers');
+      expect(out, name).toContain("specific box or arrow on the board");
+      expect(out, name).not.toContain("box, arrow, or frame");
+      expect(out, name).not.toContain("box or arrow or frame");
+    }
+
+    const coachExtra = Object.fromEntries(PROMPT_VARS.coach.map((k) => [k, "x"]));
+    const coachOut = await loader.render("coach", { ...base, ...coachExtra } as never);
+    expect(coachOut).not.toContain("box, arrow, or frame");
+    expect(coachOut).not.toContain("frame id");
+  });
+});

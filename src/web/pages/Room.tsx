@@ -27,6 +27,7 @@ import { useDelayed } from "../hooks/useDelayed";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatClock } from "../lib/format";
 import { ERROR_PAUSE_TEXT, pauseText } from "../lib/pause";
+import { activateRoomAnchor } from "../lib/roomAnchor";
 import { Link, navigate } from "../router";
 import type { SessionController } from "../session/types";
 import type { PublicSession } from "../../shared/types";
@@ -78,27 +79,21 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   };
 
   const handleAnchor = (target: AnchorTarget) => {
-    if (target.kind === "board") {
-      setPhoneView("work");
-      setGraphOpen(false);
-      if (lld) {
-        diagramFitted.current = true;
-        setTab("diagram");
-      }
-      requestAnimationFrame(() => {
-        ctl.boardRef.current?.focusElement(target.elementId);
-      });
-      return;
-    }
-    if (!lld) return;
-    setPhoneView("work");
-    setTab("code");
-    setReveal((prev) => ({
-      line: target.line,
-      column: 1,
-      ...(target.endLine !== undefined ? { endLine: target.endLine } : {}),
-      nonce: (prev?.nonce ?? 0) + 1,
-    }));
+    activateRoomAnchor(target, {
+      lld,
+      tab,
+      phoneView,
+      graphOpen,
+      diagramFitted,
+      focusBoardElement: (elementId) => ctl.boardRef.current?.focusElement(elementId) ?? false,
+      setPhoneView,
+      setGraphOpen,
+      setTab,
+      setReveal,
+      notifyError: (message) => {
+        toast.error(message);
+      },
+    });
   };
 
   const frameStep = evidenceStepFor(session.track, session.phase);
@@ -375,7 +370,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                         : "Reply to the interviewer…"
               }
               empty={guided ? "The guide starts with the first step in a moment." : "The interviewer opens the conversation in a moment."}
-              onSend={(text) => actions.sendChat("interview", text)}
+              onSend={(text, opts) => actions.sendChat("interview", text, opts)}
               onDraft={actions.composing}
               onAnchor={handleAnchor}
               topSlot={!lld ? <StepChecklist step={session.steps[session.phase]} /> : null}

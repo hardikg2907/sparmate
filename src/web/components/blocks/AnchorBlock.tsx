@@ -37,9 +37,9 @@ export function AnchorBlock({ block, onAnchor }: AnchorBlockProps) {
     );
 
   const body = (
-    <span className="min-w-0 flex-1">
-      <span className="block text-ui font-medium text-foreground">{block.label}</span>
-      {block.note ? <span className="mt-0.5 block text-meta text-muted-foreground">{block.note}</span> : null}
+    <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+      <span className="block min-w-0 text-ui font-medium [overflow-wrap:anywhere] text-foreground">{block.label}</span>
+      {block.note ? <span className="mt-0.5 block min-w-0 text-meta [overflow-wrap:anywhere] text-muted-foreground">{block.note}</span> : null}
     </span>
   );
 

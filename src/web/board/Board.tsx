@@ -14,6 +14,7 @@ import { findStepFrame, hasStepFrames, newStepFrames, stepFrameAt } from "./step
 import { loadBoardFonts, loadSceneFonts } from "./fonts";
 import { arrowSpecFor, shapeSpecFor, type ArrowPreset, type ShapeKind } from "./palette";
 import { findShapeByLabel, isBindableShape, planArrow, planShape, type ArrowPlan, type BindableShape, type Point } from "./elements";
+import { resolveBoardFocusTarget } from "../lib/roomAnchor";
 
 export interface BoardProps {
   sessionId: string;
@@ -337,17 +338,13 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
       focusElement: (elementId: string) => {
         const current = apiRef.current;
         if (!current) return false;
-        const elements = current.getSceneElements();
-        const targets = elements.filter(
-          (el) =>
-            !el.isDeleted && (el.id === elementId || ("containerId" in el && el.containerId === elementId) || (Array.isArray(el.groupIds) && el.groupIds.includes(elementId))),
-        );
-        if (targets.length === 0) {
-          const fallbackFrame = findStepFrame(elements as unknown as Record<string, unknown>[], elementId);
-          if (!fallbackFrame) return false;
-          showStepOn(current, elementId, true);
+        const resolution = resolveBoardFocusTarget(current.getSceneElements(), elementId);
+        if (resolution.kind === "missing") return false;
+        if (resolution.kind === "step") {
+          showStepOn(current, resolution.step, true);
           return true;
         }
+        const { targets } = resolution;
         current.scrollToContent(targets, {
           fitToViewport: true,
           canvasOffsets: { left: current.getAppState().width >= STYLE_PANEL_MIN_WIDTH ? STYLE_PANEL_WIDTH : 0 },

@@ -214,6 +214,16 @@ class FakeConversation implements Conversation {
         }
         if (/look at (the|my) (board|whiteboard|diagram)/i.test(said)) {
           const out = await callTool(this.setup, "view_whiteboard", {});
+          const targets = this.setup.fake.pinTargets?.() ?? [];
+          if (targets[0]) {
+            await callTool(this.setup, "emit_block", {
+              block: {
+                kind: "anchor",
+                target: { kind: "board", elementId: targets[0].id },
+                label: targets[0].label || "Board shape",
+              },
+            });
+          }
           const sawImage = out?.content.some((c) => c.type === "image") ?? false;
           return sawImage ? "I can see your board. Walk me through one request." : "I have the text form of your board. Walk me through one request.";
         }

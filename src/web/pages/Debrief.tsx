@@ -188,7 +188,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
               placeholder={debriefed ? "Ask the coach about a gap…" : "Waiting for the scorecard…"}
               empty={debriefed ? startCoach : "The coach joins when the scorecard is ready."}
               topSlot={ctl.chat.coach.length > 0 && startCoach ? <div className="px-2 py-4 text-center text-ui text-muted-foreground">{startCoach}</div> : undefined}
-              onSend={(text) => actions.sendChat("coach", text)}
+              onSend={(text, opts) => actions.sendChat("coach", text, opts)}
               onAnchor={handleAnchor}
             />
           </div>

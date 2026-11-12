@@ -26,6 +26,7 @@ export const ClientMsgSchema = z.discriminatedUnion("type", [
     channel: z.enum(["interview", "coach"]),
     clientMsgId: z.string().min(1).max(64),
     text: z.string().min(1).max(LIMITS.chatChars),
+    fromOption: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal("board.update"),

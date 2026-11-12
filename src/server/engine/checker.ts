@@ -66,7 +66,7 @@ export function checkerMessage(e: CheckerEvidence): string {
 
 /** A stable fingerprint of what the checker would read, so an unchanged step is not checked twice. */
 export function evidenceKey(e: Pick<CheckerEvidence, "chat" | "boardText" | "codeText" | "notesText">): string {
-  const lines = e.chat.filter((c) => c.role === "candidate").map((c) => `${c.id}`);
+  const lines = e.chat.filter((c) => c.role === "candidate" && !c.fromOption).map((c) => `${c.id}`);
   return JSON.stringify([lines, e.boardText, e.codeText, e.notesText]);
 }
 
@@ -107,7 +107,7 @@ export function mergeCheck(previous: StepCheck | undefined, output: CheckerOutpu
 function verify(claim: CheckerOutput["items"][number], e: CheckerEvidence): { source: StepCheckItem["source"]; at: number | null } | null {
   switch (claim.source) {
     case "chat": {
-      const line = e.chat.find((c) => c.role === "candidate" && quoteIn(claim.quote, c.text));
+      const line = e.chat.find((c) => c.role === "candidate" && !c.fromOption && quoteIn(claim.quote, c.text));
       return line ? { source: "chat", at: line.at } : null;
     }
     case "board":

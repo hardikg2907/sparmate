@@ -7,8 +7,9 @@ import { followAfterScroll, scrollsBack } from "../lib/chatScroll";
 import { formatClock } from "../lib/format";
 import { isPanelActiveAndVisible } from "../lib/panelVisibility";
 import { useVoices, useVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
-import type { AgentState, ChatItem } from "../session/types";
+import type { AgentState, ChatItem, SendChatOptions } from "../session/types";
 import { ChatBlocks } from "./blocks/ChatBlocks";
+import { applyOptionChoice, applyPrefillToComposer, focusComposerInput, resolveOptionsState } from "./blocks/optionsState";
 import { ChevronDownIcon, MicIcon, MicOffIcon, SendIcon, VolumeXIcon } from "./icons";
 import { Markdown } from "./Markdown";
 import { Button, Badge, Tooltip, cn } from "./ui";
@@ -47,7 +48,7 @@ interface ChatPanelProps {
   items: ChatItem[];
   agent: AgentState;
   /** Returns false when the message could not be sent, so the draft stays in the box. */
-  onSend: (text: string) => boolean;
+  onSend: (text: string, opts?: SendChatOptions) => boolean;
   inputLabel: string;
   placeholder: string;
   disabled?: boolean;
@@ -91,6 +92,7 @@ export function ChatPanel({
   const [atBottom, setAtBottom] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
+  const [focusSignal, setFocusSignal] = useState(0);
   const streaming = items.some((item) => item.state === "streaming");
   const busy = agent.state === "thinking" || streaming;
 
@@ -216,17 +218,19 @@ export function ChatPanel({
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
-  const handleSend = (text: string): boolean => {
-    const sent = onSend(text);
+  const handleSend = (text: string, opts?: SendChatOptions): boolean => {
+    const sent = onSend(text, opts);
     if (sent) stick.current = true;
     return sent;
   };
 
-  const handlePrefill = (text: string): boolean => {
-    if (effectiveDisabled) return false;
-    setPrefill((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }));
-    return true;
-  };
+  const handleChoose = (text: string, action: "send" | "prefill"): boolean =>
+    applyOptionChoice(text, action, {
+      disabled: effectiveDisabled,
+      onSend: handleSend,
+      onPrefill: (incoming) => setPrefill((prev) => ({ text: incoming, nonce: (prev?.nonce ?? 0) + 1 })),
+      onFocusComposer: () => setFocusSignal((n) => n + 1),
+    });
 
   return (
     <section ref={panelRef} aria-label={heading} className="flex h-full min-h-0 flex-col bg-card">
@@ -273,17 +277,17 @@ export function ChatPanel({
             <ul className="space-y-5">
               {items.map((item, index) => {
                 const isAssistant = item.role !== "candidate" && item.role !== "system";
-                const nextCandidate = isAssistant && item.blocks?.length ? items.slice(index + 1).find((m) => m.role === "candidate") : undefined;
+                const optionsState = isAssistant && item.blocks?.length ? resolveOptionsState(items, index) : { settled: false, answeredText: null };
                 return (
                   <Message
                     key={item.id}
                     item={item}
                     speaker={speaker}
                     showTime={showTimes === true}
-                    settled={Boolean(nextCandidate)}
-                    answeredText={nextCandidate?.text ?? null}
+                    settled={optionsState.settled}
+                    answeredText={optionsState.answeredText}
                     blocksDisabled={effectiveDisabled || agent.state === "thinking"}
-                    onChoose={(text, action) => (action === "prefill" ? handlePrefill(text) : handleSend(text))}
+                    onChoose={handleChoose}
                     onAnchor={onAnchor}
                   />
                 );
@@ -315,6 +319,7 @@ export function ChatPanel({
         tools={tools}
         voiceSettings={voiceSettings}
         prefill={prefill}
+        focusSignal={focusSignal}
         onBargeIn={stopSpeaking}
         onDraft={onDraft}
         onSend={handleSend}
@@ -417,6 +422,7 @@ function Composer({
   isSpeaking,
   tools,
   prefill,
+  focusSignal,
   onSend,
   onBargeIn,
   onDraft,
@@ -429,12 +435,15 @@ function Composer({
   isSpeaking: boolean;
   tools?: ReactNode;
   prefill: { text: string; nonce: number } | null;
+  focusSignal: number;
   onSend: (text: string) => boolean;
   onBargeIn: () => void;
   onDraft?: () => void;
   voiceSettings: VoiceSettings;
 }) {
   const [draft, setDraft] = useState("");
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const onDraftRef = useRef(onDraft);
   onDraftRef.current = onDraft;
   // Dictation fills the box through setDraft as well, so the draft itself is watched rather than the key presses.
@@ -445,6 +454,8 @@ function Composer({
   // The room stays mounted behind the debrief, so two chat boxes can exist at once and each needs its own id.
   const inputId = useId();
   const prefillSeen = useRef<number>(0);
+  const focusSeen = useRef<number>(0);
+  const pendingCaret = useRef<number | null>(null);
 
   const voiceInput = useVoiceInput({
     disabled,
@@ -469,15 +480,32 @@ function Composer({
   useEffect(() => {
     if (!prefill || prefill.nonce === prefillSeen.current) return;
     prefillSeen.current = prefill.nonce;
-    setDraft(prefill.text);
-    noteTypedDraft(prefill.text);
+    const current = draftRef.current;
+    const merged = applyPrefillToComposer(current, prefill.text, disabled, input.current);
+    draftRef.current = merged;
+    // Controlled textarea values update on the next commit, so selection is also re-applied once `draft` lands.
+    if (merged !== current) pendingCaret.current = merged.length;
+    setDraft(merged);
+    noteTypedDraft(merged);
+  }, [prefill, disabled, noteTypedDraft]);
+
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null) return;
+    const end = pendingCaret.current;
+    pendingCaret.current = null;
     const el = input.current;
     if (el && !disabled) {
       el.focus();
-      const end = prefill.text.length;
       el.setSelectionRange(end, end);
     }
-  }, [prefill, disabled, noteTypedDraft]);
+  }, [draft, disabled]);
+
+  // An option button unmounts into a static card once sent, so focus moves to the composer instead of dropping to body.
+  useEffect(() => {
+    if (focusSignal === focusSeen.current) return;
+    focusSeen.current = focusSignal;
+    focusComposerInput(disabled, input.current);
+  }, [focusSignal, disabled]);
 
   useEffect(() => {
     const el = input.current;

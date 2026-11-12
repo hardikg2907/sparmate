@@ -1,7 +1,18 @@
 import { useEffect, useRef } from "react";
 import { MONO_FONT, monaco, monacoTheme, remeasureWhenFontLoads } from "../monaco-setup";
 import type { CompileDiagnostic } from "../../shared/types";
+import {
+  ANCHOR_RANGE_CLASS,
+  applyAnchorReveal,
+  planAnchorReveal,
+  type AnchorDecorationEntry,
+  type AnchorRevealDriver,
+  type AnchorRevealInput,
+  type AnchorRevealPlan,
+} from "./anchorReveal";
 import { diffEdit, mapOffset, normaliseEol } from "./textEdit";
+
+export { ANCHOR_RANGE_CLASS, applyAnchorReveal, planAnchorReveal, type AnchorDecorationEntry, type AnchorRevealDriver, type AnchorRevealInput, type AnchorRevealPlan };
 
 export interface CodeReveal {
   line: number;
@@ -118,6 +129,7 @@ export function CodeEditor(props: CodeEditorProps) {
     data: [],
     shadow: null,
   });
+  const anchorDecorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -139,6 +151,7 @@ export function CodeEditor(props: CodeEditorProps) {
     const state = markers.current;
     state.data = [];
     state.shadow = editor.createDecorationsCollection();
+    anchorDecorations.current = editor.createDecorationsCollection();
 
     for (const chord of SUGGEST_CHORDS) editor.addCommand(chord, () => undefined);
 
@@ -155,11 +168,14 @@ export function CodeEditor(props: CodeEditorProps) {
         }
       }
       if (applyingExternal.current) return;
+      anchorDecorations.current?.clear();
       onChangeRef.current?.(current ? current.getValue(monaco.editor.EndOfLinePreference.LF) : "");
     });
 
     return () => {
       subscription.dispose();
+      anchorDecorations.current?.clear();
+      anchorDecorations.current = null;
       state.shadow?.clear();
       state.shadow = null;
       editor.dispose();
@@ -240,21 +256,20 @@ export function CodeEditor(props: CodeEditorProps) {
     // A request that was already there when the editor mounted is old news.
     if (revealSeen.current === revealLine.nonce) return;
     revealSeen.current = revealLine.nonce;
-    if (revealLine.endLine !== undefined && revealLine.endLine >= revealLine.line) {
-      const lineCount = model.getLineCount();
-      const startLine = clamp(revealLine.line, 1, lineCount);
-      const endLine = clamp(revealLine.endLine, startLine, lineCount);
-      const range = new monaco.Range(startLine, 1, endLine, model.getLineMaxColumn(endLine));
-      editor.setSelection(range);
-      editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Immediate);
-      editor.focus();
-      return;
-    }
-    const position = model.validatePosition({ lineNumber: revealLine.line, column: revealLine.column ?? 1 });
-    editor.setPosition(position);
-    editor.revealPositionInCenterIfOutsideViewport(position, monaco.editor.ScrollType.Immediate);
-    editor.focus();
-  }, [revealLine]);
+    applyAnchorReveal(revealLine, readOnly, {
+      getLineCount: () => model.getLineCount(),
+      getLineMaxColumn: (lineNumber) => model.getLineMaxColumn(lineNumber),
+      validatePosition: (pos) => model.validatePosition(pos),
+      createRange: (sLine, sCol, eLine, eCol) => new monaco.Range(sLine, sCol, eLine, eCol),
+      setSelection: (range) => editor.setSelection(range),
+      setPosition: (pos) => editor.setPosition(pos),
+      setAnchorDecorations: (entries) => anchorDecorations.current?.set(entries),
+      clearAnchorDecorations: () => anchorDecorations.current?.clear(),
+      revealRangeInCenter: (range) => editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Immediate),
+      revealPositionInCenter: (pos) => editor.revealPositionInCenterIfOutsideViewport(pos, monaco.editor.ScrollType.Immediate),
+      focus: () => editor.focus(),
+    });
+  }, [revealLine, readOnly]);
 
   return <div ref={hostRef} data-testid="code-editor" style={{ width: "100%", height: "100%", minHeight: 0 }} />;
 }

@@ -94,8 +94,8 @@ The board has one labelled frame per step, and their drawing in a frame is their
 
 You can call `emit_block` (at most 4 per reply) to attach generic UI blocks below your prose in the narrow chat column. Keep your prose concise and never repeat a block's contents word-for-word in prose.
 
-- **`options`**: use on a third-rung hint when framing a binary choice (2 items), or on the twice-the-planned-time clock offer so they can pick moving on vs staying (`action: "send"`). Never emit `options` on the first two hint rungs or on "I'm stuck".
-- **`anchor`**: attach when step-check feedback refers to a specific box, arrow, or frame on the board (`kind: "board"` with an `elementId` from `view_whiteboard`). Never emit blocks of any kind on count-only step checks.
+- **`options`**: use on a third-rung hint when framing a binary choice (2 items), on the twice-the-planned-time step clock offer (moving on vs staying), or on the planned-length clock offer (finishing what they are on vs ending the round) (`action: "send"`). On clock events, only those two clock offers may attach `options`, and no other clock event or block kind is allowed. Never emit `options` on the first two hint rungs or on "I'm stuck".
+- **`anchor`**: attach when step-check feedback refers to a specific box or arrow on the board (`kind: "board"` with an `elementId` from `view_whiteboard`). While a step's checks give only a count (and on any turn recording a count-only check), emit no blocks at all, and never anchor into a count-only step from another step, except on a "Hint" press, an "I'm stuck" press, or `options` on those two clock offers.
 - **`callout`**: use sparingly to set off a curveball scenario or key constraint.
 - **`diagram`**: use (`layout: "flow"` or `layout: "sequence"`) **only** in "I'm stuck" model answers instead of fenced ASCII art, with every node and edge labelled and no blank slots. Never emit `diagram` or `kv` on hints, and never emit `options` or `kv` on "I'm stuck".
 

@@ -59,7 +59,7 @@ export function phaseTiming(
 /** The candidate's own words: his chat messages and his written step answers. */
 export function candidateText(session: Pick<Session, "transcript" | "stepNotes">): string {
   return session.transcript
-    .filter((e) => e.channel === "interview" && e.role === "candidate")
+    .filter((e) => e.channel === "interview" && e.role === "candidate" && !e.fromOption)
     .map((e) => e.text)
     .concat(Object.values(session.stepNotes ?? {}))
     .join("\n");
@@ -79,7 +79,7 @@ export function stepSources(
   const out: Record<string, { candidate: string; board: string; code: string }> = {};
   for (const p of phasesFor(session.track)) {
     const chat = stepEntries(session.transcript, session.phaseHistory ?? [], p.id, endMs)
-      .filter((e) => e.role === "candidate")
+      .filter((e) => e.role === "candidate" && !e.fromOption)
       .map((e) => e.text);
     const scope = codeScopeFor(session.track, p.id);
     const code = finalCode === null || scope === null ? "" : scope === "file" ? finalCode : unnumberedCode(stepCodeText(finalCode, session.stepCode?.[p.id] ?? []));
@@ -93,7 +93,7 @@ export function stepSources(
 }
 
 export function candidateLines(session: Pick<Session, "transcript">): string[] {
-  return session.transcript.filter((e) => e.channel === "interview" && e.role === "candidate").map((e) => e.text);
+  return session.transcript.filter((e) => e.channel === "interview" && e.role === "candidate" && !e.fromOption).map((e) => e.text);
 }
 
 /** Longest root-cause label the page shows; the tester is asked for a few words. */
