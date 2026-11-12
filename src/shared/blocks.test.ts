@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { ChatBlockSchema, blocksToPlainText, blocksToSpeechText, candidateOwnText, matchUnsettledOptionTexts, sanitizeChatBlock, stripOptionTexts, type ChatBlock } from "./blocks";
+import {
+  ChatBlockSchema,
+  blockToPlainText,
+  blocksToPlainText,
+  blocksToSpeechText,
+  candidateOwnText,
+  matchUnsettledOptionTexts,
+  renumberBlockMarkers,
+  replyPlainText,
+  sanitizeChatBlock,
+  segmentReply,
+  stripBlockMarkers,
+  stripOptionTexts,
+  type ChatBlock,
+} from "./blocks";
 
 describe("ChatBlockSchema", () => {
   it("generates a clean JSON Schema for MCP tool registration", () => {
@@ -283,5 +297,39 @@ describe("ChatBlockSchema", () => {
   it("leaves a message without option texts untouched", () => {
     expect(candidateOwnText({ text: "  . " })).toBe("  . ");
     expect(stripOptionTexts("Fan-out on read", ["Fan-out on write"])).toBe("Fan-out on read");
+  });
+});
+
+describe("block markers", () => {
+  const kv: ChatBlock = { kind: "kv", rows: [{ key: "TTL", value: "24h" }] };
+  const callout: ChatBlock = { kind: "callout", label: "Note", text: "Watch the hot key." };
+  const options: ChatBlock = { kind: "options", action: "send", items: [{ label: "Go on" }] };
+
+  it("places blocks where their markers stand and trails the rest", () => {
+    const text = "Intro.\n\n<block 2/>\n\nMiddle.\n<block 9/>\n<block 2/>\n<block 3/>\n```\n<block 1/>\n```";
+    const { segments, trailing } = segmentReply(text, [kv, callout, options]);
+    expect(segments).toEqual([
+      { kind: "text", text: "Intro." },
+      { kind: "block", index: 1 },
+      { kind: "text", text: "Middle.\n\n\n\n```\n<block 1/>\n```" },
+    ]);
+    expect(trailing).toEqual([0, 2]);
+  });
+
+  it("hides a half-written marker only while streaming", () => {
+    expect(segmentReply("Hi\n<blo", [], true).segments).toEqual([{ kind: "text", text: "Hi" }]);
+    expect(segmentReply("Hi\n<blo", []).segments).toEqual([{ kind: "text", text: "Hi\n<blo" }]);
+  });
+
+  it("renumbers or drops markers and keeps marker-free text as it was", () => {
+    expect(renumberBlockMarkers("- a\n<block 1/>\nB\n<block 3/>", (n) => (n === 3 ? 1 : null))).toBe("- a\n\nB\n<block 1/>");
+    const plain = "No markers\n\n\n```\nkeep  \n\n\n```";
+    expect(segmentReply(plain, []).segments).toEqual([{ kind: "text", text: plain }]);
+  });
+
+  it("puts block text at the marker in plain text", () => {
+    expect(replyPlainText("Before\n<block 1/>\nAfter", [kv])).toBe(`Before\n\n${blockToPlainText(kv)}\n\nAfter`);
+    expect(replyPlainText("Only prose", [kv])).toBe(`Only prose\n${blockToPlainText(kv)}`);
+    expect(stripBlockMarkers("Say this\n<block 1/>\nand this")).toBe("Say this\n\nand this");
   });
 });

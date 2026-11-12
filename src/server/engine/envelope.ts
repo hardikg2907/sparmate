@@ -1,4 +1,4 @@
-import { blocksToPlainText, candidateOwnText } from "../../shared/blocks";
+import { blocksToPlainText, candidateOwnText, replyPlainText } from "../../shared/blocks";
 import type { Track } from "../../shared/phases";
 import type { CompileDiagnostic, RunResult, StepSummary, TranscriptEntry } from "../../shared/types";
 import { formatClock, formatStamp, type CheckpointKind } from "./clock";
@@ -294,7 +294,9 @@ export function stepEntries(entries: readonly TranscriptEntry[], history: readon
   return entries.filter((e) => e.channel === "interview" && !e.hidden && e.kind !== "phase" && spans.some(([from, to]) => e.at >= from && e.at <= to));
 }
 
-function entryText(e: Pick<TranscriptEntry, "text" | "blocks">): string {
+// Only replies carry block markers; candidate and event text goes through exactly as written.
+function entryText(e: Pick<TranscriptEntry, "text" | "blocks" | "role">): string {
+  if (e.role !== "candidate" && e.role !== "system") return replyPlainText(e.text, e.blocks);
   const blocksText = blocksToPlainText(e.blocks);
   return e.text && blocksText ? `${e.text}\n${blocksText}` : e.text || blocksText;
 }

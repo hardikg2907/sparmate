@@ -1,4 +1,4 @@
-import { blocksToSpeechText } from "../../shared/blocks";
+import { blocksToSpeechText, stripBlockMarkers } from "../../shared/blocks";
 import type { ChatItem } from "../session/types";
 import { cleanMarkdownForSpeech } from "./speechCleaning";
 import { splitSentences } from "./speechSentences";
@@ -30,16 +30,18 @@ export function markRepliesHeard(items: readonly ChatItem[], heard: Set<string>)
  */
 export function replySpeechSentences(item: ChatItem): string[] {
   const isFinal = item.state === "done";
-  const hasProse = item.text.trim().length > 0;
+  // Spoken prose skips markers; the blocks they place get their own summary below.
+  const prose = stripBlockMarkers(item.text, !isFinal);
+  const hasProse = prose.trim().length > 0;
   if (!isFinal || !item.blocks?.length) {
-    const cleaned = cleanMarkdownForSpeech(item.text, isFinal);
+    const cleaned = cleanMarkdownForSpeech(prose, isFinal);
     return splitSentences(cleaned, isFinal).sentences;
   }
   if (!hasProse) {
     const cleaned = cleanMarkdownForSpeech(blocksToSpeechText(item.blocks), true);
     return splitSentences(cleaned, true).sentences;
   }
-  const proseSentences = splitSentences(cleanMarkdownForSpeech(item.text, true), true).sentences;
+  const proseSentences = splitSentences(cleanMarkdownForSpeech(prose, true), true).sentences;
   const spokenBlocks = item.blocks.filter((b) => b.kind === "callout" || b.kind === "options");
   if (spokenBlocks.length === 0) return proseSentences;
   const blockSentences = splitSentences(cleanMarkdownForSpeech(blocksToSpeechText(spokenBlocks), true), true).sentences;

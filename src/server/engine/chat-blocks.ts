@@ -49,7 +49,7 @@ function findBoardTarget(elements: readonly Record<string, unknown>[], elementId
 export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
   return defineTool(
     "emit_block",
-    "Attach one structured UI block (options, diagram, anchor, callout, or kv) to appear below your reply prose. At most 4 blocks per reply. Keep prose concise and do not repeat the block's contents word-for-word.",
+    "Queue one structured UI block (options, diagram, anchor, callout, or kv) for your reply. The result gives the block a number N; write <block N/> alone on its own line in your reply where the block belongs. A block without a marker, and every options block, shows after your reply. At most 4 blocks per reply. Keep prose concise and do not repeat the block's contents word-for-word.",
     { block: ChatBlockSchema },
     async ({ block: raw }) => {
       const block = sanitizeChatBlock(raw);
@@ -142,8 +142,9 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
       if (ctx.pendingCount() >= MAX_BLOCKS_PER_TURN) {
         return textOutput(`At most ${MAX_BLOCKS_PER_TURN} blocks may be emitted per reply.`, true);
       }
-      const count = ctx.pushBlock(block);
-      const queued = `Queued ${block.kind} block (${count}/${MAX_BLOCKS_PER_TURN}).`;
+      const n = ctx.pushBlock(block);
+      const place = block.kind === "options" ? "It shows after your reply." : `Write <block ${n}/> alone on a line where it belongs in your reply.`;
+      const queued = `Queued ${block.kind} block ${n} (${ctx.pendingCount()}/${MAX_BLOCKS_PER_TURN}). ${place}`;
       return textOutput(ctx.repliesThroughTool ? queued : `${queued} Any reply text you already wrote is kept, so do not write it again.`);
     },
   );

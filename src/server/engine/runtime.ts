@@ -3,7 +3,7 @@ import { unwatchFile, watch, watchFile, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { z } from "zod";
-import { candidateOwnText, matchUnsettledOptionTexts, type ChatBlock } from "../../shared/blocks";
+import { candidateOwnText, matchUnsettledOptionTexts, renumberBlockMarkers, stripBlockMarkers, type ChatBlock } from "../../shared/blocks";
 import { deriveChecklist } from "../../shared/checklist";
 import { gapDividerText, gapForTeachMessage } from "../../shared/gaps";
 import { frameEvidence, pinTargets, pinTargetsText, stepFrames, withFrameMembership } from "../../shared/graph/frames";
@@ -268,6 +268,8 @@ interface ChannelState {
   codeSeen: number;
   // Tool instances are created once per conversation, so per-turn block state lives on the channel.
   pendingBlocks: ChatBlock[];
+  /** Every block queued this turn, in order; a reply marker `<block N/>` names entry N-1 even after filtering. */
+  queuedBlocks: ChatBlock[];
   currentTurnMeta: TurnMeta | null;
   checkedPhaseThisTurn: string | null;
   hintLevelThisTurn: 1 | 2 | 3 | null;
@@ -290,6 +292,7 @@ function newChannel(name: Channel): ChannelState {
     notesSeen: -1,
     codeSeen: -1,
     pendingBlocks: [],
+    queuedBlocks: [],
     currentTurnMeta: null,
     checkedPhaseThisTurn: null,
     hintLevelThisTurn: null,
@@ -298,8 +301,16 @@ function newChannel(name: Channel): ChannelState {
   };
 }
 
+/** Queues a block and returns the number its reply marker uses; numbers never repeat within a turn. */
+function queueBlock(ch: ChannelState, block: ChatBlock): number {
+  ch.pendingBlocks.push(block);
+  ch.queuedBlocks.push(block);
+  return ch.queuedBlocks.length;
+}
+
 function resetTurnBlocks(ch: ChannelState): void {
   ch.pendingBlocks = [];
+  ch.queuedBlocks = [];
   ch.currentTurnMeta = null;
   ch.checkedPhaseThisTurn = null;
   ch.hintLevelThisTurn = null;
@@ -1300,11 +1311,17 @@ export class SessionRuntime {
         return;
       }
       const streamedText = f.finish();
-      const text = reply.superseded ? cleanReply(reply.text) : streamedText;
+      const replyText = reply.superseded ? cleanReply(reply.text) : streamedText;
       const silent = isSilentReply(reply.text);
       // A hint turn that skipped note_hint may still be on the first two rungs, where option chips give too much away.
       const unrecordedHint = ch.name === "interview" && built.turn.meta.request === "hint" && ch.hintLevelThisTurn === null;
       const blocks = silent ? [] : unrecordedHint ? stripDisallowedHintBlocks(ch.pendingBlocks, 1) : [...ch.pendingBlocks];
+      // Blocks dropped after the model wrote its markers would leave markers pointing at the wrong block.
+      const queued = ch.queuedBlocks;
+      const text = renumberBlockMarkers(replyText, (n) => {
+        const at = queued[n - 1] ? blocks.indexOf(queued[n - 1]!) : -1;
+        return at >= 0 ? at + 1 : null;
+      });
       ch.queue.shift();
       built.commit();
       ch.freshResume = false;
@@ -1321,7 +1338,7 @@ export class SessionRuntime {
       this.setChannelStatus(ch, "idle");
       this.log.info(`${ch.name} turn (${next.kind}) in ${reply.stats.durationMs} ms for session ${this.session.id}`);
       try {
-        await next.after?.(text);
+        await next.after?.(stripBlockMarkers(text));
       } catch (err) {
         this.log.error(`After-turn step failed in session ${this.session.id}`, err);
       }
@@ -1354,7 +1371,8 @@ export class SessionRuntime {
   /** Text the browser already saw stays in the transcript, so its copy and ours never disagree. */
   private keepPartial(ch: ChannelState, filter: SilentFilter, entryId: string): void {
     if (!filter.streamed) return;
-    const text = filter.partial();
+    // A failed turn saves no blocks, so its markers, whole or half written, would only show as raw text.
+    const text = stripBlockMarkers(filter.partial(), true);
     if (text) this.addEntry({ id: entryId, channel: ch.name, role: ch.name === "coach" ? "coach" : "interviewer", text });
   }
 
@@ -1935,10 +1953,7 @@ export class SessionRuntime {
           repliesThroughTool: true,
           track: this.session.track,
           pendingCount: () => ch.pendingBlocks.length,
-          pushBlock: (block) => {
-            ch.pendingBlocks.push(block);
-            return ch.pendingBlocks.length;
-          },
+          pushBlock: (block) => queueBlock(ch, block),
           turnMeta: () => ch.currentTurnMeta,
           hintLevelThisTurn: () => ch.hintLevelThisTurn,
           currentPhase: () => ch.checkedPhaseThisTurn ?? this.session.phase,
@@ -2089,10 +2104,7 @@ export class SessionRuntime {
         repliesThroughTool: true,
         track: this.session.track,
         pendingCount: () => ch.pendingBlocks.length,
-        pushBlock: (block) => {
-          ch.pendingBlocks.push(block);
-          return ch.pendingBlocks.length;
-        },
+        pushBlock: (block) => queueBlock(ch, block),
         turnMeta: () => ch.currentTurnMeta,
         hintLevelThisTurn: () => null,
         currentPhase: () => this.session.phase,
