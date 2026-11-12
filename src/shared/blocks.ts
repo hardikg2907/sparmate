@@ -492,7 +492,8 @@ export function candidateOwnText(entry: { text: string; optionTexts?: readonly s
 // A reply places block N (1-based) by writing `<block N/>` alone on a line. Only whole lines outside fenced code
 // count, so a marker can never split a list item, a table row or a code sample.
 const MARKER_LINE = /^[ \t]*<block[ \t]+(\d{1,2})[ \t]*\/>[ \t]*$/;
-const FENCE_LINE = /^[ \t]*(`{3,}|~{3,})/;
+// A backtick fence's info string may not hold a backtick, and a closing fence carries no info string (CommonMark).
+const FENCE_LINE = /^[ \t]*(`{3,}(?=[^`]*$)|~{3,})(.*)$/;
 // While a reply streams, the last line may be the start of a marker; it stays hidden until it settles either way.
 const PARTIAL_MARKER_TAIL = /(?:^|\n)[ \t]*<(?:b(?:l(?:o(?:c(?:k(?:[ \t]+\d{0,2}[ \t]*\/?)?)?)?)?)?)?$/;
 
@@ -504,7 +505,7 @@ function walkMarkerLines(text: string, onText: (line: string) => void, onMarker:
     if (fenceMatch) {
       const mark = fenceMatch[1]!;
       if (fence === null) fence = mark;
-      else if (mark[0] === fence[0] && mark.length >= fence.length) fence = null;
+      else if (mark[0] === fence[0] && mark.length >= fence.length && fenceMatch[2]!.trim() === "") fence = null;
       onText(line);
       continue;
     }
@@ -528,7 +529,8 @@ export function renumberBlockMarkers(text: string, map: (n: number) => number | 
     (line) => out.push(line),
     (n) => {
       const next = map(n);
-      if (next !== null) out.push(`<block ${next}/>`);
+      // A dropped marker keeps its line blank, so the prose around it stays separate paragraphs.
+      out.push(next === null ? "" : `<block ${next}/>`);
     },
   );
   return tidyLines(out);

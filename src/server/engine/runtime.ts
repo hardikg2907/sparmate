@@ -1371,7 +1371,8 @@ export class SessionRuntime {
   /** Text the browser already saw stays in the transcript, so its copy and ours never disagree. */
   private keepPartial(ch: ChannelState, filter: SilentFilter, entryId: string): void {
     if (!filter.streamed) return;
-    const text = filter.partial();
+    // A failed turn saves no blocks, so its markers, whole or half written, would only show as raw text.
+    const text = stripBlockMarkers(filter.partial(), true);
     if (text) this.addEntry({ id: entryId, channel: ch.name, role: ch.name === "coach" ? "coach" : "interviewer", text });
   }
 

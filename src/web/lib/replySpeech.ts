@@ -30,7 +30,7 @@ export function markRepliesHeard(items: readonly ChatItem[], heard: Set<string>)
  */
 export function replySpeechSentences(item: ChatItem): string[] {
   const isFinal = item.state === "done";
-  // Spoken prose skips markers; the blocks they place are summarised below as before.
+  // Spoken prose skips markers; the blocks they place get their own summary below.
   const prose = stripBlockMarkers(item.text, !isFinal);
   const hasProse = prose.trim().length > 0;
   if (!isFinal || !item.blocks?.length) {

@@ -322,7 +322,7 @@ describe("block markers", () => {
   });
 
   it("renumbers or drops markers and keeps marker-free text as it was", () => {
-    expect(renumberBlockMarkers("A\n<block 1/>\nB\n<block 3/>", (n) => (n === 3 ? 1 : null))).toBe("A\nB\n<block 1/>");
+    expect(renumberBlockMarkers("- a\n<block 1/>\nB\n<block 3/>", (n) => (n === 3 ? 1 : null))).toBe("- a\n\nB\n<block 1/>");
     const plain = "No markers\n\n\n```\nkeep  \n\n\n```";
     expect(segmentReply(plain, []).segments).toEqual([{ kind: "text", text: plain }]);
   });
