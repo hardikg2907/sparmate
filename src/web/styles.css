@@ -1035,9 +1035,10 @@ body {
 
 /*
  * The coach pane morphs between its column and the full screen: the browser animates the named group's size and
- * position. The page behind stays put, so the root cross-fade is off for that transition.
+ * position. The page behind stays put, so the root cross-fade is off for that transition. The name is set only
+ * then, so a page change cross-fades the pane with the rest of the page.
  */
-.coach-pane {
+:root[data-vt="pane"] .coach-pane {
   view-transition-name: coach-pane;
 }
 :root[data-vt="pane"]::view-transition-old(root),
