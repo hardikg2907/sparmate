@@ -236,4 +236,39 @@ describe("layoutFlowDiagram", () => {
     expect(flowPill.lines.join(" ")).toContain("…");
     expect(flowPill.fullText).toBe(longFlowLabel);
   });
+
+  it("wraps long details instead of cutting them, and widens boxes when the pane has room", () => {
+    const detail = "Msgs DB, keyed (conversationId, seq) so reads stay ordered";
+    const block: FlowDiagramBlock = {
+      kind: "diagram",
+      layout: "flow",
+      nodes: [
+        { id: "a", label: "Message stored", detail },
+        { id: "b", label: "Fan-out worker" },
+      ],
+      edges: [{ from: "a", to: "b" }],
+    };
+
+    const narrow = layoutFlowDiagram(block);
+    const narrowNode = narrow.nodes[0]!;
+    expect(narrowNode.detailLines.length).toBeGreaterThan(1);
+    expect(narrowNode.detailLines.join(" ")).toBe(detail);
+    expect(narrowNode.fullText).toContain(detail);
+
+    const wide = layoutFlowDiagram(block, 900);
+    const wideNode = wide.nodes[0]!;
+    expect(wideNode.width).toBeGreaterThan(narrowNode.width);
+    expect(wideNode.detailLines.length).toBeLessThan(narrowNode.detailLines.length);
+    expect(wide.width).toBeLessThanOrEqual(900);
+
+    const withBackEdge = layoutFlowDiagram(
+      {
+        ...block,
+        nodes: [...block.nodes, { id: "c", label: "Deliver" }],
+        edges: [...block.edges, { from: "b", to: "c" }, { from: "c", to: "a", label: "retry on failure" }],
+      },
+      400,
+    );
+    expect(withBackEdge.width).toBeLessThanOrEqual(400);
+  });
 });
