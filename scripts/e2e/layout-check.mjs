@@ -5,6 +5,7 @@
 // 3. Nested scroll containers scroll in the same direction as the page / ancestor.
 // 4. The room page scrolls as a whole (instead of individual panes).
 // 5. A jump inside a page (sub-nav, #hash link) scrolls the window, body or app root, or moves the bar off the top.
+// 6. A scroller scrolls past its own content into blank space.
 // PORT sets the port; when it is unset the script picks a free port from 4750 to 4799 (not 4780).
 
 import { spawn } from "node:child_process";
@@ -98,6 +99,7 @@ try {
     { name: "room-hld", url: (theme) => `/?fixture=room-hld&theme=${theme}` },
     { name: "room-lld", url: (theme) => `/?fixture=room-lld&theme=${theme}` },
     { name: "debrief-hld", url: (theme) => `/?fixture=debrief-hld&theme=${theme}` },
+    { name: "debrief-hld (coach full screen)", url: (theme) => `/?fixture=debrief-hld&focus=coach&theme=${theme}` },
     { name: "real fake-model round", url: (theme) => `/session/${realSessionRes}?theme=${theme}` },
     { name: "usage", url: (theme) => `/usage?theme=${theme}` },
   ];
@@ -169,7 +171,25 @@ try {
               }
             }
 
-            // 4. Elements overflowing the viewport
+            // 4. A scroller must not scroll past its own content. An absolutely positioned descendant whose containing
+            // block lies outside an inner scroller (screen-reader text is the usual one) can stretch an outer scroller
+            // into blank space, which nothing else here would notice.
+            for (const sc of vScrollers) {
+              const el = sc.el;
+              const top = el.getBoundingClientRect().top + el.clientTop - el.scrollTop;
+              let contentBottom = 0;
+              for (const child of el.children) {
+                const cs = window.getComputedStyle(child);
+                if (cs.position === "absolute" || cs.position === "fixed" || cs.display === "none") continue;
+                contentBottom = Math.max(contentBottom, child.getBoundingClientRect().bottom - top + parseFloat(cs.marginBottom || "0"));
+              }
+              const extra = el.scrollHeight - (contentBottom + parseFloat(window.getComputedStyle(el).paddingBottom || "0"));
+              if (extra > 4) {
+                errors.push(`Scroller scrolls ${Math.round(extra)}px past its content: <${el.tagName} class="${el.className}">`);
+              }
+            }
+
+            // 5. Elements overflowing the viewport
             function isClipped(el) {
               let p = el.parentElement;
               while (p && p !== body && p !== doc) {

@@ -297,7 +297,7 @@ export function ChatPanel({
           role="log"
           aria-label={`${heading} conversation`}
           aria-live="off"
-          className="h-full overflow-y-auto px-4 py-4"
+          className="relative h-full overflow-y-auto px-4 py-4"
         >
           {items.length === 0 && !busy ? (
             <div className="px-2 py-8 text-center text-ui text-muted-foreground">{empty}</div>

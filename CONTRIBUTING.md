@@ -26,7 +26,7 @@ Native setup is for macOS. On Linux and Windows, run the app through the contain
 | `npm run build`        | Builds the web app.                                |
 | `npm run dev`          | Starts the app with hot reload.                    |
 
-`npm run verify` runs typecheck, lint, format check, tests, `vite build` and the fake-agent end-to-end round. The round picks a free port.
+`npm run verify` runs typecheck, lint, format check, tests, `vite build`, the fake-agent end-to-end round and the layout and scroll check. The last two pick a free port. The layout check drives Google Chrome, so Chrome must be installed.
 
 A pull request must pass typecheck, lint, format check and tests. CI runs the same four scripts.
 
