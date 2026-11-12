@@ -521,7 +521,7 @@ describe("variantEntries", () => {
       }
       expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
     }
-    expect(all.filter((p) => p.meta.track === "hld")).toHaveLength(12);
+    expect(all.filter((p) => p.meta.track === "hld")).toHaveLength(18);
     expect(all.filter((p) => p.meta.track === "lld")).toHaveLength(9);
   });
 

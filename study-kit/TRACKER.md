@@ -270,6 +270,12 @@ This example is calibrated for the default bar, **SDE-2 / senior backend at Seri
 - [ ] Payment/Transaction System
 - [ ] Web Crawler
 - [ ] E-commerce Checkout / Inventory
+- [ ] Typeahead / Autocomplete
+- [ ] File Sync Service (Dropbox)
+- [ ] Collaborative Document Editing (Google Docs)
+- [ ] Proximity Service (Yelp / nearby places)
+- [ ] High-Demand Ticket Booking (Ticketmaster)
+- [ ] Metrics and Logging Pipeline
 
 ---
 
