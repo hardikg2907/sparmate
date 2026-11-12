@@ -19,7 +19,8 @@ export interface PositionedFlowNode {
   width: number;
   height: number;
   labelLines: string[];
-  detailLine: string | null;
+  detailLines: string[];
+  fullText: string;
 }
 
 export interface PositionedFlowEdge {
@@ -70,6 +71,8 @@ export interface SequenceDiagramLayout {
 }
 
 const MAX_FLOW_COLS = 3;
+const MAX_DETAIL_LINES = 3;
+const DETAIL_LINE_H = 13;
 const LABEL_CHAR_W = 5.8;
 const EDGE_LINE_H = 13;
 
@@ -203,7 +206,11 @@ function placeFlowEdgeLabel(
   return { fullText, lines, x: round(railX), y: Math.max(4, baseY), width: size.width, height: size.height };
 }
 
-export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
+/**
+ * `availableWidth` is the room the diagram may use. Without it, boxes keep the
+ * narrow-pane size; with it, boxes widen up to a cap so a wide pane shows more text per line.
+ */
+export function layoutFlowDiagram(block: FlowDiagramBlock, availableWidth?: number): FlowDiagramLayout {
   const nodeOrder = new Map<string, number>();
   const nodeById = new Map<string, FlowDiagramBlock["nodes"][number]>();
   for (const [idx, node] of block.nodes.entries()) {
@@ -349,21 +356,31 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
     if (row.ids.length > maxCols) maxCols = row.ids.length;
   }
 
-  const boxWidth = maxCols === 1 ? 176 : maxCols === 2 ? 132 : 88;
+  const baseBoxWidth = maxCols === 1 ? 176 : maxCols === 2 ? 132 : 88;
+  const maxBoxWidth = maxCols === 1 ? 320 : maxCols === 2 ? 240 : 180;
   const colGap = maxCols === 1 ? 0 : maxCols === 2 ? 18 : 10;
-  const maxLabelChars = maxCols === 1 ? 26 : maxCols === 2 ? 19 : 12;
-  const maxDetailChars = maxCols === 1 ? 30 : maxCols === 2 ? 21 : 14;
-  const contentWidth = maxCols * boxWidth + Math.max(0, maxCols - 1) * colGap;
+  const baseLabelChars = maxCols === 1 ? 26 : maxCols === 2 ? 19 : 12;
+  const baseDetailChars = maxCols === 1 ? 30 : maxCols === 2 ? 21 : 14;
   const basePadX = 8;
   const padY = 8;
+  // Reserve room for the back-edge rail and side-placed pills so a widened layout still fits without scrolling.
+  const sideReserve = 56;
+  const fitBoxWidth = availableWidth ? Math.floor((availableWidth - basePadX * 2 - sideReserve - (maxCols - 1) * colGap) / maxCols) : 0;
+  const boxWidth = Math.max(baseBoxWidth, Math.min(maxBoxWidth, fitBoxWidth));
+  const widthScale = boxWidth / baseBoxWidth;
+  const maxLabelChars = Math.floor(baseLabelChars * widthScale);
+  const maxDetailChars = Math.floor(baseDetailChars * widthScale);
+  const contentWidth = maxCols * boxWidth + Math.max(0, maxCols - 1) * colGap;
 
-  const nodeText = new Map<string, { labelLines: string[]; detailLine: string | null; height: number }>();
+  const nodeText = new Map<string, { labelLines: string[]; detailLines: string[]; fullText: string; height: number }>();
   for (const id of nodeIds) {
     const raw = nodeById.get(id);
-    const labelLines = wrapDiagramText(raw?.label ?? id, maxLabelChars, 2);
-    const detailLine = raw?.detail ? (wrapDiagramText(raw.detail, maxDetailChars, 1)[0] ?? null) : null;
-    const height = 16 + labelLines.length * 14 + (detailLine ? 14 : 0);
-    nodeText.set(id, { labelLines, detailLine, height: Math.max(36, height) });
+    const label = raw?.label ?? id;
+    const labelLines = wrapDiagramText(label, maxLabelChars, 2);
+    const detailLines = raw?.detail ? wrapDiagramText(raw.detail, maxDetailChars, MAX_DETAIL_LINES) : [];
+    const fullText = raw?.detail ? `${label}: ${raw.detail}` : label;
+    const height = 16 + labelLines.length * 14 + (detailLines.length > 0 ? detailLines.length * DETAIL_LINE_H + 1 : 0);
+    nodeText.set(id, { labelLines, detailLines, fullText, height: Math.max(36, height) });
   }
 
   const rowOfNode = new Map<string, number>();
@@ -393,7 +410,7 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
     const startX = basePadX + (contentWidth - rowWidth) / 2;
 
     for (const [colIdx, id] of row.ids.entries()) {
-      const meta = nodeText.get(id) ?? { labelLines: [id], detailLine: null, height: 36 };
+      const meta = nodeText.get(id) ?? { labelLines: [id], detailLines: [], fullText: id, height: 36 };
       const node: PositionedFlowNode = {
         id,
         rank: row.rank,
@@ -404,7 +421,8 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
         width: boxWidth,
         height: meta.height,
         labelLines: meta.labelLines,
-        detailLine: meta.detailLine,
+        detailLines: meta.detailLines,
+        fullText: meta.fullText,
       };
       positionedNodes.push(node);
       positionedById.set(id, node);

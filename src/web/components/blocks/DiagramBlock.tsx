@@ -38,8 +38,20 @@ export function DiagramBlock({ block }: DiagramBlockProps) {
   const descId = `diag-desc-${safeId}`;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
+  const [paneWidth, setPaneWidth] = useState<number | undefined>(undefined);
 
-  const flow = useMemo(() => (block.layout === "flow" ? layoutFlowDiagram(block) : null), [block]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || block.layout !== "flow") return;
+    // Snap to 16px steps so small pane resizes do not re-run the layout on every pixel.
+    const measure = () => setPaneWidth(Math.floor(el.clientWidth / 16) * 16 || undefined);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    return () => observer?.disconnect();
+  }, [block.layout]);
+
+  const flow = useMemo(() => (block.layout === "flow" ? layoutFlowDiagram(block, paneWidth) : null), [block, paneWidth]);
   const seq = useMemo(() => (block.layout === "sequence" ? layoutSequenceDiagram(block) : null), [block]);
   const width = flow?.width ?? seq?.width ?? 280;
   const height = flow?.height ?? seq?.height ?? 120;
@@ -89,10 +101,11 @@ export function DiagramBlock({ block }: DiagramBlockProps) {
               </g>
               {flow.nodes.map((node) => {
                 const cx = node.x + node.width / 2;
-                const totalTextHeight = node.labelLines.length * 14 + (node.detailLine ? 13 : 0);
+                const totalTextHeight = node.labelLines.length * 14 + node.detailLines.length * 13;
                 const topTextY = node.y + (node.height - totalTextHeight) / 2 + 11;
                 return (
                   <g key={node.id}>
+                    <title>{node.fullText}</title>
                     <rect x={node.x} y={node.y} width={node.width} height={node.height} rx={7} fill="var(--card)" stroke="var(--border-strong)" strokeWidth={1.2} />
                     <text x={cx} textAnchor="middle" fill="var(--foreground)" fontSize={11.5} fontWeight={600}>
                       {node.labelLines.map((line, i) => (
@@ -101,9 +114,13 @@ export function DiagramBlock({ block }: DiagramBlockProps) {
                         </tspan>
                       ))}
                     </text>
-                    {node.detailLine ? (
-                      <text x={cx} y={topTextY + node.labelLines.length * 14} textAnchor="middle" fill="var(--muted-foreground)" fontSize={10} fontWeight={500}>
-                        {node.detailLine}
+                    {node.detailLines.length > 0 ? (
+                      <text textAnchor="middle" fill="var(--muted-foreground)" fontSize={10} fontWeight={500}>
+                        {node.detailLines.map((line, i) => (
+                          <tspan key={i} x={cx} y={topTextY + node.labelLines.length * 14 + i * 13}>
+                            {line}
+                          </tspan>
+                        ))}
                       </text>
                     ) : null}
                   </g>
