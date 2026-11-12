@@ -351,7 +351,8 @@ export function blocksToSpeechText(blocks: readonly ChatBlock[] | undefined): st
   return blocks.map(blockToSpeechText).filter(Boolean).join(" ");
 }
 
-const WORD_CHAR = /[\p{L}\p{N}_]/u;
+// Combining marks belong to the letter before them, so a match never ends between a letter and its accent.
+const WORD_CHAR = /[\p{L}\p{M}\p{N}_]/u;
 const HAS_WORD = /[\p{L}\p{N}]/u;
 // Marks matched text as used, so a shorter option never matches inside a longer one already found.
 const USED = "\u0000";
@@ -460,8 +461,10 @@ export function stripOptionTexts(text: string, optionTexts: readonly string[] | 
   const { folded, source } = foldForMatch(text);
   let work = folded;
   const removed: [number, number][] = [];
-  for (const opt of [...optionTexts].sort((a, b) => b.length - a.length)) {
-    const spans = foldedSpans(work, foldForMatch(opt).folded);
+  // Same order as the matcher (longest folded text first), so each stored text is found where the matcher found it.
+  const foldedOptions = optionTexts.map((opt) => foldForMatch(opt).folded).sort((a, b) => b.length - a.length);
+  for (const needle of foldedOptions) {
+    const spans = foldedSpans(work, needle);
     for (const [s, e] of spans) removed.push([source[s]!, source[e - 1]! + 1]);
     work = markUsed(work, spans);
   }

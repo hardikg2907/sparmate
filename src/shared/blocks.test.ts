@@ -266,6 +266,20 @@ describe("ChatBlockSchema", () => {
     );
   });
 
+  it("strips starters in the matcher's order even when one is padded with whitespace", () => {
+    const padded = "the  cache\n\n\n\n\n\nis";
+    expect(stripOptionTexts("the cache is warm and the cache is cold", [padded, "the cache is warm"])).toBe("and cold");
+  });
+
+  it("never ends a match between a letter and its combining mark", () => {
+    expect(stripOptionTexts("cafe\u0301 is open", ["cafe"])).toBe("cafe\u0301 is open");
+    const entries: { channel: string; role: string; blocks: ChatBlock[] }[] = [
+      { channel: "coach", role: "coach", blocks: [{ kind: "options", action: "prefill", items: [{ label: "Hi", reply: "say hi" }, { label: "No" }] }] },
+    ];
+    expect(matchUnsettledOptionTexts(entries, "coach", "say H\u0130 there")).toBeUndefined();
+    expect(stripOptionTexts("\u0130stanbul is big", ["\u0130stanbul is"])).toBe("big");
+  });
+
   it("leaves a message without option texts untouched", () => {
     expect(candidateOwnText({ text: "  . " })).toBe("  . ");
     expect(stripOptionTexts("Fan-out on read", ["Fan-out on write"])).toBe("Fan-out on read");
