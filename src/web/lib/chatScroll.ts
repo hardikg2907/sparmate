@@ -30,3 +30,16 @@ const READ_BACK_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
 export function scrollsBack(key: string): boolean {
   return READ_BACK_KEYS.has(key);
 }
+
+/** How far from the end the log must be before the jump button shows. A nudge of a few pixels never earns one. */
+export const JUMP_ZONE_PX = 96;
+
+/** The jump button shows only when the log has stopped following and he is well away from the end. */
+export function showJumpToLatest(following: boolean, fromEnd: number): boolean {
+  return !following && fromEnd > JUMP_ZONE_PX;
+}
+
+/** A wheel or trackpad turn that reads back. A sideways swipe with a little vertical drift is not one. */
+export function wheelReadsBack(deltaX: number, deltaY: number): boolean {
+  return deltaY < 0 && Math.abs(deltaY) > Math.abs(deltaX);
+}

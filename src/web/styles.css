@@ -920,6 +920,16 @@ body {
 .pop-in {
   animation: ir-pop-in 0.18s var(--ease-out-quick) backwards;
 }
+/* Frosted so the message under it stays legible; it sits at the right edge, away from the reading column. */
+.jump-latest {
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow: var(--elev-xs);
+}
+.jump-latest:hover {
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
 .page-enter {
   animation: ir-rise 0.36s var(--ease-out-quick) backwards;
 }
@@ -1011,6 +1021,22 @@ body {
 }
 ::view-transition-new(root) {
   animation: ir-fade-in 0.26s var(--ease-out-quick) both;
+}
+
+/*
+ * The coach pane morphs between its column and the full screen: the browser animates the named group's size and
+ * position. The page behind stays put, so the root cross-fade is off for that transition.
+ */
+.coach-pane {
+  view-transition-name: coach-pane;
+}
+:root[data-vt="pane"]::view-transition-old(root),
+:root[data-vt="pane"]::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(coach-pane) {
+  animation-duration: 0.3s;
+  animation-timing-function: var(--ease-out-quick);
 }
 
 /* Time past the plan is striped so it reads as "over" without colour alone. */

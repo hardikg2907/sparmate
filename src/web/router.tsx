@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from "react";
-import { flushSync } from "react-dom";
+import { withViewTransition } from "./lib/viewTransition";
 import { DrillTargetSchema, type DrillTarget } from "../shared/drills";
 
 export type PageName = "home" | "practice" | "practice-drills" | "practice-new" | "progress" | "settings" | "usage";
@@ -141,15 +141,9 @@ function withKeptParams(to: string): string {
 /**
  * Pages cross-fade where the browser supports view transitions. The address and the page change together inside
  * the callback, so nothing sees the new address while the old page (and a room's microphone) is still mounted.
- * React renders the new page synchronously there, because the new view is captured when the callback returns.
  */
 function crossFade(update: () => void): void {
-  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduced || typeof document.startViewTransition !== "function") {
-    update();
-    return;
-  }
-  document.startViewTransition(() => flushSync(update));
+  withViewTransition(update);
 }
 
 type NavigationGuard = (to: string, proceed: () => void) => void;

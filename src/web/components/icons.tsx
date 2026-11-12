@@ -166,6 +166,18 @@ export const ScanIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const ExpandIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M15 4h5v5M9 20H4v-5M20 4l-6 6M4 20l6-6" />
+  </Svg>
+);
+
+export const ShrinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 9h-5V4M4 15h5v5M15 9l6-6M9 15l-6 6" />
+  </Svg>
+);
+
 export const ChevronRightIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="m9 6 6 6-6 6" />

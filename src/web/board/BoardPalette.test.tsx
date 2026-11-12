@@ -26,13 +26,14 @@ describe("BoardPalette collapse", () => {
     expect(html).toContain('data-kind="client"');
     expect(html).toContain('aria-label="Hide the palette"');
     expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain("inert");
   });
 
-  it("opens as a slim rail with no shapes when the browser saved it collapsed", () => {
+  it("opens as a slim rail with its shapes out of reach when the browser saved it collapsed", () => {
     stubStorage("1");
     const html = render();
-    expect(html).not.toContain("ir-palette__item");
     expect(html).toContain("ir-palette--collapsed");
+    expect(html).toContain("inert");
     expect(html).toContain('aria-label="Show the palette"');
     expect(html).toContain('aria-expanded="false"');
   });

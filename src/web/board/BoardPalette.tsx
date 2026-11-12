@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "../components/icons";
-import { Tooltip } from "../components/ui";
+import { Tooltip, cn } from "../components/ui";
 import { ARROW_SPECS, HLD_SHAPES, LLD_SHAPES, type ArrowPreset, type ArrowSpec, type ShapeKind, type ShapeSpec, type StrokeStyle } from "./palette";
 
 export interface PaletteProps {
@@ -177,7 +177,7 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
         type="button"
         className="ir-palette__toggle flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         aria-expanded={!collapsed}
-        aria-controls={collapsed ? undefined : listId}
+        aria-controls={listId}
         aria-label={collapsed ? "Show the palette" : "Hide the palette"}
         onClick={toggleCollapsed}
       >
@@ -186,63 +186,69 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
     </Tooltip>
   );
 
-  if (collapsed) {
-    return (
-      <aside className="ir-palette ir-palette--collapsed flex w-10 shrink-0 flex-col items-center pt-2 text-ui text-foreground" data-theme={theme} aria-label="Board palette">
-        {toggle}
-      </aside>
-    );
-  }
-
   let index = -1;
   return (
-    <aside className="ir-palette flex w-44 shrink-0 flex-col max-md:w-12 text-ui text-foreground" data-theme={theme} aria-label="Board palette">
-      <div className="flex shrink-0 items-center justify-between px-2.5 pt-2 max-md:justify-center max-md:px-0">
-        <span className="text-meta font-semibold text-muted-foreground max-md:hidden">Palette</span>
-        {toggle}
-      </div>
+    <aside
+      className={cn(
+        "ir-palette relative shrink-0 overflow-hidden text-ui text-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none",
+        collapsed ? "ir-palette--collapsed w-10" : "w-44 max-md:w-12",
+      )}
+      data-theme={theme}
+      aria-label="Board palette"
+    >
+      {/* The toggle keeps to the right edge while the width changes, so it never jumps. */}
+      <div className="absolute right-1.5 top-2 z-10">{toggle}</div>
       <div
-        id={listId}
-        className="ir-palette__list min-h-0 flex-1 overflow-y-auto px-1.5 pt-2"
-        role="toolbar"
-        aria-orientation="vertical"
-        aria-label={track === "hld" ? "Add a component" : "Add a class or relation"}
-        onKeyDown={onKeyDown}
+        className={cn("flex h-full w-44 flex-col transition-opacity duration-150 motion-reduce:transition-none max-md:w-12", collapsed && "pointer-events-none opacity-0")}
+        inert={collapsed}
+        aria-hidden={collapsed}
       >
-        {sections.map((section) => (
-          <div key={section.heading} role="group" aria-label={section.heading} className="ir-palette__group mt-2 first:mt-0">
-            <div className="ir-palette__heading px-2 pt-0.5 pb-1.5 text-meta font-semibold text-muted-foreground max-md:hidden" aria-hidden="true">
-              {section.heading}
+        <div className="flex h-9 shrink-0 items-center px-2.5 pt-2 max-md:h-11">
+          <span className="text-meta font-semibold text-muted-foreground max-md:hidden">Palette</span>
+        </div>
+        <div
+          id={listId}
+          className="ir-palette__list min-h-0 flex-1 overflow-y-auto px-1.5 pt-2"
+          role="toolbar"
+          aria-orientation="vertical"
+          aria-label={track === "hld" ? "Add a component" : "Add a class or relation"}
+          onKeyDown={onKeyDown}
+        >
+          {sections.map((section) => (
+            <div key={section.heading} role="group" aria-label={section.heading} className="ir-palette__group mt-2 first:mt-0">
+              <div className="ir-palette__heading px-2 pt-0.5 pb-1.5 text-meta font-semibold text-muted-foreground max-md:hidden" aria-hidden="true">
+                {section.heading}
+              </div>
+              {section.entries.map((entry) => {
+                index += 1;
+                const i = index;
+                return (
+                  <Tooltip key={entry.id} content={`Add ${entry.title} to the board`} side="right">
+                    <button
+                      ref={(el) => {
+                        buttons.current[i] = el;
+                      }}
+                      type="button"
+                      className="ir-palette__item flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left max-md:min-h-9 max-md:justify-center max-md:px-0 text-ui font-medium disabled:cursor-default disabled:opacity-50"
+                      tabIndex={i === current ? 0 : -1}
+                      disabled={disabled}
+                      data-kind={entry.id}
+                      onFocus={() => setActive(i)}
+                      onClick={(event) => entry.run(event.detail > 0)}
+                    >
+                      {entry.swatch}
+                      <span className="ir-palette__label min-w-0 truncate max-md:sr-only">{entry.title}</span>
+                    </button>
+                  </Tooltip>
+                );
+              })}
             </div>
-            {section.entries.map((entry) => {
-              index += 1;
-              const i = index;
-              return (
-                <Tooltip key={entry.id} content={`Add ${entry.title} to the board`} side="right">
-                  <button
-                    ref={(el) => {
-                      buttons.current[i] = el;
-                    }}
-                    type="button"
-                    className="ir-palette__item flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left max-md:min-h-9 max-md:justify-center max-md:px-0 text-ui font-medium disabled:cursor-default disabled:opacity-50"
-                    tabIndex={i === current ? 0 : -1}
-                    disabled={disabled}
-                    data-kind={entry.id}
-                    onFocus={() => setActive(i)}
-                    onClick={(event) => entry.run(event.detail > 0)}
-                  >
-                    {entry.swatch}
-                    <span className="ir-palette__label min-w-0 truncate max-md:sr-only">{entry.title}</span>
-                  </button>
-                </Tooltip>
-              );
-            })}
-          </div>
-        ))}
+          ))}
+        </div>
+        <p className="ir-palette__hint shrink-0 border-t border-border px-3 pt-2 pb-2.5 text-meta text-faint max-md:hidden">
+          {track === "hld" ? "Double-click a shape to rename it." : "Select one or two shapes, then pick a relation. The first shape selected is the start."}
+        </p>
       </div>
-      <p className="ir-palette__hint shrink-0 border-t border-border px-3 pt-2 pb-2.5 text-meta text-faint max-md:hidden">
-        {track === "hld" ? "Double-click a shape to rename it." : "Select one or two shapes, then pick a relation. The first shape selected is the start."}
-      </p>
     </aside>
   );
 }

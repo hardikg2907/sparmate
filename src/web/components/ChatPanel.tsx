@@ -3,14 +3,14 @@ import { blocksToSpeechText, type AnchorTarget } from "../../shared/blocks";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { useVoiceOutput } from "../hooks/useVoiceOutput";
 import { CHAT_MAX_CHARS } from "../lib/contract";
-import { followAfterScroll, scrollsBack } from "../lib/chatScroll";
+import { followAfterScroll, scrollsBack, showJumpToLatest, wheelReadsBack } from "../lib/chatScroll";
 import { formatClock } from "../lib/format";
 import { isPanelActiveAndVisible } from "../lib/panelVisibility";
 import { useVoices, useVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 import type { AgentState, ChatItem } from "../session/types";
 import { ChatBlocks } from "./blocks/ChatBlocks";
 import { applyOptionChoice, applyPrefillToComposer, focusComposerInput, resolveOptionsState } from "./blocks/optionsState";
-import { ChevronDownIcon, MicIcon, MicOffIcon, SendIcon, VolumeXIcon } from "./icons";
+import { ChevronDownIcon, ExpandIcon, MicIcon, MicOffIcon, SendIcon, ShrinkIcon, VolumeXIcon } from "./icons";
 import { Markdown } from "./Markdown";
 import { Button, Badge, Tooltip, cn } from "./ui";
 
@@ -64,6 +64,8 @@ interface ChatPanelProps {
   onDraft?: () => void;
   /** Jumps to a board element or code line range referenced by an anchor block. */
   onAnchor?: (target: AnchorTarget) => void;
+  /** Shows a button in the header that fills the screen with this chat. The parent owns the layout change. */
+  focus?: { on: boolean; onToggle: () => void };
 }
 
 export function ChatPanel({
@@ -83,13 +85,14 @@ export function ChatPanel({
   afterOpening,
   onDraft,
   onAnchor,
+  focus,
 }: ChatPanelProps) {
   const panelRef = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const lastTop = useRef(0);
   const held = useRef(false);
-  const [atBottom, setAtBottom] = useState(true);
+  const [showJump, setShowJump] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const [focusSignal, setFocusSignal] = useState(0);
@@ -166,9 +169,16 @@ export function ChatPanel({
     }
   }, [items, speaker]);
 
+  // The button needs both: following has stopped and he is well away from the end. Either alone flickers it.
+  const syncJump = () => {
+    const el = scroller.current;
+    if (!el) return;
+    setShowJump(showJumpToLatest(stick.current, el.scrollHeight - el.scrollTop - el.clientHeight));
+  };
+
   const stopFollowing = () => {
     stick.current = false;
-    setAtBottom(false);
+    syncJump();
   };
 
   const onScroll = () => {
@@ -181,13 +191,13 @@ export function ChatPanel({
       clientHeight: el.clientHeight,
     });
     lastTop.current = el.scrollTop;
-    setAtBottom(stick.current);
+    syncJump();
   };
 
   // A streaming reply re-renders many times a second, and each render can land before the browser reports his
   // scroll. So intent is read from the input itself (wheel, key, a held pointer), not only from the scroll event.
-  const onWheel = (e: { deltaY: number }) => {
-    if (e.deltaY < 0) stopFollowing();
+  const onWheel = (e: { deltaX: number; deltaY: number }) => {
+    if (wheelReadsBack(e.deltaX, e.deltaY)) stopFollowing();
   };
   const onLogKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (scrollsBack(e.key)) stopFollowing();
@@ -209,12 +219,15 @@ export function ChatPanel({
       el.scrollTop = el.scrollHeight;
       lastTop.current = el.scrollTop;
     }
+    // New text can grow the log under a reader who stopped following, and no scroll event reports that.
+    syncJump();
   }, [items, busy]);
 
   const jumpToLatest = () => {
     const el = scroller.current;
     if (!el) return;
     stick.current = true;
+    setShowJump(false);
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
@@ -242,6 +255,21 @@ export function ChatPanel({
               <VolumeXIcon size={14} />
               <span>Stop speaking</span>
             </Button>
+          ) : null}
+          {focus ? (
+            <Tooltip content={focus.on ? "Back to the page" : "Fill the screen with the chat"} side="bottom">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={focus.onToggle}
+                aria-pressed={focus.on}
+                aria-label={focus.on ? "Leave full screen" : "Full screen"}
+                className="size-7 px-0"
+              >
+                {focus.on ? <ShrinkIcon size={14} /> : <ExpandIcon size={14} />}
+              </Button>
+            </Tooltip>
           ) : null}
           <span className="flex items-center gap-1.5 text-meta text-muted-foreground">
             <span
@@ -300,9 +328,9 @@ export function ChatPanel({
         <div className="sr-only" role="status" aria-live="polite">
           {announcement}
         </div>
-        {!atBottom ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-            <Button type="button" variant="outline" size="sm" onClick={jumpToLatest} className="pointer-events-auto pop-in rounded-full shadow-md">
+        {showJump ? (
+          <div className="pointer-events-none absolute bottom-3 right-5 flex justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={jumpToLatest} className="jump-latest pointer-events-auto pop-in rounded-full">
               <ChevronDownIcon size={14} />
               Jump to latest
             </Button>

@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { AnchorTarget } from "../../shared/blocks";
 import { stepOfElement } from "../../shared/graph/frames";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -19,13 +19,15 @@ import { TimingRows } from "../components/debrief/Timing";
 import { ScoreRow, VerdictCard, jumpTo } from "../components/debrief/Verdict";
 import { ArrowLeftIcon, WarnIcon } from "../components/icons";
 import { ConnectionBanner, MessageBanners } from "../components/Notices";
-import { Banner, Badge, Button, Card, SectionTitle } from "../components/ui";
+import { Banner, Badge, Button, Card, SectionTitle, cn } from "../components/ui";
 import { currentGap, gapCounts, gapMarks, gapState, type GapMark } from "../lib/gapMarks";
 import { nextAction } from "../lib/debriefNext";
 import { gapDividerText, teachMessage } from "../../shared/gaps";
 import { notesWereSaved } from "../../shared/studyNotes";
 import { MODE_LABEL, TRACK_LABEL, TRACK_TITLE, formatDate } from "../lib/format";
 import { debriefClockText, finalRoundMs, phaseSpentMs } from "../lib/timing";
+import { useUrlFlag } from "../lib/useUrlFlag";
+import { withViewTransition } from "../lib/viewTransition";
 import { scrollToInScroller } from "../lib/scrollInScroller";
 import { Link, navigate } from "../router";
 import type { ChatItem, SessionController } from "../session/types";
@@ -44,6 +46,21 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
   const [tab, setTab] = useState<DetailTab>("evidence");
   const [view, setView] = useState<EvidenceView>("step");
   const [codeReveal, setCodeReveal] = useState<CodeReveal | null>(null);
+  // In the address as ?focus=coach, so a reload keeps the full screen.
+  const [coachFocus, setCoachFocus] = useUrlFlag("focus", "coach");
+  const mainRef = useRef<HTMLElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const savedScroll = useRef({ main: 0, page: 0 });
+  const focusCoach = (on: boolean) => {
+    // The scorecard is not rendered while the chat fills the screen, so where it was scrolled to is kept here.
+    if (on) savedScroll.current = { main: mainRef.current?.scrollTop ?? 0, page: pageRef.current?.scrollTop ?? 0 };
+    withViewTransition(() => setCoachFocus(on), "pane");
+  };
+  useLayoutEffect(() => {
+    if (coachFocus) return;
+    if (mainRef.current) mainRef.current.scrollTop = savedScroll.current.main;
+    if (pageRef.current) pageRef.current.scrollTop = savedScroll.current.page;
+  }, [coachFocus]);
   const [focusedElementId, setFocusedElementId] = useState<string | null>(null);
   const stacked = useMediaQuery("(width < 48rem)");
   const scorecard = session.scorecard;
@@ -65,8 +82,27 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
     ) : null;
   const marks = useGapMarks(scorecard, session, ctl.chat.coach);
 
+  // Escape leaves the full screen unless the chat used it to stop speech, which marks the event handled first.
+  useEffect(() => {
+    if (!coachFocus) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) withViewTransition(() => setCoachFocus(false), "pane");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [coachFocus, setCoachFocus]);
+
+  const banners = (
+    <>
+      <ConnectionBanner status={state.connection} onRetry={actions.reconnect} />
+      <MessageBanners state={state} actions={actions} />
+    </>
+  );
+
   const handleAnchor = (target: AnchorTarget) => {
     if (!scorecard) return;
+    // An anchor points into the scorecard, which is not on screen while the chat fills it.
+    if (coachFocus) withViewTransition(() => setCoachFocus(false), "pane");
     if (target.kind === "code") {
       if (session.track !== "lld") return;
       setTab("judge");
@@ -109,66 +145,75 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
 
   return (
     <div className="fade-in flex h-full min-h-0 flex-col overflow-clip">
-      <header className="header-hairline relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card px-3 shadow-xs sm:px-4">
-        <Link href="/" aria-label="Back to Today" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
-          <ArrowLeftIcon size={16} />
-        </Link>
-        <h1 className="min-w-0 truncate text-lead font-bold tracking-[-0.01em]" title={session.title}>
-          {session.title}
-        </h1>
-        <span className="hidden shrink-0 text-ui text-muted-foreground sm:inline" title={TRACK_TITLE[session.track]}>
-          {TRACK_LABEL[session.track]} {MODE_LABEL[session.mode].toLowerCase()}, {formatDate(session.createdAt)}
-          {roundMs !== null ? `, ${debriefClockText(session.mode, roundMs, session.clock.durationMs)}` : ""}
-        </span>
-        {session.status === "debriefed" ? null : (
-          <span className="ml-auto">
-            <StatusChip status={session.status} />
+      {coachFocus ? null : (
+        <header className="header-hairline relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card px-3 shadow-xs sm:px-4">
+          <Link href="/" aria-label="Back to Today" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            <ArrowLeftIcon size={16} />
+          </Link>
+          <h1 className="min-w-0 truncate text-lead font-bold tracking-[-0.01em]" title={session.title}>
+            {session.title}
+          </h1>
+          <span className="hidden shrink-0 text-ui text-muted-foreground sm:inline" title={TRACK_TITLE[session.track]}>
+            {TRACK_LABEL[session.track]} {MODE_LABEL[session.mode].toLowerCase()}, {formatDate(session.createdAt)}
+            {roundMs !== null ? `, ${debriefClockText(session.mode, roundMs, session.clock.durationMs)}` : ""}
           </span>
+          {session.status === "debriefed" ? null : (
+            <span className="ml-auto">
+              <StatusChip status={session.status} />
+            </span>
+          )}
+        </header>
+      )}
+
+      {coachFocus ? null : banners}
+
+      <div ref={pageRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-clip">
+        {coachFocus ? null : (
+          <main ref={mainRef} className="page-canvas relative min-w-0 flex-1 overflow-y-auto max-md:flex-none max-md:overflow-visible" tabIndex={-1}>
+            <div className="reveal-children mx-auto max-w-4xl space-y-6 px-4 pb-20 pt-6 sm:px-8">
+              {session.status === "debriefing" ? (
+                <DebriefProgress track={session.track} debrief={state.debrief}>
+                  <WhileYouWait session={session} />
+                </DebriefProgress>
+              ) : null}
+              {session.status === "failed" ? <DebriefFailed onRetry={actions.retryDebrief} connected={connected} /> : null}
+              {scorecard ? (
+                <ScorecardBody
+                  ctl={ctl}
+                  session={session}
+                  scorecard={scorecard}
+                  theme={theme}
+                  boardImageUrl={boardImageUrl}
+                  marks={marks}
+                  tab={tab}
+                  onTab={setTab}
+                  view={view}
+                  onView={setView}
+                  codeReveal={codeReveal}
+                  focusedElementId={focusedElementId}
+                />
+              ) : session.status === "debriefed" ? (
+                <Card className="p-6 text-ui text-muted-foreground">The scorecard is not available for this session.</Card>
+              ) : null}
+            </div>
+          </main>
         )}
-      </header>
 
-      <ConnectionBanner status={state.connection} onRetry={actions.reconnect} />
-      <MessageBanners state={state} actions={actions} />
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-clip">
-        <main className="page-canvas relative min-w-0 flex-1 overflow-y-auto max-md:flex-none max-md:overflow-visible" tabIndex={-1}>
-          <div className="reveal-children mx-auto max-w-4xl space-y-6 px-4 pb-20 pt-6 sm:px-8">
-            {session.status === "debriefing" ? (
-              <DebriefProgress track={session.track} debrief={state.debrief}>
-                <WhileYouWait session={session} />
-              </DebriefProgress>
-            ) : null}
-            {session.status === "failed" ? <DebriefFailed onRetry={actions.retryDebrief} connected={connected} /> : null}
-            {scorecard ? (
-              <ScorecardBody
-                ctl={ctl}
-                session={session}
-                scorecard={scorecard}
-                theme={theme}
-                boardImageUrl={boardImageUrl}
-                marks={marks}
-                tab={tab}
-                onTab={setTab}
-                view={view}
-                onView={setView}
-                codeReveal={codeReveal}
-                focusedElementId={focusedElementId}
-              />
-            ) : session.status === "debriefed" ? (
-              <Card className="p-6 text-ui text-muted-foreground">The scorecard is not available for this session.</Card>
-            ) : null}
+        {coachFocus ? null : (
+          <div className="hidden md:flex">
+            <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
           </div>
-        </main>
-
-        <div className="hidden md:flex">
-          <ChatResizeHandle width={chatWidth} onChange={setChatWidth} />
-        </div>
+        )}
         {/* Below the md breakpoint the coach sits under the scorecard, at the end of one scrolling page, so the score gets the whole screen on a phone. */}
         <aside
           data-nested-scroll={stacked ? "" : undefined}
           style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
-          className="flex h-[80dvh] min-h-0 shrink-0 flex-col border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0"
+          className={cn(
+            "coach-pane flex min-h-0 shrink-0 flex-col",
+            coachFocus ? "w-full min-w-0 flex-1" : "h-[80dvh] border-t border-border md:h-auto md:w-[var(--chat-width)] md:border-l md:border-t-0",
+          )}
         >
+          {coachFocus ? banners : null}
           {coach.state === "error" ? (
             <Banner tone="bad" role="alert">
               <WarnIcon size={16} />
@@ -180,6 +225,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
           <div className="min-h-0 flex-1">
             <ChatPanel
               heading="Coach"
+              focus={{ on: coachFocus, onToggle: () => focusCoach(!coachFocus) }}
               speaker="Coach"
               items={ctl.chat.coach}
               agent={coach}
