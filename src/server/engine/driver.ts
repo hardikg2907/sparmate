@@ -81,6 +81,8 @@ export interface TurnStats {
 export interface TurnReply {
   text: string;
   stats: TurnStats;
+  /** True when `text` leaves out a draft that already streamed, because the model wrote the reply again in new words. */
+  superseded?: boolean;
 }
 
 export interface Conversation {
@@ -141,6 +143,11 @@ export interface RoleSetup {
 
 export interface ConversationSetup extends RoleSetup {
   resumeSessionId: string | null;
+  /**
+   * The role sends its visible reply through a `reply` tool, and text it writes outside that tool stays hidden. The
+   * Claude driver adds the tool; the fake driver already answers with one reply.
+   */
+  replyTool?: boolean;
 }
 
 export interface StructuredOutputSpec<T> {

@@ -93,6 +93,7 @@ import {
   parseStamp,
   replayTurn,
   requestTurn,
+  cleanReply,
   roundTranscript,
   runResultText,
   runSummary,
@@ -1298,7 +1299,8 @@ export class SessionRuntime {
         this.keepPartial(ch, f, entryId);
         return;
       }
-      const text = f.finish();
+      const streamedText = f.finish();
+      const text = reply.superseded ? cleanReply(reply.text) : streamedText;
       const silent = isSilentReply(reply.text);
       // A hint turn that skipped note_hint may still be on the first two rungs, where option chips give too much away.
       const unrecordedHint = ch.name === "interview" && built.turn.meta.request === "hint" && ch.hintLevelThisTurn === null;
@@ -1763,6 +1765,7 @@ export class SessionRuntime {
           focus: focusText(this.session.focus, this.phases.find((p) => p.id === this.session.focus?.source?.step)?.label ?? null),
         }),
       tools: this.interviewTools(ch),
+      replyTool: true,
       fake: {
         problem: this.problem,
         phases: this.phases,
@@ -1789,6 +1792,7 @@ export class SessionRuntime {
         });
       },
       tools: this.coachTools(ch),
+      replyTool: true,
       fake: { problem: this.problem, scorecard: this.session.scorecard, track: this.session.track, mode: this.session.mode, session: () => this.session },
       usage: { sessionId: this.session.id, problemId: this.session.problemId, track: this.session.track, mode: this.session.mode },
     };
@@ -1928,6 +1932,7 @@ export class SessionRuntime {
         ),
         createEmitBlockTool({
           channel: "interview",
+          repliesThroughTool: true,
           track: this.session.track,
           pendingCount: () => ch.pendingBlocks.length,
           pushBlock: (block) => {
@@ -2081,6 +2086,7 @@ export class SessionRuntime {
       }),
       createEmitBlockTool({
         channel: "coach",
+        repliesThroughTool: true,
         track: this.session.track,
         pendingCount: () => ch.pendingBlocks.length,
         pushBlock: (block) => {

@@ -33,6 +33,8 @@ export interface EmitBlockContext {
   boardElements(): readonly Record<string, unknown>[];
   readCode(): Promise<string> | string;
   stepCode?: () => Readonly<Record<string, readonly string[]>>;
+  /** The role sends its text through the reply tool, so nothing it wrote before this call is on screen yet. */
+  repliesThroughTool?: boolean;
 }
 
 function findBoardTarget(elements: readonly Record<string, unknown>[], elementId: string): { exists: boolean; step: string | null } {
@@ -141,7 +143,8 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
         return textOutput(`At most ${MAX_BLOCKS_PER_TURN} blocks may be emitted per reply.`, true);
       }
       const count = ctx.pushBlock(block);
-      return textOutput(`Queued ${block.kind} block (${count}/${MAX_BLOCKS_PER_TURN}).`);
+      const queued = `Queued ${block.kind} block (${count}/${MAX_BLOCKS_PER_TURN}).`;
+      return textOutput(ctx.repliesThroughTool ? queued : `${queued} Any reply text you already wrote is kept, so do not write it again.`);
     },
   );
 }
