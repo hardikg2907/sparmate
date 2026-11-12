@@ -3,7 +3,7 @@ import { unwatchFile, watch, watchFile, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { z } from "zod";
-import { candidateOwnText, matchUnsettledOptionText, type ChatBlock } from "../../shared/blocks";
+import { candidateOwnText, matchUnsettledOptionTexts, type ChatBlock } from "../../shared/blocks";
 import { deriveChecklist } from "../../shared/checklist";
 import { gapDividerText, gapForTeachMessage } from "../../shared/gaps";
 import { frameEvidence, pinTargets, pinTargetsText, stepFrames, withFrameMembership } from "../../shared/graph/frames";
@@ -448,7 +448,7 @@ export class SessionRuntime {
       // A round that stopped before its opening reply still owes him the opening, ahead of anything he said.
       if (!s.transcript.some((e) => e.channel === "interview" && e.role === "interviewer")) this.interview.queue.push(this.openingTurn());
       const last = [...s.transcript].reverse().find((e) => e.channel === "interview" && e.role !== "system");
-      if (last?.role === "candidate") this.interview.queue.push(this.candidateTurn(last.text));
+      if (last?.role === "candidate") this.interview.queue.push(this.candidateTurn(last.text, last.optionTexts));
       if (s.status === "paused" && s.pauseReason === "error") {
         this.interview.status = "error";
         this.interview.error = "The interviewer could not answer. Press Retry to continue.";
@@ -705,19 +705,19 @@ export class SessionRuntime {
   private onChat(channel: Channel, text: string, clientMsgId: string): void {
     if (channel === "coach") {
       if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
-      const optionText = matchUnsettledOptionText(this.session.transcript, "coach", text);
-      const entry = this.addEntry({ channel: "coach", role: "candidate", text, ...(optionText !== undefined ? { optionText } : {}) }, clientMsgId);
+      const optionTexts = matchUnsettledOptionTexts(this.session.transcript, "coach", text);
+      const entry = this.addEntry({ channel: "coach", role: "candidate", text, ...(optionTexts ? { optionTexts } : {}) }, clientMsgId);
       this.noteTeachRequest(text);
       if (this.coach.status === "error") this.retry(this.coach);
-      this.enqueue(this.coach, this.coachCandidateTurn(text, entry.optionText));
+      this.enqueue(this.coach, this.coachCandidateTurn(text, entry.optionTexts));
       return;
     }
     this.requireLiveRound();
-    const optionText = matchUnsettledOptionText(this.session.transcript, "interview", text);
-    const entry = this.addEntry({ channel: "interview", role: "candidate", text, ...(optionText !== undefined ? { optionText } : {}) }, clientMsgId);
+    const optionTexts = matchUnsettledOptionTexts(this.session.transcript, "interview", text);
+    const entry = this.addEntry({ channel: "interview", role: "candidate", text, ...(optionTexts ? { optionTexts } : {}) }, clientMsgId);
     this.lastCandidateAt = entry.at;
     this.markActive();
-    this.enqueue(this.interview, this.candidateTurn(text, entry.optionText));
+    this.enqueue(this.interview, this.candidateTurn(text, entry.optionTexts));
   }
 
   private async onBoardUpdate(version: number, elements: Record<string, unknown>[]): Promise<void> {
@@ -1460,12 +1460,12 @@ export class SessionRuntime {
     };
   }
 
-  private candidateTurn(text: string, optionText?: string): QueuedTurn {
+  private candidateTurn(text: string, optionTexts?: readonly string[]): QueuedTurn {
     return {
       kind: "candidate",
       build: () => {
         const { view, commit } = this.interviewContext(this.interview);
-        return { turn: { text: candidateEnvelope(view, text, optionText), meta: { kind: "candidate", candidateText: text } }, commit };
+        return { turn: { text: candidateEnvelope(view, text, optionTexts), meta: { kind: "candidate", candidateText: text } }, commit };
       },
       after: () => this.afterInterviewerTurn(),
     };
@@ -1674,12 +1674,12 @@ export class SessionRuntime {
     };
   }
 
-  private coachCandidateTurn(text: string, optionText?: string): QueuedTurn {
+  private coachCandidateTurn(text: string, optionTexts?: readonly string[]): QueuedTurn {
     return {
       kind: "candidate",
       build: () => {
         const { view, commit } = this.coachContext(this.coach);
-        return { turn: { text: candidateEnvelope(view, text, optionText), meta: { kind: "candidate", candidateText: text } }, commit };
+        return { turn: { text: candidateEnvelope(view, text, optionTexts), meta: { kind: "candidate", candidateText: text } }, commit };
       },
     };
   }
@@ -2633,7 +2633,7 @@ export class SessionRuntime {
       blocks?: ChatBlock[];
       kind?: TranscriptEntry["kind"];
       hidden?: boolean;
-      optionText?: string;
+      optionTexts?: string[];
     },
     clientMsgId?: string,
   ): TranscriptEntry {
@@ -2647,7 +2647,7 @@ export class SessionRuntime {
       ...(e.blocks && e.blocks.length > 0 ? { blocks: e.blocks } : {}),
       ...(e.kind ? { kind: e.kind } : {}),
       ...(e.hidden ? { hidden: true } : {}),
-      ...(e.optionText !== undefined ? { optionText: e.optionText } : {}),
+      ...(e.optionTexts && e.optionTexts.length > 0 ? { optionTexts: e.optionTexts } : {}),
     };
     this.session.transcript.push(entry);
     if (entry.channel === "interview" && entry.role === "interviewer" && !entry.hidden) this.spokeAt = entry.at;

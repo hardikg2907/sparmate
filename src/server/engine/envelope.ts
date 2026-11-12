@@ -143,14 +143,14 @@ export function contextBlock(v: ContextView): string {
 }
 
 /** The candidate's words go in verbatim; the model never sees them without the context around them. */
-export function candidateEnvelope(v: ContextView, text: string, optionText?: string): string {
-  if (optionText === undefined || optionText.trim() === "") {
+export function candidateEnvelope(v: ContextView, text: string, optionTexts?: readonly string[]): string {
+  const picked = (optionTexts ?? []).filter((o) => o.trim() !== "");
+  if (picked.length === 0) {
     return `${contextBlock(v)}\n<candidate>\n${text}\n</candidate>`;
   }
-  const own = candidateOwnText({ text, optionText });
-  const flatOption = optionText.replace(/\s+/g, " ").trim();
-  const optionEvent = own === "" ? "candidate picked option" : `candidate picked option: ${flatOption}`;
-  return `${contextBlock({ ...v, events: [...(v.events ?? []), optionEvent] })}\n<candidate>\n${text}\n</candidate>`;
+  const own = candidateOwnText({ text, optionTexts: picked });
+  const optionEvents = own === "" ? ["candidate picked option"] : picked.map((o) => `candidate picked option: ${o.replace(/\s+/g, " ").trim()}`);
+  return `${contextBlock({ ...v, events: [...(v.events ?? []), ...optionEvents] })}\n<candidate>\n${text}\n</candidate>`;
 }
 
 export function startTurn(v: ContextView): string {
@@ -307,9 +307,9 @@ export function transcriptLines(entries: readonly TranscriptEntry[], channel: Tr
       const content = entryText(e);
       if (e.role === "system") return `${stamp} (event) ${content}`;
       // Guide-written option words are never the candidate's own evidence, while any typed extension stays under candidate:.
-      if (e.role === "candidate" && e.optionText) {
+      if (e.role === "candidate" && e.optionTexts && e.optionTexts.length > 0) {
         const own = candidateOwnText(e);
-        const picked = `${stamp} (event) candidate picked option: ${e.optionText}`;
+        const picked = e.optionTexts.map((o) => `${stamp} (event) candidate picked option: ${o}`).join("\n");
         return own === "" ? picked : `${picked}\n${stamp} candidate: ${own}`;
       }
       return `${stamp} ${e.role}: ${content}`;
@@ -336,9 +336,9 @@ export function parseStamp(stamp: string): number | null {
 function readableLine(e: TranscriptEntry): string | null {
   const stamp = `[${formatStamp(e.at)}]`;
   const body = (text: string) => text.replace(/\r\n?|[\n\u0085\u2028\u2029]/g, "\n    ");
-  if (e.role === "candidate" && e.optionText) {
+  if (e.role === "candidate" && e.optionTexts && e.optionTexts.length > 0) {
     const own = candidateOwnText(e);
-    const picked = `${stamp} (event) candidate picked option: ${body(e.optionText)}`;
+    const picked = e.optionTexts.map((o) => `${stamp} (event) candidate picked option: ${body(o)}`).join("\n");
     return own === "" ? picked : `${picked}\n${stamp} candidate: ${body(own)}`;
   }
   if (e.role !== "system") return `${stamp} ${e.role}: ${body(entryText(e))}`;

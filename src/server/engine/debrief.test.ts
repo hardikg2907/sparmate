@@ -433,7 +433,7 @@ describe("stepSources", () => {
       mode: "guided",
       hints: [],
       extension: null,
-      transcript: [entry("1", MIN, "latency under 50 ms"), { ...entry("opt", 2 * MIN, "Fan-out on write — Fast reads"), optionText: "Fan-out on write — Fast reads" }],
+      transcript: [entry("1", MIN, "latency under 50 ms"), { ...entry("opt", 2 * MIN, "Fan-out on write — Fast reads"), optionTexts: ["Fan-out on write — Fast reads"] }],
     } as unknown as Session;
 
     expect(candidateText(withOption)).toContain("latency under 50 ms");
@@ -463,7 +463,7 @@ describe("stepSources", () => {
     expect(msg).not.toContain("[02:00] candidate:");
   });
 
-  it("strips optionText from extended prefill entries so option quotes fail while the candidate's own added words verify", () => {
+  it("strips optionTexts from extended prefill entries so option quotes fail while the candidate's own added words verify", () => {
     const withExtendedPrefill = {
       ...session,
       mode: "guided",
@@ -472,7 +472,7 @@ describe("stepSources", () => {
       transcript: [
         {
           ...entry("ext", 2 * MIN, "Fan-out on write — Fast reads, with a pull fallback for celebrity accounts."),
-          optionText: "Fan-out on write — Fast reads",
+          optionTexts: ["Fan-out on write — Fast reads"],
         },
       ],
     } as unknown as Session;

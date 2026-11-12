@@ -155,7 +155,7 @@ describe("mergeCheck", () => {
     });
     const optText = "Users create short links and redirects add under 50 ms at p99.";
     const withOptionClick = evidence({
-      chat: [entry("a", 10_000, "interviewer", "Pick one option."), { ...entry("opt", 20_000, "candidate", optText), optionText: optText }],
+      chat: [entry("a", 10_000, "interviewer", "Pick one option."), { ...entry("opt", 20_000, "candidate", optText), optionTexts: [optText] }],
     });
 
     expect(evidenceKey(withOptionClick)).toBe(evidenceKey(base));
@@ -173,7 +173,7 @@ describe("mergeCheck", () => {
     expect(check.items).toEqual({});
   });
 
-  it("rejects quotes from optionText while accepting quotes from the candidate's own added words on an extended prefill", () => {
+  it("rejects quotes from optionTexts while accepting quotes from the candidate's own added words on an extended prefill", () => {
     const base = evidence({
       chat: [entry("a", 10_000, "interviewer", "Start from one of these drafts.")],
     });
@@ -182,7 +182,7 @@ describe("mergeCheck", () => {
         entry("a", 10_000, "interviewer", "Start from one of these drafts."),
         {
           ...entry("ext", 20_000, "candidate", "Users create short links. A redirect should add under 50 ms at p99."),
-          optionText: "Users create short links.",
+          optionTexts: ["Users create short links."],
         },
       ],
     });

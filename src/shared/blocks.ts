@@ -351,76 +351,138 @@ export function blocksToSpeechText(blocks: readonly ChatBlock[] | undefined): st
   return blocks.map(blockToSpeechText).filter(Boolean).join(" ");
 }
 
-function findOptionSpan(normText: string, normOpt: string): { start: number; end: number } | null {
-  if (!normOpt) return null;
-  let from = 0;
-  while (from <= normText.length - normOpt.length) {
-    const idx = normText.indexOf(normOpt, from);
-    if (idx === -1) return null;
-    const end = idx + normOpt.length;
-    const leftOk = idx === 0 || !/\w/.test(normOpt[0]!) || !/\w/.test(normText[idx - 1]!);
-    const rightOk = end === normText.length || !/\w/.test(normOpt[normOpt.length - 1]!) || !/\w/.test(normText[end]!);
-    if (leftOk && rightOk) return { start: idx, end };
-    from = idx + 1;
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+const HAS_WORD = /[\p{L}\p{N}]/u;
+// Marks matched text as used, so a shorter option never matches inside a longer one already found.
+const USED = "\u0000";
+
+/**
+ * Text folded for matching: whitespace runs become one space, ends are dropped, and case is folded. `source` maps
+ * each folded character back to its index in the original, so a match can be cut out of the text the candidate sent.
+ */
+function foldForMatch(text: string): { folded: string; source: number[] } {
+  let folded = "";
+  const source: number[] = [];
+  let spaceAt = -1;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (/\s/.test(ch)) {
+      if (spaceAt < 0) spaceAt = i;
+      continue;
+    }
+    if (spaceAt >= 0 && folded.length > 0) {
+      folded += " ";
+      source.push(spaceAt);
+    }
+    spaceAt = -1;
+    for (const lower of ch.toLowerCase()) {
+      folded += lower;
+      source.push(i);
+    }
   }
-  return null;
+  return { folded, source };
+}
+
+/** Whole-word occurrences of `needle` in `folded`, as folded index ranges. */
+function foldedSpans(folded: string, needle: string): [number, number][] {
+  const spans: [number, number][] = [];
+  if (!needle) return spans;
+  let from = 0;
+  while (from <= folded.length - needle.length) {
+    const idx = folded.indexOf(needle, from);
+    if (idx === -1) break;
+    const end = idx + needle.length;
+    const leftOk = idx === 0 || !WORD_CHAR.test(needle[0]!) || !WORD_CHAR.test(folded[idx - 1]!);
+    const rightOk = end === folded.length || !WORD_CHAR.test(needle[needle.length - 1]!) || !WORD_CHAR.test(folded[end]!);
+    if (leftOk && rightOk) {
+      spans.push([idx, end]);
+      from = end;
+    } else {
+      from = idx + 1;
+    }
+  }
+  return spans;
+}
+
+function markUsed(folded: string, spans: readonly [number, number][]): string {
+  let out = folded;
+  for (const [s, e] of spans) out = out.slice(0, s) + USED.repeat(e - s) + out.slice(e);
+  return out;
 }
 
 /**
- * Matches an incoming candidate message against the `reply ?? label` texts of the latest unsettled `options`
- * block on `channel` (an assistant turn with no non-system turn after it). Returns the matched option text
- * so evidence checks strip guide-authored words from both `send` clicks and unedited or extended `prefill` drafts.
+ * The option texts in a candidate message, from the latest unsettled `options` block on `channel` (an assistant turn
+ * with no non-system turn after it). A whole message that equals any option is a pick. A click on a `send` option
+ * sends its text unchanged, so only a `prefill` starter can sit inside longer text; matching a send label inside
+ * typed text would take the candidate's own words away from them.
  */
-export function matchUnsettledOptionText(
+export function matchUnsettledOptionTexts(
   entries: readonly { channel: string; role: string; blocks?: readonly ChatBlock[] }[],
   channel: string,
   candidateText: string,
-): string | undefined {
+): string[] | undefined {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (!entry || entry.channel !== channel || entry.role === "system") continue;
     if (entry.role !== "interviewer" && entry.role !== "coach") return undefined;
-    const candidates: string[] = [];
+    const options: { text: string; folded: string; prefill: boolean }[] = [];
     for (const block of entry.blocks ?? []) {
       if (block.kind !== "options") continue;
       for (const item of block.items) {
-        const opt = (item.reply ?? item.label).replace(/\r\n?/g, "\n").trim();
-        if (opt && !candidates.includes(opt)) candidates.push(opt);
+        const text = (item.reply ?? item.label).trim();
+        const folded = foldForMatch(text).folded;
+        if (folded && !options.some((o) => o.folded === folded && o.prefill === (block.action === "prefill"))) {
+          options.push({ text, folded, prefill: block.action === "prefill" });
+        }
       }
     }
-    if (candidates.length === 0) return undefined;
-    const normCandidate = candidateText.replace(/\r\n?/g, "\n");
-    const trimmedCandidate = normCandidate.trim();
-    for (const opt of candidates) {
-      if (trimmedCandidate === opt) return opt;
+    if (options.length === 0) return undefined;
+    let remaining = foldForMatch(candidateText).folded;
+    const whole = options.find((o) => o.folded === remaining);
+    if (whole) return [whole.text];
+    const matched: string[] = [];
+    for (const o of options.filter((x) => x.prefill).sort((a, b) => b.folded.length - a.folded.length)) {
+      const spans = foldedSpans(remaining, o.folded);
+      if (spans.length === 0) continue;
+      if (!matched.includes(o.text)) matched.push(o.text);
+      remaining = markUsed(remaining, spans);
     }
-    const byLength = [...candidates].sort((a, b) => b.length - a.length);
-    for (const opt of byLength) {
-      if (findOptionSpan(normCandidate, opt)) return opt;
-    }
-    return undefined;
+    return matched.length > 0 ? matched : undefined;
   }
   return undefined;
 }
 
-/** Removes matched guide-authored option text from a candidate message, leaving only the candidate's own words. */
-export function stripOptionText(text: string, optionText: string | undefined): string {
-  if (!optionText) return text;
-  const normText = text.replace(/\r\n?/g, "\n");
-  const normOpt = optionText.replace(/\r\n?/g, "\n").trim();
-  if (!normOpt) return text;
-  const fallbackIdx = normText.indexOf(normOpt);
-  const span = findOptionSpan(normText, normOpt) ?? (fallbackIdx >= 0 ? { start: fallbackIdx, end: fallbackIdx + normOpt.length } : null);
-  if (!span) return text;
-  const before = normText.slice(0, span.start).trimEnd();
-  const after = normText.slice(span.end).trimStart();
-  if (!before && !after) return "";
-  if (!before) return after;
-  if (!after) return before;
-  const windowSlice = normText.slice(Math.max(0, span.start - 1), Math.min(normText.length, span.end + 1));
-  return `${before}${windowSlice.includes("\n") ? "\n" : " "}${after}`;
+/**
+ * Removes guide- or coach-written option text from a candidate message, leaving only the candidate's own words.
+ * What is left with no letter or digit is empty, so a starter sent with only "." added is not evidence.
+ */
+export function stripOptionTexts(text: string, optionTexts: readonly string[] | undefined): string {
+  if (!optionTexts || optionTexts.length === 0) return text;
+  const { folded, source } = foldForMatch(text);
+  let work = folded;
+  const removed: [number, number][] = [];
+  for (const opt of [...optionTexts].sort((a, b) => b.length - a.length)) {
+    const spans = foldedSpans(work, foldForMatch(opt).folded);
+    for (const [s, e] of spans) removed.push([source[s]!, source[e - 1]! + 1]);
+    work = markUsed(work, spans);
+  }
+  if (removed.length === 0) return text;
+  removed.sort((a, b) => a[0] - b[0]);
+  let out = "";
+  let cursor = 0;
+  let sep = "";
+  for (const [s, e] of removed) {
+    const piece = text.slice(cursor, s).trim();
+    if (piece) out = out ? `${out}${sep}${piece}` : piece;
+    sep = /[\r\n]/.test(text.slice(Math.max(0, s - 1), Math.min(text.length, e + 1))) ? "\n" : " ";
+    cursor = e;
+  }
+  const tail = text.slice(cursor).trim();
+  if (tail) out = out ? `${out}${sep}${tail}` : tail;
+  out = out.replace(/\r\n?/g, "\n");
+  return HAS_WORD.test(out) ? out : "";
 }
 
-export function candidateOwnText(entry: { text: string; optionText?: string }): string {
-  return stripOptionText(entry.text, entry.optionText);
+export function candidateOwnText(entry: { text: string; optionTexts?: readonly string[] }): string {
+  return stripOptionTexts(entry.text, entry.optionTexts);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { ChatBlockSchema, blocksToPlainText, blocksToSpeechText, candidateOwnText, matchUnsettledOptionText, sanitizeChatBlock, stripOptionText, type ChatBlock } from "./blocks";
+import { ChatBlockSchema, blocksToPlainText, blocksToSpeechText, candidateOwnText, matchUnsettledOptionTexts, sanitizeChatBlock, stripOptionTexts, type ChatBlock } from "./blocks";
 
 describe("ChatBlockSchema", () => {
   it("generates a clean JSON Schema for MCP tool registration", () => {
@@ -179,19 +179,77 @@ describe("ChatBlockSchema", () => {
       { channel: "interview", role: "interviewer", blocks: [optionsBlock] },
       { channel: "interview", role: "system" },
     ];
-    expect(matchUnsettledOptionText(unsettled, "interview", "Yes")).toBe("Yes");
-    expect(matchUnsettledOptionText(unsettled, "interview", "Yesterday we saw spikes")).toBeUndefined();
+    expect(matchUnsettledOptionTexts(unsettled, "interview", "Yes")).toEqual(["Yes"]);
+    expect(matchUnsettledOptionTexts(unsettled, "interview", "Yesterday we saw spikes")).toBeUndefined();
 
     const extended = "I'd cache hot lookups in Redis because p99 redirects must stay under 20 ms.";
-    const matched = matchUnsettledOptionText(unsettled, "interview", extended);
-    expect(matched).toBe("I'd cache hot lookups in Redis because");
-    expect(candidateOwnText({ text: extended, optionText: matched })).toBe("p99 redirects must stay under 20 ms.");
-    expect(stripOptionText("I'd cache hot lookups in Redis because", matched)).toBe("");
+    const matched = matchUnsettledOptionTexts(unsettled, "interview", extended);
+    expect(matched).toEqual(["I'd cache hot lookups in Redis because"]);
+    expect(candidateOwnText({ text: extended, optionTexts: matched })).toBe("p99 redirects must stay under 20 ms.");
+    expect(stripOptionTexts("I'd cache hot lookups in Redis because", matched)).toBe("");
 
     const settledByAssistant = [...unsettled, { channel: "interview", role: "interviewer" }];
-    expect(matchUnsettledOptionText(settledByAssistant, "interview", "Yes")).toBeUndefined();
+    expect(matchUnsettledOptionTexts(settledByAssistant, "interview", "Yes")).toBeUndefined();
 
     const settledByCandidate = [...unsettled, { channel: "interview", role: "candidate" }];
-    expect(matchUnsettledOptionText(settledByCandidate, "interview", "Yes")).toBeUndefined();
+    expect(matchUnsettledOptionTexts(settledByCandidate, "interview", "Yes")).toBeUndefined();
+  });
+
+  it("matches a send option only as the whole message, so typed words that contain a label stay the candidate's", () => {
+    const send = (labels: string[]): { channel: string; role: string; blocks: ChatBlock[] }[] => [
+      { channel: "interview", role: "interviewer", blocks: [{ kind: "options", items: labels.map((label) => ({ label })) }] },
+    ];
+    expect(matchUnsettledOptionTexts(send(["Redis", "Postgres"]), "interview", "I'd put Redis in front of Postgres for hot keys")).toBeUndefined();
+    expect(matchUnsettledOptionTexts(send(["Yes", "No"]), "interview", "No, I'd shard by user id")).toBeUndefined();
+    expect(matchUnsettledOptionTexts(send(["Consistent hashing", "Range"]), "interview", "consistent hashing with virtual nodes")).toBeUndefined();
+    expect(matchUnsettledOptionTexts(send(["Redis", "Postgres"]), "interview", "  postgres ")).toEqual(["Postgres"]);
+  });
+
+  it("matches a lightly edited prefill and strips it from the original text", () => {
+    const entries: { channel: string; role: string; blocks: ChatBlock[] }[] = [
+      {
+        channel: "coach",
+        role: "coach",
+        blocks: [{ kind: "options", action: "prefill", items: [{ label: "Cache", reply: "I'd cache hot lookups because" }, { label: "Queue" }] }],
+      },
+    ];
+    const text = "i'd  cache hot\nlookups because reads dominate 100:1.";
+    const matched = matchUnsettledOptionTexts(entries, "coach", text);
+    expect(matched).toEqual(["I'd cache hot lookups because"]);
+    expect(candidateOwnText({ text, optionTexts: matched })).toBe("reads dominate 100:1.");
+  });
+
+  it("treats a starter sent with only punctuation added as no words of the candidate's own", () => {
+    expect(stripOptionTexts("I'd cache hot lookups because .", ["I'd cache hot lookups because"])).toBe("");
+    expect(stripOptionTexts("I'd cache hot lookups because — !", ["I'd cache hot lookups because"])).toBe("");
+  });
+
+  it("finds and strips every prefill starter in one message", () => {
+    const entries: { channel: string; role: string; blocks: ChatBlock[] }[] = [
+      {
+        channel: "interview",
+        role: "interviewer",
+        blocks: [
+          {
+            kind: "options",
+            action: "prefill",
+            items: [
+              { label: "A", reply: "I'd shard by user id because" },
+              { label: "B", reply: "I'd shard by region because" },
+            ],
+          },
+        ],
+      },
+    ];
+    const text = "Writes are hot. I'd shard by user id because I'd shard by region because";
+    const matched = matchUnsettledOptionTexts(entries, "interview", text);
+    expect(matched).toEqual(expect.arrayContaining(["I'd shard by user id because", "I'd shard by region because"]));
+    expect(matched).toHaveLength(2);
+    expect(candidateOwnText({ text, optionTexts: matched })).toBe("Writes are hot.");
+  });
+
+  it("leaves a message without option texts untouched", () => {
+    expect(candidateOwnText({ text: "  . " })).toBe("  . ");
+    expect(stripOptionTexts("Fan-out on read", ["Fan-out on write"])).toBe("Fan-out on read");
   });
 });

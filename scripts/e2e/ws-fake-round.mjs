@@ -811,7 +811,7 @@ async function guidedRound() {
   check("a live guided round sends no checklist", Object.keys(pinned.session.steps).length === 0);
 
   // Walk up to the third-rung hint so the guide emits an options block, then send its reply text with no client flag:
-  // the server must match optionText itself and keep those words out of step checks and debrief quotes.
+  // the server must match optionTexts itself and keep those words out of step checks and debrief quotes.
   mark = c.mark();
   c.send({ type: "guided.hint" });
   await c.waitFor(isInterviewerMsg, { since: mark, label: "hint 2 reply" });
@@ -829,7 +829,11 @@ async function guidedRound() {
     text: optReplyText,
   });
   const optEcho = await c.waitFor((m) => m.type === "chat.message" && m.clientMsgId === "opt-req", { since: mark, label: "option-chip echo" });
-  check("an unmarked option-chip reply is matched by the server with optionText", optEcho.entry.optionText === optReplyText, JSON.stringify(optEcho.entry));
+  check(
+    "an unmarked option-chip reply is matched by the server with optionTexts",
+    optEcho.entry.optionTexts?.length === 1 && optEcho.entry.optionTexts[0] === optReplyText,
+    JSON.stringify(optEcho.entry),
+  );
   await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to option-chip click" });
 
   mark = c.mark();

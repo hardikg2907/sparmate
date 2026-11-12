@@ -3209,6 +3209,53 @@ describe("rich chat blocks", () => {
     rt.dispose();
   });
 
+  it("tells the guide a pending option pick was an option pick when the turn is replayed after a restart", async () => {
+    const baseFake = createFakeDriver({ chunkDelayMs: 0 });
+    const liveTurns: { role: string; text: string }[] = [];
+    const wrappedFake: Driver = {
+      ...baseFake,
+      startConversation(convSetup: ConversationSetup): Conversation {
+        const inner = baseFake.startConversation(convSetup);
+        return {
+          sdkSessionId: () => inner.sdkSessionId(),
+          close: () => inner.close(),
+          send(turn, callbacks) {
+            liveTurns.push({ role: convSetup.role, text: turn.text });
+            return inner.send(turn, callbacks);
+          },
+        };
+      },
+    };
+    const t = setup(wrappedFake, "guided");
+    const pick = "I'd coalesce concurrent misses.";
+    const session: Session = {
+      ...newSession("guided"),
+      startedAt: new Date(Date.now() - 10 * MIN).toISOString(),
+      status: "paused",
+      pauseStartedAt: new Date().toISOString(),
+      pauseReason: "restart",
+      transcript: [
+        { id: "o1", at: 1_000, wall: new Date().toISOString(), channel: "interview", role: "interviewer", text: "Let's begin." },
+        {
+          id: "h3",
+          at: 60_000,
+          wall: new Date().toISOString(),
+          channel: "interview",
+          role: "interviewer",
+          text: "Two ways out.",
+          blocks: [{ kind: "options", items: [{ label: "Coalesce", reply: pick }, { label: "Warm" }] }],
+        },
+        { id: "c1", at: 70_000, wall: new Date().toISOString(), channel: "interview", role: "candidate", text: pick, optionTexts: [pick] },
+      ],
+    };
+    const rt = await t.start(session);
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const replayed = liveTurns.find((x) => x.role === "guide" && x.text.includes(`<candidate>\n${pick}\n</candidate>`));
+    expect(replayed?.text).toContain("candidate picked option");
+    rt.dispose();
+  });
+
   it("matches option-chip replies on the server without client flags, notifies the live turn in <context>, and excludes option text from checks and debrief quotes", async () => {
     const baseFake = createFakeDriver({ chunkDelayMs: 0 });
     const liveTurns: { role: string; text: string }[] = [];
@@ -3259,9 +3306,9 @@ describe("rich chat blocks", () => {
     await vi.advanceTimersByTimeAsync(2_000);
 
     const optEntry = session.transcript.find((e) => e.role === "candidate" && e.text === optReply);
-    expect(optEntry?.optionText).toBe(optReply);
+    expect(optEntry?.optionTexts).toEqual([optReply]);
     const echoed = t.msgs.find((m): m is Extract<ServerMsg, { type: "chat.message" }> => m.type === "chat.message" && m.clientMsgId === "opt-1");
-    expect(echoed?.entry.optionText).toBe(optReply);
+    expect(echoed?.entry.optionTexts).toEqual([optReply]);
 
     const guideOptTurn = [...liveTurns].reverse().find((x) => x.role === "guide");
     expect(guideOptTurn?.text).toContain("events: candidate picked option\n</context>");
@@ -3285,7 +3332,8 @@ describe("rich chat blocks", () => {
     });
     expect(JSON.stringify(session.scorecard)).not.toContain("Option-chip pick");
 
-    // Open Coach (FakeDriver attaches options on coach_open) and verify extended option reply sets optionText and notifies Coach in <context>.
+    // Open Coach (FakeDriver attaches send options on coach_open): a click sends the label unchanged, and the server
+    // marks it as an option pick on the coach channel too.
     await rt.handle({ type: "coach.open" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
     const coachOpen = session.transcript.find((e) => e.channel === "coach" && e.role === "coach");
@@ -3293,22 +3341,14 @@ describe("rich chat blocks", () => {
     expect(coachOpts?.kind).toBe("options");
     const coachOptText = coachOpts?.kind === "options" ? (coachOpts.items[0]?.reply ?? coachOpts.items[0]!.label) : "";
 
-    await rt.handle(
-      {
-        type: "chat.send",
-        channel: "coach",
-        clientMsgId: "coach-opt-1",
-        text: `${coachOptText} focusing on hot-key stampedes.`,
-      },
-      t.peer,
-    );
+    await rt.handle({ type: "chat.send", channel: "coach", clientMsgId: "coach-opt-1", text: coachOptText }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
 
     const coachCand = session.transcript.findLast((e) => e.channel === "coach" && e.role === "candidate");
-    expect(coachCand?.optionText).toBe(coachOptText);
+    expect(coachCand?.optionTexts).toEqual([coachOptText]);
     const coachOptTurn = [...liveTurns].reverse().find((x) => x.role === "coach");
-    expect(coachOptTurn?.text).toContain(`events: candidate picked option: ${coachOptText}\n</context>`);
-    expect(coachOptTurn?.text).toContain(`<candidate>\n${coachOptText} focusing on hot-key stampedes.\n</candidate>`);
+    expect(coachOptTurn?.text).toContain("events: candidate picked option\n</context>");
+    expect(coachOptTurn?.text).toContain(`<candidate>\n${coachOptText}\n</candidate>`);
 
     rt.dispose();
   });
@@ -3441,7 +3481,7 @@ describe("rich chat blocks", () => {
     // 1. Pure send-mode option click (unmarked on the wire) followed by Check this step -> built.empty === true, checker never runs.
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "pure-send", text: sendReply }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(session.transcript.findLast((e) => e.role === "candidate")?.optionText).toBe(sendReply);
+    expect(session.transcript.findLast((e) => e.role === "candidate")?.optionTexts).toEqual([sendReply]);
 
     await rt.handle({ type: "guided.feedback" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
@@ -3451,7 +3491,7 @@ describe("rich chat blocks", () => {
     // 2. Unedited prefill option submission (unmarked on the wire) followed by leaving the phase -> built.empty === true, checker still never runs.
     await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "pure-prefill", text: prefillReply }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(session.transcript.findLast((e) => e.role === "candidate")?.optionText).toBe(prefillReply);
+    expect(session.transcript.findLast((e) => e.role === "candidate")?.optionTexts).toEqual([prefillReply]);
 
     await rt.handle({ type: "phase.set", phase: "entities" }, t.peer);
     await vi.advanceTimersByTimeAsync(1_000);
@@ -3461,7 +3501,7 @@ describe("rich chat blocks", () => {
     rt.dispose();
   });
 
-  it("strips optionText from fake.candidateLines on pure and extended prefill picks so FakeDriver credits notes and own words instead of unverified option quotes", async () => {
+  it("strips optionTexts from fake.candidateLines on pure and extended prefill picks so FakeDriver credits notes and own words instead of unverified option quotes", async () => {
     const baseFake = createFakeDriver({ chunkDelayMs: 0 });
     const pureOptReply = "Every code is unique forever and two generated codes never collide.";
     const prefillOptReply = "Create a short link for a long URL with optional custom alias and optional expiry.";
@@ -3556,7 +3596,7 @@ describe("rich chat blocks", () => {
     const uniqueItem = reqItems.find((i) => i.label.includes("Every code is unique"))!;
 
     const checked = session.stepChecks.requirements?.items ?? {};
-    // Without stripping optionText from fake.candidateLines, FakeDriver would pick "chat" (7 keyword hits > 5 in notes),
+    // Without stripping optionTexts from fake.candidateLines, FakeDriver would pick "chat" (7 keyword hits > 5 in notes),
     // verify() would reject the option quote, and createItem would fail to be covered!
     expect(checked[createItem.id]).toMatchObject({ state: "covered", source: "notes" });
     expect(checked[latencyItem.id]).toMatchObject({ state: "covered", source: "chat" });

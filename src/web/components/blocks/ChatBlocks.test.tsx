@@ -317,7 +317,7 @@ describe("options settlement, wire messages, pointer-aware focus, and prefill re
     expect(unfrozenHtml).not.toContain("Selected: ");
   });
 
-  it("omits fromOption on the wire for option sends and matches optionText server-side in FakeServer", () => {
+  it("omits fromOption on the wire for option sends and matches optionTexts server-side in FakeServer", () => {
     const sentMessages: ClientMsg[] = [];
 
     const ok = applyOptionChoice("I pick 302 Found.", "send", {
@@ -347,7 +347,7 @@ describe("options settlement, wire messages, pointer-aware focus, and prefill re
     expect(ClientMsgSchema.safeParse(sentMessages[0]).success).toBe(true);
     expect("fromOption" in sentMessages[0]!).toBe(false);
 
-    // FakeServer mirrors the real server by populating optionText from unsettled options without any client flag.
+    // FakeServer mirrors the real server by populating optionTexts from unsettled options without any client flag.
     const guidedSession = {
       ...hldRoom("guided"),
       transcript: [
@@ -366,7 +366,7 @@ describe("options settlement, wire messages, pointer-aware focus, and prefill re
     fake.handle(sentMessages[0]!);
     const recorded = fake.session.transcript.at(-1);
     expect(recorded?.role).toBe("candidate");
-    expect(recorded?.optionText).toBe("I pick 302 Found.");
+    expect(recorded?.optionTexts).toEqual(["I pick 302 Found."]);
   });
 
   it("focuses the composer textarea after option send only on fine pointers and focuses the settled options group on touch", () => {

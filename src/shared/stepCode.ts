@@ -81,7 +81,10 @@ export function unnumberedCode(text: string): string {
     .join("\n");
 }
 
-/** Which steps in `stepCode` own at least one non-blank line in the 1-based inclusive range `[startLine, endLine]`. */
+/**
+ * Which steps in `stepCode` own at least one line in the 1-based inclusive range `[startLine, endLine]`. Lines with no
+ * letter or digit (`}`, `};`) appear in every step's code, so they never decide who owns a range.
+ */
 export function stepsOwningCodeRange(content: string, startLine: number, endLine: number, stepCode: Readonly<Record<string, readonly string[]>> | undefined): string[] {
   if (!stepCode) return [];
   const all = fileLines(content);
@@ -90,7 +93,7 @@ export function stepsOwningCodeRange(content: string, startLine: number, endLine
   const targetLines = new Set<string>();
   for (let i = lo; i < hi; i++) {
     const trimmed = all[i]?.trim() ?? "";
-    if (trimmed !== "") targetLines.add(trimmed);
+    if (/[\p{L}\p{N}]/u.test(trimmed)) targetLines.add(trimmed);
   }
   if (targetLines.size === 0) return [];
   const owners: string[] = [];

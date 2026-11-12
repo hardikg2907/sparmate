@@ -1,4 +1,4 @@
-import { matchUnsettledOptionText } from "../../shared/blocks";
+import { matchUnsettledOptionTexts } from "../../shared/blocks";
 import type { ClientMsg, ServerMsg } from "../../shared/protocol";
 import type { Proposal, PublicSession, RunResult, TranscriptEntry } from "../../shared/types";
 import type { CompileDiagnostic } from "../../shared/types";
@@ -117,7 +117,7 @@ export class FakeServer {
     return roundMsAt(this.session.clock, Date.now());
   }
 
-  private addEntry(channel: "interview" | "coach", role: TranscriptEntry["role"], text: string, id?: string, optionText?: string): TranscriptEntry {
+  private addEntry(channel: "interview" | "coach", role: TranscriptEntry["role"], text: string, id?: string, optionTexts?: string[]): TranscriptEntry {
     const entry: TranscriptEntry = {
       id: id ?? `fx-e${++this.counter}`,
       at: this.nowRound(),
@@ -125,7 +125,7 @@ export class FakeServer {
       channel,
       role,
       text,
-      ...(optionText !== undefined ? { optionText } : {}),
+      ...(optionTexts ? { optionTexts } : {}),
     };
     this.session = { ...this.session, transcript: [...this.session.transcript, entry] };
     return entry;
@@ -159,8 +159,8 @@ export class FakeServer {
   handle(msg: ClientMsg): void {
     switch (msg.type) {
       case "chat.send": {
-        const optionText = matchUnsettledOptionText(this.session.transcript, msg.channel, msg.text);
-        const entry = this.addEntry(msg.channel, "candidate", msg.text, undefined, optionText);
+        const optionTexts = matchUnsettledOptionTexts(this.session.transcript, msg.channel, msg.text);
+        const entry = this.addEntry(msg.channel, "candidate", msg.text, undefined, optionTexts);
         this.emit({ type: "chat.message", entry, clientMsgId: msg.clientMsgId });
         this.stream(msg.channel, msg.channel === "coach" ? COACH_REPLY : INTERVIEWER_REPLY);
         break;

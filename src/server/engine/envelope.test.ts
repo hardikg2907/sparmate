@@ -85,11 +85,11 @@ describe("candidate envelope", () => {
     const callerEvents = ['candidate moved to phase "design" at 12:10'];
     const baseView = { time, board: { version: 1, graphText: "a", changed: false }, events: callerEvents };
 
-    const purePick = candidateEnvelope(baseView, "Fan-out on write", "Fan-out on write");
+    const purePick = candidateEnvelope(baseView, "Fan-out on write", ["Fan-out on write"]);
     expect(purePick).toContain('events: candidate moved to phase "design" at 12:10; candidate picked option\n</context>');
     expect(purePick).toContain("<candidate>\nFan-out on write\n</candidate>");
 
-    const extendedPrefill = candidateEnvelope(baseView, "Fan-out on write because celebrity posts Stay in a hot-key cache.", "Fan-out on write");
+    const extendedPrefill = candidateEnvelope(baseView, "Fan-out on write because celebrity posts Stay in a hot-key cache.", ["Fan-out on write"]);
     expect(extendedPrefill).toContain('events: candidate moved to phase "design" at 12:10; candidate picked option: Fan-out on write\n</context>');
     expect(extendedPrefill).toContain("<candidate>\nFan-out on write because celebrity posts Stay in a hot-key cache.\n</candidate>");
     expect(callerEvents).toEqual(['candidate moved to phase "design" at 12:10']);
@@ -192,7 +192,7 @@ describe("transcript and code text", () => {
         channel: "interview",
         role: "candidate",
         text: "Fan-out on write — Fast reads",
-        optionText: "Fan-out on write — Fast reads",
+        optionTexts: ["Fan-out on write — Fast reads"],
       },
       {
         id: "3",
@@ -201,7 +201,7 @@ describe("transcript and code text", () => {
         channel: "interview",
         role: "candidate",
         text: "Fan-out on write — Fast reads, with a pull fallback for mega-accounts.",
-        optionText: "Fan-out on write — Fast reads",
+        optionTexts: ["Fan-out on write — Fast reads"],
       },
     ];
     const expected = [

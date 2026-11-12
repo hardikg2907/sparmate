@@ -101,4 +101,11 @@ describe("stepCodeText", () => {
     expect(stepsOwningCodeRange(file, 2, 4, stepCode)).toEqual(["clarify", "entities"]);
     expect(stepsOwningCodeRange(file, 3, 3, stepCode)).toEqual([]);
   });
+
+  it("never lets a bracket-only line decide which step owns a range", () => {
+    const code = "class Spot {\n  int floor;\n};\nclass Lot {\n  void park();\n};\n";
+    const stepCode = { entities: ["class Spot {", "int floor;", "};"], behaviour: ["class Lot {", "void park();", "};"] };
+    expect(stepsOwningCodeRange(code, 5, 6, stepCode)).toEqual(["behaviour"]);
+    expect(stepsOwningCodeRange(code, 6, 6, stepCode)).toEqual([]);
+  });
 });
