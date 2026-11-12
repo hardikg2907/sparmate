@@ -211,6 +211,22 @@ function placeFlowEdgeLabel(
  * narrow-pane size; with it, boxes widen up to a cap so a wide pane shows more text per line.
  */
 export function layoutFlowDiagram(block: FlowDiagramBlock, availableWidth?: number): FlowDiagramLayout {
+  let layout = layoutFlowAt(block, availableWidth);
+  if (!availableWidth) return layout;
+  // Back-edge rails and side-placed pills only settle after layout, so shrink the boxes by the measured overflow.
+  for (let pass = 0; pass < 4 && layout.width > availableWidth; pass++) {
+    const box = layout.nodes[0]?.width ?? 0;
+    const colsByRow = new Map<number, number>();
+    for (const node of layout.nodes) colsByRow.set(node.row, (colsByRow.get(node.row) ?? 0) + 1);
+    const cols = Math.max(1, ...colsByRow.values());
+    const shrunk = layoutFlowAt(block, availableWidth, Math.floor(box - (layout.width - availableWidth) / cols));
+    if ((shrunk.nodes[0]?.width ?? 0) >= box) break;
+    layout = shrunk;
+  }
+  return layout;
+}
+
+function layoutFlowAt(block: FlowDiagramBlock, availableWidth?: number, boxWidthCap?: number): FlowDiagramLayout {
   const nodeOrder = new Map<string, number>();
   const nodeById = new Map<string, FlowDiagramBlock["nodes"][number]>();
   for (const [idx, node] of block.nodes.entries()) {
@@ -363,10 +379,8 @@ export function layoutFlowDiagram(block: FlowDiagramBlock, availableWidth?: numb
   const baseDetailChars = maxCols === 1 ? 30 : maxCols === 2 ? 21 : 14;
   const basePadX = 8;
   const padY = 8;
-  // Reserve room for the back-edge rail and side-placed pills so a widened layout still fits without scrolling.
-  const sideReserve = 56;
-  const fitBoxWidth = availableWidth ? Math.floor((availableWidth - basePadX * 2 - sideReserve - (maxCols - 1) * colGap) / maxCols) : 0;
-  const boxWidth = Math.max(baseBoxWidth, Math.min(maxBoxWidth, fitBoxWidth));
+  const fitBoxWidth = availableWidth ? Math.floor((availableWidth - basePadX * 2 - (maxCols - 1) * colGap) / maxCols) : 0;
+  const boxWidth = Math.max(baseBoxWidth, Math.min(maxBoxWidth, boxWidthCap ?? Infinity, fitBoxWidth));
   const widthScale = boxWidth / baseBoxWidth;
   const maxLabelChars = Math.floor(baseLabelChars * widthScale);
   const maxDetailChars = Math.floor(baseDetailChars * widthScale);

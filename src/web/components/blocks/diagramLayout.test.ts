@@ -260,5 +260,15 @@ describe("layoutFlowDiagram", () => {
     expect(wideNode.width).toBeGreaterThan(narrowNode.width);
     expect(wideNode.detailLines.length).toBeLessThan(narrowNode.detailLines.length);
     expect(wide.width).toBeLessThanOrEqual(900);
+
+    const withBackEdge = layoutFlowDiagram(
+      {
+        ...block,
+        nodes: [...block.nodes, { id: "c", label: "Deliver" }],
+        edges: [...block.edges, { from: "b", to: "c" }, { from: "c", to: "a", label: "retry on failure" }],
+      },
+      400,
+    );
+    expect(withBackEdge.width).toBeLessThanOrEqual(400);
   });
 });
