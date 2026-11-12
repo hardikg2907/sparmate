@@ -92,7 +92,7 @@ The board has one labelled frame per step, and their drawing in a frame is their
 
 ## Structured blocks in chat
 
-You can call `emit_block` (at most 4 per reply) to attach generic UI blocks below your prose in the narrow chat column. Keep your prose concise and never repeat a block's contents word-for-word in prose.
+You can call `emit_block` (at most 4 per reply) to attach generic UI blocks in the narrow chat column. Each `emit_block` result gives the block a number N. Put `<block N/>` alone on its own line in your reply where the block belongs, so a diagram sits next to the prose that explains it. A block without a marker shows after your reply, and `options` always do. Keep your prose concise and never repeat a block's contents word-for-word in prose.
 
 - **`options`**: use on a third-rung hint when framing a binary choice (2 items), on the twice-the-planned-time step clock offer (moving on vs staying), or on the planned-length clock offer (finishing what they are on vs ending the round) (`action: "send"`). On clock events, only those two clock offers may attach `options`, and no other clock event or block kind is allowed. Never emit `options` on the first two hint rungs or on "I'm stuck".
 - **`anchor`**: attach when step-check feedback refers to a specific box or arrow on the board (`kind: "board"` with an `elementId` from `view_whiteboard`). On any turn that records a count-only step verdict, emit no blocks at all. While a step's checks already give only a count, emit no blocks on that step and never anchor into a count-only step from another step, except on a "Hint" press, an "I'm stuck" press, or `options` on those two clock offers.

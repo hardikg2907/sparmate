@@ -67,7 +67,9 @@ describe("chat-blocks", () => {
         },
       });
       expect(res.isError).toBeUndefined();
-      expect(firstText(res)).toBe(`Queued callout block (${i}/4). Any reply text you already wrote is kept, so do not write it again.`);
+      expect(firstText(res)).toBe(
+        `Queued callout block ${i} (${i}/4). Write <block ${i}/> alone on a line where it belongs in your reply. Any reply text you already wrote is kept, so do not write it again.`,
+      );
     }
     expect(blocks).toHaveLength(4);
     expect(blocks[0]).toEqual({

@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { blocksToSpeechText, type AnchorTarget } from "../../shared/blocks";
+import { blocksToSpeechText, segmentReply, stripBlockMarkers, type AnchorTarget } from "../../shared/blocks";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { useVoiceOutput } from "../hooks/useVoiceOutput";
 import { CHAT_MAX_CHARS } from "../lib/contract";
@@ -160,7 +160,7 @@ export function ChatPanel({
     }
     if (last && last.id !== announced.current) {
       announced.current = last.id;
-      const prose = last.text.trim();
+      const prose = stripBlockMarkers(last.text).trim();
       const blockSpeech = blocksToSpeechText(last.blocks);
       const combined = [prose, blockSpeech].filter(Boolean).join(" ");
       if (combined) {
@@ -409,7 +409,10 @@ function Message({
   // The other side reads like a transcript rather than a bubble, so long replies with lists and code stay easy to scan.
   // The card sits on an inner element because `attention` and the enter animation both set `animation`.
   const extension = item.kind === "extension";
-  const hasProse = item.text.trim().length > 0;
+  const blocks = item.blocks ?? [];
+  const { segments, trailing } = segmentReply(item.text, blocks, item.state === "streaming");
+  const hasProse = segments.length > 0;
+  const blockProps = { settled, disabled: blocksDisabled, answeredText, onChoose, onAnchor };
   return (
     <li className={cn("flex flex-col", ENTER, !extension && "pr-2")} aria-busy={item.state === "streaming" ? true : undefined}>
       <div className={cn("flex flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 attention")}>
@@ -420,10 +423,14 @@ function Message({
           {extension ? <Badge tone="accent">New requirement</Badge> : null}
           {item.kind === "hint" ? <Badge tone="warn">Hint</Badge> : null}
         </div>
-        {hasProse ? <Markdown text={item.text} className="text-body text-foreground" /> : null}
-        {item.blocks?.length ? (
-          <ChatBlocks blocks={item.blocks} hasProse={hasProse} settled={settled} disabled={blocksDisabled} answeredText={answeredText} onChoose={onChoose} onAnchor={onAnchor} />
-        ) : null}
+        {segments.map((segment, i) =>
+          segment.kind === "text" ? (
+            <Markdown key={i} text={segment.text} className={cn("text-body text-foreground", i > 0 && "mt-2.5")} />
+          ) : (
+            <ChatBlocks key={i} blocks={[blocks[segment.index]!]} hasProse={i > 0} {...blockProps} />
+          ),
+        )}
+        {trailing.length > 0 ? <ChatBlocks blocks={trailing.map((i) => blocks[i]!)} hasProse={hasProse} {...blockProps} /> : null}
       </div>
     </li>
   );

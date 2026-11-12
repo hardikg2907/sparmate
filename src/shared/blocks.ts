@@ -488,3 +488,110 @@ export function stripOptionTexts(text: string, optionTexts: readonly string[] | 
 export function candidateOwnText(entry: { text: string; optionTexts?: readonly string[] }): string {
   return stripOptionTexts(entry.text, entry.optionTexts);
 }
+
+// A reply places block N (1-based) by writing `<block N/>` alone on a line. Only whole lines outside fenced code
+// count, so a marker can never split a list item, a table row or a code sample.
+const MARKER_LINE = /^[ \t]*<block[ \t]+(\d{1,2})[ \t]*\/>[ \t]*$/;
+const FENCE_LINE = /^[ \t]*(`{3,}|~{3,})/;
+// While a reply streams, the last line may be the start of a marker; it stays hidden until it settles either way.
+const PARTIAL_MARKER_TAIL = /(?:^|\n)[ \t]*<(?:b(?:l(?:o(?:c(?:k(?:[ \t]+\d{0,2}[ \t]*\/?)?)?)?)?)?)?$/;
+
+/** Calls `onMarker` for every marker line and `onText` for every other line, in order. */
+function walkMarkerLines(text: string, onText: (line: string) => void, onMarker: (n: number) => void): void {
+  let fence: string | null = null;
+  for (const line of text.split("\n")) {
+    const fenceMatch = FENCE_LINE.exec(line);
+    if (fenceMatch) {
+      const mark = fenceMatch[1]!;
+      if (fence === null) fence = mark;
+      else if (mark[0] === fence[0] && mark.length >= fence.length) fence = null;
+      onText(line);
+      continue;
+    }
+    const marker = fence === null ? MARKER_LINE.exec(line) : null;
+    if (marker) onMarker(Number(marker[1]));
+    else onText(line);
+  }
+}
+
+// Only blank lines at the ends go: blank lines inside the prose may sit inside a code sample.
+function tidyLines(lines: readonly string[]): string {
+  return lines.join("\n").replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "");
+}
+
+/** Points each marker at a new block number, or drops it when `map` returns null. */
+export function renumberBlockMarkers(text: string, map: (n: number) => number | null): string {
+  if (!text.includes("<block")) return text;
+  const out: string[] = [];
+  walkMarkerLines(
+    text,
+    (line) => out.push(line),
+    (n) => {
+      const next = map(n);
+      if (next !== null) out.push(`<block ${next}/>`);
+    },
+  );
+  return tidyLines(out);
+}
+
+export type ReplySegment = { kind: "text"; text: string } | { kind: "block"; index: number };
+
+/**
+ * Splits a reply into prose and the blocks its markers place, in reading order. `trailing` lists the blocks with no
+ * usable marker; they show after the prose. Options always trail, because they are the prompt for the next answer.
+ * A marker for a missing block, a second marker for the same block, or a half-written marker while streaming shows nothing.
+ */
+export function segmentReply(text: string, blocks: readonly ChatBlock[], streaming = false): { segments: ReplySegment[]; trailing: number[] } {
+  const source = streaming ? text.replace(PARTIAL_MARKER_TAIL, "") : text;
+  if (!source.includes("<block")) {
+    return { segments: source.trim() ? [{ kind: "text", text: source }] : [], trailing: blocks.map((_, i) => i) };
+  }
+  const segments: ReplySegment[] = [];
+  const placed = new Set<number>();
+  let lines: string[] = [];
+  const flush = () => {
+    const prose = tidyLines(lines);
+    if (prose) segments.push({ kind: "text", text: prose });
+    lines = [];
+  };
+  walkMarkerLines(
+    source,
+    (line) => lines.push(line),
+    (n) => {
+      const index = n - 1;
+      const block = blocks[index];
+      // A dropped marker still ends the paragraph, so prose does not jump when the block arrives after streaming.
+      if (!block || block.kind === "options" || placed.has(index)) {
+        lines.push("");
+        return;
+      }
+      flush();
+      placed.add(index);
+      segments.push({ kind: "block", index });
+    },
+  );
+  flush();
+  const trailing = blocks.map((_, i) => i).filter((i) => !placed.has(i));
+  return { segments, trailing };
+}
+
+/** The reply prose with every marker removed, for speech and anywhere blocks are not shown. */
+export function stripBlockMarkers(text: string, streaming = false): string {
+  return segmentReply(text, [], streaming)
+    .segments.map((s) => (s.kind === "text" ? s.text : ""))
+    .join("\n\n");
+}
+
+/** The reply as plain text with each block's text where its marker stands, and unplaced blocks after the prose. */
+export function replyPlainText(text: string, blocks: readonly ChatBlock[] | undefined): string {
+  const all = blocks ?? [];
+  const { segments, trailing } = segmentReply(text, all);
+  if (!segments.some((s) => s.kind === "block")) {
+    const prose = segments.map((s) => (s.kind === "text" ? s.text : "")).join("\n\n");
+    const blocksText = blocksToPlainText(all);
+    return prose && blocksText ? `${prose}\n${blocksText}` : prose || blocksText;
+  }
+  const parts = segments.map((s) => (s.kind === "text" ? s.text : blockToPlainText(all[s.index]!)));
+  for (const i of trailing) parts.push(blockToPlainText(all[i]!));
+  return parts.filter(Boolean).join("\n\n");
+}
