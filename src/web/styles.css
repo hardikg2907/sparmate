@@ -455,6 +455,20 @@ body {
   pointer-events: none !important;
 }
 
+/*
+ * Screen-reader text is absolutely positioned, and by default it sits where it would have flowed. Inside a scroller
+ * whose positioned ancestor is outside it, that spot can lie far past the content, and the 1px box then stretches an
+ * outer scroller into blank space. Pinning it to the corner of its containing block keeps it inside every box. It is
+ * a base rule, so a utility such as the skip link's `focus:top-3` still wins.
+ */
+@layer base {
+  [class~="sr-only"],
+  [class*=":sr-only"] {
+    top: 0;
+    left: 0;
+  }
+}
+
 /* Model replies are Markdown. Tailwind's reset strips list and heading styles, so they come back here. */
 .md {
   line-height: 1.6;
@@ -920,6 +934,16 @@ body {
 .pop-in {
   animation: ir-pop-in 0.18s var(--ease-out-quick) backwards;
 }
+/* Frosted so the message under it stays legible; it sits at the right edge, away from the reading column. */
+.jump-latest {
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow: var(--elev-xs);
+}
+.jump-latest:hover {
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
 .page-enter {
   animation: ir-rise 0.36s var(--ease-out-quick) backwards;
 }
@@ -1011,6 +1035,23 @@ body {
 }
 ::view-transition-new(root) {
   animation: ir-fade-in 0.26s var(--ease-out-quick) both;
+}
+
+/*
+ * The coach pane morphs between its column and the full screen: the browser animates the named group's size and
+ * position. The page behind stays put, so the root cross-fade is off for that transition. The name is set only
+ * then, so a page change cross-fades the pane with the rest of the page.
+ */
+:root[data-vt="pane"] .coach-pane {
+  view-transition-name: coach-pane;
+}
+:root[data-vt="pane"]::view-transition-old(root),
+:root[data-vt="pane"]::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(coach-pane) {
+  animation-duration: 0.3s;
+  animation-timing-function: var(--ease-out-quick);
 }
 
 /* Time past the plan is striped so it reads as "over" without colour alone. */

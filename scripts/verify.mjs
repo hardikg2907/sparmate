@@ -16,6 +16,8 @@ const steps = [
     args: ["scripts/e2e/ws-fake-round.mjs"],
     env: { SPARMATE_FAKE_AGENT: "1" },
   },
+  // Scroll and overflow bugs show only in a real browser at real sizes, so every page is loaded at each width.
+  { name: "layout and scroll", cmd: process.execPath, args: ["scripts/e2e/layout-check.mjs"] },
 ];
 
 for (const [i, step] of steps.entries()) {

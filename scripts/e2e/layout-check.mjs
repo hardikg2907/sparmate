@@ -5,9 +5,11 @@
 // 3. Nested scroll containers scroll in the same direction as the page / ancestor.
 // 4. The room page scrolls as a whole (instead of individual panes).
 // 5. A jump inside a page (sub-nav, #hash link) scrolls the window, body or app root, or moves the bar off the top.
+// 6. A scroller scrolls past its own content into blank space.
 // PORT sets the port; when it is unset the script picks a free port from 4750 to 4799 (not 4780).
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -19,7 +21,18 @@ import { copyStudyKit } from "../lib/tempStudy.mjs";
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PORT = process.env.PORT ? Number(process.env.PORT) : await pickFreePort();
 const BASE = `http://127.0.0.1:${PORT}`;
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+// CHROME_PATH overrides the usual install path for the platform.
+const CHROME =
+  process.env.CHROME_PATH ??
+  {
+    darwin: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    linux: "/usr/bin/google-chrome",
+    win32: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  }[process.platform];
+if (!CHROME || !existsSync(CHROME)) {
+  console.error(`Google Chrome was not found at ${CHROME ?? "(no default for this platform)"}. Install it, or set CHROME_PATH.`);
+  process.exit(1);
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const VIEWPORTS = [
@@ -98,6 +111,7 @@ try {
     { name: "room-hld", url: (theme) => `/?fixture=room-hld&theme=${theme}` },
     { name: "room-lld", url: (theme) => `/?fixture=room-lld&theme=${theme}` },
     { name: "debrief-hld", url: (theme) => `/?fixture=debrief-hld&theme=${theme}` },
+    { name: "debrief-hld (coach full screen)", url: (theme) => `/?fixture=debrief-hld&focus=coach&theme=${theme}` },
     { name: "real fake-model round", url: (theme) => `/session/${realSessionRes}?theme=${theme}` },
     { name: "usage", url: (theme) => `/usage?theme=${theme}` },
   ];
@@ -169,7 +183,25 @@ try {
               }
             }
 
-            // 4. Elements overflowing the viewport
+            // 4. A scroller must not scroll past its own content. An absolutely positioned descendant whose containing
+            // block lies outside an inner scroller (screen-reader text is the usual one) can stretch an outer scroller
+            // into blank space, which nothing else here would notice.
+            for (const sc of vScrollers) {
+              const el = sc.el;
+              const top = el.getBoundingClientRect().top + el.clientTop - el.scrollTop;
+              let contentBottom = 0;
+              for (const child of el.children) {
+                const cs = window.getComputedStyle(child);
+                if (cs.position === "absolute" || cs.position === "fixed" || cs.display === "none") continue;
+                contentBottom = Math.max(contentBottom, child.getBoundingClientRect().bottom - top + parseFloat(cs.marginBottom || "0"));
+              }
+              const extra = el.scrollHeight - (contentBottom + parseFloat(window.getComputedStyle(el).paddingBottom || "0"));
+              if (extra > 4) {
+                errors.push(`Scroller scrolls ${Math.round(extra)}px past its content: <${el.tagName} class="${el.className}">`);
+              }
+            }
+
+            // 5. Elements overflowing the viewport
             function isClipped(el) {
               let p = el.parentElement;
               while (p && p !== body && p !== doc) {
@@ -297,6 +329,21 @@ try {
     totalFailures += 1;
     console.error(`FAIL: ${message}`);
   };
+  // The skip link is screen-reader text until it takes focus; then its own top and left place it, not the pin that
+  // keeps hidden text inside its box.
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.goto(`${BASE}/?theme=dark`, { waitUntil: "networkidle0" });
+  await sleep(350);
+  const skip = await page.evaluate(() => {
+    const a = [...document.querySelectorAll("a")].find((el) => /Skip to main content/.test(el.textContent ?? ""));
+    if (!a) return null;
+    a.focus();
+    const r = a.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width };
+  });
+  if (!skip || skip.left !== 12 || skip.top !== 12 || skip.width < 40) fail(`skip link on focus sits at ${JSON.stringify(skip)}, not 12px in`);
+  else console.log("PASS: the skip link shows 12px in from the corner on focus");
+
   for (const width of [640, 768, 1024]) {
     await page.setViewport({ width, height: 900 });
     await page.goto(`${BASE}/?fixture=home&theme=dark`, { waitUntil: "networkidle0" });

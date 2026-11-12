@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { followAfterScroll, scrollsBack } from "./chatScroll";
+import { JUMP_ZONE_PX, followAfterScroll, scrollsBack, showJumpToLatest, wheelReadsBack } from "./chatScroll";
 
 const view = (prevTop: number, top: number, scrollHeight = 2000, clientHeight = 500) => ({ prevTop, top, scrollHeight, clientHeight });
 
@@ -30,5 +30,34 @@ describe("scrollsBack", () => {
   it("knows the keys that read back", () => {
     expect(scrollsBack("PageUp")).toBe(true);
     expect(scrollsBack("ArrowDown")).toBe(false);
+  });
+});
+
+describe("showJumpToLatest", () => {
+  it("stays hidden while the log follows", () => {
+    expect(showJumpToLatest(true, 800)).toBe(false);
+  });
+
+  it("stays hidden for a small step back from the end", () => {
+    expect(showJumpToLatest(false, 20)).toBe(false);
+    expect(showJumpToLatest(false, JUMP_ZONE_PX)).toBe(false);
+  });
+
+  it("shows once he is well away from the end", () => {
+    expect(showJumpToLatest(false, JUMP_ZONE_PX + 1)).toBe(true);
+  });
+});
+
+describe("wheelReadsBack", () => {
+  it("reads back on a clear upward turn", () => {
+    expect(wheelReadsBack(0, -40)).toBe(true);
+  });
+
+  it("ignores a sideways swipe that drifts a little upward", () => {
+    expect(wheelReadsBack(60, -3)).toBe(false);
+  });
+
+  it("ignores a downward turn", () => {
+    expect(wheelReadsBack(0, 40)).toBe(false);
   });
 });
