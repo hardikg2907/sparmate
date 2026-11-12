@@ -15,6 +15,7 @@ import {
   type UserTurn,
 } from "./driver";
 import { truncate, type Logger } from "./log";
+import { isSilentReply } from "./chat-blocks";
 import { ReplyTextStream } from "./reply-stream";
 import { AssistantSpend, addStats, attachFailureStats, extractConversationStats, extractOneShotStats, failureStats, noResultStats } from "./usage-capture";
 
@@ -484,8 +485,9 @@ function distinctBlocks(blocks: string[]): string[] {
  * (a value that could not be read live), the stored message is replaced. With no reply call at all, the loose text is
  * shown instead, which is also how a bare `<silent/>` still reaches the silence filter.
  */
-function replyResult(reply: ReplyCapture, loose: string, stats: TurnReply["stats"], handlers: TurnHandlers): TurnReply {
+function replyResult(reply: ReplyCapture, loose: string, stats: TurnReply["stats"], handlers: TurnHandlers, noReply: () => void): TurnReply {
   const streamed = reply.streamed;
+  if (reply.accepted === null && !isSilentReply(loose)) noReply();
   const text = reply.accepted ?? loose;
   if (streamed === "") {
     if (text) handlers.onTextDelta(text);
@@ -614,7 +616,11 @@ class ClaudeConversation implements Conversation {
           this.costBaselineKnown = true;
         }
         if (msg.subtype === "success" && !msg.is_error) {
-          if (reply) return replyResult(reply, settled || distinctBlocks(assistantTexts).join("\n\n"), stats, handlers);
+          if (reply) {
+            // Counted so a prompt that stops calling the tool shows up in the log rather than as a chat that types all at once.
+            const noReply = () => this.opts.log.warn(`${this.setup.role} turn ended without a reply call; its loose text was shown instead`);
+            return replyResult(reply, settled || distinctBlocks(assistantTexts).join("\n\n"), stats, handlers, noReply);
+          }
           if (streamed) return settled === streamed ? { text: streamed, stats } : { text: settled, stats, superseded: true };
           const text = distinctBlocks(assistantTexts).join("\n\n") || msg.result;
           if (text) handlers.onTextDelta(text);

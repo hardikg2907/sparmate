@@ -274,10 +274,23 @@ describe("a role that replies through the reply tool", () => {
     expect((await gate.tool.run({ text: "c" })).isError).toBeUndefined();
   });
 
-  it("falls back to the loose text when no reply call comes, so a silent turn still reads as silent", async () => {
-    const silent = await runReplyTurn([...block(0, "<silent/>"), done()]);
+  it("falls back to the loose text when no reply call comes, and logs it unless the turn is silent", async () => {
+    const log = memoryLogger();
+    const run = async (messages: unknown[]) => {
+      scripted.messages = [messages as any[]];
+      const conv = createClaudeDriver({ cwd: "/tmp", log, clientApp: "t/1" }).startConversation({ ...setup, role: "coach", replyTool: true });
+      const deltas: string[] = [];
+      const reply = await conv.send({ text: "q", meta: {} } as any, { onTextDelta: (d: string) => deltas.push(d) });
+      conv.close();
+      return { reply, streamed: deltas.join("") };
+    };
+    const silent = await run([...block(0, "<silent/>"), done()]);
     expect(silent.streamed).toBe("<silent/>");
     expect(silent.reply.text).toBe("<silent/>");
+    expect(log.lines.join("\n")).not.toContain("without a reply call");
+    const loose = await run([...block(0, "Loose text."), done()]);
+    expect(loose.reply.text).toBe("Loose text.");
+    expect(log.lines.join("\n")).toContain("coach turn ended without a reply call");
   });
 
   it("settles on the complete input when the live text could not be read", async () => {
