@@ -1765,6 +1765,7 @@ export class SessionRuntime {
           focus: focusText(this.session.focus, this.phases.find((p) => p.id === this.session.focus?.source?.step)?.label ?? null),
         }),
       tools: this.interviewTools(ch),
+      replyTool: true,
       fake: {
         problem: this.problem,
         phases: this.phases,
@@ -1931,6 +1932,7 @@ export class SessionRuntime {
         ),
         createEmitBlockTool({
           channel: "interview",
+          repliesThroughTool: true,
           track: this.session.track,
           pendingCount: () => ch.pendingBlocks.length,
           pushBlock: (block) => {
