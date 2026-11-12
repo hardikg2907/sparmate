@@ -138,6 +138,11 @@ describe("layoutSequenceDiagram", () => {
     expect(actorSpacing(longLabels)).toBeGreaterThanOrEqual(156);
     expect(actorSpacing(longLabels)).toBeGreaterThanOrEqual(actorSpacing(shortLabels));
     expect(longLabels.width).toBeLessThanOrEqual(360);
+
+    const longStepLabel = "SELECT code, long_url, owner_id, expires_at FROM links WHERE code = $1";
+    const stepPill = longLabels.steps[0]!.label;
+    expect(stepPill.lines.join(" ")).toContain("…");
+    expect(stepPill.fullText).toBe(longStepLabel);
   });
 });
 
@@ -216,5 +221,19 @@ describe("layoutFlowDiagram", () => {
         expect(rectsOverlap(edge.label, node)).toBe(false);
       }
     }
+
+    const longFlowLabel = "INSERT INTO urls (code, long_url, created_at) ON CONFLICT DO NOTHING";
+    const truncatedFlow = layoutFlowDiagram({
+      kind: "diagram",
+      layout: "flow",
+      nodes: [
+        { id: "api", label: "Write API" },
+        { id: "db", label: "Postgres" },
+      ],
+      edges: [{ from: "api", to: "db", label: longFlowLabel }],
+    });
+    const flowPill = truncatedFlow.edges[0]!.label!;
+    expect(flowPill.lines.join(" ")).toContain("…");
+    expect(flowPill.fullText).toBe(longFlowLabel);
   });
 });

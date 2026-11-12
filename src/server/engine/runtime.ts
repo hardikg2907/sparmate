@@ -3,7 +3,7 @@ import { unwatchFile, watch, watchFile, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { z } from "zod";
-import type { ChatBlock } from "../../shared/blocks";
+import { candidateOwnText, matchUnsettledOptionText, type ChatBlock } from "../../shared/blocks";
 import { deriveChecklist } from "../../shared/checklist";
 import { gapDividerText, gapForTeachMessage } from "../../shared/gaps";
 import { frameEvidence, pinTargets, pinTargetsText, stepFrames, withFrameMembership } from "../../shared/graph/frames";
@@ -645,7 +645,7 @@ export class SessionRuntime {
         case "hello":
           return;
         case "chat.send":
-          return this.onChat(msg.channel, msg.text, msg.clientMsgId, msg.fromOption);
+          return this.onChat(msg.channel, msg.text, msg.clientMsgId);
         case "board.update":
           return await this.onBoardUpdate(msg.version, msg.elements);
         case "notes.update":
@@ -702,20 +702,22 @@ export class SessionRuntime {
     if (s !== "live") throw new UserError("not_live", "The round is over.");
   }
 
-  private onChat(channel: Channel, text: string, clientMsgId: string, fromOption?: boolean): void {
+  private onChat(channel: Channel, text: string, clientMsgId: string): void {
     if (channel === "coach") {
       if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
-      this.addEntry({ channel: "coach", role: "candidate", text, ...(fromOption ? { fromOption: true } : {}) }, clientMsgId);
+      const optionText = matchUnsettledOptionText(this.session.transcript, "coach", text);
+      const entry = this.addEntry({ channel: "coach", role: "candidate", text, ...(optionText !== undefined ? { optionText } : {}) }, clientMsgId);
       this.noteTeachRequest(text);
       if (this.coach.status === "error") this.retry(this.coach);
-      this.enqueue(this.coach, this.coachCandidateTurn(text));
+      this.enqueue(this.coach, this.coachCandidateTurn(text, entry.optionText));
       return;
     }
     this.requireLiveRound();
-    const entry = this.addEntry({ channel: "interview", role: "candidate", text, ...(fromOption ? { fromOption: true } : {}) }, clientMsgId);
+    const optionText = matchUnsettledOptionText(this.session.transcript, "interview", text);
+    const entry = this.addEntry({ channel: "interview", role: "candidate", text, ...(optionText !== undefined ? { optionText } : {}) }, clientMsgId);
     this.lastCandidateAt = entry.at;
     this.markActive();
-    this.enqueue(this.interview, this.candidateTurn(text));
+    this.enqueue(this.interview, this.candidateTurn(text, entry.optionText));
   }
 
   private async onBoardUpdate(version: number, elements: Record<string, unknown>[]): Promise<void> {
@@ -996,7 +998,7 @@ export class SessionRuntime {
     const codeText =
       scope === "step" ? stepCodeText(this.codeContent, s.stepCode[phase] ?? []) : scope === "file" && this.codeContent.trim() !== "" ? numberedCode(this.codeContent) : "";
     const notesText = (s.stepNotes[phase] ?? "").trim();
-    const said = chat.some((e) => e.role === "candidate" && !e.fromOption) || notesText !== "";
+    const said = chat.some((e) => e.role === "candidate" && candidateOwnText(e) !== "") || notesText !== "";
     const drawn = unframed ? s.board.graphText.trim() !== "" : frame !== null && !frame.empty;
     return {
       evidence: { stepLabel: def.label, goal: def.goal, items, chat, boardText, codeText, notesText, imageAttached: false },
@@ -1077,7 +1079,11 @@ export class SessionRuntime {
           track: s.track,
           mode: s.mode,
           checkItems: evidence.items,
-          candidateLines: evidence.chat.filter((e) => e.role === "candidate" && !e.fromOption).map((e) => e.text),
+          candidateLines: evidence.chat.flatMap((e) => {
+            if (e.role !== "candidate") return [];
+            const own = candidateOwnText(e);
+            return own ? [own] : [];
+          }),
           frameText: evidence.boardText,
           codeText: unnumberedCode(evidence.codeText),
           notesText: evidence.notesText,
@@ -1454,12 +1460,12 @@ export class SessionRuntime {
     };
   }
 
-  private candidateTurn(text: string): QueuedTurn {
+  private candidateTurn(text: string, optionText?: string): QueuedTurn {
     return {
       kind: "candidate",
       build: () => {
         const { view, commit } = this.interviewContext(this.interview);
-        return { turn: { text: candidateEnvelope(view, text), meta: { kind: "candidate", candidateText: text } }, commit };
+        return { turn: { text: candidateEnvelope(view, text, optionText), meta: { kind: "candidate", candidateText: text } }, commit };
       },
       after: () => this.afterInterviewerTurn(),
     };
@@ -1668,12 +1674,12 @@ export class SessionRuntime {
     };
   }
 
-  private coachCandidateTurn(text: string): QueuedTurn {
+  private coachCandidateTurn(text: string, optionText?: string): QueuedTurn {
     return {
       kind: "candidate",
       build: () => {
         const { view, commit } = this.coachContext(this.coach);
-        return { turn: { text: candidateEnvelope(view, text), meta: { kind: "candidate", candidateText: text } }, commit };
+        return { turn: { text: candidateEnvelope(view, text, optionText), meta: { kind: "candidate", candidateText: text } }, commit };
       },
     };
   }
@@ -1935,6 +1941,7 @@ export class SessionRuntime {
           countOnlyVerdictThisTurn: () => ch.countOnlyVerdictThisTurn,
           boardElements: () => this.boardElements,
           readCode: () => this.codeContent,
+          stepCode: () => this.session.stepCode,
         }),
       );
     }
@@ -2086,6 +2093,7 @@ export class SessionRuntime {
         isCountOnly: () => false,
         boardElements: () => this.boardElements,
         readCode: async () => (await this.readAttemptFile()) ?? (await this.deps.store.readFinalCode(this.session.id)) ?? this.codeContent,
+        stepCode: () => ({}),
       }),
     ];
     if (this.session.track === "lld") {
@@ -2625,7 +2633,7 @@ export class SessionRuntime {
       blocks?: ChatBlock[];
       kind?: TranscriptEntry["kind"];
       hidden?: boolean;
-      fromOption?: boolean;
+      optionText?: string;
     },
     clientMsgId?: string,
   ): TranscriptEntry {
@@ -2639,7 +2647,7 @@ export class SessionRuntime {
       ...(e.blocks && e.blocks.length > 0 ? { blocks: e.blocks } : {}),
       ...(e.kind ? { kind: e.kind } : {}),
       ...(e.hidden ? { hidden: true } : {}),
-      ...(e.fromOption ? { fromOption: true } : {}),
+      ...(e.optionText !== undefined ? { optionText: e.optionText } : {}),
     };
     this.session.transcript.push(entry);
     if (entry.channel === "interview" && entry.role === "interviewer" && !entry.hidden) this.spokeAt = entry.at;

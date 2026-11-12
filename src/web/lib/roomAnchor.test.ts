@@ -42,6 +42,42 @@ describe("resolveBoardFocusTarget", () => {
 });
 
 describe("activateRoomAnchor", () => {
+  it("silently skips board anchors when the board handle is not ready yet without showing a toast or marking diagramFitted", () => {
+    const diagramFitted = { current: false };
+    const setPhoneView = vi.fn();
+    const setGraphOpen = vi.fn();
+    const setTab = vi.fn();
+    const setReveal = vi.fn();
+    const notifyError = vi.fn();
+    const scheduleAfterLayout = vi.fn();
+
+    const activated = activateRoomAnchor(
+      { kind: "board", elementId: "lot" },
+      {
+        lld: true,
+        tab: "code",
+        phoneView: "chat",
+        graphOpen: true,
+        diagramFitted,
+        focusBoardElement: () => "not_ready",
+        setPhoneView,
+        setGraphOpen,
+        setTab,
+        setReveal,
+        notifyError,
+        scheduleAfterLayout,
+      },
+    );
+
+    expect(activated).toBe(false);
+    expect(notifyError).not.toHaveBeenCalled();
+    expect(diagramFitted.current).toBe(false);
+    expect(setPhoneView).not.toHaveBeenCalled();
+    expect(setGraphOpen).not.toHaveBeenCalled();
+    expect(setTab).not.toHaveBeenCalled();
+    expect(scheduleAfterLayout).not.toHaveBeenCalled();
+  });
+
   it("reports an error notice and leaves diagramFitted and active views untouched when a board shape is missing", () => {
     const diagramFitted = { current: false };
     const setPhoneView = vi.fn();
@@ -59,7 +95,7 @@ describe("activateRoomAnchor", () => {
         phoneView: "chat",
         graphOpen: true,
         diagramFitted,
-        focusBoardElement: () => false,
+        focusBoardElement: () => "missing",
         setPhoneView,
         setGraphOpen,
         setTab,
@@ -98,7 +134,7 @@ describe("activateRoomAnchor", () => {
         diagramFitted,
         focusBoardElement: (id) => {
           focusCalls.push(id);
-          return true;
+          return "focused";
         },
         setPhoneView,
         setGraphOpen,
@@ -136,7 +172,7 @@ describe("activateRoomAnchor", () => {
         phoneView: "work",
         graphOpen: false,
         diagramFitted: { current: false },
-        focusBoardElement: () => false,
+        focusBoardElement: () => "missing",
         setPhoneView,
         setGraphOpen: () => {},
         setTab,
@@ -157,7 +193,7 @@ describe("activateRoomAnchor", () => {
         phoneView: "chat",
         graphOpen: false,
         diagramFitted: { current: false },
-        focusBoardElement: () => false,
+        focusBoardElement: () => "missing",
         setPhoneView,
         setGraphOpen: () => {},
         setTab,

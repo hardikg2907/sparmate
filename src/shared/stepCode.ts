@@ -80,3 +80,22 @@ export function unnumberedCode(text: string): string {
     .map((l) => l.replace(/^\s*\d+ \| /, ""))
     .join("\n");
 }
+
+/** Which steps in `stepCode` own at least one non-blank line in the 1-based inclusive range `[startLine, endLine]`. */
+export function stepsOwningCodeRange(content: string, startLine: number, endLine: number, stepCode: Readonly<Record<string, readonly string[]>> | undefined): string[] {
+  if (!stepCode) return [];
+  const all = fileLines(content);
+  const lo = Math.max(0, startLine - 1);
+  const hi = Math.min(all.length, endLine);
+  const targetLines = new Set<string>();
+  for (let i = lo; i < hi; i++) {
+    const trimmed = all[i]?.trim() ?? "";
+    if (trimmed !== "") targetLines.add(trimmed);
+  }
+  if (targetLines.size === 0) return [];
+  const owners: string[] = [];
+  for (const [step, lines] of Object.entries(stepCode)) {
+    if (lines.some((line) => targetLines.has(line))) owners.push(step);
+  }
+  return owners;
+}

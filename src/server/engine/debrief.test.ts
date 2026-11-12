@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { phasePlan } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import { ScorecardSchema, type Session } from "../../shared/types";
-import { checkStepQuotes } from "../../shared/quotes";
+import { checkQuotes, checkStepQuotes } from "../../shared/quotes";
 import {
   candidateLines,
   candidateText,
@@ -427,13 +427,13 @@ describe("stepSources", () => {
     expect(checkStepQuotes(stepCard, (phase) => by[phase] ?? { candidate: "", board: "", code: "" })).toEqual([{ phase: "api", index: 0, verified: false }]);
   });
 
-  it("excludes option-chip candidate entries from candidateText, stepSources, and candidateLines, and marks them as events in judgeMessage", () => {
+  it("excludes pure option-chip candidate entries from candidateText, stepSources, and candidateLines, and marks them as events in judgeMessage", () => {
     const withOption = {
       ...session,
       mode: "guided",
       hints: [],
       extension: null,
-      transcript: [entry("1", MIN, "latency under 50 ms"), { ...entry("opt", 2 * MIN, "Fan-out on write — Fast reads"), fromOption: true }],
+      transcript: [entry("1", MIN, "latency under 50 ms"), { ...entry("opt", 2 * MIN, "Fan-out on write — Fast reads"), optionText: "Fan-out on write — Fast reads" }],
     } as unknown as Session;
 
     expect(candidateText(withOption)).toContain("latency under 50 ms");
@@ -461,6 +461,83 @@ describe("stepSources", () => {
     });
     expect(msg).toContain("[02:00] (event) candidate picked option: Fan-out on write — Fast reads");
     expect(msg).not.toContain("[02:00] candidate:");
+  });
+
+  it("strips optionText from extended prefill entries so option quotes fail while the candidate's own added words verify", () => {
+    const withExtendedPrefill = {
+      ...session,
+      mode: "guided",
+      hints: [],
+      extension: null,
+      transcript: [
+        {
+          ...entry("ext", 2 * MIN, "Fan-out on write — Fast reads, with a pull fallback for celebrity accounts."),
+          optionText: "Fan-out on write — Fast reads",
+        },
+      ],
+    } as unknown as Session;
+
+    const cand = candidateText(withExtendedPrefill);
+    expect(cand).not.toContain("Fan-out on write");
+    expect(cand).toContain("pull fallback for celebrity accounts");
+    expect(candidateLines(withExtendedPrefill)).toEqual([", with a pull fallback for celebrity accounts."]);
+
+    const dimChecks = checkQuotes(
+      {
+        dimensions: [
+          {
+            id: "design",
+            name: "Design",
+            score: 3,
+            whatA4LooksLike: "x",
+            evidence: [
+              { quote: "Fan-out on write", source: "candidate", at: "02:00", polarity: "plus" },
+              { quote: "pull fallback for celebrity accounts", source: "candidate", at: "02:00", polarity: "plus" },
+            ],
+          },
+        ],
+      },
+      { candidate: cand, board: "", code: "" },
+    );
+    expect(dimChecks).toEqual([
+      { dimensionId: "design", index: 0, verified: false },
+      { dimensionId: "design", index: 1, verified: true },
+    ]);
+
+    const by = stepSources(withExtendedPrefill, null, { endMs: 20 * MIN });
+    expect(by.requirements?.candidate).not.toContain("Fan-out on write");
+    expect(by.requirements?.candidate).toContain("pull fallback for celebrity accounts");
+    expect(
+      checkStepQuotes(
+        {
+          steps: [
+            {
+              phase: "requirements",
+              took: [
+                { evidence: { quote: "Fan-out on write", source: "candidate" as const } },
+                { evidence: { quote: "pull fallback for celebrity accounts", source: "candidate" as const } },
+              ],
+            },
+          ],
+        },
+        (phase) => by[phase] ?? { candidate: "", board: "", code: "" },
+      ),
+    ).toEqual([
+      { phase: "requirements", index: 0, verified: false },
+      { phase: "requirements", index: 1, verified: true },
+    ]);
+
+    const msg = judgeMessage({
+      session: withExtendedPrefill,
+      problem: { meta: { title: "URL Shortener" } } as unknown as Problem,
+      timing: [],
+      finalGraphText: "",
+      finalCode: null,
+      tester: null,
+      hasImage: false,
+    });
+    expect(msg).toContain("[02:00] (event) candidate picked option: Fan-out on write — Fast reads");
+    expect(msg).toContain("[02:00] candidate: , with a pull fallback for celebrity accounts.");
   });
 });
 

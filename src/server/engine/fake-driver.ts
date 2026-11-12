@@ -151,7 +151,12 @@ class FakeConversation implements Conversation {
               block: {
                 kind: "options",
                 items: [
-                  { label: "Optimize for read latency", note: "Cache hot lookups ahead of storage" },
+                  {
+                    label: "Optimize for read latency",
+                    note: "Cache hot lookups ahead of storage",
+                    reply:
+                      "Option-chip pick: create a short link for a long URL with custom alias and expiry, redirect in under 50 ms at p99, 100 million new links a month and 100 redirects per link.",
+                  },
                   { label: "Optimize for write throughput", note: "Append first and materialize asynchronously" },
                 ],
               },

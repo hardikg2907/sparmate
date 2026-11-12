@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { OptionItem, OptionsBlock as OptionsBlockType } from "../../../shared/blocks";
 import { CheckIcon } from "../icons";
 import { cn } from "../ui";
+import { focusSettledOptionsGroup, prefersFinePointer } from "./optionsState";
 
 export interface OptionsBlockProps {
   block: OptionsBlockType;
   settled: boolean;
   disabled: boolean;
   answeredText?: string | null;
+  focusGroupOnSettle?: boolean;
   onChoose: (text: string, action: "send" | "prefill") => boolean;
 }
 
@@ -26,15 +28,26 @@ function matchAnsweredIndex(items: readonly OptionItem[], answeredText: string |
   return null;
 }
 
-export function OptionsBlock({ block, settled, disabled, answeredText, onChoose }: OptionsBlockProps) {
+export function OptionsBlock({ block, settled, disabled, answeredText, focusGroupOnSettle: focusGroupOnSettleProp, onChoose }: OptionsBlockProps) {
   const [prefilledIndex, setPrefilledIndex] = useState<number | null>(null);
+  const [focusGroupState, setFocusGroupState] = useState(false);
+  const pendingGroupFocus = useRef(false);
+  const groupRef = useRef<HTMLDivElement>(null);
   const action = block.action ?? "send";
+  const focusGroupOnSettle = focusGroupOnSettleProp ?? focusGroupState;
   // A later assistant reply settles options with answeredText === null, which must not mark a prefill draft as sent.
   const chosenIndex = matchAnsweredIndex(block.items, answeredText) ?? (settled && answeredText ? prefilledIndex : null);
 
+  // Touch sends keep the virtual keyboard closed by landing focus on the settled group once the buttons unmount.
+  useLayoutEffect(() => {
+    if (focusSettledOptionsGroup(settled, pendingGroupFocus.current, groupRef.current)) {
+      pendingGroupFocus.current = false;
+    }
+  }, [settled, focusGroupState]);
+
   if (settled) {
     return (
-      <div role="group" aria-label="Options" className="flex flex-col gap-1.5">
+      <div ref={groupRef} role="group" aria-label="Options" tabIndex={focusGroupOnSettle ? -1 : undefined} className="flex flex-col gap-1.5 outline-none">
         {block.items.map((item, index) => {
           const chosen = chosenIndex === index;
           return (
@@ -73,7 +86,14 @@ export function OptionsBlock({ block, settled, disabled, answeredText, onChoose 
               const text = item.reply ?? item.label;
               const ok = onChoose(text, action);
               if (!ok) return;
-              if (action === "prefill") setPrefilledIndex(index);
+              if (action === "prefill") {
+                setPrefilledIndex(index);
+                return;
+              }
+              if (!prefersFinePointer()) {
+                pendingGroupFocus.current = true;
+                setFocusGroupState(true);
+              }
             }}
             className={cn(
               "group flex w-full items-start justify-between gap-2.5 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55",

@@ -102,12 +102,8 @@ export interface SessionSource {
   boardImageUrl(): string;
 }
 
-export interface SendChatOptions {
-  fromOption?: boolean;
-}
-
 export interface SessionActions {
-  sendChat(channel: Channel, text: string, opts?: SendChatOptions): boolean;
+  sendChat(channel: Channel, text: string): boolean;
   /** Tells the server he is writing to the interviewer, at most once per `COMPOSING_EVERY_MS`. */
   composing(): void;
   setPhase(phase: string): void;

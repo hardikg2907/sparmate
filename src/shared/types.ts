@@ -108,8 +108,8 @@ export interface TranscriptEntry {
   text: string;
   /** Structured generic UI primitives emitted alongside a Guide or Coach reply. */
   blocks?: ChatBlock[];
-  /** True when a candidate chat message was sent by clicking a Guide/Coach option button rather than typed by the candidate. */
-  fromOption?: boolean;
+  /** Guide- or Coach-authored option text matched against the latest unsettled options block when this candidate message arrived. */
+  optionText?: string;
   /** System notes describe events (phase change, run result, extension, clock). Hidden ones are for the model only. */
   kind?: "clock" | "extension" | "hint" | "phase" | "run" | "note" | "error" | "gap";
   hidden?: boolean;

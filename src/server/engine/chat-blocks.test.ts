@@ -9,13 +9,14 @@ interface HarnessOptions {
   channel?: Channel;
   track?: Track;
   meta?: TurnMeta | null;
-  hintLevel?: 1 | 2 | 3 | null;
+  hintLevel?: 1 | 2 | 3 | null | (() => 1 | 2 | 3 | null);
   phase?: string;
   countOnlyPhases?: string[];
   countOnlyVerdictThisTurn?: boolean | (() => boolean);
   boardElements?: Record<string, unknown>[];
   code?: string;
   readCode?: () => Promise<string> | string;
+  stepCode?: Readonly<Record<string, readonly string[]>>;
 }
 
 const SAMPLE_BOARD: Record<string, unknown>[] = [
@@ -38,12 +39,13 @@ function makeHarness(opts: HarnessOptions = {}) {
       return blocks.length;
     },
     turnMeta: () => opts.meta ?? { kind: "candidate", candidateText: "hello" },
-    hintLevelThisTurn: () => opts.hintLevel ?? null,
+    hintLevelThisTurn: () => (typeof opts.hintLevel === "function" ? opts.hintLevel() : (opts.hintLevel ?? null)),
     currentPhase: () => opts.phase ?? "requirements",
     isCountOnly: (phase) => countOnly.has(phase),
     countOnlyVerdictThisTurn: () => (typeof opts.countOnlyVerdictThisTurn === "function" ? opts.countOnlyVerdictThisTurn() : (opts.countOnlyVerdictThisTurn ?? false)),
     boardElements: () => opts.boardElements ?? SAMPLE_BOARD,
     readCode: opts.readCode ?? (() => opts.code ?? ""),
+    ...(opts.stepCode ? { stepCode: () => opts.stepCode! } : {}),
   });
   return { tool, blocks };
 }
@@ -123,7 +125,26 @@ describe("chat-blocks", () => {
     expect(blocks).toHaveLength(0);
   });
 
-  it("refuses diagram and kv on hint turns, refuses options on H1 and H2, and allows options on H3", async () => {
+  it("refuses diagram and kv on hint turns, refuses options before note_hint(3) and on H1/H2, and allows options once note_hint(3) has run", async () => {
+    let dynamicRung: 1 | 2 | 3 | null = null;
+    const unrecordedThenH3 = makeHarness({
+      meta: { kind: "request", request: "hint" },
+      hintLevel: () => dynamicRung,
+    });
+    const beforeNoteHint = await unrecordedThenH3.tool.run({
+      block: { kind: "options", items: [{ label: "Push on write" }, { label: "Pull on read" }] },
+    });
+    expect(beforeNoteHint.isError).toBe(true);
+    expect(firstText(beforeNoteHint)).toContain("note_hint");
+    expect(unrecordedThenH3.blocks).toHaveLength(0);
+
+    dynamicRung = 3;
+    const afterNoteHint3 = await unrecordedThenH3.tool.run({
+      block: { kind: "options", items: [{ label: "Push on write" }, { label: "Pull on read" }] },
+    });
+    expect(afterNoteHint3.isError).toBeUndefined();
+    expect(unrecordedThenH3.blocks.map((b) => b.kind)).toEqual(["options"]);
+
     for (const hintLevel of [1, 2] as const) {
       const lower = makeHarness({
         meta: { kind: "request", request: "hint" },
@@ -375,6 +396,53 @@ describe("chat-blocks", () => {
     });
     expect(racedCodeAnchor.isError).toBe(true);
     expect(asyncVerdictRace.blocks).toHaveLength(0);
+  });
+
+  it("refuses cross-step LLD code anchors into count-only design steps while allowing current-step code anchors and explicit Hint/Stuck presses", async () => {
+    const code = ["// clarify: support compact and SUV spots", "// clarify: reject entry when lot is full", "struct Spot {", "  int id = 0;", "};"].join("\n");
+    const stepCode = {
+      clarify: ["// clarify: support compact and SUV spots", "// clarify: reject entry when lot is full"],
+    };
+
+    const onSkeleton = makeHarness({
+      track: "lld",
+      meta: { kind: "candidate", candidateText: "check my skeleton" },
+      phase: "skeleton",
+      countOnlyPhases: ["clarify"],
+      hintLevel: 1,
+      code,
+      stepCode,
+    });
+    const clarifyLine = await onSkeleton.tool.run({
+      block: { kind: "anchor", target: { kind: "code", line: 1 }, label: "Clarify notes" },
+    });
+    expect(clarifyLine.isError).toBe(true);
+    expect(firstText(clarifyLine)).toContain("do not anchor to code written in it");
+
+    const spanningClarifyAndSkeleton = await onSkeleton.tool.run({
+      block: { kind: "anchor", target: { kind: "code", line: 2, endLine: 4 }, label: "Mixed range" },
+    });
+    expect(spanningClarifyAndSkeleton.isError).toBe(true);
+
+    const skeletonOnly = await onSkeleton.tool.run({
+      block: { kind: "anchor", target: { kind: "code", line: 3, endLine: 5 }, label: "struct Spot" },
+    });
+    expect(skeletonOnly.isError).toBeUndefined();
+    expect(onSkeleton.blocks).toHaveLength(1);
+
+    const explicitHint = makeHarness({
+      track: "lld",
+      meta: { kind: "request", request: "hint" },
+      phase: "clarify",
+      countOnlyPhases: ["clarify"],
+      hintLevel: 1,
+      code,
+      stepCode,
+    });
+    const hintClarifyAnchor = await explicitHint.tool.run({
+      block: { kind: "anchor", target: { kind: "code", line: 1, endLine: 2 }, label: "Clarify notes" },
+    });
+    expect(hintClarifyAnchor.isError).toBeUndefined();
   });
 
   it("validates board anchor elementId against pinTargets and stepFrames", async () => {

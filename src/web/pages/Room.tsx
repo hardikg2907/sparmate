@@ -85,7 +85,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
       phoneView,
       graphOpen,
       diagramFitted,
-      focusBoardElement: (elementId) => ctl.boardRef.current?.focusElement(elementId) ?? false,
+      focusBoardElement: (elementId) => ctl.boardRef.current?.focusElement(elementId) ?? "not_ready",
       setPhoneView,
       setGraphOpen,
       setTab,
@@ -370,7 +370,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
                         : "Reply to the interviewer…"
               }
               empty={guided ? "The guide starts with the first step in a moment." : "The interviewer opens the conversation in a moment."}
-              onSend={(text, opts) => actions.sendChat("interview", text, opts)}
+              onSend={(text) => actions.sendChat("interview", text)}
               onDraft={actions.composing}
               onAnchor={handleAnchor}
               topSlot={!lld ? <StepChecklist step={session.steps[session.phase]} /> : null}

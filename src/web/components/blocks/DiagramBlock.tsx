@@ -6,11 +6,19 @@ export interface DiagramBlockProps {
   block: DiagramBlockType;
 }
 
+/** Replaces ASCII arrows in the plain-text summary so screen readers speak natural prose via aria-describedby. */
+export function diagramAccessibleDescription(block: DiagramBlockType): string {
+  return blockToPlainText(block)
+    .replace(/\s*-->\s*/g, " to ")
+    .replace(/\s*->\s*/g, " to ");
+}
+
 function EdgePill({ pill }: { pill: PositionedEdgeLabel }) {
   const cx = pill.x + pill.width / 2;
   const firstBaseline = pill.y + 12.5;
   return (
     <g>
+      <title>{pill.fullText}</title>
       <rect x={pill.x} y={pill.y} width={pill.width} height={pill.height} rx={5} fill="var(--card)" stroke="var(--border)" strokeWidth={1} />
       <text x={cx} textAnchor="middle" fill="var(--muted-foreground)" fontSize={10.5} fontWeight={500}>
         {pill.lines.map((line, i) => (
@@ -36,7 +44,7 @@ export function DiagramBlock({ block }: DiagramBlockProps) {
   const width = flow?.width ?? seq?.width ?? 280;
   const height = flow?.height ?? seq?.height ?? 120;
   const ariaLabel = flow?.ariaLabel ?? seq?.ariaLabel ?? "Diagram";
-  const plainDescription = useMemo(() => blockToPlainText(block), [block]);
+  const accessibleDescription = useMemo(() => diagramAccessibleDescription(block), [block]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -51,8 +59,9 @@ export function DiagramBlock({ block }: DiagramBlockProps) {
   return (
     <figure className="m-0 rounded-lg border border-border bg-raised/60 p-3">
       {block.title ? <figcaption className="mb-2 text-meta font-semibold text-muted-foreground">{block.title}</figcaption> : null}
-      <div id={descId} className="sr-only whitespace-pre-wrap">
-        {plainDescription}
+      {/* `hidden` omits the summary from linear page reading while still supplying `aria-describedby` per WAI-ARIA. */}
+      <div id={descId} hidden>
+        {accessibleDescription}
       </div>
       <div ref={scrollRef} className="max-w-full overflow-x-auto" {...(wide ? { tabIndex: 0, role: "region", "aria-label": `${ariaLabel}, scrolls sideways` } : {})}>
         <svg

@@ -149,15 +149,13 @@ describe("mergeCheck", () => {
     );
   });
 
-  it("ignores option-chip candidate entries in evidenceKey and chat quote verification, and marks them as events in checkerMessage", () => {
+  it("ignores pure option-chip candidate entries in evidenceKey and chat quote verification, and marks them as events in checkerMessage", () => {
     const base = evidence({
       chat: [entry("a", 10_000, "interviewer", "Pick one option.")],
     });
+    const optText = "Users create short links and redirects add under 50 ms at p99.";
     const withOptionClick = evidence({
-      chat: [
-        entry("a", 10_000, "interviewer", "Pick one option."),
-        { ...entry("opt", 20_000, "candidate", "Users create short links and redirects add under 50 ms at p99."), fromOption: true },
-      ],
+      chat: [entry("a", 10_000, "interviewer", "Pick one option."), { ...entry("opt", 20_000, "candidate", optText), optionText: optText }],
     });
 
     expect(evidenceKey(withOptionClick)).toBe(evidenceKey(base));
@@ -173,6 +171,43 @@ describe("mergeCheck", () => {
       30_000,
     );
     expect(check.items).toEqual({});
+  });
+
+  it("rejects quotes from optionText while accepting quotes from the candidate's own added words on an extended prefill", () => {
+    const base = evidence({
+      chat: [entry("a", 10_000, "interviewer", "Start from one of these drafts.")],
+    });
+    const withExtendedPrefill = evidence({
+      chat: [
+        entry("a", 10_000, "interviewer", "Start from one of these drafts."),
+        {
+          ...entry("ext", 20_000, "candidate", "Users create short links. A redirect should add under 50 ms at p99."),
+          optionText: "Users create short links.",
+        },
+      ],
+    });
+
+    expect(evidenceKey(withExtendedPrefill)).not.toBe(evidenceKey(base));
+    const msg = checkerMessage(withExtendedPrefill);
+    expect(msg).toContain("[00:20] (event) candidate picked option: Users create short links.");
+    expect(msg).toContain("[00:20] candidate: A redirect should add under 50 ms at p99.");
+
+    const check = mergeCheck(
+      undefined,
+      {
+        items: [claim("requirements-1", "covered", "chat", "Users create short links"), claim("requirements-2", "covered", "chat", "A redirect should add under 50 ms at p99")],
+      },
+      withExtendedPrefill,
+      30_000,
+    );
+    expect(check.items["requirements-1"]).toBeUndefined();
+    expect(check.items["requirements-2"]).toEqual({
+      state: "covered",
+      source: "chat",
+      at: 20_000,
+      quote: "A redirect should add under 50 ms at p99",
+      detail: "",
+    });
   });
 });
 

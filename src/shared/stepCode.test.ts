@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HLD_PHASES, LLD_PHASES } from "./phases";
-import { MAX_STEP_LINES, codeScopeFor, newLines, numberedCode, stepCodeText, unnumberedCode, withStepLines } from "./stepCode";
+import { MAX_STEP_LINES, codeScopeFor, newLines, numberedCode, stepCodeText, stepsOwningCodeRange, unnumberedCode, withStepLines } from "./stepCode";
 
 describe("codeScopeFor", () => {
   it("gives a design round no code", () => {
@@ -90,5 +90,15 @@ describe("stepCodeText", () => {
   it("reads back as his own text", () => {
     expect(unnumberedCode(stepCodeText(file, ["class Spot {", "int floor;"]))).toBe("class Spot {\n  int floor;");
     expect(unnumberedCode(numberedCode("x | y\n 7 | z"))).toBe("x | y\n 7 | z");
+  });
+
+  it("finds which design steps own lines inside a 1-based code range", () => {
+    const stepCode = {
+      clarify: ["// Clarify: one entry gate", "// Out of scope: payments"],
+      entities: ["class Spot {", "int floor;"],
+    };
+    expect(stepsOwningCodeRange(file, 1, 2, stepCode)).toEqual(["clarify"]);
+    expect(stepsOwningCodeRange(file, 2, 4, stepCode)).toEqual(["clarify", "entities"]);
+    expect(stepsOwningCodeRange(file, 3, 3, stepCode)).toEqual([]);
   });
 });

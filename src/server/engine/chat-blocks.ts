@@ -1,7 +1,7 @@
 import { ChatBlockSchema, MAX_BLOCKS_PER_TURN, sanitizeChatBlock, type ChatBlock } from "../../shared/blocks";
 import { pinTargets, stepFrames, stepOfElement } from "../../shared/graph/frames";
 import type { Track } from "../../shared/phases";
-import { fileLines } from "../../shared/stepCode";
+import { fileLines, stepsOwningCodeRange } from "../../shared/stepCode";
 import type { Channel } from "../../shared/types";
 import { defineTool, textOutput, type RoomTool, type TurnMeta } from "./driver";
 
@@ -32,6 +32,7 @@ export interface EmitBlockContext {
   countOnlyVerdictThisTurn?(): boolean;
   boardElements(): readonly Record<string, unknown>[];
   readCode(): Promise<string> | string;
+  stepCode?: () => Readonly<Record<string, readonly string[]>>;
 }
 
 function findBoardTarget(elements: readonly Record<string, unknown>[], elementId: string): { exists: boolean; step: string | null } {
@@ -77,6 +78,9 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
         if (isHint && (block.kind === "diagram" || block.kind === "kv")) {
           return textOutput(`"${block.kind}" blocks are not allowed on hint replies. Use prose, callout, anchor, or (on H3) options.`, true);
         }
+        if (hintRequested && hintLevel === null && block.kind === "options") {
+          return textOutput('Call note_hint with level 3 before emitting "options" on a hint reply; options are only allowed on third-rung (H3) hints.', true);
+        }
         if (hintLevel !== null && hintLevel < 3 && block.kind === "options") {
           return textOutput(`"options" blocks are only allowed on third-rung (H3) hints, not H${hintLevel}.`, true);
         }
@@ -114,6 +118,13 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
           if (block.target.line > lineCount || endLine > lineCount) {
             const range = block.target.endLine !== undefined ? `L${block.target.line}-L${block.target.endLine}` : `L${block.target.line}`;
             return textOutput(`Code anchor ${range} is out of range; the file has ${lineCount} line${lineCount === 1 ? "" : "s"}.`, true);
+          }
+          // Design steps write requirements and nouns into the file, so anchoring their lines from another step would reveal open items.
+          if (ctx.channel === "interview" && !skipsCountOnly) {
+            const owners = stepsOwningCodeRange(code, block.target.line, endLine, ctx.stepCode?.());
+            if (owners.some((step) => ctx.isCountOnly(step))) {
+              return textOutput("Checks of that step give only a count of what is open, so do not anchor to code written in it.", true);
+            }
           }
         }
       }

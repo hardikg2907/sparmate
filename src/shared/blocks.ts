@@ -350,3 +350,77 @@ export function blocksToSpeechText(blocks: readonly ChatBlock[] | undefined): st
   if (!blocks || blocks.length === 0) return "";
   return blocks.map(blockToSpeechText).filter(Boolean).join(" ");
 }
+
+function findOptionSpan(normText: string, normOpt: string): { start: number; end: number } | null {
+  if (!normOpt) return null;
+  let from = 0;
+  while (from <= normText.length - normOpt.length) {
+    const idx = normText.indexOf(normOpt, from);
+    if (idx === -1) return null;
+    const end = idx + normOpt.length;
+    const leftOk = idx === 0 || !/\w/.test(normOpt[0]!) || !/\w/.test(normText[idx - 1]!);
+    const rightOk = end === normText.length || !/\w/.test(normOpt[normOpt.length - 1]!) || !/\w/.test(normText[end]!);
+    if (leftOk && rightOk) return { start: idx, end };
+    from = idx + 1;
+  }
+  return null;
+}
+
+/**
+ * Matches an incoming candidate message against the `reply ?? label` texts of the latest unsettled `options`
+ * block on `channel` (an assistant turn with no non-system turn after it). Returns the matched option text
+ * so evidence checks strip guide-authored words from both `send` clicks and unedited or extended `prefill` drafts.
+ */
+export function matchUnsettledOptionText(
+  entries: readonly { channel: string; role: string; blocks?: readonly ChatBlock[] }[],
+  channel: string,
+  candidateText: string,
+): string | undefined {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (!entry || entry.channel !== channel || entry.role === "system") continue;
+    if (entry.role !== "interviewer" && entry.role !== "coach") return undefined;
+    const candidates: string[] = [];
+    for (const block of entry.blocks ?? []) {
+      if (block.kind !== "options") continue;
+      for (const item of block.items) {
+        const opt = (item.reply ?? item.label).replace(/\r\n?/g, "\n").trim();
+        if (opt && !candidates.includes(opt)) candidates.push(opt);
+      }
+    }
+    if (candidates.length === 0) return undefined;
+    const normCandidate = candidateText.replace(/\r\n?/g, "\n");
+    const trimmedCandidate = normCandidate.trim();
+    for (const opt of candidates) {
+      if (trimmedCandidate === opt) return opt;
+    }
+    const byLength = [...candidates].sort((a, b) => b.length - a.length);
+    for (const opt of byLength) {
+      if (findOptionSpan(normCandidate, opt)) return opt;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+/** Removes matched guide-authored option text from a candidate message, leaving only the candidate's own words. */
+export function stripOptionText(text: string, optionText: string | undefined): string {
+  if (!optionText) return text;
+  const normText = text.replace(/\r\n?/g, "\n");
+  const normOpt = optionText.replace(/\r\n?/g, "\n").trim();
+  if (!normOpt) return text;
+  const fallbackIdx = normText.indexOf(normOpt);
+  const span = findOptionSpan(normText, normOpt) ?? (fallbackIdx >= 0 ? { start: fallbackIdx, end: fallbackIdx + normOpt.length } : null);
+  if (!span) return text;
+  const before = normText.slice(0, span.start).trimEnd();
+  const after = normText.slice(span.end).trimStart();
+  if (!before && !after) return "";
+  if (!before) return after;
+  if (!after) return before;
+  const windowSlice = normText.slice(Math.max(0, span.start - 1), Math.min(normText.length, span.end + 1));
+  return `${before}${windowSlice.includes("\n") ? "\n" : " "}${after}`;
+}
+
+export function candidateOwnText(entry: { text: string; optionText?: string }): string {
+  return stripOptionText(entry.text, entry.optionText);
+}

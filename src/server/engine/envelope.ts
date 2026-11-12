@@ -1,4 +1,4 @@
-import { blocksToPlainText } from "../../shared/blocks";
+import { blocksToPlainText, candidateOwnText } from "../../shared/blocks";
 import type { Track } from "../../shared/phases";
 import type { CompileDiagnostic, RunResult, StepSummary, TranscriptEntry } from "../../shared/types";
 import { formatClock, formatStamp, type CheckpointKind } from "./clock";
@@ -143,8 +143,14 @@ export function contextBlock(v: ContextView): string {
 }
 
 /** The candidate's words go in verbatim; the model never sees them without the context around them. */
-export function candidateEnvelope(v: ContextView, text: string): string {
-  return `${contextBlock(v)}\n<candidate>\n${text}\n</candidate>`;
+export function candidateEnvelope(v: ContextView, text: string, optionText?: string): string {
+  if (optionText === undefined || optionText.trim() === "") {
+    return `${contextBlock(v)}\n<candidate>\n${text}\n</candidate>`;
+  }
+  const own = candidateOwnText({ text, optionText });
+  const flatOption = optionText.replace(/\s+/g, " ").trim();
+  const optionEvent = own === "" ? "candidate picked option" : `candidate picked option: ${flatOption}`;
+  return `${contextBlock({ ...v, events: [...(v.events ?? []), optionEvent] })}\n<candidate>\n${text}\n</candidate>`;
 }
 
 export function startTurn(v: ContextView): string {
@@ -300,8 +306,12 @@ export function transcriptLines(entries: readonly TranscriptEntry[], channel: Tr
       const stamp = `[${formatStamp(e.at)}]`;
       const content = entryText(e);
       if (e.role === "system") return `${stamp} (event) ${content}`;
-      // Guide-written option labels are never the candidate's own words, so neither checker nor judge credits them.
-      if (e.role === "candidate" && e.fromOption) return `${stamp} (event) candidate picked option: ${content}`;
+      // Guide-written option words are never the candidate's own evidence, while any typed extension stays under candidate:.
+      if (e.role === "candidate" && e.optionText) {
+        const own = candidateOwnText(e);
+        const picked = `${stamp} (event) candidate picked option: ${e.optionText}`;
+        return own === "" ? picked : `${picked}\n${stamp} candidate: ${own}`;
+      }
       return `${stamp} ${e.role}: ${content}`;
     })
     .join("\n");
@@ -326,7 +336,11 @@ export function parseStamp(stamp: string): number | null {
 function readableLine(e: TranscriptEntry): string | null {
   const stamp = `[${formatStamp(e.at)}]`;
   const body = (text: string) => text.replace(/\r\n?|[\n\u0085\u2028\u2029]/g, "\n    ");
-  if (e.role === "candidate" && e.fromOption) return `${stamp} (event) candidate picked option: ${body(entryText(e))}`;
+  if (e.role === "candidate" && e.optionText) {
+    const own = candidateOwnText(e);
+    const picked = `${stamp} (event) candidate picked option: ${body(e.optionText)}`;
+    return own === "" ? picked : `${picked}\n${stamp} candidate: ${body(own)}`;
+  }
   if (e.role !== "system") return `${stamp} ${e.role}: ${body(entryText(e))}`;
   if (e.kind === "hint") return `${stamp} (event) The interviewer gave a hint on: ${body(e.text.replace(/^hint H\d:\s*/, ""))}`;
   if (e.hidden) return null;

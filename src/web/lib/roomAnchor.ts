@@ -40,6 +40,8 @@ export function resolveBoardFocusTarget<T extends FocusableBoardElement>(element
   return { kind: "missing" };
 }
 
+export type BoardFocusResult = "focused" | "missing" | "not_ready";
+
 export interface AnchorCodeReveal {
   line: number;
   column?: number;
@@ -53,7 +55,7 @@ export interface ActivateRoomAnchorContext {
   phoneView: "work" | "chat";
   graphOpen: boolean;
   diagramFitted: { current: boolean };
-  focusBoardElement: (elementId: string) => boolean;
+  focusBoardElement: (elementId: string) => BoardFocusResult;
   setPhoneView: (view: "work" | "chat") => void;
   setGraphOpen: (open: boolean) => void;
   setTab: (tab: "code" | "diagram") => void;
@@ -68,8 +70,11 @@ export interface ActivateRoomAnchorContext {
  */
 export function activateRoomAnchor(target: AnchorTarget, ctx: ActivateRoomAnchorContext): boolean {
   if (target.kind === "board") {
-    const found = ctx.focusBoardElement(target.elementId);
-    if (!found) {
+    const result = ctx.focusBoardElement(target.elementId);
+    if (result === "not_ready") {
+      return false;
+    }
+    if (result === "missing") {
       ctx.notifyError(MISSING_BOARD_SHAPE_NOTICE);
       return false;
     }

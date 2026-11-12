@@ -14,7 +14,7 @@ import { findStepFrame, hasStepFrames, newStepFrames, stepFrameAt } from "./step
 import { loadBoardFonts, loadSceneFonts } from "./fonts";
 import { arrowSpecFor, shapeSpecFor, type ArrowPreset, type ShapeKind } from "./palette";
 import { findShapeByLabel, isBindableShape, planArrow, planShape, type ArrowPlan, type BindableShape, type Point } from "./elements";
-import { resolveBoardFocusTarget } from "../lib/roomAnchor";
+import { resolveBoardFocusTarget, type BoardFocusResult } from "../lib/roomAnchor";
 
 export interface BoardProps {
   sessionId: string;
@@ -41,7 +41,7 @@ export interface BoardHandle {
   /** Pans and zooms to a step's frame; null, or a step with no frame, shows the whole board. False when not ready. */
   showStep(step: string | null, animate?: boolean): boolean;
   /** Pans and zooms to a board element (or step frame fallback), selecting it when editable. */
-  focusElement(elementId: string): boolean;
+  focusElement(elementId: string): BoardFocusResult;
 }
 
 declare global {
@@ -335,14 +335,14 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
         showStepOn(current, step, animate);
         return true;
       },
-      focusElement: (elementId: string) => {
+      focusElement: (elementId: string): BoardFocusResult => {
         const current = apiRef.current;
-        if (!current) return false;
+        if (!current) return "not_ready";
         const resolution = resolveBoardFocusTarget(current.getSceneElements(), elementId);
-        if (resolution.kind === "missing") return false;
+        if (resolution.kind === "missing") return "missing";
         if (resolution.kind === "step") {
           showStepOn(current, resolution.step, true);
-          return true;
+          return "focused";
         }
         const { targets } = resolution;
         current.scrollToContent(targets, {
@@ -359,7 +359,7 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
             captureUpdate: CaptureUpdateAction.NEVER,
           });
         }
-        return true;
+        return "focused";
       },
       getElements: () => {
         const current = apiRef.current;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { ChatBlockSchema, blocksToPlainText, blocksToSpeechText, sanitizeChatBlock, type ChatBlock } from "./blocks";
+import { ChatBlockSchema, blocksToPlainText, blocksToSpeechText, candidateOwnText, matchUnsettledOptionText, sanitizeChatBlock, stripOptionText, type ChatBlock } from "./blocks";
 
 describe("ChatBlockSchema", () => {
   it("generates a clean JSON Schema for MCP tool registration", () => {
@@ -166,5 +166,32 @@ describe("ChatBlockSchema", () => {
 
     const speech = blocksToSpeechText(blocks);
     expect(speech).toBe("Constraint. Redirect latency must stay under 20 ms at p99. Read : write: 100 : 1. Storage (5 yr): 1.8 TB. Options: Base62 counter, Random 7-char slug.");
+  });
+
+  it("matches unsettled option reply/label text and strips guide words while keeping candidate extensions", () => {
+    const optionsBlock: ChatBlock = {
+      kind: "options",
+      action: "prefill",
+      items: [{ label: "Yes" }, { label: "Cache hot lookups", reply: "I'd cache hot lookups in Redis because" }],
+    };
+
+    const unsettled = [
+      { channel: "interview", role: "interviewer", blocks: [optionsBlock] },
+      { channel: "interview", role: "system" },
+    ];
+    expect(matchUnsettledOptionText(unsettled, "interview", "Yes")).toBe("Yes");
+    expect(matchUnsettledOptionText(unsettled, "interview", "Yesterday we saw spikes")).toBeUndefined();
+
+    const extended = "I'd cache hot lookups in Redis because p99 redirects must stay under 20 ms.";
+    const matched = matchUnsettledOptionText(unsettled, "interview", extended);
+    expect(matched).toBe("I'd cache hot lookups in Redis because");
+    expect(candidateOwnText({ text: extended, optionText: matched })).toBe("p99 redirects must stay under 20 ms.");
+    expect(stripOptionText("I'd cache hot lookups in Redis because", matched)).toBe("");
+
+    const settledByAssistant = [...unsettled, { channel: "interview", role: "interviewer" }];
+    expect(matchUnsettledOptionText(settledByAssistant, "interview", "Yes")).toBeUndefined();
+
+    const settledByCandidate = [...unsettled, { channel: "interview", role: "candidate" }];
+    expect(matchUnsettledOptionText(settledByCandidate, "interview", "Yes")).toBeUndefined();
   });
 });

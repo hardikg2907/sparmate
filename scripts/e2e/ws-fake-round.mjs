@@ -810,17 +810,26 @@ async function guidedRound() {
   );
   check("a live guided round sends no checklist", Object.keys(pinned.session.steps).length === 0);
 
-  // Clicking a guide-supplied option chip must stay marked and never count as the candidate's own evidence.
+  // Walk up to the third-rung hint so the guide emits an options block, then send its reply text with no client flag:
+  // the server must match optionText itself and keep those words out of step checks and debrief quotes.
+  mark = c.mark();
+  c.send({ type: "guided.hint" });
+  await c.waitFor(isInterviewerMsg, { since: mark, label: "hint 2 reply" });
+  mark = c.mark();
+  c.send({ type: "guided.hint" });
+  const h3 = await c.waitFor(isInterviewerMsg, { since: mark, label: "hint 3 reply" });
+  const optReplyText = h3.entry.blocks?.[0]?.kind === "options" ? h3.entry.blocks[0].items[0]?.reply : undefined;
+  check("third-rung hint attaches an options block", typeof optReplyText === "string" && optReplyText.length > 0, JSON.stringify(h3.entry.blocks));
+
   mark = c.mark();
   c.send({
     type: "chat.send",
     channel: "interview",
     clientMsgId: "opt-req",
-    fromOption: true,
-    text: "Option-chip pick: create a short link for a long URL with custom alias and expiry, redirect in under 50 ms at p99, 100 million new links a month and 100 redirects per link.",
+    text: optReplyText,
   });
   const optEcho = await c.waitFor((m) => m.type === "chat.message" && m.clientMsgId === "opt-req", { since: mark, label: "option-chip echo" });
-  check("an option-chip reply is echoed with fromOption", optEcho.entry.fromOption === true, JSON.stringify(optEcho.entry));
+  check("an unmarked option-chip reply is matched by the server with optionText", optEcho.entry.optionText === optReplyText, JSON.stringify(optEcho.entry));
   await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to option-chip click" });
 
   mark = c.mark();
@@ -896,7 +905,11 @@ async function guidedRound() {
     JSON.stringify(debrief.scorecard.readiness),
   );
   check("debrief does not quote option-chip text as candidate evidence", !JSON.stringify(debrief.scorecard.dimensions).includes("Option-chip pick"));
-  check("hints show up once the round is over", debrief.state.hints.length === 1 && debrief.state.hints[0].level === 1);
+  check(
+    "hints show up once the round is over",
+    debrief.state.hints.length === 3 && debrief.state.hints.map((h) => h.level).join(",") === "1,2,3",
+    JSON.stringify(debrief.state.hints),
+  );
   const judgePins = debrief.state.pins.filter((p) => p.by === "judge");
   check(
     "the judge pins what held and a gap, and the debrief shows every pin",

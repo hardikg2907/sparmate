@@ -1,6 +1,7 @@
 import type { FlowDiagramBlock, SequenceDiagramBlock } from "../../../shared/blocks";
 
 export interface PositionedEdgeLabel {
+  fullText: string;
   lines: string[];
   x: number;
   y: number;
@@ -149,6 +150,7 @@ function boxesOverlap(a: BoxRect, b: BoxRect, gap = 3): boolean {
 }
 
 function placeFlowEdgeLabel(
+  fullText: string,
   lines: string[],
   size: { width: number; height: number },
   anchor: { x: number; y: number },
@@ -161,7 +163,7 @@ function placeFlowEdgeLabel(
   const isClear = (cand: BoxRect): boolean => cand.y >= 4 && !nodes.some((node) => boxesOverlap(cand, node, 4)) && !placedLabels.some((other) => boxesOverlap(cand, other, 3));
 
   const tryPos = (x: number, y: number): PositionedEdgeLabel | null => {
-    const cand: PositionedEdgeLabel = { lines, x: round(x), y: round(y), width: size.width, height: size.height };
+    const cand: PositionedEdgeLabel = { fullText, lines, x: round(x), y: round(y), width: size.width, height: size.height };
     return isClear(cand) ? cand : null;
   };
 
@@ -198,7 +200,7 @@ function placeFlowEdgeLabel(
     if (hit) return hit;
   }
 
-  return { lines, x: round(railX), y: Math.max(4, baseY), width: size.width, height: size.height };
+  return { fullText, lines, x: round(railX), y: Math.max(4, baseY), width: size.width, height: size.height };
 }
 
 export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
@@ -529,7 +531,7 @@ export function layoutFlowDiagram(block: FlowDiagramBlock): FlowDiagramLayout {
     if (edge.label) {
       const lines = wrapDiagramText(edge.label, 18, 2);
       const size = measurePill(lines);
-      label = placeFlowEdgeLabel(lines, size, labelAnchor, horizDir, positionedNodes, placedLabels);
+      label = placeFlowEdgeLabel(edge.label, lines, size, labelAnchor, horizDir, positionedNodes, placedLabels);
       placedLabels.push(label);
     }
 
@@ -702,6 +704,7 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
       const path = `M ${cx} ${topY} H ${round(cx + loopW - 4)} Q ${round(cx + loopW)} ${topY} ${round(cx + loopW)} ${round(topY + 4)} V ${round(bottomY - 4)} Q ${round(cx + loopW)} ${bottomY} ${round(cx + loopW - 4)} ${bottomY} H ${round(cx + 2)}`;
       const pillX = clampSequencePillX(cx - 6, pill.width, padX, totalWidth);
       const label: PositionedEdgeLabel = {
+        fullText: step.label,
         lines,
         x: pillX,
         y: round(cursorY),
@@ -734,6 +737,7 @@ export function layoutSequenceDiagram(block: SequenceDiagramBlock): SequenceDiag
       const midX = (fromActor.cx + toActor.cx) / 2;
       const pillX = clampSequencePillX(midX - pill.width / 2, pill.width, padX, totalWidth);
       const label: PositionedEdgeLabel = {
+        fullText: step.label,
         lines,
         x: pillX,
         y: round(cursorY),

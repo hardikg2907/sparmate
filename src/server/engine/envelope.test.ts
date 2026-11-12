@@ -80,6 +80,20 @@ describe("candidate envelope", () => {
       "time: 12:34 (guided practice, no time limit) · phase: api",
     );
   });
+
+  it("records option picks in <context> events without mutating the caller's events array", () => {
+    const callerEvents = ['candidate moved to phase "design" at 12:10'];
+    const baseView = { time, board: { version: 1, graphText: "a", changed: false }, events: callerEvents };
+
+    const purePick = candidateEnvelope(baseView, "Fan-out on write", "Fan-out on write");
+    expect(purePick).toContain('events: candidate moved to phase "design" at 12:10; candidate picked option\n</context>');
+    expect(purePick).toContain("<candidate>\nFan-out on write\n</candidate>");
+
+    const extendedPrefill = candidateEnvelope(baseView, "Fan-out on write because celebrity posts Stay in a hot-key cache.", "Fan-out on write");
+    expect(extendedPrefill).toContain('events: candidate moved to phase "design" at 12:10; candidate picked option: Fan-out on write\n</context>');
+    expect(extendedPrefill).toContain("<candidate>\nFan-out on write because celebrity posts Stay in a hot-key cache.\n</candidate>");
+    expect(callerEvents).toEqual(['candidate moved to phase "design" at 12:10']);
+  });
 });
 
 describe("clock turn", () => {
@@ -168,13 +182,36 @@ describe("transcript and code text", () => {
     expect(transcriptLines(entries, "interview")).toBe("[00:00] interviewer: Let's start.\n[01:05] candidate: Requirements first.\n[01:10] (event) clock: phase end");
   });
 
-  it("formats option-chip candidate clicks as events rather than candidate speech", () => {
+  it("formats pure option picks as events and splits extended prefill picks into event plus candidate's own words", () => {
     const entries: TranscriptEntry[] = [
       { id: "1", at: 65_000, wall: "", channel: "interview", role: "candidate", text: "Requirements first." },
-      { id: "2", at: 90_000, wall: "", channel: "interview", role: "candidate", text: "Fan-out on write — Fast reads", fromOption: true },
+      {
+        id: "2",
+        at: 90_000,
+        wall: "",
+        channel: "interview",
+        role: "candidate",
+        text: "Fan-out on write — Fast reads",
+        optionText: "Fan-out on write — Fast reads",
+      },
+      {
+        id: "3",
+        at: 110_000,
+        wall: "",
+        channel: "interview",
+        role: "candidate",
+        text: "Fan-out on write — Fast reads, with a pull fallback for mega-accounts.",
+        optionText: "Fan-out on write — Fast reads",
+      },
     ];
-    expect(transcriptLines(entries, "interview")).toBe("[01:05] candidate: Requirements first.\n[01:30] (event) candidate picked option: Fan-out on write — Fast reads");
-    expect(roundTranscript(entries, null)).toBe("[01:05] candidate: Requirements first.\n[01:30] (event) candidate picked option: Fan-out on write — Fast reads");
+    const expected = [
+      "[01:05] candidate: Requirements first.",
+      "[01:30] (event) candidate picked option: Fan-out on write — Fast reads",
+      "[01:50] (event) candidate picked option: Fan-out on write — Fast reads",
+      "[01:50] candidate: , with a pull fallback for mega-accounts.",
+    ].join("\n");
+    expect(transcriptLines(entries, "interview")).toBe(expected);
+    expect(roundTranscript(entries, null)).toBe(expected);
   });
 
   it("keeps only the interview chat from every visit to a step", () => {

@@ -7,7 +7,7 @@ import { followAfterScroll, scrollsBack } from "../lib/chatScroll";
 import { formatClock } from "../lib/format";
 import { isPanelActiveAndVisible } from "../lib/panelVisibility";
 import { useVoices, useVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
-import type { AgentState, ChatItem, SendChatOptions } from "../session/types";
+import type { AgentState, ChatItem } from "../session/types";
 import { ChatBlocks } from "./blocks/ChatBlocks";
 import { applyOptionChoice, applyPrefillToComposer, focusComposerInput, resolveOptionsState } from "./blocks/optionsState";
 import { ChevronDownIcon, MicIcon, MicOffIcon, SendIcon, VolumeXIcon } from "./icons";
@@ -48,7 +48,7 @@ interface ChatPanelProps {
   items: ChatItem[];
   agent: AgentState;
   /** Returns false when the message could not be sent, so the draft stays in the box. */
-  onSend: (text: string, opts?: SendChatOptions) => boolean;
+  onSend: (text: string) => boolean;
   inputLabel: string;
   placeholder: string;
   disabled?: boolean;
@@ -218,8 +218,8 @@ export function ChatPanel({
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
-  const handleSend = (text: string, opts?: SendChatOptions): boolean => {
-    const sent = onSend(text, opts);
+  const handleSend = (text: string): boolean => {
+    const sent = onSend(text);
     if (sent) stick.current = true;
     return sent;
   };
@@ -454,6 +454,7 @@ function Composer({
   // The room stays mounted behind the debrief, so two chat boxes can exist at once and each needs its own id.
   const inputId = useId();
   const prefillSeen = useRef<number>(0);
+  const lastPrefillRef = useRef<string | null>(null);
   const focusSeen = useRef<number>(0);
   const pendingCaret = useRef<number | null>(null);
 
@@ -466,6 +467,7 @@ function Composer({
     onSend: (text) => {
       const sent = onSend(text);
       if (sent) {
+        lastPrefillRef.current = null;
         setDraft("");
         input.current?.focus();
       }
@@ -481,7 +483,8 @@ function Composer({
     if (!prefill || prefill.nonce === prefillSeen.current) return;
     prefillSeen.current = prefill.nonce;
     const current = draftRef.current;
-    const merged = applyPrefillToComposer(current, prefill.text, disabled, input.current);
+    const merged = applyPrefillToComposer(current, prefill.text, disabled, input.current, lastPrefillRef.current);
+    lastPrefillRef.current = prefill.text.slice(0, CHAT_MAX_CHARS);
     draftRef.current = merged;
     // Controlled textarea values update on the next commit, so selection is also re-applied once `draft` lands.
     if (merged !== current) pendingCaret.current = merged.length;
@@ -517,6 +520,7 @@ function Composer({
   const submit = () => {
     if (disabled || draft.trim() === "") return;
     if (onSend(draft)) {
+      lastPrefillRef.current = null;
       setDraft("");
       voiceInput.resetSpokenDraft();
     }
@@ -576,6 +580,7 @@ function Composer({
           disabled={disabled}
           placeholder={placeholder}
           onChange={(event) => {
+            if (event.target.value === "") lastPrefillRef.current = null;
             setDraft(event.target.value);
             voiceInput.noteTypedDraft(event.target.value);
           }}

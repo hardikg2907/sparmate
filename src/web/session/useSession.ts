@@ -19,7 +19,7 @@ import {
   type CodeText,
 } from "./codeSync";
 import { chatItems, initialState, reducer, type Action } from "./reducer";
-import type { SendChatOptions, SessionActions, SessionController, SessionSource } from "./types";
+import type { SessionActions, SessionController, SessionSource } from "./types";
 
 /** A long answer takes minutes to write; one signal this often keeps the quiet check from interrupting it. */
 const COMPOSING_EVERY_MS = 30_000;
@@ -62,7 +62,6 @@ function newId(): string {
 export function dispatchSendChat(
   channel: Channel,
   text: string,
-  opts: SendChatOptions | undefined,
   deps: {
     now?: number;
     clientMsgId?: string;
@@ -84,7 +83,6 @@ export function dispatchSendChat(
     channel,
     clientMsgId,
     text: trimmed,
-    ...(opts?.fromOption ? { fromOption: true } : {}),
   };
   if (deps.send(msg)) return true;
   deps.dispatch({ type: "pending-drop", clientMsgId });
@@ -383,8 +381,8 @@ export function useSessionController(source: SessionSource): SessionController {
         // Silent on failure: this is a hint for the server's quiet check, and no user action depends on it.
         if (socketRef.current?.send({ type: "chat.composing" })) lastComposing = now;
       },
-      sendChat(channel: Channel, text: string, opts?: SendChatOptions) {
-        return dispatchSendChat(channel, text, opts, { dispatch, send });
+      sendChat(channel: Channel, text: string) {
+        return dispatchSendChat(channel, text, { dispatch, send });
       },
 
       setPhase(phase) {
