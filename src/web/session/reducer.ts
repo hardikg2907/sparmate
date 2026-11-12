@@ -340,7 +340,7 @@ export function visibleStreamText(raw: string): string {
   return text;
 }
 
-export function chatItems(state: SessionState, channel: Channel): ChatItem[] {
+export function chatItems(state: Pick<SessionState, "session" | "pending" | "streams">, channel: Channel): ChatItem[] {
   const items: ChatItem[] = [];
   for (const entry of state.session?.transcript ?? []) {
     if (entry.channel !== channel || entry.hidden) continue;

@@ -279,11 +279,12 @@ export function useVoiceInput({ disabled, isActive = true, isSpeaking, useHeadph
   useEffect(() => {
     // StrictMode mounts, unmounts and mounts again in development; the second mount must be live.
     disposedRef.current = false;
+    const halfDuplex = halfDuplexRef.current;
     return () => {
       disposedRef.current = true;
       userMicEnabledRef.current = false;
       isListeningRef.current = false;
-      halfDuplexRef.current.disableMic();
+      halfDuplex.disableMic();
       pauseTimerRef.current?.cancel();
       const rec = recognitionRef.current;
       recognitionRef.current = null;

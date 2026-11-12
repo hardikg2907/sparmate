@@ -29,7 +29,8 @@ export function PinLayer({ api, pins }: { api: ExcalidrawImperativeAPI | null; p
   const [controls, setControls] = useState<readonly Rect[]>([]);
 
   // Excalidraw's controls move with the window size and appear with a selection, so they are measured after every
-  // redraw. The new list only causes one more render when a control actually moved.
+  // redraw. The new list only causes one more render when a control actually moved, so this cannot loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose; sameRects stops the loop
   useLayoutEffect(() => {
     const el = layer.current;
     const root = el?.parentElement;

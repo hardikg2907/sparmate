@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { AnchorTarget } from "../../shared/blocks";
 import { Board } from "../board/Board";
 import { CodeEditor, type CodeReveal } from "../code/CodeEditor";
@@ -129,10 +129,11 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
 
   // The guide and the interviewer move the rail as well as a click, and the board already opens on the first step.
   const shownPhase = useRef(session.phase);
+  const revealPhase = useEffectEvent(showPhase);
   useEffect(() => {
     if (shownPhase.current === session.phase) return;
     shownPhase.current = session.phase;
-    showPhase(session.phase);
+    revealPhase(session.phase);
   }, [session.phase]);
 
   // A click moves the rail and the effect above reveals it; the step already on the rail has no move to react to.

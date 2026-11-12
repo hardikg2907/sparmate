@@ -510,11 +510,11 @@ export function useSessionController(source: SessionSource): SessionController {
     };
   }, [source, io]);
 
-  const chat = useMemo(
-    () => ({ interview: chatItems(state, "interview"), coach: chatItems(state, "coach") }),
-    // chatItems reads only these three parts of the state.
-    [state.session, state.pending, state.streams],
-  );
+  const { session: chatSession, pending: chatPending, streams: chatStreams } = state;
+  const chat = useMemo(() => {
+    const parts = { session: chatSession, pending: chatPending, streams: chatStreams };
+    return { interview: chatItems(parts, "interview"), coach: chatItems(parts, "coach") };
+  }, [chatSession, chatPending, chatStreams]);
 
   return { state, chat, actions, boardRef, reload: () => setAttempt((n) => n + 1) };
 }

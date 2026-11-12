@@ -198,7 +198,7 @@ export function CodeEditor(props: CodeEditorProps) {
     const model = editor?.getModel();
     const state = markers.current;
     if (!editor || !model || !state.shadow) return;
-    state.data = diagnostics.map((d) => toMarker(model, d));
+    state.data = (JSON.parse(diagnosticsKey) as CompileDiagnostic[]).map((d) => toMarker(model, d));
     state.shadow.set(
       state.data.map((m) => ({
         range: new monaco.Range(m.startLineNumber, m.startColumn, m.endLineNumber, m.endColumn),
