@@ -1,4 +1,5 @@
 import type { PublicSession, Scorecard } from "../../../shared/types";
+import type { CodeReveal } from "../../code/CodeEditor";
 import { MARK_LABEL, MARK_TONE, marksInWords } from "../../lib/format";
 import type { CodeState } from "../../session/types";
 import type { Theme } from "../../theme";
@@ -25,10 +26,12 @@ interface DetailsProps {
   code: CodeState | null;
   theme: Theme;
   boardImageUrl: string;
+  codeReveal?: CodeReveal | null;
+  focusedElementId?: string | null;
 }
 
 /** The detail behind the verdict, one tab at a time: evidence, time, the record the judge read, and the reference answer. */
-export function Details({ tab, onTab, view, onView, session, scorecard, board, graphText, code, theme, boardImageUrl }: DetailsProps) {
+export function Details({ tab, onTab, view, onView, session, scorecard, board, graphText, code, theme, boardImageUrl, codeReveal, focusedElementId }: DetailsProps) {
   const lld = session.track === "lld";
   const hasTime = (scorecard.phaseTiming?.length ?? 0) > 0 || scorecard.timeline.length > 0;
   const hasReference = (session.reference?.sections.length ?? 0) > 0;
@@ -84,6 +87,7 @@ export function Details({ tab, onTab, view, onView, session, scorecard, board, g
               elements={board}
               notes={session.stepNotes}
               summaries={session.stepSummaries}
+              focusedElementId={focusedElementId}
             />
           ) : (
             <DimensionsTable scorecard={scorecard} />
@@ -107,6 +111,7 @@ export function Details({ tab, onTab, view, onView, session, scorecard, board, g
             track={session.track}
             answers={session.stepNotes}
             lint={scorecard.lintIssues ?? []}
+            codeReveal={codeReveal}
           />
         </TabsContent>
 

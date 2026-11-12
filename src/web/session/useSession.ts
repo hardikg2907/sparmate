@@ -59,6 +59,36 @@ function newId(): string {
   return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export function dispatchSendChat(
+  channel: Channel,
+  text: string,
+  deps: {
+    now?: number;
+    clientMsgId?: string;
+    dispatch: (action: Action) => void;
+    send: (msg: ClientMsg) => boolean;
+  },
+): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (trimmed.length > CHAT_MAX_CHARS) {
+    deps.dispatch({ type: "notice", message: "That message is too long to send." });
+    return false;
+  }
+  const clientMsgId = deps.clientMsgId ?? newId();
+  // The local copy goes in first so the server's echo always finds it, however fast it answers.
+  deps.dispatch({ type: "pending-add", message: { clientMsgId, channel, text: trimmed, sentAt: deps.now ?? Date.now() } });
+  const msg: ClientMsg = {
+    type: "chat.send",
+    channel,
+    clientMsgId,
+    text: trimmed,
+  };
+  if (deps.send(msg)) return true;
+  deps.dispatch({ type: "pending-drop", clientMsgId });
+  return false;
+}
+
 /** Everything the socket handlers and actions share but that must not cause a render when it changes. */
 interface Io {
   /** Null on a round without a code file. */
@@ -352,18 +382,7 @@ export function useSessionController(source: SessionSource): SessionController {
         if (socketRef.current?.send({ type: "chat.composing" })) lastComposing = now;
       },
       sendChat(channel: Channel, text: string) {
-        const trimmed = text.trim();
-        if (!trimmed) return false;
-        if (trimmed.length > CHAT_MAX_CHARS) {
-          dispatch({ type: "notice", message: "That message is too long to send." });
-          return false;
-        }
-        const clientMsgId = newId();
-        // The local copy goes in first so the server's echo always finds it, however fast it answers.
-        dispatch({ type: "pending-add", message: { clientMsgId, channel, text: trimmed, sentAt: Date.now() } });
-        if (send({ type: "chat.send", channel, clientMsgId, text: trimmed })) return true;
-        dispatch({ type: "pending-drop", clientMsgId });
-        return false;
+        return dispatchSendChat(channel, text, { dispatch, send });
       },
 
       setPhase(phase) {
@@ -491,11 +510,11 @@ export function useSessionController(source: SessionSource): SessionController {
     };
   }, [source, io]);
 
-  const chat = useMemo(
-    () => ({ interview: chatItems(state, "interview"), coach: chatItems(state, "coach") }),
-    // chatItems reads only these three parts of the state.
-    [state.session, state.pending, state.streams],
-  );
+  const { session: chatSession, pending: chatPending, streams: chatStreams } = state;
+  const chat = useMemo(() => {
+    const parts = { session: chatSession, pending: chatPending, streams: chatStreams };
+    return { interview: chatItems(parts, "interview"), coach: chatItems(parts, "coach") };
+  }, [chatSession, chatPending, chatStreams]);
 
   return { state, chat, actions, boardRef, reload: () => setAttempt((n) => n + 1) };
 }

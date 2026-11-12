@@ -109,9 +109,11 @@ function CustomPrompt({
     }
   };
 
+  const jobId = job?.id;
+  const jobStage = job?.stage;
   useEffect(() => {
-    if (!job || !preparing) return;
-    if (job.stage === "ready" || job.stage === "failed" || job.stage === "cancelled") {
+    if (jobId === undefined || jobStage === undefined || !preparing) return;
+    if (jobStage === "ready" || jobStage === "failed" || jobStage === "cancelled") {
       setPreparing(false);
       return;
     }
@@ -119,7 +121,7 @@ function CustomPrompt({
     let active = true;
     const timer = setInterval(async () => {
       try {
-        const next = await api.customProblemJob(job.id);
+        const next = await api.customProblemJob(jobId);
         if (!active) return;
         setJob(next);
         if (next.stage === "ready") {
@@ -143,7 +145,7 @@ function CustomPrompt({
       active = false;
       clearInterval(timer);
     };
-  }, [job?.id, job?.stage, preparing]);
+  }, [jobId, jobStage, preparing]);
 
   return (
     <section aria-label="Prepare a question" className="max-w-3xl">

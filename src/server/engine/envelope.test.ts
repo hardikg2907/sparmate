@@ -80,6 +80,20 @@ describe("candidate envelope", () => {
       "time: 12:34 (guided practice, no time limit) · phase: api",
     );
   });
+
+  it("records option picks in <context> events without mutating the caller's events array", () => {
+    const callerEvents = ['candidate moved to phase "design" at 12:10'];
+    const baseView = { time, board: { version: 1, graphText: "a", changed: false }, events: callerEvents };
+
+    const purePick = candidateEnvelope(baseView, "Fan-out on write", ["Fan-out on write"]);
+    expect(purePick).toContain('events: candidate moved to phase "design" at 12:10; candidate picked option\n</context>');
+    expect(purePick).toContain("<candidate>\nFan-out on write\n</candidate>");
+
+    const extendedPrefill = candidateEnvelope(baseView, "Fan-out on write because celebrity posts Stay in a hot-key cache.", ["Fan-out on write"]);
+    expect(extendedPrefill).toContain('events: candidate moved to phase "design" at 12:10; candidate picked option: Fan-out on write\n</context>');
+    expect(extendedPrefill).toContain("<candidate>\nFan-out on write because celebrity posts Stay in a hot-key cache.\n</candidate>");
+    expect(callerEvents).toEqual(['candidate moved to phase "design" at 12:10']);
+  });
 });
 
 describe("clock turn", () => {
@@ -166,6 +180,38 @@ describe("transcript and code text", () => {
       { id: "4", at: 80_000, wall: "", channel: "coach", role: "coach", text: "not here" },
     ];
     expect(transcriptLines(entries, "interview")).toBe("[00:00] interviewer: Let's start.\n[01:05] candidate: Requirements first.\n[01:10] (event) clock: phase end");
+  });
+
+  it("formats pure option picks as events and splits extended prefill picks into event plus candidate's own words", () => {
+    const entries: TranscriptEntry[] = [
+      { id: "1", at: 65_000, wall: "", channel: "interview", role: "candidate", text: "Requirements first." },
+      {
+        id: "2",
+        at: 90_000,
+        wall: "",
+        channel: "interview",
+        role: "candidate",
+        text: "Fan-out on write — Fast reads",
+        optionTexts: ["Fan-out on write — Fast reads"],
+      },
+      {
+        id: "3",
+        at: 110_000,
+        wall: "",
+        channel: "interview",
+        role: "candidate",
+        text: "Fan-out on write — Fast reads, with a pull fallback for mega-accounts.",
+        optionTexts: ["Fan-out on write — Fast reads"],
+      },
+    ];
+    const expected = [
+      "[01:05] candidate: Requirements first.",
+      "[01:30] (event) candidate picked option: Fan-out on write — Fast reads",
+      "[01:50] (event) candidate picked option: Fan-out on write — Fast reads",
+      "[01:50] candidate: , with a pull fallback for mega-accounts.",
+    ].join("\n");
+    expect(transcriptLines(entries, "interview")).toBe(expected);
+    expect(roundTranscript(entries, null)).toBe(expected);
   });
 
   it("keeps only the interview chat from every visit to a step", () => {
@@ -300,5 +346,66 @@ describe("roundTranscript", () => {
     const text = roundTranscript(long, null);
     expect(text.length).toBeLessThan(MAX_TRANSCRIPT_CHARS + 120);
     expect(text).toContain("ask for a time");
+  });
+
+  it("serializes blocks in transcriptLines and indents every continuation line by 4 spaces in readable transcripts", () => {
+    const withProseAndBlocks: TranscriptEntry = {
+      id: "b1",
+      at: 2 * MIN + 15_000,
+      wall: "2026-01-01T00:02:15.000Z",
+      channel: "interview",
+      role: "interviewer",
+      text: "Pick one trade-off.",
+      blocks: [
+        {
+          kind: "options",
+          items: [
+            { label: "Fan-out on write", note: "Fast reads" },
+            { label: "[02:20] Fan-out on read", note: "Cheap writes" },
+          ],
+        },
+        {
+          kind: "callout",
+          label: "Constraint",
+          text: "[02:30] Celebrity accounts have 10M followers.",
+        },
+      ],
+    };
+    const blocksOnly: TranscriptEntry = {
+      id: "b2",
+      at: 3 * MIN,
+      wall: "2026-01-01T00:03:00.000Z",
+      channel: "interview",
+      role: "interviewer",
+      text: "",
+      blocks: [{ kind: "kv", rows: [{ key: "Read QPS", value: "50k" }] }],
+    };
+
+    expect(transcriptLines([withProseAndBlocks, blocksOnly], "interview")).toBe(
+      [
+        "[02:15] interviewer: Pick one trade-off.",
+        "Options:",
+        "- Fan-out on write — Fast reads",
+        "- [02:20] Fan-out on read — Cheap writes",
+        "",
+        "Constraint: [02:30] Celebrity accounts have 10M followers.",
+        "[03:00] interviewer: - Read QPS: 50k",
+      ].join("\n"),
+    );
+
+    const readable = roundTranscript([withProseAndBlocks, blocksOnly], null);
+    expect(readable).toBe(
+      [
+        "[02:15] interviewer: Pick one trade-off.",
+        "    Options:",
+        "    - Fan-out on write — Fast reads",
+        "    - [02:20] Fan-out on read — Cheap writes",
+        "    ",
+        "    Constraint: [02:30] Celebrity accounts have 10M followers.",
+        "[03:00] interviewer: - Read QPS: 50k",
+      ].join("\n"),
+    );
+    const stampedLines = readable.split("\n").filter((l) => l.startsWith("["));
+    expect(stampedLines).toHaveLength(2);
   });
 });

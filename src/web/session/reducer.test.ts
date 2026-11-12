@@ -270,6 +270,21 @@ describe("chat items", () => {
     });
     expect(chatItems(state, "interview").map((i) => i.id)).toEqual(["e1", "e3"]);
   });
+
+  it("maps non-empty blocks onto done chat items and omits empty block lists", () => {
+    const blocks = [{ kind: "kv" as const, rows: [{ key: "Read rate", value: "4,000 / s" }] }];
+    const state = loaded({
+      transcript: [
+        entry("e1", "interviewer", "Numbers settled.", { blocks }),
+        entry("e2", "interviewer", "Plain prose.", { blocks: [] }),
+        entry("e3", "interviewer", "No blocks field."),
+      ],
+    });
+    const items = chatItems(state, "interview");
+    expect(items[0]?.blocks).toEqual(blocks);
+    expect("blocks" in (items[1] ?? {})).toBe(false);
+    expect("blocks" in (items[2] ?? {})).toBe(false);
+  });
 });
 
 describe("phase changes", () => {

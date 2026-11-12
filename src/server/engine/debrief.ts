@@ -1,3 +1,4 @@
+import { candidateOwnText } from "../../shared/blocks";
 import type { Problem } from "../../shared/problem";
 import { MAX_GAPS, type Scorecard, type Session } from "../../shared/types";
 import { formatStamp, roundTimeMs } from "./clock";
@@ -59,8 +60,11 @@ export function phaseTiming(
 /** The candidate's own words: his chat messages and his written step answers. */
 export function candidateText(session: Pick<Session, "transcript" | "stepNotes">): string {
   return session.transcript
-    .filter((e) => e.channel === "interview" && e.role === "candidate")
-    .map((e) => e.text)
+    .flatMap((e) => {
+      if (e.channel !== "interview" || e.role !== "candidate") return [];
+      const own = candidateOwnText(e);
+      return own === "" ? [] : [own];
+    })
     .concat(Object.values(session.stepNotes ?? {}))
     .join("\n");
 }
@@ -78,9 +82,11 @@ export function stepSources(
   const endMs = opts.endMs ?? (Number.isFinite(measured) ? measured : session.durationMs);
   const out: Record<string, { candidate: string; board: string; code: string }> = {};
   for (const p of phasesFor(session.track)) {
-    const chat = stepEntries(session.transcript, session.phaseHistory ?? [], p.id, endMs)
-      .filter((e) => e.role === "candidate")
-      .map((e) => e.text);
+    const chat = stepEntries(session.transcript, session.phaseHistory ?? [], p.id, endMs).flatMap((e) => {
+      if (e.role !== "candidate") return [];
+      const own = candidateOwnText(e);
+      return own === "" ? [] : [own];
+    });
     const scope = codeScopeFor(session.track, p.id);
     const code = finalCode === null || scope === null ? "" : scope === "file" ? finalCode : unnumberedCode(stepCodeText(finalCode, session.stepCode?.[p.id] ?? []));
     out[p.id] = {
@@ -93,7 +99,11 @@ export function stepSources(
 }
 
 export function candidateLines(session: Pick<Session, "transcript">): string[] {
-  return session.transcript.filter((e) => e.channel === "interview" && e.role === "candidate").map((e) => e.text);
+  return session.transcript.flatMap((e) => {
+    if (e.channel !== "interview" || e.role !== "candidate") return [];
+    const own = candidateOwnText(e);
+    return own === "" ? [] : [own];
+  });
 }
 
 /** Longest root-cause label the page shows; the tester is asked for a few words. */

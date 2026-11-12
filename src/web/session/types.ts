@@ -1,6 +1,7 @@
 import type { MutableRefObject } from "react";
 import type { BoardHandle } from "../board/Board";
 import type { BoardSnapshot, CodeSnapshot, SocketLike, SocketStatus } from "../backend";
+import type { ChatBlock } from "../../shared/blocks";
 import type { Channel, CompileDiagnostic, Proposal, PublicSession, Role, RunResult, TranscriptEntry } from "../../shared/types";
 
 export type ProgressStage = "collecting" | "testing" | "judging" | "checking" | "done";
@@ -77,6 +78,7 @@ export interface ChatItem {
   id: string;
   role: Role;
   text: string;
+  blocks?: ChatBlock[];
   /** Round time in ms; null while the message is still local or streaming. */
   at: number | null;
   kind?: TranscriptEntry["kind"];

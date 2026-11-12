@@ -262,8 +262,8 @@ export function entry(startedAtMs: number, id: string, atSec: number, role: Tran
   };
 }
 
-export function coachEntry(startedAtMs: number, id: string, atSec: number, role: "coach" | "candidate", text: string): TranscriptEntry {
-  return entry(startedAtMs, id, atSec, role, text, { channel: "coach" });
+export function coachEntry(startedAtMs: number, id: string, atSec: number, role: "coach" | "candidate", text: string, extra: Partial<TranscriptEntry> = {}): TranscriptEntry {
+  return entry(startedAtMs, id, atSec, role, text, { channel: "coach", ...extra });
 }
 
 /** A round saved before the checklist, with the written step text and notepads it held then (`?legacy=1`). */

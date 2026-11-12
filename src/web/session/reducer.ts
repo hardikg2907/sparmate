@@ -340,11 +340,19 @@ export function visibleStreamText(raw: string): string {
   return text;
 }
 
-export function chatItems(state: SessionState, channel: Channel): ChatItem[] {
+export function chatItems(state: Pick<SessionState, "session" | "pending" | "streams">, channel: Channel): ChatItem[] {
   const items: ChatItem[] = [];
   for (const entry of state.session?.transcript ?? []) {
     if (entry.channel !== channel || entry.hidden) continue;
-    items.push({ id: entry.id, role: entry.role, text: entry.text, at: entry.at, kind: entry.kind, state: "done" });
+    items.push({
+      id: entry.id,
+      role: entry.role,
+      text: entry.text,
+      ...(entry.blocks?.length ? { blocks: entry.blocks } : {}),
+      at: entry.at,
+      kind: entry.kind,
+      state: "done",
+    });
   }
   for (const pending of state.pending) {
     if (pending.channel === channel) {

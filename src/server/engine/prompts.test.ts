@@ -169,3 +169,40 @@ describe("scribe prompt", () => {
     expect(await loader.render("scribe", vars as never)).toContain(`at most ${LIMITS.proposalOps} operations`);
   });
 });
+
+describe("structured block rules in guide and coach prompts", () => {
+  it("keeps guide-hld, guide-lld, and coach aligned with clock offers, hint rungs, count-only guards, callout scope, and pin target shapes", async () => {
+    const loader = new PromptLoader(join(APP_ROOT, "content"), APP_ROOT);
+    const base = commonVars({ date: "2026-01-01", problemTitle: "Cache", track: "hld", mode: "guided", durationMin: 45, candidateProfile: "" });
+
+    const rendered: Record<"guide-hld" | "guide-lld", string> = { "guide-hld": "", "guide-lld": "" };
+    for (const name of ["guide-hld", "guide-lld"] as const) {
+      const extra = Object.fromEntries(PROMPT_VARS[name].map((k) => [k, "x"]));
+      const out = await loader.render(name, { ...base, ...extra } as never);
+      rendered[name] = out;
+      expect(out, name).toContain("third-rung hint");
+      expect(out, name).toContain("twice-the-planned-time step clock offer");
+      expect(out, name).toContain("planned-length clock offer");
+      expect(out, name).toContain("Never emit `options` on the first two hint rungs");
+      expect(out, name).toContain("On any turn that records a count-only step verdict, emit no blocks at all.");
+      expect(out, name).not.toContain("and on any turn recording a count-only check");
+      expect(out, name).toContain("While a step's checks already give only a count, emit no blocks on that step and never anchor into a count-only step from another step");
+      expect(out, name).toContain('except on a "Hint" press, an "I\'m stuck" press, or `options` on those two clock offers');
+      expect(out, name).toContain("on non-clock replies");
+      expect(out, name).toContain("clock events never allow `callout`");
+      expect(out, name).toContain("specific box or arrow on the board");
+      expect(out, name).not.toContain("box, arrow, or frame");
+      expect(out, name).not.toContain("box or arrow or frame");
+    }
+
+    expect(rendered["guide-hld"]).toContain("curveball scenario in Deep dives");
+    expect(rendered["guide-lld"]).toContain("(including code written in that step)");
+    expect(rendered["guide-lld"]).toContain("Extension step");
+    expect(rendered["guide-lld"]).toContain("concurrency follow-up");
+
+    const coachExtra = Object.fromEntries(PROMPT_VARS.coach.map((k) => [k, "x"]));
+    const coachOut = await loader.render("coach", { ...base, ...coachExtra } as never);
+    expect(coachOut).not.toContain("box, arrow, or frame");
+    expect(coachOut).not.toContain("frame id");
+  });
+});

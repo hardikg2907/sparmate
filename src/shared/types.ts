@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ChatBlock } from "./blocks";
 import type { Mode, Track } from "./phases";
 import { DrillTypeSchema, type DrillType } from "./drills";
 import { LIMITS } from "./protocol";
@@ -105,6 +106,10 @@ export interface TranscriptEntry {
   channel: Channel;
   role: Role;
   text: string;
+  /** Structured generic UI primitives emitted alongside a Guide or Coach reply. */
+  blocks?: ChatBlock[];
+  /** Guide- or Coach-written option texts the server found in this candidate message, from the latest unsettled options block. */
+  optionTexts?: string[];
   /** System notes describe events (phase change, run result, extension, clock). Hidden ones are for the model only. */
   kind?: "clock" | "extension" | "hint" | "phase" | "run" | "note" | "error" | "gap";
   hidden?: boolean;

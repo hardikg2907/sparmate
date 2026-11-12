@@ -1,18 +1,22 @@
 import { useMemo, useState, type CSSProperties } from "react";
+import type { AnchorTarget } from "../../shared/blocks";
+import { stepOfElement } from "../../shared/graph/frames";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { ApiError, api } from "../backend";
+import { findStepFrame } from "../board/stepFrames";
+import type { CodeReveal } from "../code/CodeEditor";
 import type { PublicSession, Scorecard } from "../../shared/types";
 import { ChatPanel } from "../components/ChatPanel";
 import { ChatResizeHandle, useChatWidth } from "../components/ChatWidth";
 import { DebriefFailed, DebriefProgress } from "../components/debrief/Progress";
 import { Details, type DetailTab, type EvidenceView } from "../components/debrief/Details";
-import { GapsSection } from "../components/debrief/Gaps";
+import { GapsSection, sortedGaps } from "../components/debrief/Gaps";
 import { GapProgressLine, NextStep } from "../components/debrief/NextStep";
+import { stepsWithContent } from "../components/debrief/Steps";
 import { StudyNotes } from "../components/debrief/StudyNotes";
 import { SummaryCard } from "../components/debrief/Summary";
 import { TimingRows } from "../components/debrief/Timing";
 import { ScoreRow, VerdictCard, jumpTo } from "../components/debrief/Verdict";
-import { sortedGaps } from "../components/debrief/Gaps";
 import { ArrowLeftIcon, WarnIcon } from "../components/icons";
 import { ConnectionBanner, MessageBanners } from "../components/Notices";
 import { Banner, Badge, Button, Card, SectionTitle } from "../components/ui";
@@ -37,6 +41,10 @@ interface DebriefViewProps {
 export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewProps) {
   const { state, actions } = ctl;
   const [chatWidth, setChatWidth] = useChatWidth();
+  const [tab, setTab] = useState<DetailTab>("evidence");
+  const [view, setView] = useState<EvidenceView>("step");
+  const [codeReveal, setCodeReveal] = useState<CodeReveal | null>(null);
+  const [focusedElementId, setFocusedElementId] = useState<string | null>(null);
   const stacked = useMediaQuery("(width < 48rem)");
   const scorecard = session.scorecard;
   const debriefed = session.status === "debriefed";
@@ -56,6 +64,48 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
       </div>
     ) : null;
   const marks = useGapMarks(scorecard, session, ctl.chat.coach);
+
+  const handleAnchor = (target: AnchorTarget) => {
+    if (!scorecard) return;
+    if (target.kind === "code") {
+      if (session.track !== "lld") return;
+      setTab("judge");
+      // Wait one frame so JudgeSaw's CodeEditor mounts before the reveal nonce increments.
+      requestAnimationFrame(() => {
+        setCodeReveal((prev) => ({
+          line: target.line,
+          column: 1,
+          ...(target.endLine !== undefined ? { endLine: target.endLine } : {}),
+          nonce: (prev?.nonce ?? 0) + 1,
+        }));
+        requestAnimationFrame(() => {
+          jumpTo("final-code");
+        });
+      });
+      return;
+    }
+
+    const elements = state.board?.elements ?? null;
+    const rawStep = elements ? (stepOfElement(elements, target.elementId) ?? (findStepFrame(elements, target.elementId) ? target.elementId : null)) : null;
+    const shownSteps = stepsWithContent({
+      scorecard,
+      track: session.track,
+      steps: session.steps,
+      pins: session.pins,
+      notes: session.stepNotes,
+      summaries: session.stepSummaries,
+    });
+    const step = rawStep && shownSteps.some((s) => s.id === rawStep) ? rawStep : null;
+    if (step) {
+      setTab("evidence");
+      setView("step");
+      setFocusedElementId(target.elementId);
+      requestAnimationFrame(() => requestAnimationFrame(() => jumpTo(`step-${step}`)));
+    } else {
+      setTab("judge");
+      requestAnimationFrame(() => requestAnimationFrame(() => jumpTo("judge-saw")));
+    }
+  };
 
   return (
     <div className="fade-in flex h-full min-h-0 flex-col overflow-clip">
@@ -90,7 +140,20 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
             ) : null}
             {session.status === "failed" ? <DebriefFailed onRetry={actions.retryDebrief} connected={connected} /> : null}
             {scorecard ? (
-              <ScorecardBody ctl={ctl} session={session} scorecard={scorecard} theme={theme} boardImageUrl={boardImageUrl} marks={marks} />
+              <ScorecardBody
+                ctl={ctl}
+                session={session}
+                scorecard={scorecard}
+                theme={theme}
+                boardImageUrl={boardImageUrl}
+                marks={marks}
+                tab={tab}
+                onTab={setTab}
+                view={view}
+                onView={setView}
+                codeReveal={codeReveal}
+                focusedElementId={focusedElementId}
+              />
             ) : session.status === "debriefed" ? (
               <Card className="p-6 text-ui text-muted-foreground">The scorecard is not available for this session.</Card>
             ) : null}
@@ -126,6 +189,7 @@ export function DebriefView({ ctl, session, theme, boardImageUrl }: DebriefViewP
               empty={debriefed ? startCoach : "The coach joins when the scorecard is ready."}
               topSlot={ctl.chat.coach.length > 0 && startCoach ? <div className="px-2 py-4 text-center text-ui text-muted-foreground">{startCoach}</div> : undefined}
               onSend={(text) => actions.sendChat("coach", text)}
+              onAnchor={handleAnchor}
             />
           </div>
         </aside>
@@ -205,6 +269,12 @@ function ScorecardBody({
   theme,
   boardImageUrl,
   marks,
+  tab,
+  onTab,
+  view,
+  onView,
+  codeReveal,
+  focusedElementId,
 }: {
   ctl: SessionController;
   session: PublicSession;
@@ -212,10 +282,14 @@ function ScorecardBody({
   theme: Theme;
   boardImageUrl: string;
   marks: ReadonlyMap<string, GapMark>;
+  tab: DetailTab;
+  onTab: (tab: DetailTab) => void;
+  view: EvidenceView;
+  onView: (view: EvidenceView) => void;
+  codeReveal: CodeReveal | null;
+  focusedElementId: string | null;
 }) {
   const { state, actions } = ctl;
-  const [tab, setTab] = useState<DetailTab>("evidence");
-  const [view, setView] = useState<EvidenceView>("step");
   const [practising, setPractising] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -260,8 +334,8 @@ function ScorecardBody({
     else if (next.kind === "practise_gap") practise(next.gap);
   };
   const openEvidence = (dimensionId: string) => {
-    setTab("evidence");
-    setView("score");
+    onTab("evidence");
+    onView("score");
     // The tab content mounts on the next render, so the target is looked up one frame later.
     requestAnimationFrame(() => requestAnimationFrame(() => jumpTo(`dim-${dimensionId}`)));
   };
@@ -300,9 +374,9 @@ function ScorecardBody({
       <SummaryCard scorecard={scorecard} />
       <Details
         tab={tab}
-        onTab={setTab}
+        onTab={onTab}
         view={view}
-        onView={setView}
+        onView={onView}
         session={session}
         scorecard={scorecard}
         board={state.board?.elements ?? null}
@@ -310,6 +384,8 @@ function ScorecardBody({
         code={state.code}
         theme={theme}
         boardImageUrl={boardImageUrl}
+        codeReveal={codeReveal}
+        focusedElementId={focusedElementId}
       />
     </>
   );

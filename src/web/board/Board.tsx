@@ -14,6 +14,7 @@ import { findStepFrame, hasStepFrames, newStepFrames, stepFrameAt } from "./step
 import { loadBoardFonts, loadSceneFonts } from "./fonts";
 import { arrowSpecFor, shapeSpecFor, type ArrowPreset, type ShapeKind } from "./palette";
 import { findShapeByLabel, isBindableShape, planArrow, planShape, type ArrowPlan, type BindableShape, type Point } from "./elements";
+import { resolveBoardFocusTarget, type BoardFocusResult } from "../lib/roomAnchor";
 
 export interface BoardProps {
   sessionId: string;
@@ -39,6 +40,8 @@ export interface BoardHandle {
   flush(): void;
   /** Pans and zooms to a step's frame; null, or a step with no frame, shows the whole board. False when not ready. */
   showStep(step: string | null, animate?: boolean): boolean;
+  /** Pans and zooms to a board element (or step frame fallback), selecting it when editable. */
+  focusElement(elementId: string): BoardFocusResult;
 }
 
 declare global {
@@ -332,6 +335,32 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
         showStepOn(current, step, animate);
         return true;
       },
+      focusElement: (elementId: string): BoardFocusResult => {
+        const current = apiRef.current;
+        if (!current) return "not_ready";
+        const resolution = resolveBoardFocusTarget(current.getSceneElements(), elementId);
+        if (resolution.kind === "missing") return "missing";
+        if (resolution.kind === "step") {
+          showStepOn(current, resolution.step, true);
+          return "focused";
+        }
+        const { targets } = resolution;
+        current.scrollToContent(targets, {
+          fitToViewport: true,
+          canvasOffsets: { left: current.getAppState().width >= STYLE_PANEL_MIN_WIDTH ? STYLE_PANEL_WIDTH : 0 },
+          viewportZoomFactor: 0.45,
+          maxZoom: 1,
+          animate: !reducedMotion(),
+          duration: 240,
+        });
+        if (!readOnly) {
+          current.updateScene({
+            appState: { selectedElementIds: Object.fromEntries(targets.map((t) => [t.id, true])) },
+            captureUpdate: CaptureUpdateAction.NEVER,
+          });
+        }
+        return "focused";
+      },
       getElements: () => {
         const current = apiRef.current;
         const elements = current ? current.getSceneElements() : startElements.current.filter((el) => !el.isDeleted);
@@ -339,7 +368,7 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
       },
       flush,
     }),
-    [flush],
+    [flush, readOnly],
   );
 
   // Opens on the step he is working on rather than the whole board; it waits a moment so Excalidraw's own

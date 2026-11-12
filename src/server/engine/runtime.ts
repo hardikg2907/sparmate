@@ -3,6 +3,7 @@ import { unwatchFile, watch, watchFile, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { z } from "zod";
+import { candidateOwnText, matchUnsettledOptionTexts, type ChatBlock } from "../../shared/blocks";
 import { deriveChecklist } from "../../shared/checklist";
 import { gapDividerText, gapForTeachMessage } from "../../shared/gaps";
 import { frameEvidence, pinTargets, pinTargetsText, stepFrames, withFrameMembership } from "../../shared/graph/frames";
@@ -36,6 +37,7 @@ import type { PrivacyGuard } from "../guard/privacy";
 import type { CppRunner } from "../runner/cpp";
 import { applyProposal, planProposal } from "../study/bookkeeping";
 import { atomicWrite, resolveInside } from "../study/files";
+import { createEmitBlockTool, isSilentReply, stripDisallowedHintBlocks } from "./chat-blocks";
 import { CheckerOutputSchema, checkerMessage, evidenceKey, mergeCheck, stepReadingText, type CheckerEvidence } from "./checker";
 import {
   CheckpointScheduler,
@@ -77,6 +79,7 @@ import {
   type RoleName,
   type RoomTool,
   type ToolOutput,
+  type TurnMeta,
   type UserTurn,
 } from "./driver";
 import {
@@ -231,6 +234,7 @@ export class UserError extends Error {
 
 interface BuiltTurn {
   turn: UserTurn;
+  checkedPhase?: string;
   /** Marks the context as seen; runs only once the model has answered. */
   commit(): void;
 }
@@ -261,6 +265,13 @@ interface ChannelState {
   boardSeen: number;
   notesSeen: number;
   codeSeen: number;
+  // Tool instances are created once per conversation, so per-turn block state lives on the channel.
+  pendingBlocks: ChatBlock[];
+  currentTurnMeta: TurnMeta | null;
+  checkedPhaseThisTurn: string | null;
+  hintLevelThisTurn: 1 | 2 | 3 | null;
+  countOnlyVerdictThisTurn: boolean;
+  namedVerdictPhasesThisTurn: Set<string>;
 }
 
 function newChannel(name: Channel): ChannelState {
@@ -277,7 +288,22 @@ function newChannel(name: Channel): ChannelState {
     boardSeen: -1,
     notesSeen: -1,
     codeSeen: -1,
+    pendingBlocks: [],
+    currentTurnMeta: null,
+    checkedPhaseThisTurn: null,
+    hintLevelThisTurn: null,
+    countOnlyVerdictThisTurn: false,
+    namedVerdictPhasesThisTurn: new Set(),
   };
+}
+
+function resetTurnBlocks(ch: ChannelState): void {
+  ch.pendingBlocks = [];
+  ch.currentTurnMeta = null;
+  ch.checkedPhaseThisTurn = null;
+  ch.hintLevelThisTurn = null;
+  ch.countOnlyVerdictThisTurn = false;
+  ch.namedVerdictPhasesThisTurn.clear();
 }
 
 /**
@@ -422,7 +448,7 @@ export class SessionRuntime {
       // A round that stopped before its opening reply still owes him the opening, ahead of anything he said.
       if (!s.transcript.some((e) => e.channel === "interview" && e.role === "interviewer")) this.interview.queue.push(this.openingTurn());
       const last = [...s.transcript].reverse().find((e) => e.channel === "interview" && e.role !== "system");
-      if (last?.role === "candidate") this.interview.queue.push(this.candidateTurn(last.text));
+      if (last?.role === "candidate") this.interview.queue.push(this.candidateTurn(last.text, last.optionTexts));
       if (s.status === "paused" && s.pauseReason === "error") {
         this.interview.status = "error";
         this.interview.error = "The interviewer could not answer. Press Retry to continue.";
@@ -679,17 +705,19 @@ export class SessionRuntime {
   private onChat(channel: Channel, text: string, clientMsgId: string): void {
     if (channel === "coach") {
       if (this.session.status !== "debriefed") throw new UserError("coach_unavailable", "The coach is available once the debrief is ready.");
-      this.addEntry({ channel: "coach", role: "candidate", text }, clientMsgId);
+      const optionTexts = matchUnsettledOptionTexts(this.session.transcript, "coach", text);
+      const entry = this.addEntry({ channel: "coach", role: "candidate", text, ...(optionTexts ? { optionTexts } : {}) }, clientMsgId);
       this.noteTeachRequest(text);
       if (this.coach.status === "error") this.retry(this.coach);
-      this.enqueue(this.coach, this.coachCandidateTurn(text));
+      this.enqueue(this.coach, this.coachCandidateTurn(text, entry.optionTexts));
       return;
     }
     this.requireLiveRound();
-    const entry = this.addEntry({ channel: "interview", role: "candidate", text }, clientMsgId);
+    const optionTexts = matchUnsettledOptionTexts(this.session.transcript, "interview", text);
+    const entry = this.addEntry({ channel: "interview", role: "candidate", text, ...(optionTexts ? { optionTexts } : {}) }, clientMsgId);
     this.lastCandidateAt = entry.at;
     this.markActive();
-    this.enqueue(this.interview, this.candidateTurn(text));
+    this.enqueue(this.interview, this.candidateTurn(text, entry.optionTexts));
   }
 
   private async onBoardUpdate(version: number, elements: Record<string, unknown>[]): Promise<void> {
@@ -970,7 +998,7 @@ export class SessionRuntime {
     const codeText =
       scope === "step" ? stepCodeText(this.codeContent, s.stepCode[phase] ?? []) : scope === "file" && this.codeContent.trim() !== "" ? numberedCode(this.codeContent) : "";
     const notesText = (s.stepNotes[phase] ?? "").trim();
-    const said = chat.some((e) => e.role === "candidate") || notesText !== "";
+    const said = chat.some((e) => e.role === "candidate" && candidateOwnText(e) !== "") || notesText !== "";
     const drawn = unframed ? s.board.graphText.trim() !== "" : frame !== null && !frame.empty;
     return {
       evidence: { stepLabel: def.label, goal: def.goal, items, chat, boardText, codeText, notesText, imageAttached: false },
@@ -1051,7 +1079,11 @@ export class SessionRuntime {
           track: s.track,
           mode: s.mode,
           checkItems: evidence.items,
-          candidateLines: evidence.chat.filter((e) => e.role === "candidate").map((e) => e.text),
+          candidateLines: evidence.chat.flatMap((e) => {
+            if (e.role !== "candidate") return [];
+            const own = candidateOwnText(e);
+            return own ? [own] : [];
+          }),
           frameText: evidence.boardText,
           codeText: unnumberedCode(evidence.codeText),
           notesText: evidence.notesText,
@@ -1255,6 +1287,9 @@ export class SessionRuntime {
       this.boardLooksThisTurn = 0;
       this.rechecksThisTurn = 0;
       this.passBarredThisTurn = built.turn.meta.request === "stuck";
+      resetTurnBlocks(ch);
+      ch.currentTurnMeta = built.turn.meta;
+      ch.checkedPhaseThisTurn = built.checkedPhase ?? null;
       entryId = newEntryId();
       const f = new SilentFilter((text) => this.broadcast({ type: "chat.delta", channel: ch.name, messageId: entryId, textDelta: text }));
       filter = f;
@@ -1264,11 +1299,23 @@ export class SessionRuntime {
         return;
       }
       const text = f.finish();
+      const silent = isSilentReply(reply.text);
+      // A hint turn that skipped note_hint may still be on the first two rungs, where option chips give too much away.
+      const unrecordedHint = ch.name === "interview" && built.turn.meta.request === "hint" && ch.hintLevelThisTurn === null;
+      const blocks = silent ? [] : unrecordedHint ? stripDisallowedHintBlocks(ch.pendingBlocks, 1) : [...ch.pendingBlocks];
       ch.queue.shift();
       built.commit();
       ch.freshResume = false;
       this.rememberSdkSession(ch, conv);
-      if (text) this.addEntry({ id: entryId, channel: ch.name, role: ch.name === "coach" ? "coach" : "interviewer", text });
+      if (!silent && (text || blocks.length > 0)) {
+        this.addEntry({
+          id: entryId,
+          channel: ch.name,
+          role: ch.name === "coach" ? "coach" : "interviewer",
+          text,
+          ...(blocks.length > 0 ? { blocks } : {}),
+        });
+      }
       this.setChannelStatus(ch, "idle");
       this.log.info(`${ch.name} turn (${next.kind}) in ${reply.stats.durationMs} ms for session ${this.session.id}`);
       try {
@@ -1285,6 +1332,7 @@ export class SessionRuntime {
     } finally {
       ch.busy = false;
       this.passBarredThisTurn = false;
+      resetTurnBlocks(ch);
       if (ch === this.interview) {
         if (this.session.status === "paused") {
           ch.conv?.close();
@@ -1412,12 +1460,12 @@ export class SessionRuntime {
     };
   }
 
-  private candidateTurn(text: string): QueuedTurn {
+  private candidateTurn(text: string, optionTexts?: readonly string[]): QueuedTurn {
     return {
       kind: "candidate",
       build: () => {
         const { view, commit } = this.interviewContext(this.interview);
-        return { turn: { text: candidateEnvelope(view, text), meta: { kind: "candidate", candidateText: text } }, commit };
+        return { turn: { text: candidateEnvelope(view, text, optionTexts), meta: { kind: "candidate", candidateText: text } }, commit };
       },
       after: () => this.afterInterviewerTurn(),
     };
@@ -1442,7 +1490,7 @@ export class SessionRuntime {
           this.pinTargetsBlock(),
         ].join("\n");
         const { view, commit } = this.interviewContext(this.interview, false);
-        return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "feedback" } }, commit };
+        return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "feedback" } }, checkedPhase: phaseId, commit };
       },
       after: () => this.afterInterviewerTurn(),
     };
@@ -1626,12 +1674,12 @@ export class SessionRuntime {
     };
   }
 
-  private coachCandidateTurn(text: string): QueuedTurn {
+  private coachCandidateTurn(text: string, optionTexts?: readonly string[]): QueuedTurn {
     return {
       kind: "candidate",
       build: () => {
         const { view, commit } = this.coachContext(this.coach);
-        return { turn: { text: candidateEnvelope(view, text), meta: { kind: "candidate", candidateText: text } }, commit };
+        return { turn: { text: candidateEnvelope(view, text, optionTexts), meta: { kind: "candidate", candidateText: text } }, commit };
       },
     };
   }
@@ -1790,9 +1838,12 @@ export class SessionRuntime {
         "Record the hint you are giving in this reply, before you write the reply text, so the debrief can count it. Level 1 points at an area, level 2 names the concern, level 3 offers two options. Write the topic in plain words with no level code in it. The candidate never sees this record.",
         { level: z.number().int().min(1).max(3), topic: z.string().min(1).max(200) },
         async ({ level, topic }) => {
+          const rung = level as 1 | 2 | 3;
+          ch.hintLevelThisTurn = rung;
+          ch.pendingBlocks = stripDisallowedHintBlocks(ch.pendingBlocks, rung);
           const at = this.roundNow();
           const plain = plainHintTopic(topic);
-          this.session.hints.push({ at, level: level as 1 | 2 | 3, topic: plain });
+          this.session.hints.push({ at, level: rung, topic: plain });
           this.addEntry({ channel: "interview", role: "system", kind: "hint", hidden: true, text: `hint H${level}: ${plain}` });
           return textOutput("Recorded.");
         },
@@ -1807,7 +1858,7 @@ export class SessionRuntime {
         },
       ),
     ];
-    // Pins are guided-mode help; an interview round gives none, so the interviewer never gets the tool.
+    // Pins and structured chat blocks are guided-mode help; an interview round gives none, so the interviewer never gets them.
     if (guided) {
       tools.push(
         defineTool(
@@ -1833,11 +1884,14 @@ export class SessionRuntime {
               return textOutput("This reply gives a model answer, so the step cannot pass now. Ask him to redo the step; judge it on his next check.", true);
             if (verdict === "pass" && this.session.stepVerdicts?.[phase]?.verdict !== "pass") {
               const refused = await this.passRefusal(phase);
-              if (refused && this.countsOnly(phase))
+              if (refused && this.countsOnly(phase)) {
+                ch.countOnlyVerdictThisTurn = true;
+                ch.pendingBlocks = [];
                 return textOutput(
                   `The step cannot pass yet. Checks of this step name nothing: call step_verdict with "not_yet" and say only that ${openCountPhrase(this.openCount(phase))} still open.`,
                   true,
                 );
+              }
               if (refused) return textOutput(refused, true);
             }
             // A count-only check stores the count itself, so the page never shows the item the guide was told not to name.
@@ -1847,8 +1901,16 @@ export class SessionRuntime {
             if (!done.ok) return textOutput(done.error, true);
             this.saveSoon();
             this.sendState();
-            if (counted) return textOutput(`Recorded: not yet. The page shows: "${input.gap}" Name nothing that is missing in your reply.`);
-            if (verdict === "not_yet") return textOutput("Recorded: not yet.");
+            if (counted) {
+              ch.countOnlyVerdictThisTurn = true;
+              ch.pendingBlocks = [];
+              return textOutput(`Recorded: not yet. The page shows: "${input.gap}" Name nothing that is missing in your reply.`);
+            }
+            if (verdict === "not_yet") {
+              // The second miss flips countsOnly for future turns, not for the named check currently finishing.
+              ch.namedVerdictPhasesThisTurn.add(phase);
+              return textOutput("Recorded: not yet.");
+            }
             this.notePractice(phase);
             return textOutput(`Recorded: the step passed. Steps now: ${this.stepsLine()}.`);
           },
@@ -1864,6 +1926,23 @@ export class SessionRuntime {
             return this.recheckStep(phase);
           },
         ),
+        createEmitBlockTool({
+          channel: "interview",
+          track: this.session.track,
+          pendingCount: () => ch.pendingBlocks.length,
+          pushBlock: (block) => {
+            ch.pendingBlocks.push(block);
+            return ch.pendingBlocks.length;
+          },
+          turnMeta: () => ch.currentTurnMeta,
+          hintLevelThisTurn: () => ch.hintLevelThisTurn,
+          currentPhase: () => ch.checkedPhaseThisTurn ?? this.session.phase,
+          isCountOnly: (phase) => this.countsOnly(phase) && !ch.namedVerdictPhasesThisTurn.has(phase),
+          countOnlyVerdictThisTurn: () => ch.countOnlyVerdictThisTurn,
+          boardElements: () => this.boardElements,
+          readCode: () => this.codeContent,
+          stepCode: () => this.session.stepCode,
+        }),
       );
     }
     if (this.session.track === "lld") {
@@ -1991,13 +2070,30 @@ export class SessionRuntime {
       defineTool("view_whiteboard", "See the candidate's final whiteboard: an image plus its exact text form.", {}, async () => {
         ch.boardSeen = this.session.board.version;
         const png = await this.deps.store.readFinalPng(this.session.id);
-        if (!png) return textOutput(`No image of the final board was saved, so here is the text form only.\n\n${this.boardText()}`);
+        const text = `${this.boardText()}\n\n${this.pinTargetsBlock()}`;
+        if (!png) return textOutput(`No image of the final board was saved, so here is the text form only.\n\n${text}`);
         return {
           content: [
             { type: "image", data: png.toString("base64"), mimeType: "image/png" },
-            { type: "text", text: this.boardText() },
+            { type: "text", text },
           ],
         };
+      }),
+      createEmitBlockTool({
+        channel: "coach",
+        track: this.session.track,
+        pendingCount: () => ch.pendingBlocks.length,
+        pushBlock: (block) => {
+          ch.pendingBlocks.push(block);
+          return ch.pendingBlocks.length;
+        },
+        turnMeta: () => ch.currentTurnMeta,
+        hintLevelThisTurn: () => null,
+        currentPhase: () => this.session.phase,
+        isCountOnly: () => false,
+        boardElements: () => this.boardElements,
+        readCode: async () => (await this.readAttemptFile()) ?? (await this.deps.store.readFinalCode(this.session.id)) ?? this.codeContent,
+        stepCode: () => ({}),
       }),
     ];
     if (this.session.track === "lld") {
@@ -2529,7 +2625,16 @@ export class SessionRuntime {
   }
 
   private addEntry(
-    e: { id?: string; channel: Channel; role: TranscriptEntry["role"]; text: string; kind?: TranscriptEntry["kind"]; hidden?: boolean },
+    e: {
+      id?: string;
+      channel: Channel;
+      role: TranscriptEntry["role"];
+      text: string;
+      blocks?: ChatBlock[];
+      kind?: TranscriptEntry["kind"];
+      hidden?: boolean;
+      optionTexts?: string[];
+    },
     clientMsgId?: string,
   ): TranscriptEntry {
     const entry: TranscriptEntry = {
@@ -2539,8 +2644,10 @@ export class SessionRuntime {
       channel: e.channel,
       role: e.role,
       text: e.text,
+      ...(e.blocks && e.blocks.length > 0 ? { blocks: e.blocks } : {}),
       ...(e.kind ? { kind: e.kind } : {}),
       ...(e.hidden ? { hidden: true } : {}),
+      ...(e.optionTexts && e.optionTexts.length > 0 ? { optionTexts: e.optionTexts } : {}),
     };
     this.session.transcript.push(entry);
     if (entry.channel === "interview" && entry.role === "interviewer" && !entry.hidden) this.spokeAt = entry.at;

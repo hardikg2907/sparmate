@@ -508,6 +508,7 @@ async function hldRound(dirs) {
   const look = await say(c, "Can you look at the board?", "c2");
   const pngAsked = c.msgs.slice(look.mark).some((m) => m.type === "board.png.request");
   check("view_whiteboard asks the browser for a PNG and the model sees it", pngAsked && look.reply.entry.text.startsWith("I can see your board"), look.reply.entry.text);
+  check("interview mode never attaches rich blocks even when the driver attempts emit_block", !look.reply.entry.blocks?.length, JSON.stringify(look.reply.entry.blocks));
 
   // The step checker: chat and frame evidence, the leave-time frame image, and the interview-mode filter.
   c.send({ type: "board.update", version: 2, elements: framedScene() });
@@ -654,6 +655,11 @@ async function hldRound(dirs) {
     label: "coach opening",
   });
   check("coach opens on request", coachOpen.entry.text.includes("Let's start with"), coachOpen.entry.text.slice(0, 80));
+  check(
+    "coach opening attaches structured options block",
+    Array.isArray(coachOpen.entry.blocks) && coachOpen.entry.blocks[0]?.kind === "options",
+    JSON.stringify(coachOpen.entry.blocks),
+  );
   check("coach can read the round's transcript", /I read [1-9]\d* lines of the round/.test(coachOpen.entry.text), coachOpen.entry.text.slice(0, 200));
   mark = c.mark();
   c.send({ type: "chat.send", channel: "coach", clientMsgId: "k1", text: "Can you explain the first gap?" });
@@ -804,6 +810,32 @@ async function guidedRound() {
   );
   check("a live guided round sends no checklist", Object.keys(pinned.session.steps).length === 0);
 
+  // Walk up to the third-rung hint so the guide emits an options block, then send its reply text with no client flag:
+  // the server must match optionTexts itself and keep those words out of step checks and debrief quotes.
+  mark = c.mark();
+  c.send({ type: "guided.hint" });
+  await c.waitFor(isInterviewerMsg, { since: mark, label: "hint 2 reply" });
+  mark = c.mark();
+  c.send({ type: "guided.hint" });
+  const h3 = await c.waitFor(isInterviewerMsg, { since: mark, label: "hint 3 reply" });
+  const optReplyText = h3.entry.blocks?.[0]?.kind === "options" ? h3.entry.blocks[0].items[0]?.reply : undefined;
+  check("third-rung hint attaches an options block", typeof optReplyText === "string" && optReplyText.length > 0, JSON.stringify(h3.entry.blocks));
+
+  mark = c.mark();
+  c.send({
+    type: "chat.send",
+    channel: "interview",
+    clientMsgId: "opt-req",
+    text: optReplyText,
+  });
+  const optEcho = await c.waitFor((m) => m.type === "chat.message" && m.clientMsgId === "opt-req", { since: mark, label: "option-chip echo" });
+  check(
+    "an unmarked option-chip reply is matched by the server with optionTexts",
+    optEcho.entry.optionTexts?.length === 1 && optEcho.entry.optionTexts[0] === optReplyText,
+    JSON.stringify(optEcho.entry),
+  );
+  await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to option-chip click" });
+
   mark = c.mark();
   c.send({ type: "guided.feedback" });
   const held = await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to a check with nothing new" });
@@ -833,6 +865,16 @@ async function guidedRound() {
   check("a pass replaces a not_yet and drops its gap", passed.session.stepVerdicts.requirements.gap === undefined);
   await c.waitFor(isInterviewerMsg, { since: mark, label: "reply to the second check" });
 
+  const guidedLook = await say(c, "Can you look at the board?", "g-look");
+  check(
+    "guided look-at-board attaches a board anchor block",
+    Array.isArray(guidedLook.reply.entry.blocks) &&
+      guidedLook.reply.entry.blocks[0]?.kind === "anchor" &&
+      guidedLook.reply.entry.blocks[0]?.target?.kind === "board" &&
+      guidedLook.reply.entry.blocks[0]?.target?.elementId === "lb",
+    JSON.stringify(guidedLook.reply.entry.blocks),
+  );
+
   mark = c.mark();
   c.send({ type: "guided.stuck" });
   const stuck = await c.waitFor(isInterviewerMsg, { since: mark, label: "model answer" });
@@ -841,6 +883,11 @@ async function guidedRound() {
     "'I'm stuck' gets a model answer and the server counts the assist",
     stuck.entry.text.includes("model answer") && assisted.session.assistCount === 1 && !("assists" in assisted.session),
     stuck.entry.text.slice(0, 60),
+  );
+  check(
+    "guided model answer attaches a flow diagram block",
+    Array.isArray(stuck.entry.blocks) && stuck.entry.blocks[0]?.kind === "diagram" && stuck.entry.blocks[0]?.layout === "flow",
+    JSON.stringify(stuck.entry.blocks),
   );
 
   mark = c.mark();
@@ -861,7 +908,12 @@ async function guidedRound() {
     debrief.scorecard.readiness?.call === "not_yet" && debrief.scorecard.readiness.reasons.includes("Requirements was assisted.") && Boolean(debrief.scorecard.verdict.sde2),
     JSON.stringify(debrief.scorecard.readiness),
   );
-  check("hints show up once the round is over", debrief.state.hints.length === 1 && debrief.state.hints[0].level === 1);
+  check("debrief does not quote option-chip text as candidate evidence", !JSON.stringify(debrief.scorecard.dimensions).includes("Option-chip pick"));
+  check(
+    "hints show up once the round is over",
+    debrief.state.hints.length === 3 && debrief.state.hints.map((h) => h.level).join(",") === "1,2,3",
+    JSON.stringify(debrief.state.hints),
+  );
   const judgePins = debrief.state.pins.filter((p) => p.by === "judge");
   check(
     "the judge pins what held and a gap, and the debrief shows every pin",

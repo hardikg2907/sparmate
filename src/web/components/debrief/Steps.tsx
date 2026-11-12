@@ -24,6 +24,7 @@ interface StepsProps {
   /** Written step text and notepads that a round may hold. */
   notes?: Readonly<Record<string, string>>;
   summaries?: Readonly<Record<string, StepSummary>>;
+  focusedElementId?: string | null;
 }
 
 /** The steps that the judge read, or that hold coverage, pins or notes; the others have nothing to show. */
@@ -45,7 +46,7 @@ export function stepsWithContent({ scorecard, track, steps = {}, pins = [], note
  * Each step as the judge read it, beside the frame that held his answer: what held, with his own quoted words,
  * what is missing, and the pins the guide and the judge attached to his drawing.
  */
-export function Steps({ scorecard, track, steps = {}, pins = [], elements = null, notes = {}, summaries = {} }: StepsProps) {
+export function Steps({ scorecard, track, steps = {}, pins = [], elements = null, notes = {}, summaries = {}, focusedElementId = null }: StepsProps) {
   const judged = new Map((scorecard.steps ?? []).map((s) => [s.phase, s]));
   const dimMap = new Map(scorecard.dimensions.map((d) => [d.id, d.name]));
   const stepChecks = new Map<string, boolean>();
@@ -74,9 +75,11 @@ export function Steps({ scorecard, track, steps = {}, pins = [], elements = null
           const stepPins = numbered.filter((pin) => pin.phase === phase.id);
           const ring = ringView(step);
           return (
-            <Card key={phase.id} variant="raised" className="p-5">
+            <Card key={phase.id} id={`step-${phase.id}`} variant="raised" className="p-5">
               <div className={cn("grid gap-5", thumbStep ? "md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]" : "")}>
-                {thumbStep && elements ? <FrameThumb elements={elements} step={thumbStep} pins={stepPins} numberOf={numberOf} label={phase.label} /> : null}
+                {thumbStep && elements ? (
+                  <FrameThumb elements={elements} step={thumbStep} pins={stepPins} numberOf={numberOf} label={phase.label} focusedElementId={focusedElementId} />
+                ) : null}
                 <div className="min-w-0">
                   <header className="mb-3 flex items-center gap-3">
                     <h3 className="text-lead font-bold text-foreground">{phase.label}</h3>
@@ -185,12 +188,14 @@ function FrameThumb({
   pins,
   numberOf,
   label,
+  focusedElementId,
 }: {
   elements: readonly Raw[];
   step: string;
   pins: readonly BoardPin[];
   numberOf: ReadonlyMap<string, number>;
   label: string;
+  focusedElementId?: string | null;
 }) {
   const frame = findStepFrame(elements, step);
   const frameId = frame ? String(frame.id) : null;
@@ -218,10 +223,25 @@ function FrameThumb({
   if (!frame) return null;
   const box = elementBounds(frame);
   const byId = new Map(elements.map((el) => [String(el.id), el]));
+  const focusedEl = focusedElementId ? byId.get(focusedElementId) : undefined;
+  const focusSpot = (() => {
+    if (!focusedEl) return null;
+    const a = pinAnchor(focusedEl);
+    const left = ((a.x - box.x) / Math.max(1, box.w)) * 100;
+    const top = ((a.y - box.y) / Math.max(1, box.h)) * 100;
+    return left >= 0 && left <= 100 && top >= 0 && top <= 100 ? { left, top } : null;
+  })();
   return (
     <figure className="step-well m-0 self-start">
       <div className="step-thumb" style={{ aspectRatio: `${Math.max(1, box.w)} / ${Math.max(1, box.h)}` }}>
         {url ? <img src={url} alt={`The ${label} frame of your board`} /> : <div className={cn("size-full", !failed && "skeleton")} />}
+        {url && focusSpot ? (
+          <span
+            aria-hidden="true"
+            style={{ left: `${focusSpot.left}%`, top: `${focusSpot.top}%` }}
+            className="pointer-events-none absolute size-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/15"
+          />
+        ) : null}
         {url
           ? pins.map((pin) => {
               const el = byId.get(pin.elementId);

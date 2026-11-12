@@ -146,9 +146,41 @@ class FakeConversation implements Conversation {
           const session = facts.session?.();
           const level = Math.min(3, (session?.hints.length ?? 0) + 1);
           await callTool(this.setup, "note_hint", { level, topic: `${label}: the main constraint` });
+          if (level === 3) {
+            await callTool(this.setup, "emit_block", {
+              block: {
+                kind: "options",
+                items: [
+                  {
+                    label: "Optimize for read latency",
+                    note: "Cache hot lookups ahead of storage",
+                    reply:
+                      "Option-chip pick: create a short link for a long URL with custom alias and expiry, redirect in under 50 ms at p99, 100 million new links a month and 100 redirects per link.",
+                  },
+                  { label: "Optimize for write throughput", note: "Append first and materialize asynchronously" },
+                ],
+              },
+            });
+          }
           return `Hint ${level}: think about which number in ${label.toLowerCase()} changes the design the most.`;
         }
         if (turn.meta.request === "stuck") {
+          await callTool(this.setup, "emit_block", {
+            block: {
+              kind: "diagram",
+              layout: "flow",
+              title: `${label} path`,
+              nodes: [
+                { id: "client", label: "Client" },
+                { id: "service", label: "Service", detail: "applies the key constraint" },
+                { id: "store", label: "Primary Store" },
+              ],
+              edges: [
+                { from: "client", to: "service", label: "request" },
+                { from: "service", to: "store", label: "bounded write" },
+              ],
+            },
+          });
           return `A model answer for ${label.toLowerCase()}: state the one number that changes the design, then the decision it forces. Now say it again in your own words.`;
         }
         if (turn.meta.request === "feedback") {
@@ -187,6 +219,16 @@ class FakeConversation implements Conversation {
         }
         if (/look at (the|my) (board|whiteboard|diagram)/i.test(said)) {
           const out = await callTool(this.setup, "view_whiteboard", {});
+          const targets = this.setup.fake.pinTargets?.() ?? [];
+          if (targets[0]) {
+            await callTool(this.setup, "emit_block", {
+              block: {
+                kind: "anchor",
+                target: { kind: "board", elementId: targets[0].id },
+                label: targets[0].label || "Board shape",
+              },
+            });
+          }
           const sawImage = out?.content.some((c) => c.type === "image") ?? false;
           return sawImage ? "I can see your board. Walk me through one request." : "I have the text form of your board. Walk me through one request.";
         }
@@ -231,6 +273,15 @@ class FakeConversation implements Conversation {
       const transcript = read?.content.map((c) => (c.type === "text" ? c.text : "")).join("\n") ?? "";
       const lines = transcript.split("\n").filter((l) => l.startsWith("[")).length;
       const hint = transcript.includes("gave a hint on:") ? " One hint is in it." : "";
+      await callTool(this.setup, "emit_block", {
+        block: {
+          kind: "options",
+          items: [
+            { label: "Full lesson (~12 min)", note: "Walk through the mechanism and failure modes" },
+            { label: "Core idea now (~4 min)", note: "Cover the key rule and save depth for later" },
+          ],
+        },
+      });
       return `${card?.verdict.summary ?? "The round is scored."} Most of the signal sits in the gaps below. I read ${lines} lines of the round.${hint}\n\nLet's start with ${top.toLowerCase()}. What do you think the interviewer wanted to hear there?`;
     }
     return `Good question. The short version is that every number should end in a decision about the design.\n\nTry it on ${top.toLowerCase()}: say the number, then say what it forces you to build.`;

@@ -9,7 +9,14 @@ export function testHooksEnabled(): boolean {
 export function describeSession(ctl: SessionController): Record<string, unknown> {
   const { state } = ctl;
   const session = state.session;
-  const line = (item: SessionController["chat"]["interview"][number]) => ({ id: item.id, role: item.role, text: item.text, kind: item.kind ?? null, state: item.state });
+  const line = (item: SessionController["chat"]["interview"][number]) => ({
+    id: item.id,
+    role: item.role,
+    text: item.text,
+    ...(item.blocks?.length ? { blocks: item.blocks } : {}),
+    kind: item.kind ?? null,
+    state: item.state,
+  });
   return {
     page: "session",
     sessionId: session?.id ?? null,

@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { blocksToSpeechText, type AnchorTarget } from "../../shared/blocks";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { useVoiceOutput } from "../hooks/useVoiceOutput";
 import { CHAT_MAX_CHARS } from "../lib/contract";
@@ -7,6 +8,8 @@ import { formatClock } from "../lib/format";
 import { isPanelActiveAndVisible } from "../lib/panelVisibility";
 import { useVoices, useVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 import type { AgentState, ChatItem } from "../session/types";
+import { ChatBlocks } from "./blocks/ChatBlocks";
+import { applyOptionChoice, applyPrefillToComposer, focusComposerInput, resolveOptionsState } from "./blocks/optionsState";
 import { ChevronDownIcon, MicIcon, MicOffIcon, SendIcon, VolumeXIcon } from "./icons";
 import { Markdown } from "./Markdown";
 import { Button, Badge, Tooltip, cn } from "./ui";
@@ -59,6 +62,8 @@ interface ChatPanelProps {
   afterOpening?: ReactNode;
   /** Called whenever the draft changes, typed or dictated. */
   onDraft?: () => void;
+  /** Jumps to a board element or code line range referenced by an anchor block. */
+  onAnchor?: (target: AnchorTarget) => void;
 }
 
 export function ChatPanel({
@@ -77,6 +82,7 @@ export function ChatPanel({
   topSlot,
   afterOpening,
   onDraft,
+  onAnchor,
 }: ChatPanelProps) {
   const panelRef = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -85,6 +91,8 @@ export function ChatPanel({
   const held = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
   const [isActive, setIsActive] = useState(true);
+  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
+  const [focusSignal, setFocusSignal] = useState(0);
   const streaming = items.some((item) => item.state === "streaming");
   const busy = agent.state === "thinking" || streaming;
 
@@ -149,7 +157,12 @@ export function ChatPanel({
     }
     if (last && last.id !== announced.current) {
       announced.current = last.id;
-      setAnnouncement(`${speaker}: ${last.text.slice(0, 500)}`);
+      const prose = last.text.trim();
+      const blockSpeech = blocksToSpeechText(last.blocks);
+      const combined = [prose, blockSpeech].filter(Boolean).join(" ");
+      if (combined) {
+        setAnnouncement(`${speaker}: ${combined.slice(0, 500)}`);
+      }
     }
   }, [items, speaker]);
 
@@ -205,6 +218,20 @@ export function ChatPanel({
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
+  const handleSend = (text: string): boolean => {
+    const sent = onSend(text);
+    if (sent) stick.current = true;
+    return sent;
+  };
+
+  const handleChoose = (text: string, action: "send" | "prefill"): boolean =>
+    applyOptionChoice(text, action, {
+      disabled: effectiveDisabled,
+      onSend: handleSend,
+      onPrefill: (incoming) => setPrefill((prev) => ({ text: incoming, nonce: (prev?.nonce ?? 0) + 1 })),
+      onFocusComposer: () => setFocusSignal((n) => n + 1),
+    });
+
   return (
     <section ref={panelRef} aria-label={heading} className="flex h-full min-h-0 flex-col bg-card">
       <header className="chat-head header-hairline flex h-11 shrink-0 items-center justify-between gap-2 px-4">
@@ -248,9 +275,23 @@ export function ChatPanel({
             <div className="px-2 py-8 text-center text-ui text-muted-foreground">{empty}</div>
           ) : (
             <ul className="space-y-5">
-              {items.map((item) => (
-                <Message key={item.id} item={item} speaker={speaker} showTime={showTimes === true} />
-              ))}
+              {items.map((item, index) => {
+                const isAssistant = item.role !== "candidate" && item.role !== "system";
+                const optionsState = isAssistant && item.blocks?.length ? resolveOptionsState(items, index) : { settled: false, answeredText: null };
+                return (
+                  <Message
+                    key={item.id}
+                    item={item}
+                    speaker={speaker}
+                    showTime={showTimes === true}
+                    settled={optionsState.settled}
+                    answeredText={optionsState.answeredText}
+                    blocksDisabled={effectiveDisabled || agent.state === "thinking"}
+                    onChoose={handleChoose}
+                    onAnchor={onAnchor}
+                  />
+                );
+              })}
             </ul>
           )}
           {busy ? <Typing speaker={speaker} early={streaming} /> : null}
@@ -277,19 +318,35 @@ export function ChatPanel({
         isSpeaking={isSpeaking}
         tools={tools}
         voiceSettings={voiceSettings}
+        prefill={prefill}
+        focusSignal={focusSignal}
         onBargeIn={stopSpeaking}
         onDraft={onDraft}
-        onSend={(text) => {
-          const sent = onSend(text);
-          if (sent) stick.current = true;
-          return sent;
-        }}
+        onSend={handleSend}
       />
     </section>
   );
 }
 
-function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string; showTime: boolean }) {
+function Message({
+  item,
+  speaker,
+  showTime,
+  settled,
+  answeredText,
+  blocksDisabled,
+  onChoose,
+  onAnchor,
+}: {
+  item: ChatItem;
+  speaker: string;
+  showTime: boolean;
+  settled: boolean;
+  answeredText: string | null;
+  blocksDisabled: boolean;
+  onChoose: (text: string, action: "send" | "prefill") => boolean;
+  onAnchor?: (target: AnchorTarget) => void;
+}) {
   if (item.role === "system") {
     return (
       <li className={cn("flex items-center gap-3 px-1 text-meta text-faint", ENTER)} data-gap-divider={item.kind === "gap" ? item.text : undefined}>
@@ -324,6 +381,7 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
   // The other side reads like a transcript rather than a bubble, so long replies with lists and code stay easy to scan.
   // The card sits on an inner element because `attention` and the enter animation both set `animation`.
   const extension = item.kind === "extension";
+  const hasProse = item.text.trim().length > 0;
   return (
     <li className={cn("flex flex-col", ENTER, !extension && "pr-2")} aria-busy={item.state === "streaming" ? true : undefined}>
       <div className={cn("flex flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 attention")}>
@@ -334,7 +392,10 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
           {extension ? <Badge tone="accent">New requirement</Badge> : null}
           {item.kind === "hint" ? <Badge tone="warn">Hint</Badge> : null}
         </div>
-        <Markdown text={item.text} className="text-body text-foreground" />
+        {hasProse ? <Markdown text={item.text} className="text-body text-foreground" /> : null}
+        {item.blocks?.length ? (
+          <ChatBlocks blocks={item.blocks} hasProse={hasProse} settled={settled} disabled={blocksDisabled} answeredText={answeredText} onChoose={onChoose} onAnchor={onAnchor} />
+        ) : null}
       </div>
     </li>
   );
@@ -360,6 +421,8 @@ function Composer({
   isActive,
   isSpeaking,
   tools,
+  prefill,
+  focusSignal,
   onSend,
   onBargeIn,
   onDraft,
@@ -371,12 +434,16 @@ function Composer({
   isActive: boolean;
   isSpeaking: boolean;
   tools?: ReactNode;
+  prefill: { text: string; nonce: number } | null;
+  focusSignal: number;
   onSend: (text: string) => boolean;
   onBargeIn: () => void;
   onDraft?: () => void;
   voiceSettings: VoiceSettings;
 }) {
   const [draft, setDraft] = useState("");
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const onDraftRef = useRef(onDraft);
   onDraftRef.current = onDraft;
   // Dictation fills the box through setDraft as well, so the draft itself is watched rather than the key presses.
@@ -386,6 +453,10 @@ function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   // The room stays mounted behind the debrief, so two chat boxes can exist at once and each needs its own id.
   const inputId = useId();
+  const prefillSeen = useRef<number>(0);
+  const lastPrefillRef = useRef<string | null>(null);
+  const focusSeen = useRef<number>(0);
+  const pendingCaret = useRef<number | null>(null);
 
   const voiceInput = useVoiceInput({
     disabled,
@@ -396,6 +467,7 @@ function Composer({
     onSend: (text) => {
       const sent = onSend(text);
       if (sent) {
+        lastPrefillRef.current = null;
         setDraft("");
         input.current?.focus();
       }
@@ -405,6 +477,38 @@ function Composer({
     draft,
     setDraft,
   });
+  const { noteTypedDraft } = voiceInput;
+
+  useEffect(() => {
+    if (!prefill || prefill.nonce === prefillSeen.current) return;
+    prefillSeen.current = prefill.nonce;
+    const current = draftRef.current;
+    const merged = applyPrefillToComposer(current, prefill.text, disabled, input.current, lastPrefillRef.current);
+    lastPrefillRef.current = prefill.text.slice(0, CHAT_MAX_CHARS);
+    draftRef.current = merged;
+    // Controlled textarea values update on the next commit, so selection is also re-applied once `draft` lands.
+    if (merged !== current) pendingCaret.current = merged.length;
+    setDraft(merged);
+    noteTypedDraft(merged);
+  }, [prefill, disabled, noteTypedDraft]);
+
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null) return;
+    const end = pendingCaret.current;
+    pendingCaret.current = null;
+    const el = input.current;
+    if (el && !disabled) {
+      el.focus();
+      el.setSelectionRange(end, end);
+    }
+  }, [draft, disabled]);
+
+  // An option button unmounts into a static card once sent, so focus moves to the composer instead of dropping to body.
+  useEffect(() => {
+    if (focusSignal === focusSeen.current) return;
+    focusSeen.current = focusSignal;
+    focusComposerInput(disabled, input.current);
+  }, [focusSignal, disabled]);
 
   useEffect(() => {
     const el = input.current;
@@ -416,6 +520,7 @@ function Composer({
   const submit = () => {
     if (disabled || draft.trim() === "") return;
     if (onSend(draft)) {
+      lastPrefillRef.current = null;
       setDraft("");
       voiceInput.resetSpokenDraft();
     }
@@ -475,6 +580,7 @@ function Composer({
           disabled={disabled}
           placeholder={placeholder}
           onChange={(event) => {
+            if (event.target.value === "") lastPrefillRef.current = null;
             setDraft(event.target.value);
             voiceInput.noteTypedDraft(event.target.value);
           }}

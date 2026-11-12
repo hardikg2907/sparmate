@@ -16,7 +16,7 @@ export function codeScopeFor(track: Track, phase: string): "step" | "file" | nul
   return null;
 }
 
-function fileLines(content: string): string[] {
+export function fileLines(content: string): string[] {
   return content.replace(/\n$/, "").split("\n");
 }
 
@@ -79,4 +79,26 @@ export function unnumberedCode(text: string): string {
     .split("\n")
     .map((l) => l.replace(/^\s*\d+ \| /, ""))
     .join("\n");
+}
+
+/**
+ * Which steps in `stepCode` own at least one line in the 1-based inclusive range `[startLine, endLine]`. Lines with no
+ * letter or digit (`}`, `};`) appear in every step's code, so they never decide who owns a range.
+ */
+export function stepsOwningCodeRange(content: string, startLine: number, endLine: number, stepCode: Readonly<Record<string, readonly string[]>> | undefined): string[] {
+  if (!stepCode) return [];
+  const all = fileLines(content);
+  const lo = Math.max(0, startLine - 1);
+  const hi = Math.min(all.length, endLine);
+  const targetLines = new Set<string>();
+  for (let i = lo; i < hi; i++) {
+    const trimmed = all[i]?.trim() ?? "";
+    if (/[\p{L}\p{N}]/u.test(trimmed)) targetLines.add(trimmed);
+  }
+  if (targetLines.size === 0) return [];
+  const owners: string[] = [];
+  for (const [step, lines] of Object.entries(stepCode)) {
+    if (lines.some((line) => targetLines.has(line))) owners.push(step);
+  }
+  return owners;
 }

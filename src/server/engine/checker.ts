@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { candidateOwnText } from "../../shared/blocks";
 import { quoteIn } from "../../shared/quotes";
 import { unnumberedCode } from "../../shared/stepCode";
 import type { ChecklistItem, StepCheck, StepCheckItem, TranscriptEntry } from "../../shared/types";
@@ -66,7 +67,11 @@ export function checkerMessage(e: CheckerEvidence): string {
 
 /** A stable fingerprint of what the checker would read, so an unchanged step is not checked twice. */
 export function evidenceKey(e: Pick<CheckerEvidence, "chat" | "boardText" | "codeText" | "notesText">): string {
-  const lines = e.chat.filter((c) => c.role === "candidate").map((c) => `${c.id}`);
+  const lines = e.chat.flatMap((c) => {
+    if (c.role !== "candidate") return [];
+    const own = candidateOwnText(c);
+    return own ? [`${c.id}:${own}`] : [];
+  });
   return JSON.stringify([lines, e.boardText, e.codeText, e.notesText]);
 }
 
@@ -107,8 +112,12 @@ export function mergeCheck(previous: StepCheck | undefined, output: CheckerOutpu
 function verify(claim: CheckerOutput["items"][number], e: CheckerEvidence): { source: StepCheckItem["source"]; at: number | null } | null {
   switch (claim.source) {
     case "chat": {
-      const line = e.chat.find((c) => c.role === "candidate" && quoteIn(claim.quote, c.text));
-      return line ? { source: "chat", at: line.at } : null;
+      const hit = e.chat.find((c) => {
+        if (c.role !== "candidate") return false;
+        const own = candidateOwnText(c);
+        return own !== "" && quoteIn(claim.quote, own);
+      });
+      return hit ? { source: "chat", at: hit.at } : null;
     }
     case "board":
       // A drawing has no words to quote, so it counts only when the checker was shown the image.

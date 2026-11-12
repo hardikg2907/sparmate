@@ -1,7 +1,25 @@
 import { useEffect, useRef } from "react";
 import { MONO_FONT, monaco, monacoTheme, remeasureWhenFontLoads } from "../monaco-setup";
 import type { CompileDiagnostic } from "../../shared/types";
+import {
+  ANCHOR_RANGE_CLASS,
+  applyAnchorReveal,
+  planAnchorReveal,
+  type AnchorDecorationEntry,
+  type AnchorRevealDriver,
+  type AnchorRevealInput,
+  type AnchorRevealPlan,
+} from "./anchorReveal";
 import { diffEdit, mapOffset, normaliseEol } from "./textEdit";
+
+export { ANCHOR_RANGE_CLASS, applyAnchorReveal, planAnchorReveal, type AnchorDecorationEntry, type AnchorRevealDriver, type AnchorRevealInput, type AnchorRevealPlan };
+
+export interface CodeReveal {
+  line: number;
+  column?: number;
+  endLine?: number;
+  nonce: number;
+}
 
 export interface CodeEditorProps {
   /** Current file content. A change from outside (your editor, reload) replaces the editor text. */
@@ -13,8 +31,8 @@ export interface CodeEditorProps {
   readOnly?: boolean;
   /** Every edit; the parent debounces what it sends. */
   onChange?: (content: string) => void;
-  /** Lets the console jump to a diagnostic. */
-  revealLine?: { line: number; column: number; nonce: number } | null;
+  /** Lets the console or an anchor jump to a line or line range. */
+  revealLine?: CodeReveal | null;
 }
 
 const MARKER_OWNER = "clang";
@@ -111,6 +129,7 @@ export function CodeEditor(props: CodeEditorProps) {
     data: [],
     shadow: null,
   });
+  const anchorDecorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -132,6 +151,7 @@ export function CodeEditor(props: CodeEditorProps) {
     const state = markers.current;
     state.data = [];
     state.shadow = editor.createDecorationsCollection();
+    anchorDecorations.current = editor.createDecorationsCollection();
 
     for (const chord of SUGGEST_CHORDS) editor.addCommand(chord, () => undefined);
 
@@ -148,11 +168,14 @@ export function CodeEditor(props: CodeEditorProps) {
         }
       }
       if (applyingExternal.current) return;
+      anchorDecorations.current?.clear();
       onChangeRef.current?.(current ? current.getValue(monaco.editor.EndOfLinePreference.LF) : "");
     });
 
     return () => {
       subscription.dispose();
+      anchorDecorations.current?.clear();
+      anchorDecorations.current = null;
       state.shadow?.clear();
       state.shadow = null;
       editor.dispose();
@@ -175,7 +198,7 @@ export function CodeEditor(props: CodeEditorProps) {
     const model = editor?.getModel();
     const state = markers.current;
     if (!editor || !model || !state.shadow) return;
-    state.data = diagnostics.map((d) => toMarker(model, d));
+    state.data = (JSON.parse(diagnosticsKey) as CompileDiagnostic[]).map((d) => toMarker(model, d));
     state.shadow.set(
       state.data.map((m) => ({
         range: new monaco.Range(m.startLineNumber, m.startColumn, m.endLineNumber, m.endColumn),
@@ -233,11 +256,20 @@ export function CodeEditor(props: CodeEditorProps) {
     // A request that was already there when the editor mounted is old news.
     if (revealSeen.current === revealLine.nonce) return;
     revealSeen.current = revealLine.nonce;
-    const position = model.validatePosition({ lineNumber: revealLine.line, column: revealLine.column });
-    editor.setPosition(position);
-    editor.revealPositionInCenterIfOutsideViewport(position, monaco.editor.ScrollType.Immediate);
-    editor.focus();
-  }, [revealLine]);
+    applyAnchorReveal(revealLine, readOnly, {
+      getLineCount: () => model.getLineCount(),
+      getLineMaxColumn: (lineNumber) => model.getLineMaxColumn(lineNumber),
+      validatePosition: (pos) => model.validatePosition(pos),
+      createRange: (sLine, sCol, eLine, eCol) => new monaco.Range(sLine, sCol, eLine, eCol),
+      setSelection: (range) => editor.setSelection(range),
+      setPosition: (pos) => editor.setPosition(pos),
+      setAnchorDecorations: (entries) => anchorDecorations.current?.set(entries),
+      clearAnchorDecorations: () => anchorDecorations.current?.clear(),
+      revealRangeInCenter: (range) => editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Immediate),
+      revealPositionInCenter: (pos) => editor.revealPositionInCenterIfOutsideViewport(pos, monaco.editor.ScrollType.Immediate),
+      focus: () => editor.focus(),
+    });
+  }, [revealLine, readOnly]);
 
   return <div ref={hostRef} data-testid="code-editor" style={{ width: "100%", height: "100%", minHeight: 0 }} />;
 }
