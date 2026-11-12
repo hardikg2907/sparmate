@@ -296,6 +296,34 @@ function rawEnd(raw: string, length: number): number {
   return raw.length;
 }
 
+/** Three-word runs of a text, lower-cased and stripped of punctuation, for comparing two drafts of one reply. */
+function wordTriples(text: string): Set<string> {
+  const words = text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  const out = new Set<string>();
+  for (let i = 0; i + 2 < words.length; i++) out.add(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+  return out;
+}
+
+/** Shortest earlier block worth comparing; a short lead-in such as "Let me check." is never a draft of the reply. */
+const REDRAFT_MIN_TRIPLES = 12;
+/** Share of an earlier block's word runs that a later block must repeat for the later one to count as its rewrite. */
+const REDRAFT_OVERLAP = 0.6;
+
+/** Whether `later` says the same thing as `earlier` in new words, so the reader would see the answer twice. */
+function rewrites(earlier: string, later: string): boolean {
+  const before = wordTriples(earlier);
+  if (before.size < REDRAFT_MIN_TRIPLES) return false;
+  const after = wordTriples(later);
+  let shared = 0;
+  for (const run of before) if (after.has(run)) shared++;
+  return shared / before.size >= REDRAFT_OVERLAP;
+}
+
 /**
  * Joins the top-level text blocks of one turn into the text the user sees. When the model writes a paragraph, calls a
  * tool, then writes it again, the repeat is held back while it still matches the start of an earlier block and
@@ -306,7 +334,9 @@ function rawEnd(raw: string, length: number): number {
 class TurnText {
   text = "";
   private readonly earlier: string[] = [];
-  private cur: { index: number; text: string; held: boolean } | null = null;
+  /** What each block put into `text`, so a block the model later wrote again in new words can be left out at the end. */
+  private readonly shown: string[] = [];
+  private cur: { index: number; text: string; held: boolean; from: number } | null = null;
 
   constructor(private readonly emit: (delta: string) => void) {}
 
@@ -321,7 +351,7 @@ class TurnText {
 
   startBlock(index: number): void {
     this.finish();
-    this.cur = { index, text: "", held: this.earlier.length > 0 };
+    this.cur = { index, text: "", held: this.earlier.length > 0, from: this.text.length };
   }
 
   delta(delta: string): void {
@@ -353,6 +383,17 @@ class TurnText {
     const seen = collapse(cur.text);
     if (cur.held && seen !== "" && !this.earlier.includes(seen)) this.release(cur.text);
     this.earlier.push(seen);
+    const shown = this.text.slice(cur.from).trim();
+    if (shown !== "") this.shown.push(shown);
+  }
+
+  /**
+   * The reply once a block that a later block rewrites is left out. The model sometimes writes its answer, calls a
+   * tool, then writes it again in other words; the first draft has already streamed, so the final text drops it.
+   */
+  settled(): string {
+    const kept = this.shown.filter((block, i) => !this.shown.slice(i + 1).some((later) => rewrites(block, later)));
+    return kept.length === this.shown.length ? this.text : kept.join("\n\n");
   }
 }
 
@@ -453,6 +494,7 @@ class ClaudeConversation implements Conversation {
       } else if (msg.type === "result") {
         turnText.finish();
         const streamed = turnText.text;
+        const settled = turnText.settled();
         const { stats, nextCumulativeCost } = extractConversationStats(msg, started, this.lastCumulativeCost, this.setup.model);
         this.lastCumulativeCost = nextCumulativeCost;
         if (!this.costBaselineKnown) {
@@ -460,7 +502,7 @@ class ClaudeConversation implements Conversation {
           this.costBaselineKnown = true;
         }
         if (msg.subtype === "success" && !msg.is_error) {
-          if (streamed) return { text: streamed, stats };
+          if (streamed) return settled === streamed ? { text: streamed, stats } : { text: settled, stats, superseded: true };
           const text = distinctBlocks(assistantTexts).join("\n\n") || msg.result;
           if (text) handlers.onTextDelta(text);
           return { text, stats };

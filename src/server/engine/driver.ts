@@ -81,6 +81,8 @@ export interface TurnStats {
 export interface TurnReply {
   text: string;
   stats: TurnStats;
+  /** True when `text` leaves out a draft that already streamed, because the model wrote the reply again in new words. */
+  superseded?: boolean;
 }
 
 export interface Conversation {

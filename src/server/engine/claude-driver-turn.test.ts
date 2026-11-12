@@ -157,6 +157,39 @@ describe("a reply the model writes twice", () => {
   });
 });
 
+describe("a reply the model rewrites after a tool call", () => {
+  beforeEach(() => {
+    scripted.messages = [];
+    scripted.hang = null;
+  });
+
+  const first =
+    "Here is where the queue sits in your design. Every job is a row in the jobs table, keyed by job id, with a retries column on the row. A worker is offline for three days and then asks for everything it missed. Which rows does the server have to read to answer that, and how much work is that at ten million jobs a day?";
+  const second =
+    "Here is where the queue sits in your design. Each job is a row in the jobs table, keyed by job id, with a retries column on that row. A worker has been offline for three days and then asks for everything it missed. Which rows does the server read to answer that, and how much work is that at ten million jobs a day?";
+
+  it("keeps only the later draft in the final text, though the first one streamed", async () => {
+    const { reply, streamed } = await runTurn([...block(0, first), toolStart(1), stop(1), ...block(2, second), done()]);
+    expect(streamed).toContain(first);
+    expect(reply.text).toBe(second);
+    expect(reply.superseded).toBe(true);
+  });
+
+  it("keeps a short lead-in before the reply", async () => {
+    const { reply } = await runTurn([...block(0, "Let me check the transcript."), toolStart(1), stop(1), ...block(2, second), done()]);
+    expect(reply.text).toBe(`Let me check the transcript.\n\n${second}`);
+    expect(reply.superseded).toBeUndefined();
+  });
+
+  it("keeps two long blocks that are about different things", async () => {
+    const other =
+      "Next, look at the retry policy instead. A failed job waits one minute, then five, then thirty before it moves to the dead letter queue, where a person reads it. Say what each wait protects against, and what would go wrong if every wait were the same length for every kind of failure in the system.";
+    const { reply } = await runTurn([...block(0, first), toolStart(1), stop(1), ...block(2, other), done()]);
+    expect(reply.text).toBe(`${first}\n\n${other}`);
+    expect(reply.superseded).toBeUndefined();
+  });
+});
+
 describe("a model process that stops on its own", () => {
   let dir: string;
   let ledger: UsageLedger;

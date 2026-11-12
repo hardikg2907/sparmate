@@ -141,7 +141,7 @@ export function createEmitBlockTool(ctx: EmitBlockContext): RoomTool {
         return textOutput(`At most ${MAX_BLOCKS_PER_TURN} blocks may be emitted per reply.`, true);
       }
       const count = ctx.pushBlock(block);
-      return textOutput(`Queued ${block.kind} block (${count}/${MAX_BLOCKS_PER_TURN}).`);
+      return textOutput(`Queued ${block.kind} block (${count}/${MAX_BLOCKS_PER_TURN}). Any reply text you already wrote is kept, so do not write it again.`);
     },
   );
 }

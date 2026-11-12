@@ -93,6 +93,7 @@ import {
   parseStamp,
   replayTurn,
   requestTurn,
+  cleanReply,
   roundTranscript,
   runResultText,
   runSummary,
@@ -1298,7 +1299,8 @@ export class SessionRuntime {
         this.keepPartial(ch, f, entryId);
         return;
       }
-      const text = f.finish();
+      const streamedText = f.finish();
+      const text = reply.superseded ? cleanReply(reply.text) : streamedText;
       const silent = isSilentReply(reply.text);
       // A hint turn that skipped note_hint may still be on the first two rungs, where option chips give too much away.
       const unrecordedHint = ch.name === "interview" && built.turn.meta.request === "hint" && ch.hintLevelThisTurn === null;
