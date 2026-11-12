@@ -8,6 +8,12 @@ tracker:
   section: "### C2. Classic HLD Problems"
   bullet: "Distributed Job Scheduler"
 notesFile: notes/c2-job-scheduler.md
+sources:
+  - title: "Google SRE book: Distributed Periodic Scheduling with Cron"
+    url: "https://sre.google/sre-book/distributed-periodic-scheduling/"
+  - title: "Dropbox: Asynchronous Task Scheduling at Dropbox"
+    url: "https://dropbox.tech/infrastructure/asynchronous-task-scheduling-at-dropbox"
+confidence: "Two production write-ups back up the main shape: due work kept in a durable store and polled every second or two, queues split by type and priority, executors that stop themselves when they lose their heartbeat, a start-time target of a few seconds, and each launch named by the job and its scheduled time. They differ from this problem on one choice: one prefers skipping a launch to running it twice, where these facts pick at least once with a run id for dedup. The store write budget, row sizes and fleet numbers are this problem's own assumptions."
 ---
 
 ## Opening prompt
@@ -18,8 +24,7 @@ Let's design a distributed job scheduler. Teams submit jobs that must run at a s
 
 Reveal a fact only when the candidate asks about it, or asks a question whose honest answer needs it. Never volunteer the list.
 
-Terms: a **job** is what a tenant submits, one-off or cron. A **run** is one execution of a job at one due time. An **attempt** is one try at a run.
-
+- **Terms:** a job is what a tenant submits, one-off or cron. A run is one execution of a job at one due time. An attempt is one try at a run.
 - **Who submits:** about 2,000 tenants (teams and their services) through an API. Auth is out of scope.
 - **What a job is:** a task type, a JSON payload (at most 64 KB, typically under 1 KB) and options: priority, retry policy, timeout. There are about 500 task types. Every worker already has the code for every task type. Deploying code and placing containers on machines are out of scope.
 - **Kinds:** one-off (run now, or at a set time up to 30 days ahead; a time in the past runs at once) and cron (a standard cron expression plus a time zone, at most once a minute).
@@ -53,7 +58,7 @@ Core, functional:
 
 Core, non-functional:
 1. About 200 million runs a day: 2,300 a second on average, 12,000 at the top of the hour. *Ask: How many runs a day, and when is the busiest moment?*
-2. At least once: an accepted job is never lost, even when a zone dies. *Ask: Can an accepted job ever be lost?*
+2. At least once: an accepted job is never lost, even when a zone dies, and a rare duplicate run carries the same run id. *Ask: Can an accepted job ever be lost?*
 3. Outside the top of the hour, 99% of runs start within 5 seconds of due time, never early. *Ask: How close to its due time must a run start?*
 4. One tenant cannot delay other tenants, and low priority does not starve. *Ask: What if one tenant submits far more than the others?*
 5. No single point of failure; losing a machine or zone delays runs by 2 minutes at most. *Ask: What happens to runs if a machine or a zone fails?*
@@ -62,11 +67,12 @@ Extras (credit when they name one, never a gap):
 - A dead run can be inspected and re-run by the tenant.
 - Cancel a job before it starts. Stopping a run already in progress is best effort.
 - Show each job's state and attempt history for 30 days.
-- Rare duplicate runs carry the same run id.
 - In the first minute of each hour, high priority starts within 5 seconds and the rest within 60.
 - The submit API is 99.99% available.
 
 ## Capacity math
+
+The write budget per Postgres primary (about 4,000 a second on a churning queue table), the row size of about 1 KB and the heartbeat interval below are assumptions. Accept other reasonable values when the candidate gives a reason.
 
 - **Runs:** 200 million a day is about 2,300 per second on average. At the top of the hour, 600,000 runs started within 60 seconds add 10,000 per second, so the peak is about 12,000 per second, which means the store and the dispatch path are sized for the burst, about 5 times the average.
 - **Store writes:** each run costs about 4 transactions on its shard: create, hand to the queue, claim by a worker, and finish (which also moves the run to history). That is about 9,000 per second on average and 48,000 at peak, which means this system is write-heavy, unlike most read-heavy designs. A queue table churns: every update leaves a dead row for vacuum and moves index entries. At a planning budget of about 4,000 such writes per second per Postgres primary, the peak needs 12 primaries, which means sharding the store: 16 shards by a hash of the job id, about 3,000 writes per second each at peak.
@@ -124,6 +130,8 @@ Run states: `SCHEDULED → QUEUED → LEASED → SUCCEEDED`. A failure or a lost
  history:  finished runs and attempts ──> day partitions, dropped after 30 days
 ```
 
+A dead primary is replaced by a failover manager that keeps its leader lock in etcd (Patroni is one such tool). It promotes the standby that confirmed the latest commits within tens of seconds. The API and the dispatchers reconnect, and runs on that shard wait no longer than that, well inside the 2-minute budget. The dispatcher pods spread over the three zones, so a lost zone moves its shard leases to the survivors when they expire.
+
 Walk one run: a tenant submits a one-off job due at 10:00:00. The API derives the job id from the tenant and the idempotency key, hashes it to shard 7 and inserts the job and its `SCHEDULED` run in one transaction. At 10:00:00.4 the dispatcher that owns shard 7 marks the run `QUEUED` and publishes its id to the normal queue. A worker pulls it and claims it: attempt 1, lease until 10:00:30. The handler finishes at 10:00:05, and finish with attempt 1 marks the run `SUCCEEDED` and moves it to history.
 
 Walk one failing run: the handler fails on attempt 1, and the worker calls `finish` with attempt 1 and the outcome `retry`. The conditional finish moves the run from `LEASED` back to `SCHEDULED` with a later `dueAt`, and the `Attempt` row keeps the worker, the outcome and the error. When the run falls due, the dispatcher that owns its shard queues it again, and a worker claims attempt 2 with the same run id as the idempotency key. After the last of `maxAttempts` the finish moves the run to `DEAD`. A tenant finds it with `GET /runs?state=dead`, and `POST /runs/{runId}/retry` creates a fresh run of the same job due now, with a new run id.
@@ -150,7 +158,7 @@ Walk a cron fire: the dispatcher queues the 09:00 run of a schedule and inserts 
 ### Finding due runs without one scheduler
 - **Bad:** one scheduler process that selects every job with `runAt <= now()` each second and keeps timers in memory. It is a single point of failure, and a second copy "for safety" runs every job twice. Or partitioning the store by due hour, which puts every current read and write on one partition.
 - **Good:** a partial index on due time over waiting runs only. Dispatchers claim a batch with `FOR UPDATE SKIP LOCKED` and change its state in the same transaction, so two dispatchers never take the same run. Several dispatcher pods with shard ownership or leader election. A tick of a second or less meets the 5-second target.
-- **Great:** shards by job id, so each shard's due slice is small and the burst spreads evenly. Says shard ownership is only for efficiency: the row-level claim gives correctness, so two dispatchers on one shard during a handover cause no double run. Keeps the runs table small (finished runs move to history) so the due index and vacuum keep up. Uses the database's `now()` as the one clock. Knows when a near-term delay layer earns its place (sub-second precision) and how it is rebuilt after a crash.
+- **Great:** shards by job id, so each shard's due slice is small and the burst spreads evenly. Says shard ownership is only for efficiency: the row-level claim gives correctness, so two dispatchers on one shard during a handover cause no double run. Keeps the runs table small (finished runs move to history) so the due index and vacuum keep up. Uses the database's `now()` as the one clock. Computes a cron run's next fire in the schedule's own time zone and stores it in UTC, and handles the skipped and the repeated daylight-saving hour by the stated rule. Knows when a near-term delay layer earns its place (sub-second precision) and how it is rebuilt after a crash.
 
 ### Leases, heartbeats and at-least-once
 - **Bad:** the worker acks or deletes the message, then runs the job, so a crash loses it (at most once). Or "exactly once with Kafka transactions". Or a fixed visibility timeout with no heartbeat, so a job longer than the timeout gets a second copy while the first still runs.
@@ -176,6 +184,8 @@ Use one, at the extension point, unless the candidate already handled it.
    Fits: Leases, heartbeats and at-least-once
 3. **EU region (geography):** "We are opening an EU region. EU tenants' payloads and history must never leave the EU. What changes?" Expect: a full, independent copy of the stack per region (API, store shards, dispatchers, queues, workers). Each tenant gets a home region, and a thin global routing layer sends its calls there. No shared cross-region store: every claim would pay a cross-region round trip, and residency forbids it. If the EU region goes down, EU runs wait for it, or fail over to a second EU region through async replication. That can re-run work finished just before the failure, and run-id idempotency covers it. Cron time zones do not depend on the region.
    Fits: none
+4. **Downstream outage:** "A payment provider used by about 5% of all runs goes down for 20 minutes, outside the top of the hour. Every attempt that calls it fails. What happens, and what should happen?" Expect: about 115 such runs fall due each second, about 139,000 in 20 minutes. With the default backoff (30 seconds, then 1, 2 and 4 minutes) a run's 5 attempts span about 7.5 minutes, so every run that falls due in the first 12 or so minutes is `DEAD` before the provider returns: about 87,000 dead runs. Meanwhile the provider gets about 5 attempts per run, about 580 calls a second, while it tries to recover. Fix: a breaker per task type opens when most attempts fail, and dispatch holds those runs as `SCHEDULED` without using attempts. A few probe runs test the provider, and on recovery the held runs are released at a pace the provider can take: about 700,000 slot-seconds of work, about 23 minutes on 500 spare slots, less with a scale-up. The cron overlap rule skips new fires of a schedule whose run is still waiting, so schedules do not pile up. The "no run waits more than 10 minutes" rule cannot hold for these runs, so say so and tell the tenants. Strong: one alert per task type instead of one per run, and a bulk re-run of dead runs by task type and time range.
+   Fits: Retries, backoff and dead runs
 
 ## Level bar
 
@@ -208,3 +218,4 @@ Stretch signal:
 - A heartbeat thread with no run timeout: a hung handler holds its slot forever.
 - Comparing lease times against each worker's own clock.
 - A Kubernetes CronJob or a crontab line per schedule, for 5 million schedules.
+- Skipping a run whenever a double run is possible, as one large operator's cron prefers. It is a fair design for some jobs, but here it loses accepted runs, which the facts forbid. Credit for naming the trade-off; a red flag if the candidate keeps it after the at-least-once fact is given.

@@ -9,6 +9,12 @@ tracker:
   bullet: "Hotel/Movie Ticket Booking System"
 notesFile: notes/b3-ticket-booking.md
 lldFolder: ticket-booking
+sources:
+  - title: "techinterview.org, Movie Ticket Booking LLD"
+    url: "https://www.techinterview.org/post/3233463752/lld-movie-ticket-booking-system/"
+  - title: "Hello Interview, Amazon Locker"
+    url: "https://www.hellointerview.com/learn/low-level-design/problem-breakdowns/amazon-locker"
+confidence: "Medium. Per-show seat state, a hold with a lazy expiry, all-or-nothing seat requests and a confirm that re-checks the hold are the problem's standard form. One outside write-up keeps the seat state on the physical seat and marks that as a gap itself, because two shows on one screen would then share state; this version names it as the main trap. That write-up holds seats for 10 minutes and refunds in tiers, and this version uses 5 minutes and a full refund before the start. A second write-up on a reservation timeout confirms the lazy-expiry approach. Scenario and extension numbers were traced against the stated rules."
 ---
 
 ## Opening prompt
@@ -24,7 +30,7 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Seat layout:** every screen in the demo has rows A, B and C with 5 seats each, labelled A1 to C5. Row A is REGULAR, row B is PREMIUM, row C is RECLINER. Real screens differ in size, so the layout is data given at setup.
 - **Price:** set per show and per category, in whole rupees. Demo shows use 200 REGULAR, 300 PREMIUM, 500 RECLINER, except show 2, which uses 150, 250 and 400. Every show prices every category. Prices never change after setup.
 - **Who picks seats:** the user names the exact seats. The system does not assign them.
-- **Seat state:** a seat is free, held or booked **for one show**. Seat A1 in the 6 pm show and in the 9 pm show are two separate things.
+- **Seat state:** a seat is free, held or booked. Two shows on one screen sell the same seat label separately.
 - **Hold:** 1 to 6 seats of one show, all or nothing. If any seat is not free, the whole request is rejected and nothing changes. Duplicate seats in one request and seats that are not on the screen are invalid. A held seat is not free for anyone, including the user who holds it. One user may have many holds and bookings at once, on the same show too. A hold cannot be extended or renewed. After it ends, the user makes a new hold.
 - **Hold time:** 5 minutes, configurable. A hold made at minute 10 is valid at minutes 10 to 14 and is over at minute 15. The caller passes `now` on every call.
 - **Expiry:** no timer thread. A seat counts as free the moment `now` reaches its expiry, even if nothing cleaned it up. An explicit `releaseExpired(now)` is allowed as an extra, never as the only mechanism.
@@ -52,16 +58,17 @@ For the interviewer: on scale, an index by movie and city is a fine extra.
 
 Core:
 1. Set up cities, theatres, screens with seat layouts, movies and shows with prices per category. *Ask: What must be set up before anyone can book?*
-2. Hold 1 to 6 seats of one show for 5 minutes, all or nothing; return the hold id and total. *Ask: Who picks the seats, and what happens while a customer pays?*
-3. Confirm after payment success. Reject unknown, expired, released and already confirmed holds. *Ask: What does payment tell the system, and what if the hold is too old?*
-4. Release on payment failure. An expired hold frees its seats without any cleanup call. *Ask: What happens to the seats if payment fails or time runs out?*
-5. Cancel a confirmed booking before the show starts, as its owner. Seats become free. *Ask: Can a booking be cancelled, and by whom?*
-6. Safe under concurrent calls. *Ask: Can several threads use it at once?*
+2. Hold 1 to 6 seats of one show for 5 minutes, all or nothing; return the hold id and total. A hold at or after the show's start, and any other invalid request, is rejected and changes nothing. *Ask: Who picks the seats, and what happens while a customer pays?*
+3. Confirm after payment success and return the amount fixed at the hold. Reject unknown, expired, released and already confirmed holds, each with no change. *Ask: What does payment tell the system, and what if the hold is too old?*
+4. Release on payment failure. An expired hold frees its seats without any cleanup call. A release of a booking that is not held is rejected and changes nothing. *Ask: What happens to the seats if payment fails or time runs out?*
+5. Cancel a confirmed booking before the show starts, as its owner. Seats become free. Any other cancel is rejected and changes nothing. *Ask: Can a booking be cancelled, and by whom?*
+6. Safe under concurrent calls (only when asked). *Ask: Can several threads use it at once?*
+7. Browse: the shows of a movie in a city, in start order with started shows hidden, and the free seats of a show at `now`. *Ask: How does a user find a show and see which seats are free?*
+8. A seat's state belongs to one show: the same seat label in two shows is sold separately. *Ask: Can two shows on one screen sell the same seat?*
 
 Extras (credit when they name one, never a gap):
-- Browse: shows of a movie in a city, in start order, started shows hidden. Free seats of a show at `now`.
-- Seat state is per show.
-- Every invalid call is rejected with no state change.
+- An index of shows by movie and city.
+- An explicit `releaseExpired(now)` beside the lazy expiry, never instead of it.
 
 ## Entities and relationships
 
@@ -104,6 +111,10 @@ Invariant to listen for: a seat has at most one owner at a time, and only its ow
  enum class BookingState { HELD, CONFIRMED, RELEASED, EXPIRED, CANCELLED };
 
  struct Seat     { int id; char row; int number; SeatCategory category; };   // physical, belongs to a screen
+ struct City     { int id; std::string name; };
+ struct Theatre  { int id; int cityId; std::string name; };
+ struct Screen   { int id; int theatreId; std::vector<Seat> seats; };        // the physical layout, given at setup
+ struct Movie    { int id; std::string title; int minutes; };
  struct ShowSeat { SeatState state = SeatState::FREE; int bookingId = 0; int heldUntil = 0; };   // one seat in ONE show
  struct Show     { int id; int movieId; int screenId; int startMinute;
                    std::map<SeatCategory, int> price;
@@ -114,34 +125,50 @@ Invariant to listen for: a seat has at most one owner at a time, and only its ow
  class PricingStrategy {                                                    // interface
   public:
    virtual ~PricingStrategy() = default;
-   virtual int price(const Show& show, const Seat& seat, int occupiedSeats) const = 0;
+   virtual int price(const Show& show, const Seat& seat) const = 0;
  };
  class CategoryPricing : public PricingStrategy { ... return show.price.at(seat.category); ... };
 
  class BookingSystem {
-   std::map<int, std::shared_ptr<Show>> shows;      // plus maps for cities, theatres, screens, movies
+   std::map<int, City> cities;  std::map<int, Theatre> theatres;  std::map<int, Screen> screens;  std::map<int, Movie> movies;
+   std::map<int, std::shared_ptr<Show>> shows;
    std::map<int, Booking> bookings;
    std::shared_ptr<PricingStrategy> pricing;
-   int holdMinutes = 5;
+   int holdMinutes;                                                          // a setup value; the demo uses 5
    std::mutex mtx;
    int nextBookingId = 1;
   public:
+   explicit BookingSystem(std::shared_ptr<PricingStrategy> pricing, int holdMinutes = 5);
+   // setup, before any booking; the ids are the caller's
+   void addCity(int id, const std::string& name);
+   void addTheatre(int id, int cityId, const std::string& name);
+   void addScreen(int id, int theatreId, const std::vector<Seat>& seats);
+   void addMovie(int id, const std::string& title, int minutes);
+   void addShow(int id, int movieId, int screenId, int startMinute, const std::map<SeatCategory, int>& price);   // builds the ShowSeat vector from the screen's seats
+
    std::optional<Booking> hold(int userId, int showId, const std::vector<int>& seatIds, int now);   // id and amount
    std::optional<int> confirm(int bookingId, int now);                       // amount
    bool release(int bookingId, int now);
    std::optional<int> cancel(int bookingId, int userId, int now);            // refund amount
    std::vector<int> freeSeats(int showId, int now);
-   std::vector<int> showsFor(int movieId, int cityId, int now);
+   std::vector<int> showsFor(int movieId, int cityId, int now);              // walks show -> screen -> theatre -> city; start > now; ordered by (start, id)
  };
 ```
 
 `Show` owns a `vector<ShowSeat>` indexed like the screen's seats. That makes "state per show" one array lookup, and a hold is one loop to check and one loop to write. `ShowSeat` stores `heldUntil`, so the free check needs no booking lookup. Expiry is lazy: every check compares `now` with `heldUntil`.
 
-Accepted alternatives: separate `Hold` and `Booking` records. A `ShowSeat` that stores only the booking id, with expiry read from the booking. A per-show set of unavailable seats, if it keeps the owner and the expiry. The caller passing `expiresAt` as well as `now`. A `hold` that returns only the id, with the amount read from the booking. A global mutex or a mutex per show. Nested city-theatre-screen objects or flat id maps. A seat label such as "A1" instead of an int id.
-
 ## Patterns that fit
 
 - **Strategy** for pricing: the first version is a category lookup, and dynamic pricing becomes a new class, not an edit to `hold`. Seat selection for group bookings can be a Strategy too, but a plain function is enough.
+- **Accepted alternatives:**
+  - Separate `Hold` and `Booking` records.
+  - A `ShowSeat` that stores only the booking id, with the expiry read from the booking.
+  - A per-show set of unavailable seats, if it keeps the owner and the expiry.
+  - The caller passing `expiresAt` as well as `now`.
+  - A `hold` that returns only the id, with the amount read from the booking.
+  - A global mutex or a mutex per show.
+  - Nested city-theatre-screen objects or flat id maps.
+  - A seat label such as "A1" instead of an int id.
 - Not needed: Singleton, Factory, Observer (no notifications), the State pattern. A `BookingState` enum with guard checks is enough for five states. One class per state is over-engineering.
 
 ## Demo scenarios
@@ -167,16 +194,17 @@ Setup: cities 1 Pune and 2 Delhi. Theatres: 1 Central and 2 Riverside in Pune, 3
 7. **Expiry at the boundary.** User 3 holds B1 on show 1 at minute 21 (over at 26) and holds C1 at minute 21 as a second hold. User 2 holds B1 at minute 25: rejected. User 3 confirms the C1 hold at minute 25: accepted (last valid minute), amount 500. User 2 holds B1 at minute 26: accepted, with no cleanup call made. User 3 confirms the old B1 hold at minute 26: rejected, and B1 stays held by user 2. User 3 reports a payment failure for the old B1 hold at minute 27: rejected or harmless, and B1 stays held by user 2. At minute 27, 13 seats are free. At minute 31, user 2's hold is over and 14 seats are free.
 8. **Invalid input and limits.** At minute 10, each of these is rejected and changes nothing: a hold of 0 seats; a hold of 7 seats (A1 to A5, B1, B2); a hold of A1 and Z9 (A1 stays free); A1 twice in one request; show 99; confirm, release and cancel with id 999. Show 1 still has 15 free seats. A hold of exactly 6 seats (A1 to A5, B1) is accepted: total 1,300 (5 x 200 + 300), 9 free seats. At minute 999, user 2 holds C5: accepted, total 500. At minute 1000, user 2 holds C4: rejected (show started).
 9. **Cancel and resale.** User 1 holds A1, A2 on show 1 at minute 10, confirms at minute 12. User 1 cancels at minute 800: refund 400, 15 free seats. User 2 holds A1 at minute 801: accepted.
-10. **Cancel rules.** At minute 10, user 1 holds and confirms (at minute 12) A1 and A2 (booking P, 400), then C1 (booking R, 500). User 2 does the same for C2 (booking S, 500). Then in order: user 3 cancels S at minute 100: rejected, C2 still booked. User 2 cancels S at minute 100: refund 500, C2 free. User 2 cancels S at minute 101: rejected, no second refund. User 3 holds C3 at minute 102, then cancels that unconfirmed hold at minute 103: rejected, C3 stays held at minutes 102 to 106 and is free at 107 (skip this step if the candidate's API merges cancel and release). User 1 cancels P at minute 999: refund 400, and 14 seats are free at minute 999 (only C1 is booked; A1, A2, C2 and C3 are free). User 1 cancels R at minute 1000: rejected, C1 stays booked.
+10. **Cancel rules.** User 1 holds A1 and A2 at minute 10 and confirms at minute 12 (booking P, 400). User 1 holds C1 at minute 12 and confirms at minute 13 (booking R, 500). User 2 holds C2 at minute 12 and confirms at minute 13 (booking S, 500). Then in order: user 3 cancels S at minute 100: rejected, C2 still booked. User 2 cancels S at minute 100: refund 500, C2 free. User 2 cancels S at minute 101: rejected, no second refund. User 3 holds C3 at minute 102, then cancels that unconfirmed hold at minute 103: rejected, C3 stays held at minutes 102 to 106 and is free at 107 (skip this step if the candidate's API merges cancel and release). User 1 cancels P at minute 999: refund 400, and 14 seats are free at minute 999 (only C1 is booked; A1, A2, C2 and C3 are free). User 1 cancels R at minute 1000: rejected, C1 stays booked.
 11. **Mixed lifecycle.** User 1 holds A1, A2 at minute 10. User 2 holds B1 at minute 11. User 3 holds C1 at minute 12. Confirm the first hold at minute 13. Release the second at minute 14. At minute 16, 12 seats are free (C1 still held until 17). At minute 17, 13 seats are free, and the confirm of the third hold at minute 17 is rejected. The final seat map: A1 and A2 booked, everything else free.
-12. **Only if the candidate made it thread-safe:** 8 threads each loop over the 15 seats of show 1 and try to hold one seat per call, at minute 10, thread number as user id. In total exactly 15 holds succeed, no seat is held twice, and show 1 has 0 free seats at minute 10. At minute 15 (nobody confirmed) all 15 seats are free again. The count per thread is not fixed.
+12. **A different hold time.** Build the same system with a hold time of 2 minutes. User 1 holds A1 and, as a second hold, B1, both on show 1 at minute 10. User 2 holds A1 at minute 11: rejected. User 1 confirms the B1 hold at minute 11: accepted, amount 300. User 2 holds A1 at minute 12: accepted, because the first hold is over at minute 12. User 1 confirms the A1 hold at minute 12: rejected. At minute 12, 13 seats are free. A candidate who fixed the time at 5 fails this one, so name the missed question at the debrief.
+13. **Only if the candidate made it thread-safe:** 8 threads each loop over the 15 seats of show 1 and try to hold one seat per call, at minute 10, thread number as user id. In total exactly 15 holds succeed, no seat is held twice, and show 1 has 0 free seats at minute 10. At minute 15 (nobody confirmed) all 15 seats are free again. The count per thread is not fixed.
 
 ## Extensions
 
 Pick one for the last 15 minutes. Prefer 1 or 2. Use 3 as a design talk if little time is left.
 
 1. **Group booking with adjacent seats.** "Hold N seats together": the system picks N consecutive seat numbers in one row, all free at `now`. Rule: scan rows A, B, C in order, take the lowest starting number in the first row that has a run. Adjacency never wraps to the next row. Example on a fresh show 1 at minute 10: 4 together gives A1 to A4 (800). 3 together gives B1 to B3 (900), because row A has only A5 left. 2 together gives B4 and B5 (600). 6 together is rejected: no row has 6 seats. 7 together is rejected by the 6-seat limit. After the first hold is released, 5 together gives A1 to A5 (1,000). What changes? Expect: one new function that picks seat ids from the show's seat list, then calls the existing hold path. **What stays the same:** explicit-seat `hold`, the limit of 6, all or nothing, confirm, release, expiry, cancel.
-2. **Dynamic pricing by occupancy.** The price is the category price times a multiplier. Occupied means booked, or held and not expired at `now`, counted before the new hold. Under 50% occupied (0 to 7 of 15) is 1.0x. From 50% to under 80% (8 to 11 of 15) is 1.2x. 80% or more (12 to 15) is 1.5x. All seats in one hold use one multiplier. No rounding rule is needed. Example on a fresh show 1 at minute 10: user 1 holds A1 to A5: 1,000 at 1.0x (0 occupied). User 1 holds B1 to B3: 900 at 1.0x (5 occupied). User 2 holds B4, B5: 720 (2 x 360, 8 occupied). User 3 holds C1, C2: 1,200 (2 x 600, 10 occupied). User 4 holds C3: 750 (1.5x, 12 occupied). At minute 15 everything has expired, and user 5 holds A1: 200. What changes? Expect: a new `PricingStrategy` that reads occupancy, injected into `BookingSystem`. The first-version interface may need the occupied count added, which is a fair, small change. Every demo price is a multiple of 50, so both multipliers give whole rupees and no rounding rule is needed. **What stays the same:** every earlier scenario that asserts a total has fewer than 8 seats occupied before each hold, so its totals do not change; the amount is fixed at hold and confirm returns that same amount, the cancel refund is the amount paid, and states and expiry do not change.
+2. **Dynamic pricing by occupancy.** The price of a seat is its category price times a whole percent, divided by 100. Occupied means booked, or held and not expired at `now`, counted before the new hold. Under 50% occupied (0 to 7 of 15) is 100. From 50% to under 80% (8 to 11 of 15) is 120. 80% or more (12 to 15) is 150. All seats in one hold use the same percent. Example on a fresh show 1 at minute 10: user 1 holds A1 to A5: 1,000 at 100 (0 occupied). User 1 holds B1 to B3: 900 at 100 (5 occupied). User 2 holds B4, B5: 720 (2 x 360, percent 120, 8 occupied). User 3 holds C1, C2: 1,200 (2 x 600, percent 120, 10 occupied). User 4 holds C3: 750 (percent 150, 12 occupied). At minute 15 everything has expired, and user 5 holds A1: 200. What changes? Expect: a new `PricingStrategy` that reads occupancy, injected into `BookingSystem`. The first-version interface may need the occupied count added, which is a fair, small change. Every demo price is a multiple of 50, so the division by 100 is exact. A `double` multiplier with a cast is a rounding case waiting to happen. **What stays the same:** every earlier scenario that asserts a total has fewer than 8 seats occupied before each hold, so its totals do not change; the amount is fixed at hold and confirm returns that same amount, the cancel refund is the amount paid, and states and expiry do not change.
 3. **Hotel rooms over date ranges.** The same engine sells rooms by night. A room is booked for check-in day to check-out day, and the nights are check-in up to but not including check-out. Room 101 costs 3,000 a night. User 1 holds days 10 to 13 (nights 10, 11, 12): 9,000. User 2 holds days 12 to 14: rejected (night 12 taken). User 2 holds days 13 to 15: accepted, 6,000. User 3 holds days 9 to 10: accepted, 3,000. Check-in equal to check-out is rejected. A hold covers 1 to 6 nights. Cancel works while `now` is before the start of the check-in day (day x 1,440 minutes). What changes? Expect: the unit of state moves from (show, seat) to (room, night). A good design lets `Booking` carry a list of slot keys, and the hold, confirm, release and cancel code never learns whether the keys are seats or nights. **What stays the same:** all or nothing, the 5-minute hold, lazy expiry, the booking states, and the movie scenarios.
 
 ## Concurrency follow-up

@@ -9,6 +9,10 @@ tracker:
   bullet: "LRU Cache (code-level)"
 notesFile: notes/b3-lru-cache.md
 lldFolder: lru-cache
+sources:
+  - title: "AlgoMaster, design LRU cache"
+    url: "https://algomaster.io/learn/lld/design-lru-cache"
+confidence: "Medium. The core (a list in recency order, a map from key to list node, one lock, a miss that differs from a stored empty string) is the problem's standard form. One outside write-up of the problem agrees on the structure and the locking rules. It differs in two places that this version rules out on purpose: generic templates, and a sentinel value for a miss. The expiry, second-policy and size-limit extensions are the usual follow-ups, and their numbers were traced against the rules stated here."
 ---
 
 ## Opening prompt
@@ -30,7 +34,7 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Threads:** yes. One cache serves up to about 16 request threads at once. `main()` may stay single-threaded.
 - **Time:** the first version has none. A later rule that needs time gets it from the caller, in whole seconds, on every `get` and `put`. Never the system clock.
 - **Demo:** `main()` shows a hit, a miss, an eviction and an update.
-- **Not in the first version:** expiry, other eviction policies, persistence, eviction callbacks, hit statistics, a `peek` that does not refresh.
+- **Not in the first version:** expiry, other eviction policies, a limit on memory, persistence, eviction callbacks, hit statistics, a `peek` that does not refresh.
 
 For the interviewer: on the operations, if the candidate adds `erase(key)`, it takes O(1) and says whether the key was there.
 
@@ -42,15 +46,14 @@ For the interviewer: on what is not in the first version, if the candidate asks,
 
 Core:
 1. Fixed capacity of 1 or more entries. Reject 0 or negative at construction. *Ask: What capacity values are allowed?*
-2. `get`: a hit returns the value and refreshes the key. A miss reports "no value". *Ask: What counts as a use, and how is a miss reported?*
+2. `get`: a hit returns the value and refreshes the key. A miss reports "no value", never an empty string, and changes nothing. *Ask: What counts as a use, and how is a miss reported?*
 3. `put` of a new key makes it most recent; a full cache evicts exactly the least recent one. *Ask: What happens when a new key arrives and the cache is full?*
 4. `put` of an existing key replaces the value, refreshes the key and evicts nothing. *Ask: What does a put do when the key already exists?*
 5. `get` and `put` take O(1) average time, with no scan over all entries. *Ask: How fast must each operation be?*
-6. Safe when up to 16 threads call `get`, `put` and `size` at once. *Ask: Can several threads use it at once?*
+6. Safe when up to 16 threads call `get`, `put` and `size` at once (only when asked). *Ask: Can several threads use it at once?*
 
 Extras (credit when they name one, never a gap):
 - `size()` returns the entry count, never above the capacity.
-- A miss is never an empty string and changes nothing.
 
 ## Entities and relationships
 
@@ -94,6 +97,14 @@ Extras (credit when they name one, never a gap):
  };
  // LruPolicy: std::list<int> plus a map of iterators. LfuPolicy: a count per key, a std::unordered_map<int, std::list<int>> of keys per count, a map from key to its bucket iterator, and a minCount.
  // LRUCache then holds std::unordered_map<int, std::string> values and a std::shared_ptr<EvictionPolicy>.
+
+ // After the expiry extension: Entry gains `std::optional<int> expiresAt`, and the caller's time comes in on every call.
+ //   std::optional<std::string> get(int key, int now);
+ //   void put(int key, const std::string& value, std::optional<int> ttl, int now);
+
+ // After the size extension: the constructor takes `maxChars`, the cache keeps a `totalChars` counter, and put reports a refusal.
+ //   LRUCache(int capacity, std::size_t maxChars);
+ //   bool put(int key, const std::string& value);                // false when the value alone is longer than maxChars
 ```
 
 A list in recency order plus a map from key to list iterator makes every step O(1). The map finds the node, `splice` moves it to the front without invalidating any iterator, and `back()` is always the next victim.
@@ -103,6 +114,7 @@ A list in recency order plus a map from key to list iterator makes every step O(
 - **Strategy** for the eviction policy, once the policy extension arrives: a new policy is a new class, and the cache does not change. Cost: `LruPolicy` keeps a second key index, and they should say so.
 - **Data structures:** list plus hash map is the reference. A `std::list<int>` of keys, with the value stored in the map beside the iterator, is accepted: the back node is still a key, so eviction finds its slot. A hand-written doubly linked list with sentinels is accepted, at the cost of more code and more pointer bugs. An ordered map keyed by a use counter is O(log n): it misses the stated O(1) goal, so accept it only if they say so and can name the O(1) structure. A `vector` or `deque` with a linear search is not accepted, because each call is O(n).
 - **LFU data structures:** a `std::set` ordered by (use count, last-use tick) is O(log n). Accept it as a first version if they say so. The O(1) answer is count buckets with a `minCount`.
+- **Sharded caches** for the concurrency follow-up: accepted when they say that eviction is per shard, so the order is only approximately LRU. Approximate schemes (a CLOCK sweep, sampled eviction) are accepted on the same condition.
 - Not needed: Singleton, Factory, Observer, State, templates over the key and value types.
 
 ## Demo scenarios
@@ -120,6 +132,7 @@ Each scenario starts with a fresh cache of capacity 3 unless stated. Keys are `i
 9. **Expiry. Only if the candidate built it.** Time is in whole seconds. At time 0: `put 1:a` with TTL 10, and `put 2:b` with no TTL. At time 9: `get 1` gives a, and does not extend the life. At time 10: `get 1` misses, because an entry put at time t with TTL d expires at time t + d. At time 20: `put 3:c` with TTL 5. At time 24: `put 3:C` with TTL 5, which restarts the clock, so it expires at time 29. At time 28: `get 3` gives C. At time 29: `get 3` misses. At time 1,000,000: `get 2` gives b.
 10. **LFU policy. Only if the candidate built it.** The fewest uses goes first, and a tie goes to the least recently used. `put 1:a, 2:b, 3:c`. `get 1` twice, then `get 2` once, so keys 1, 2 and 3 have 3, 2 and 1 uses. `put 4:d` evicts key 3. `put 5:e` evicts key 4, because a new entry starts at 1. `get 5` gives e, so key 5 has 2. `put 6:f` evicts key 2: keys 2 and 5 tie at 2, and key 2 was used longer ago. Then `get 3`, `get 4`, `get 2` miss, and `get 1`, `get 5`, `get 6` give a, e, f.
 11. **Concurrency. Only if the candidate made it thread-safe.** Capacity 100. Four threads (t = 0 to 3) each run 5,000 rounds (r = 0 to 4,999). Each round puts key `(r + 250 * t) % 1000` with that key as text for the value, then gets key `(r * 3 + 250 * t) % 1000` and checks any hit against that key as text. After all threads finish: no crash and no wrong value, the size is exactly 100, and getting each key from 0 to 999 once gives exactly 100 hits, each with its own text.
+12. **Size limit. Only if the candidate built it.** At most 3 entries and at most 10 characters in all the values. `put 1:aaaa` and `put 2:bbbb`: 8 characters in 2 entries. `put 3:cccc` needs 12, so key 1 goes: `get 1` misses, and the cache holds keys 2 and 3 with 8 characters. `put 2:` with 8 "b" characters is an update: the total would be 12, so key 3 goes and only key 2 is left, with 8 characters. `get 3` misses and `get 2` gives its 8 characters. `put 4:` with 11 "x" characters is refused and changes nothing: `get 2` still gives its 8 characters and the size is 1. `put 5:` with 10 "y" characters evicts key 2 and fits alone. `put 6:` with the empty string fits with no eviction: the size is 2.
 
 ## Extensions
 
@@ -133,6 +146,10 @@ Pick one. If they built room for one already, pick another. Say the requirement,
    - Facts: a new entry starts at 1 use, and each later hit or update adds 1. A tie goes to the least recently used. An evicted key forgets its count. The speed target stays O(1), and a slower first version must say so.
    - Expect: the order logic leaves the cache. The cache keeps `values` and an `EvictionPolicy`, and `get` and `put` only call its hooks. An `enum` plus `switch` works for two policies if they name the cost: each new policy edits the cache. Stretch: O(1) LFU with count buckets, and why `std::priority_queue` fails: it cannot change a priority in place.
    - Same: with `LruPolicy`, scenarios 1 to 8 give the same results. A new key in a full cache evicts exactly one entry, and an update none. The lock stays in the cache and covers the policy calls.
+3. **Bound memory by total value size:** product also wants a limit on the memory the values use. What changes?
+   - Facts: the cache gets a second limit, `maxChars`, on the total length of all stored values, next to the entry limit. The length of a value is its `size()` in characters, and keys are not counted. A `put` of a value longer than `maxChars` is refused before anything changes, even for an existing key, and `put` now tells the caller. Otherwise the cache evicts least recently used entries until the new entry fits both limits. An update of an existing key changes the total by the difference between the new and the old length, and it never evicts that key itself. A `get` changes no length. Example with 3 entries and `maxChars` 10: `put 1:aaaa`, `put 2:bbbb`, `put 3:cccc` evicts key 1, because 12 is over 10. Then `put 2:` with 8 "b" characters evicts key 3.
+   - Expect: a running `totalChars` in the cache, kept equal to the sum of the stored lengths. The oversize check comes first, before any eviction or change. `put` becomes a loop that evicts from the back while either limit is broken. An update subtracts the old length and adds the new one before it loops. A good answer sees that the loop cannot reach the updated key, because that key sits at the front and fits alone. Lock scope does not change. Stretch: say what happens when many large entries must go for one new entry, and that each eviction is still O(1).
+   - Same: with a `maxChars` too large to reach, scenarios 1 to 8 give the same results.
 
 ## Concurrency follow-up
 
@@ -172,4 +189,4 @@ Stretch signal:
 - A sweeper thread or the system clock for expiry: the cache cannot be tested, and time must come from the caller.
 - `std::priority_queue` for LFU: it cannot change a priority in place, so stale entries pile up.
 - `std::shared_ptr` for both `next` and `prev` in a hand-written list: the cycles leak every node.
-- Over-building (templates, a `Cache` interface with a factory) before anything runs, or more than 20 minutes on steps 1 to 3.
+- Over-building (templates, a `Cache` interface with a factory) before anything runs, or more than about a third of the round on steps 1 to 3.

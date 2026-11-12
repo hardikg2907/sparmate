@@ -8,6 +8,16 @@ tracker:
   section: "### C2. Classic HLD Problems"
   bullet: "Chat/Messaging System (WhatsApp)"
 notesFile: notes/c2-chat-system.md
+sources:
+  - title: "Hello Interview: Design WhatsApp"
+    url: "https://www.hellointerview.com/learn/system-design/problem-breakdowns/whatsapp"
+  - title: "ByteByteGo: Design a Chat System"
+    url: "https://bytebytego.com/courses/system-design-interview/design-a-chat-system"
+  - title: "Discord: How Discord Stores Billions of Messages"
+    url: "https://discord.com/blog/how-discord-stores-billions-of-messages"
+  - title: "WhatsApp: 1 million is so 2011"
+    url: "https://blog.whatsapp.com/1-million-is-so-2011"
+confidence: "The sources agree on the core: persistent connections to a gateway tier, a durable store keyed by conversation, a per-recipient inbox for offline phones, and a lookup that finds the recipient's server. A production write-up backs up the partition-per-channel key with time buckets and the tombstone cost of heavy deletes, and another reports over 2 million connections on one server. They differ on ordering (a per-conversation sequence, or a server timestamp that accepts rare misorder); this problem's facts ask for one order for every member. One of them does not cover sender-side dedup, so that part rests on the facts here. Scale numbers are this problem's own assumptions."
 ---
 
 ## Opening prompt
@@ -54,14 +64,13 @@ Core, functional:
 Core, non-functional:
 1. 10 billion messages a day and 50 million open connections at peak. *Ask: How many users, how much do they send, how many are online at once?*
 2. Under 500 ms at p99 from our servers to an online recipient. *Ask: How fast must a message reach an online recipient?*
-3. Nothing is lost once the sender sees "sent": the message is durable before the ack. *Ask: What must be true once the sender sees a message as sent?*
+3. Nothing is lost once the sender sees "sent" (the message is durable before the ack), and nobody sees a message twice (at-least-once delivery plus dedup). *Ask: What must be true once the sender sees a message as sent?*
 4. One order per conversation, the same for every member; each sender's order is kept. *Ask: In what order must members see messages?*
 5. 99.99% for send and receive; presence, typing and receipts may lag first. *Ask: What must stay up if something fails, and what may lag?*
 
 Extras (credit when they name one, never a gap):
 - Online status and last seen in one-to-one chats.
 - One year of history on the server, paged 50 messages at a time, a page in under 200 ms.
-- No duplicates on screen: at-least-once delivery plus dedup.
 
 ## Capacity math
 
@@ -70,10 +79,11 @@ Per-server and per-row figures below are assumptions. Accept other reasonable va
 - **Sends:** 200 million users times 50 is 10 billion messages a day. That is about 115,000 a second on average and 350,000 at peak, which means every message is a durable write far beyond one database primary, so the store must be partitioned.
 - **Deliveries:** a message reaches 3 people on average (0.75 times 1, plus 0.25 times 9 for a 10-member group). That is about 350,000 deliveries a second on average and 1 million at peak, which means fan-out, not sending, is the main load, so it runs after the sender's ack.
 - **Receipts:** each delivery later brings back a delivered receipt and a read receipt, so two per delivery. Sent one by one, that is about 700,000 a second on average and 2 million at peak, which means receipts outnumber messages, so they travel as "up to seq N" watermarks per conversation.
-- **Connections:** at about 100,000 connections per gateway server, 50 million phones need about 500 servers plus spare, which means the gateway tier is stateful, so a registry must map each user to a server. Anything from 50,000 to 1 million per server is fine with a reason.
+- **Connections:** at about 100,000 connections per gateway server, 50 million phones need about 500 servers plus spare, which means the gateway tier is stateful, so a registry must map each user to a server. Anything from 50,000 to about 2 million per server is fine with a reason; the bigger the server, the bigger the reconnect storm when it dies.
 - **Heartbeats:** a ping every 30 seconds from 50 million phones is about 1.7 million a second, which means pings end in gateway memory and never become a Redis or database write.
 - **Registry:** 50 million entries at about 100 bytes is about 5 GB, read about 1 million times a second at peak (once per delivery) and written about 170,000 times a second when each gateway refreshes its entries' TTL every 5 minutes, which means a Redis cluster of about 12 shards at roughly 100,000 operations a second each, with a group's lookups batched.
 - **Sequencer:** one counter increment per message is 350,000 a second at peak. At about 100 bytes a counter, the 550 million conversations active in a day are about 55 GB, and a few billion conversations alive over a year are a few hundred GB, which means the counters fit a Redis cluster, and speed alone needs only about 4 shards.
+- **SentLog:** one conditional insert per send, so 350,000 a second at peak. In Cassandra a conditional insert is a Paxos round, several round trips among the replicas instead of one, so it costs several times a plain write. Kept 25 hours (the phone retries for 24), it holds about 10 billion rows, about 1 TB at about 100 bytes a row before replication, which means its retention follows the retry window, and the conditional insert, not the size, is the cost to plan for.
 - **Inbox:** one small row (ids only, about 30 bytes) per delivery, so about 350,000 writes a second on average and 1 million at peak, plus about as many deletes on ack. That is three times the message writes, which means the inbox is the busiest table by write count, so it is partitioned by user, kept to ids, and cleared with one range delete per ack.
 - **Storage:** at about 200 bytes a row (the body plus ids and timestamps), that is 2 TB a day, 730 TB a year and about 2.2 PB with 3 replicas, which means hundreds of storage nodes, so the partition key decides whether a chat page touches one node or all of them.
 - **Partition size:** a busy one-to-one chat grows about 7 MB a year. A very busy group grows about 73 MB a year (365,000 rows), which means one partition per conversation works, but groups near the usual 100 MB comfort limit of a Cassandra partition, so a bucket in the key (per month, or per 10,000 seq values) is the safe default for groups.
@@ -98,15 +108,16 @@ Core entities:
 - `Member { conversationId, userId, role, joinedAtSeq, deliveredSeq, readSeq }`, keyed by both ids, plus a reverse index by `userId` to list a user's chats. A new member's `deliveredSeq` and `readSeq` start at `joinedAtSeq`.
 - `Message { conversationId, seq, senderId, clientMsgId, body, sentAt }`: partition key `conversationId` (plus a bucket for groups), clustering key `seq` descending.
 - `Inbox { userId, conversationId, seq }`: partition key `userId`, clustering key `(conversationId, seq)`, one row per message not yet on that phone, kept up to 30 days.
-- `SentLog { senderId, clientMsgId, conversationId, seq, sentAt }`: kept 7 days, for sender-side dedup. The insert happens only if no row exists.
+- `SentLog { senderId, clientMsgId, conversationId, seq, sentAt }`: in Cassandra, partition key `senderId`, clustering key `clientMsgId`, with a 25-hour TTL, for sender-side dedup. The insert happens only if no row exists (a conditional insert).
 - Redis: `conn:{userId}` holds `{ gatewayId, connId }` with a TTL (the registry), `seq:{conversationId}` is the counter, and `lastSeen:{userId}` backs presence.
 
 ## Reference design
 
 ```
  send:     Phone A ──WebSocket──> L4 LB ──> Gateway G1 ──> Chat service (stateless)
-             1. is A a member? (cached)
+             1. is A a member? (cached; a membership change deletes the entry first)
              2. SentLog has (A, clientMsgId)? reuse that seq. Else INCR seq:{conversationId}, insert it if absent
+                                                                 Cassandra, conditional insert, 25 h TTL
              3. write Message at (conversationId, seq)           Cassandra, quorum
              4. publish {conversationId, seq}                    Kafka, keyed by conversationId
              5. "sent" ──> G1 ──> Phone A                        one tick
@@ -121,7 +132,7 @@ Core entities:
  presence: connect / disconnect ──> lastSeen:{userId} in Redis ──> only phones that watch that user
 ```
 
-Walk one message to an online user. Phone A sends `send` with a new `clientMsgId`. G1 forwards one send per connection at a time, so A's own order holds. The chat service checks membership and `SentLog`. A miss takes the next `seq` from Redis and inserts it into `SentLog` only if no row exists yet, so two racing retries end with one `seq`. A hit, meaning a retry, reuses the stored `seq`. It writes the message at quorum, publishes to Kafka, and only then sends A `sent`. Each step is safe to repeat, so after a crash anywhere, A's retry still ends with one message. A fan-out worker writes B's inbox row, finds B on G7 and calls it. B's phone inserts the message by `seq` and acks. The server deletes B's inbox rows for that chat up to that `seq`, raises `deliveredSeq`, and sends A a delivered receipt.
+Walk one message to an online user. Phone A sends `send` with a new `clientMsgId`. G1 forwards one send per connection at a time, so A's own order holds. The chat service checks membership and `SentLog`. Membership is cached, and an add or remove deletes the cache entry before the API answers, so the next send and the next fan-out see a removed member as gone. A miss takes the next `seq` from Redis and inserts it into `SentLog` only if no row exists yet, so two racing retries end with one `seq`. A hit, meaning a retry, reuses the stored `seq`. It writes the message at quorum, publishes to Kafka, and only then sends A `sent`. Each step is safe to repeat, so after a crash anywhere, A's retry still ends with one message. A fan-out worker writes B's inbox row, finds B on G7 and calls it. B's phone inserts the message by `seq` and acks. The server deletes B's inbox rows for that chat up to that `seq`, raises `deliveredSeq`, and sends A a delivered receipt.
 
 Walk one history page: phone B sends `GET /conversations/{id}/messages?beforeSeq=&limit=50` over HTTPS. The History service checks that B is a member and answers `403` if not. It reads one Cassandra partition (two at a bucket edge) with `conversationId = ? AND seq < ?` and `LIMIT 50`, and the clustering order returns the newest rows first. The read never goes below B's `joinedAtSeq`, so a new member sees nothing sent before joining. The service answers with the page, and the phone uses the lowest `seq` it received as the next `beforeSeq`.
 
@@ -134,7 +145,7 @@ Walk a read. B opens the chat and sends `read { seq: 57 }`. The server raises B'
 - **Transport.** WebSockets, MQTT or a custom TCP protocol. Long polling, or server-sent events plus HTTP for sends, is fine with a reason. Short polling is not: a 5-second poll from 50 million phones is 10 million mostly empty requests a second.
 - **Reaching the recipient's gateway.** A registry plus a direct call (reference). Pub/sub with a channel per connected user, or a queue per gateway, works only with a durable inbox behind it, because pub/sub drops a message when nobody is subscribed. Hashing users to fixed gateways works if the candidate handles a gateway dying.
 - **Presence.** Connect and disconnect events from the gateway (reference). Or a Redis key per user with a short TTL that the gateway refreshes about once a minute, if the candidate counts the writes: 50 million entries is about 830,000 writes a second. Writing every 30-second ping straight to Redis or a database is a trap.
-- **Ordering.** A per-conversation counter in Redis (reference), or in a SQL row updated in the same transaction as the insert. A single owner per conversation that hands out numbers in memory, with a failover story. Time-ordered unique ids (timestamp, machine, counter), if everyone sorts by the id, server clock skew is milliseconds (far below human reply time), and one user's sends are stamped in one place. That loses gap detection, so delivery leans on the inbox.
+- **Ordering.** A per-conversation counter in Redis (reference), or in a SQL row updated in the same transaction as the insert. A single owner per conversation that hands out numbers in memory, with a failover story. Time-ordered unique ids (timestamp, machine, counter), if everyone sorts by the id, server clock skew is milliseconds (far below human reply time), and one user's sends are stamped in one place. That loses gap detection, so delivery leans on the inbox. Some popular write-ups order by a server timestamp alone and accept a rare misorder. With ties broken by id, that is fine if the candidate says so. It meets "the same order for every member" only if everyone sorts by the same stored value.
 - **Message store.** Cassandra, ScyllaDB, HBase or DynamoDB keyed by conversation (reference). Postgres sharded by `conversationId`, with the shard math for 730 TB a year. Per-user mailboxes with a copy per member: about 4 copies per message (2 for a one-to-one chat, 10 for an average group), so about 2.9 PB a year before replication, but a phone's sync is one partition read.
 - **Offline sync.** A per-user inbox deleted on ack (reference). An append-only per-user log with a cursor per phone and a TTL, which avoids deletes and suits more devices later. Per-conversation watermarks, if the candidate says how the server finds the chats that changed.
 - **Fan-out.** Kafka between the write and the fan-out (reference), or direct fan-out from the chat service with retries, since groups cap at 100. The inbox rows must be written before the sent tick, or a repair job must find messages with no inbox row. Direct fan-out loses the burst buffer.
@@ -151,7 +162,7 @@ Walk a read. B opens the chat and sends `read { seq: 57 }`. The server raises B'
 ### Ordering, retries and duplicates
 - **Bad:** sorting by the sender's phone clock. Promising exactly-once delivery. Retries with no id, so a flaky network posts a message twice.
 - **Good:** the server assigns `seq` per conversation and every phone sorts by it. The phone retries `send` with the same `clientMsgId` until `sent`, and the server dedups on it. The recipient acks, the server redelivers anything unacked, and a phone ignores a `seq` it already holds.
-- **Great:** says exactly-once delivery to a phone is impossible over a lossy network, and at-least-once plus idempotent steps gives effectively-once. Keeps each sender's order by handling one connection's sends one at a time. The recipient inserts by `seq`, not arrival order, and fetches the range when a gap does not fill within a second or two. Knows a Redis failover can hand out a recent `seq` again, so the insert must never overwrite a different message (a conditional insert that accepts the same `clientMsgId`, or a tie-breaker in the key). Gaps are harmless.
+- **Great:** says exactly-once delivery to a phone is impossible over a lossy network, and at-least-once plus idempotent steps gives effectively-once. Keeps each sender's order by handling one connection's sends one at a time. The recipient inserts by `seq`, not arrival order, and fetches the range when a gap does not fill within a second or two. Knows a Redis failover can hand out a recent `seq` again, so the insert must never overwrite a different message (a conditional insert that accepts the same `clientMsgId`, which is a second Paxos round per send, or a tie-breaker in the key, which is cheaper). Gaps are harmless. Covers a lost counter too: after a restart without persistence or an eviction, `INCR` starts again at 1 and every new message would collide, so a missing counter is seeded from the highest stored `seq` with `SET NX` before the first `INCR`, and the counters run with persistence and no eviction. Sizes the dedup table and the cost of its conditional insert, and keeps it only as long as the phone retries.
 
 ### Offline delivery, receipts and push
 - **Bad:** undelivered messages kept in gateway memory. "Send a push and we are done", though pushes get dropped and delayed. A receipt row per message per member, updated one by one.

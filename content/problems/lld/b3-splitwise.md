@@ -9,6 +9,14 @@ tracker:
   bullet: "Splitwise (expense sharing)"
 notesFile: notes/b3-splitwise.md
 lldFolder: splitwise
+sources:
+  - title: "prepdeck, Design Splitwise"
+    url: "https://prepdeck-three.vercel.app/lld/splitwise"
+  - title: "AlgoMonster, LeetCode 465 write-up"
+    url: "https://algo.monster/liteproblems/465"
+  - title: "arXiv, Evolutionary solving of the debts' clearing problem (abstract page)"
+    url: "https://arxiv.org/abs/1402.6556"
+confidence: "Medium. Integer paise, a split strategy with its own validation, and a netted balance per pair of users are the problem's standard form. One outside write-up keeps a single net balance per user, which cannot say who owes whom, and this version names that as a trap. The same write-up gives the leftover paisa to the first participant, and this version accepts that rule and the last-participant rule beside its own. For simplifying debts, the greedy matching is not always minimal and the exact answer is a partition problem; the abstract page and the standard subset-sum write-up agree with that. Scenario and extension numbers were traced against the rules stated here."
 ---
 
 ## Opening prompt
@@ -48,16 +56,14 @@ For the interviewer: on what is out of scope, if the candidate asks, say "not no
 
 Core:
 1. Register users. Create groups with a member list. *Ask: Who can share expenses, and how are they grouped?*
-2. Add an expense: group, payer, total in paise, split type, participants and a time. *Ask: What goes into an expense, and how can it be split?*
-3. Validate every input: amounts, participants, membership, exact sums and percentages. *Ask: What makes an expense invalid?*
+2. Add an expense: group, payer, total in paise, split type, participants and a time. The split types (equal, exact, percent) sit behind one interface or a function object, with each type's own validation inside it, and each participant has a split input. *Ask: What goes into an expense, and how can it be split?*
+3. Validate every input: amounts, participants, membership, exact sums and percentages. Validation finishes before the first change, so a rejected call changes nothing. *Ask: What makes an expense invalid?*
 4. Shares add up to the total to the paisa; the leftover rule is stated and repeatable. *Ask: How is money stored, and who gets the leftover paisa?*
 5. One netted balance per pair of users; show who owes whom, for all or for one user. *Ask: Are balances kept per pair or per group, and what can be shown?*
 6. Settle up with the rules above. *Ask: How does one user pay another back?*
-7. Safe under concurrent calls. *Ask: Can several threads use it at once?*
+7. Safe under concurrent calls (only when asked). *Ask: Can several threads use it at once?*
 
 Extras (credit when they name one, never a gap):
-- A rejected call changes nothing.
-- Equal, exact and percent splits sit behind one interface, and each participant has a split input.
 - Total above 0 and within the cap; no empty or duplicate participants; everyone is a group member; exact amounts add up; percentages total 100; no negative entries.
 
 ## Entities and relationships
@@ -69,7 +75,7 @@ Extras (credit when they name one, never a gap):
 - `Settlement`: from, to, amount, time. Kept for history. The ledger does not read it.
 - `Expense` (the hidden noun): id, group, payer, total, **the stored shares**, time. Most candidates apply the split straight into a balance map and keep no record. Then edit and delete are impossible, and nothing proves the total.
 - `SplitStrategy` (interface) with `EqualSplit`, `ExactSplit` and `PercentSplit`: each validates its input and returns shares. They use no ledger, no clock and no lock.
-- `Ledger`: the pair balances and the rule for adding to them.
+- `Ledger`: one signed number per pair of users under a (smaller id, larger id) key, and the rule for adding to it: add on one side, subtract on the other, and erase the pair at zero.
 - `SplitService`: owns users, groups, expenses, the ledger, the strategies and the lock.
 - Not stored: a user's net position (derive it from the pairs), a balance per group, any floating-point value.
 
@@ -94,7 +100,7 @@ Extras (credit when they name one, never a gap):
  struct Expense { int id; int groupId; int payerId; Money total; std::vector<Share> shares; int time; };
  struct Settlement { int from; int to; Money amount; int time; };
  struct Debt    { int debtor; int creditor; Money amount; };  // amount > 0
- struct Result  { bool ok; int id; std::string error; };     // one error style for every call
+ struct Result  { bool ok; int id; std::string error; };     // one error style for every call; id is 0 when the call makes no id
 
  // floor(total * w / sum(w)) per part, then leftover paise one each, in listed order, to parts with w > 0
  std::vector<Share> allocate(Money total, const std::vector<Part>& weights);
@@ -140,19 +146,19 @@ Extras (credit when they name one, never a gap):
 
 One signed number per pair of users, under a key with the smaller id first, makes netting automatic: add on one side, subtract on the other, and a zero erases the pair. Each expense keeps its computed shares, so a later reversal subtracts exactly what was added.
 
-Accepted variations:
-- A nested `map<int, map<int, Money>>` that keeps `owes[a][b]` and `owes[b][a]` as opposite values. They must update both in one step.
-- Un-netted directed edges, only if `balances()` nets each pair on read.
-- Replaying every stored expense and settle-up on each read. It is correct, and they must say it costs O(E) per read.
-- A `std::shared_ptr<SplitStrategy>` passed by the caller instead of an enum. A strategy that returns `std::optional` or throws instead of using an output parameter.
-- Their own helper in place of `allocate`, if equal and percent share one leftover rule.
-- A thin `Money` struct around the `int64`, with no floating point inside. System-assigned user and group ids.
-- A `std::shared_mutex`, with a shared lock for reads and an exclusive lock for writes.
-
 ## Patterns that fit
 
 - **Strategy** for the split type. This is the textbook case. The validation lives inside each strategy, so a new split type is one new class and one registration line, and `addExpense` does not change. They should notice that equal and percent are the same proportional split with different weights.
+- An enum plus a switch that calls one function per split type is accepted when they name the cost: each new split type edits the service. A switch that also holds the validation, or applies the shares inline, is the trap.
 - A small shared function for the leftover paise. It is not a pattern, but it keeps one rule in one place.
+- **Accepted variations:**
+  - A nested `map<int, map<int, Money>>` that keeps `owes[a][b]` and `owes[b][a]` as opposite values. They must update both in one step.
+  - Un-netted directed edges, only if `balances()` nets each pair on read.
+  - Replaying every stored expense and settle-up on each read. It is correct, and they must say it costs O(E) per read.
+  - A `std::shared_ptr<SplitStrategy>` passed by the caller instead of an enum. A strategy that returns `std::optional` or throws instead of using an output parameter.
+  - Their own helper in place of `allocate`, if equal and percent share one leftover rule.
+  - A thin `Money` struct around the `int64`, with no floating point inside. System-assigned user and group ids.
+  - A `std::shared_mutex`, with a shared lock for reads and an exclusive lock for writes.
 - Not needed: Observer (no notifications in scope), Factory beyond a plain map, Singleton, State, Command or Memento for undo (stored shares do that job), Builder for `Expense`.
 
 ## Demo scenarios
@@ -170,9 +176,9 @@ Setup for every scenario: users 1 Alice, 2 Bob, 3 Carol, 4 Dave, 5 Erin. Group 1
    - a. Carol pays 10000 percent [Alice 50, Bob 30, Dave 20]. Balances: Alice owes Carol 5000, Bob owes Carol 3000, Dave owes Carol 2000.
    - b. Alice pays 101 percent [Bob 50, Carol 50]. Bob owes Alice 51, Carol owes Alice 50.
    - c. Alice pays 100 percent [Bob 33.33, Carol 33.33, Dave 33.34]. The three amounts add up to 100 and each is 33 or 34. With the problem's rounding rule: Bob owes Alice 34, Carol 33, Dave 33. Skip this one if their API cannot take two decimals, and note that as a gap.
-5. **Netting across groups, and a flip.** Start with scenario 1. Then Flat: Bob pays 500 equal [Alice, Bob]. The Alice and Bob pair becomes "Bob owes Alice 50", one line, with no "Alice owes Bob 250" line. Carol and Dave still owe Alice 300 each. Then Trip: Bob pays 500 equal [Alice, Bob]. The pair flips to "Alice owes Bob 200". Final lines: Alice owes Bob 200, Carol owes Alice 300, Dave owes Alice 300. Net positions: Alice +400, Bob +200, Carol −300, Dave −300.
-6. **Settle-up, partial then full.** Start with scenario 1. Bob pays Alice 100: Bob owes Alice 200. Bob pays Alice 200: the Bob line is gone. Carol and Dave still owe Alice 300 each. Net positions: Alice +600, Bob 0, Carol −300, Dave −300.
-7. **Settle-up rejected.** Start with scenario 1. Each call below is rejected, and the three 300 lines stay as they were:
+5. **Netting across groups, and a flip.** On a fresh service, Alice pays 1200 equal [Alice, Bob, Carol, Dave] (the Trip expense of scenario 1), so Bob, Carol and Dave each owe Alice 300. Then Flat: Bob pays 500 equal [Alice, Bob]. The Alice and Bob pair becomes "Bob owes Alice 50", one line, with no "Alice owes Bob 250" line. Carol and Dave still owe Alice 300 each. Then Trip: Bob pays 500 equal [Alice, Bob]. The pair flips to "Alice owes Bob 200". Final lines: Alice owes Bob 200, Carol owes Alice 300, Dave owes Alice 300. Net positions: Alice +400, Bob +200, Carol −300, Dave −300.
+6. **Settle-up, partial then full.** On a fresh service, Alice pays 1200 equal [Alice, Bob, Carol, Dave], so Bob, Carol and Dave each owe Alice 300. Bob pays Alice 100: Bob owes Alice 200. Bob pays Alice 200: the Bob line is gone. Carol and Dave still owe Alice 300 each. Net positions: Alice +600, Bob 0, Carol −300, Dave −300.
+7. **Settle-up rejected.** On a fresh service, Alice pays 1200 equal [Alice, Bob, Carol, Dave], so Bob, Carol and Dave each owe Alice 300. Each call below is rejected, and the three 300 lines stay as they were:
    - Carol pays Alice 400 (she owes 300).
    - Carol pays Alice 0, and Carol pays Alice −50.
    - Alice pays Bob 100 (wrong direction, Alice owes nothing).
@@ -240,7 +246,7 @@ Stretch signal: states the cost with the problem's numbers. At about 100 calls p
 Hire bar must show:
 - Step 1 questions that cover the money unit and rounding, the leftover rule, the split types and their validation, whether balances are per pair or per group, the settle-up rules, and threads.
 - Money as an integer type, 64-bit, with no floating point in amounts. Shares that add up to the total exactly, with a stated and implemented leftover rule.
-- The split types behind a Strategy, with validation inside it, so a new type lands in one new class.
+- The split types behind one interface or a function object, with each type's validation inside it, so a new type lands in one new class or function.
 - `Expense` and `Share` as real types, and a pair balance that nets, so "who owes whom" has no duplicate pair and no zero line.
 - Validation that finishes before the first mutation, so a rejected call leaves no trace.
 - A program that compiles and runs scenarios 1 to 9 inside the time.
@@ -258,7 +264,7 @@ Stretch signal:
 - `double` for money, or rounding every share to 2 decimals. 33.33 three times gives 99.99, so the shares do not add up and the ledger drifts. Comparing percentages with `== 100.0` fails the same way.
 - Dividing with `total / n` and dropping `total % n`. Paise disappear, and the net positions no longer add up to 0.
 - A 32-bit `int` for `total * percent`, which overflows at 100,000,000.
-- A `switch` on the split type inside `addExpense`, so every new split type edits the service. The opposite fault is an interface, a factory and a builder for three tiny rules.
+- A `switch` on the split type inside `addExpense` that also holds the validation or applies the shares, so every new split type edits the service and its rules. A switch that only picks one function per type is accepted when they name that cost. The opposite fault is an interface, a factory and a builder for three tiny rules.
 - Applying the shares while validating. A bad sum found after the second share leaves a half-applied expense.
 - A directed matrix that is never netted, so the output shows "Alice owes Bob 250" and "Bob owes Alice 300" together. Or only per-user net positions, which cannot say who owes whom.
 - No `Expense` record, so delete is impossible. Or delete by subtracting `total / n`, which is wrong with leftover paise and exact splits.
@@ -266,4 +272,4 @@ Stretch signal:
 - Letting a settle-up overpay, or checking the amount outside the lock. Reading the system clock for the expense time.
 - "Greedy simplify gives the minimum." "Use max-flow" is the same kind of confident wrong answer, because max-flow does not minimise the number of edges. Another one: simplify that rewrites the stored pair balances, which destroys the record of who paid whom.
 - Copying an `Expense` or a map entry (`auto x = ...`) and changing the copy, or erasing from the map while iterating over it.
-- Spending more than 25 minutes on steps 1 to 3, so nothing runs at the end.
+- Spending more than about a third of the round on steps 1 to 3, so nothing runs at the end.

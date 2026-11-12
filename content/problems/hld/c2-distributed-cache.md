@@ -8,6 +8,16 @@ tracker:
   section: "### C2. Classic HLD Problems"
   bullet: "Distributed Cache (design a Redis)"
 notesFile: notes/c2-distributed-cache.md
+sources:
+  - title: "Scaling Memcache at Facebook (NSDI 2013)"
+    url: "https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf"
+  - title: "Redis cluster specification"
+    url: "https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/"
+  - title: "Redis: Key eviction"
+    url: "https://redis.io/docs/latest/develop/reference/eviction/"
+  - title: "Redis: EXPIRE"
+    url: "https://redis.io/docs/latest/commands/expire/"
+confidence: "The Redis documentation backs up the mechanisms here: 16,384 hash slots with MOVED and ASK redirects, failover decided by a majority of primaries, sampled approximate LRU, and lazy plus active expiry with the primary sending deletes to replicas. A large operator's paper backs up leases against stale sets and thundering herds, and shows a different failure answer (a small spare pool and mostly no replicas) that suits a database with more headroom than this problem has. The expiry-cycle details (about 20 keys a round, repeat above about a quarter expired) match older Redis documentation; the current pages give no numbers. Hardware, traffic and database-headroom numbers are this problem's own assumptions."
 ---
 
 ## Opening prompt
@@ -53,20 +63,22 @@ For the interviewer: on batch reads, placing the keys of one batch together is a
 Core, functional:
 1. Get a key (a value or a miss), set a key with an optional TTL, and delete a key. *Ask: What operations must the cache offer?*
 2. An expired key is never returned. *Ask: What must a read do with a key whose time is up?*
-3. When memory is full, evict keys (least recently used first) instead of failing writes. *Ask: What happens to a write when memory is full?*
+3. When memory is full, evict keys by an LRU-like policy instead of failing writes. *Ask: What happens to a write when memory is full?*
 
 Core, non-functional:
-1. About 1 billion keys of about 1 KB, and 1 million operations a second, 90% reads. *Ask: How many keys, how big is a value, how many operations a second?*
+1. About 1 billion keys of about 1 KB, doubling within a year, and 1 million operations a second, 90% reads. *Ask: How many keys, how big is a value, how many operations a second?*
 2. p99 under 2 ms at the client. *Ask: How fast must a read be?*
 3. 99.99% availability. A dead node costs at most 10 seconds of errors on its own keys. *Ask: How much downtime is fine, and what may a dead node cost?*
 4. No durability: the database is the source of truth. *Ask: Is the cache the only copy of the data?*
 5. Read-after-write by default; up to 2 seconds of staleness only if the caller opts in. *Ask: Must a read always see the latest write?*
 
 Extras (credit when they name one, never a gap):
-- The data doubles within a year; nodes are added online without a hit-ratio drop the databases would feel.
+- Nodes are added online without a hit-ratio drop the databases would feel.
 - Losing a whole shard's data at once is still not acceptable, because of the database load.
 
 ## Capacity math
+
+The per-entry overhead, the 48 GB memory cap, the connections per client and the copy speeds below are assumptions. Accept other reasonable values when the candidate gives a reason.
 
 - **Memory and shards:** each entry costs about 1.2 KB: the 1 KB value, the 50-byte key and about 150 bytes for the hash-table entry, expiry time, access clock and allocator rounding. 1 billion entries is about 1.2 TB. Capped at 48 GB of data per 64 GB machine (the rest is for the operating system, replication buffers and fragmentation), that is 25 primary shards, and 50 machines with one replica each. A candidate who picks another cap or adds headroom lands on 20 to 30 shards, which is fine; the later numbers scale with the shard count. The data doubles within a year to about 50 primaries, which means the data must be partitioned and adding nodes is routine work, not a rare event.
 - **Load per shard:** 1 million operations per second over 25 primaries is 40,000 per primary at peak, against about 100,000 per core. Each shard holds about 40 million keys at random, so even the popular keys spread out and every shard gets close to 4% of reads, which means memory, not CPU, sets the shard count, and only one very hot key can overload a shard.
@@ -81,8 +93,8 @@ Extras (credit when they name one, never a gap):
 
 External API:
 Data API, sent by the client library over persistent TCP connections with a compact binary protocol and pipelining. HTTP and JSON on every call would cost more than the lookup itself.
-- `GET key` returns the value or `nil`.
-- `SET key value [ttlSeconds]` returns `OK`. It replaces the value and replaces or clears any old TTL. A value over 1 MB returns an error.
+- `GET key` returns the value or `nil`. A caller that asks for a lease gets `nil` plus a lease token on a miss.
+- `SET key value [ttlSeconds] [leaseToken]` returns `OK`. It replaces the value and replaces or clears any old TTL. A value over 1 MB returns an error. A `SET` whose lease a `DELETE` voided is dropped.
 - `DELETE key` returns 1 if the key existed, else 0.
 - `MGET key1 ... keyN` (optional) returns the values in order. The client splits it by shard and sends the parts in parallel.
 - Redirect replies name the right node: `MOVED node` when ownership changed for good (update the map), and a one-time redirect for a key that has already moved during a migration (do not update the map).
@@ -123,7 +135,7 @@ Core entities:
    repl buffer   every write streamed to the replica, plus a backlog for quick resume
 ```
 
-Walk one GET: the client hashes `user:42:profile` onto the ring. The first virtual node clockwise belongs to shard 7, so the client sends `GET` to shard 7's primary on a pooled connection. The node finds the entry. If `expiresAt` has passed, it deletes the entry, tells the replica to delete it, and answers a miss. Otherwise it stamps `lastAccess` and returns the value. On a miss the service reads its database and calls `SET` with a TTL. If the node replies `MOVED`, the client refreshes its map and retries once.
+Walk one GET: the client hashes `user:42:profile` onto the ring. The first virtual node clockwise belongs to shard 7, so the client sends `GET` to shard 7's primary on a pooled connection. The node finds the entry. If `expiresAt` has passed, it deletes the entry, tells the replica to delete it, and answers a miss. Otherwise it stamps `lastAccess` and returns the value. On a miss the service reads its database and calls `SET` with a TTL. That fill can arrive after a writer's `DELETE` and put back the old row. The optional lease closes the race: the miss returns a token, the `SET` carries it, and a `DELETE` in between voids it, so the late fill is dropped. If the node replies `MOVED`, the client refreshes its map and retries once.
 
 Walk one SET: the client routes the same way. If memory is above 48 GB, the primary evicts sampled-LRU entries until the write fits. It stores the entry with `expiresAt` set to now plus the TTL, appends the write to the replication buffer, and answers `OK` without waiting for the replica. Each evicted key goes into the same buffer as a delete, so the replica never evicts on its own. The replica applies it a few milliseconds later.
 
@@ -166,7 +178,7 @@ Walk one crash: shard 7's primary dies. Checkers in two of the three zones agree
 ### Memory limits, eviction and expiry
 - **Bad:** reject writes when memory is full. Or a timer per key (28 million per node), or a full scan of 40 million keys every second. Or a memory limit equal to the 64 GB of RAM, which ends in swapping or the out-of-memory killer.
 - **Good:** a memory cap well below RAM, and least-recently-used eviction when a write would cross it. Every read checks `expiresAt` and returns a miss for an expired key. A background job removes expired keys that nobody reads.
-- **Great:** sampled LRU. Each entry stores a small access clock. To evict, the node samples 5 to 10 random keys and evicts the oldest, keeping a small pool of good candidates between rounds. The result is close to true LRU, with no pointer pair per key and no list update on reads. Mentions LFU with decay, so one batch job that reads every key once cannot flush the hot set. Expiry is lazy plus sampled: a few times a second, sample about 20 keys from the TTL index, delete the expired ones, and repeat while more than about a quarter were expired, up to a CPU budget. The primary decides expiry and sends the deletes to the replica, and a replica still checks `expiresAt` on reads. Stores `expiresAt` as an absolute time, and asks callers to add jitter to TTLs so a batch written together does not expire together.
+- **Great:** sampled LRU. Each entry stores a small access clock. To evict, the node samples 5 to 10 random keys and evicts the oldest, keeping a small pool of good candidates between rounds. The result is close to true LRU, with no pointer pair per key and no list update on reads. Mentions LFU with decay, so one batch job that reads every key once cannot flush the hot set. Expiry is lazy plus sampled: a few times a second, sample about 20 keys from the TTL index, delete the expired ones, and repeat while more than about a quarter were expired, up to a CPU budget. The primary decides expiry and sends the deletes to the replica, and a replica still checks `expiresAt` on reads. Stores `expiresAt` as an absolute time, and asks callers to add jitter to TTLs so a batch written together does not expire together. Sees the stale-set race under cache-aside: a reader misses, reads the old row, and its `SET` lands after the writer's `DELETE`, so the stale value lives until its TTL and breaks read-after-write. Fixes it with leases: a miss returns a lease token, a `SET` must carry a valid token, and a `DELETE` voids it, so a late fill is dropped. The node hands out one lease per key every few seconds, and other callers that miss wait briefly and retry, so a hot miss reaches the database once. One large operator saw its peak database load on such keys fall more than tenfold. A versioned `SET` (only a newer version wins) is fine too.
 
 ## Curveballs
 
@@ -174,21 +186,23 @@ Use one, at the extension point, unless the candidate already handled it.
 1. **Hot key:** "A flash sale starts. One key, a 20 KB product page, now gets 500,000 reads per second for 30 minutes." The page may be up to 2 seconds stale. "What breaks first?" Expect: 500,000 reads of 20 KB is 10 GB per second against a card that moves about 1.25 GB per second, so one node is 8 times over on the network, and a primary plus replica is still 4 times over. The single core that serves the key is also 5 times over its 100,000 operations per second. More shards do not help, because one key lives on one shard. Detect hot keys with top-key counters in the client or on the node. Then either turn on a local cache in each app instance with a 1-second TTL, which cuts the shard to at most 2,000 fetches per second (about 40 MB per second), or keep about 20 copies under suffixed keys on different shards, read one at random, and write all of them on update. A strong answer also covers the moment the key expires: refresh it ahead of time, or let one caller rebuild it while the others serve the stale copy.
    Fits: Partitioning and routing
 2. **Zone outage:** "Zone A goes dark at peak. It held a third of the cache nodes." User traffic moves to the other zones. "Walk me through the next ten minutes." Expect: cache load stays the same, because user traffic moves to the other zones. Each primary's replica sits in another zone, so about a third of the primaries (8 or 9) fail over to warm replicas in 5 to 10 seconds, and nothing goes cold. Failure detection still works, because two of three zones and two of three manager instances are a majority. Afterwards about two-thirds of the shards have no replica: the promoted ones, and the ones whose replica lived in zone A. Each rebuild takes about 3 minutes, and the surviving zones need spare machines for it. If the candidate placed a primary and its replica in the same zone, a third of the keys go cold: about 285,000 extra database reads per second against a ceiling of 60,000, which is a full outage. A strong answer adds that a zone-A node cut off but still alive must stop serving once its lease lapses.
-   Fits: Rebalancing when nodes join or leave; Replication, failover and node crash
+   Fits: Replication, failover and node crash
 3. **Durable sessions:** "A team wants to keep login sessions in the cache as the only copy: 50 million sessions of 2 KB, written 5,000 times a second. A lost session logs the user out. What changes?" Expect: the sessions take about 100 GB, so 3 shards with replicas. A separate cluster, because this data must not share an eviction policy with cache data. Eviction is off for it: full memory rejects writes and alerts, so size it with headroom. Add an append-only log of writes, synced to disk once a second (10 MB per second is easy for an SSD), plus periodic snapshots so a restart does not replay days of log. Either accept up to a second of loss or make writes wait for the replica's acknowledgement, and say that async failover still loses acknowledged writes. Stretch: asks whether a cache is the right home at all, and proposes Postgres or a durable key-value store as the source of truth with the cache in front.
    Fits: Replication, failover and node crash; Memory limits, eviction and expiry
+4. **Early growth:** "A new service starts writing as many keys as all the others together, months before the planned growth. Every node is at its memory cap, evictions are climbing, and the hit ratio has fallen from 95% to 94% in a week. What do you do?" Expect: 6% misses on 900,000 reads a second is 54,000 database reads against a ceiling near 60,000, and below about 93.3% the databases are past it, so this is urgent. Twice the keys is about 2.4 TB, so about 50 primaries at 48 GB. Add primaries with replicas a few at a time. Each new node takes only its share of keys from the others, under 48 GB, about 8 minutes at a throttled 100 MB a second; one node at a time takes about 3 hours for 25 nodes, and a few at once, each pulling from different sources, cut that to about an hour. Copy with a redirect while a range moves. Handing over ranges with no copy is now unsafe, because the databases have only about 6,000 reads a second of headroom left. Strong: sees that one service's keys push out other services' hot keys under one shared LRU, so per-prefix memory limits or a separate cluster now matter, and alerts on eviction rate and the hit-ratio trend so capacity arrives before the databases feel it.
+   Fits: Rebalancing when nodes join or leave; Memory limits, eviction and expiry
 
 ## Level bar
 
 Hire bar must show:
 - Requirements that pin down the operations, value size, the TTL rule (an expired key is never returned), behaviour when memory is full, the latency target, and that the database stays the source of truth.
-- The memory math (keys times entry size, over the memory one machine can use), ending in a shard count of about 20 to 30 and a memory cap below the machine's RAM. The load math ends in "which means memory, not CPU, sets the shard count".
+- The memory math (keys times entry size, over the memory one machine can use), ending in a shard count of about 20 to 30 and a memory cap below the machine's RAM. The load math shows CPU per shard is well under one core's limit.
 - A placement scheme that moves only a small share of keys when a node joins, with the reason `hash mod N` fails (nearly every key moves).
 - A routing choice, client or proxy, with one trade-off stated.
 - A primary and an async replica per shard with automatic failover, and an honest line on what async replication loses.
 - Eviction with an LRU-like policy under a memory cap, and expiry that checks on read plus a background cleanup.
 - One deep dive done properly when the interviewer picks it.
-- Names the hot key when probed, and gives at least one fix above the shard, such as a local cache or copies on several shards.
+- When probed, names the hot key and gives at least one fix above the shard, such as a local cache or copies on several shards.
 
 Stretch signal:
 - Links replicas to the databases without a prompt, with "an empty shard adds about 75% to database reads, past their ceiling", so failover lands on a warm replica and planned restarts fail over first.
@@ -196,6 +210,7 @@ Stretch signal:
 - Sampled LRU and lazy-plus-sampled expiry with a CPU budget, with the reason: no per-key timers and no list update on every read.
 - Online migration with a redirect while a range moves, throttled so client latency holds.
 - Spots that a lost `DELETE` on failover brings back a stale value, and uses TTLs as the safety net.
+- Raises the stale-set race under cache-aside and fixes it with leases or a versioned `SET`.
 - Sizes the memory cap (about 75% of RAM) and says why: the operating system, replication buffers and fragmentation.
 - Raises hot-key detection and a bounded-staleness local cache before the curveball.
 
@@ -203,7 +218,8 @@ Stretch signal:
 
 - `hash(key) mod N` for placement. One new node moves about 96% of keys.
 - "Add shards" to fix a hot key. One key always lives on one shard.
-- "It is only a cache, so no replicas." One empty shard adds about 75% to database reads, past their ceiling.
+- "It is only a cache, so no replicas." One empty shard adds about 75% to database reads, past their ceiling. Some large operators run caches mostly without replicas and send a dead node's keys to a small pool of spare nodes with short TTLs. That pool starts cold, so here it does not stop the spike (about 34,000 extra reads against about 15,000 of headroom). Partial credit only when the candidate checks that number and adds replicas or a warm-up.
+- A `SET` after a miss that can land after a writer's `DELETE`, with no lease or version, so a stale value lives until its TTL.
 - A replica that promotes itself when it loses the primary. A network partition then gives two primaries.
 - Raft or synchronous replication on every write. It adds a cross-zone round trip to every write, blocks writes when a replica is slow, and buys nothing for data the database can rebuild. Consensus belongs to the cluster map and failover decisions.
 - Reading the database after every cache error. A failed shard then sends its whole load to databases that are sized for 15,000 extra reads per second.

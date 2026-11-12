@@ -8,6 +8,16 @@ tracker:
   section: "### C2. Classic HLD Problems"
   bullet: "Rate Limiter"
 notesFile: notes/c2-rate-limiter.md
+sources:
+  - title: "Hello Interview: Design a Distributed Rate Limiter"
+    url: "https://www.hellointerview.com/learn/system-design/problem-breakdowns/distributed-rate-limiter"
+  - title: "Stripe: Scaling your API with rate limiters"
+    url: "https://stripe.com/blog/rate-limiters"
+  - title: "Cloudflare: How we built rate limiting capable of scaling to millions of domains"
+    url: "https://blog.cloudflare.com/counting-things-a-lot-of-different-things/"
+  - title: "IETF draft: RateLimit header fields for HTTP"
+    url: "https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/"
+confidence: "Two sources use a token bucket kept in Redis, and one of them runs it as one atomic script at a gateway, which matches the reference. Another counts with a sliding window counter per site rather than globally. They disagree on what to do when the limiter fails: one picks fail-closed, another fails open. This problem's facts decide it (the API must stay up, login must stay limited). The near-2x worst case of a sliding window counter is the adversarial bound; one operator measured a far smaller error on real traffic, and both are true. Header names follow a draft that has changed over time, so several forms are accepted. The scale and per-node numbers are this problem's own assumptions."
 ---
 
 ## Opening prompt
@@ -18,7 +28,7 @@ Let's design a rate limiter for a public API. Where would you like to start?
 
 Reveal a fact only when the candidate asks about it, or asks a question whose honest answer needs it. Never volunteer the list.
 
-- **Today:** a public REST API over HTTPS, in one region. A load balancer sends traffic to 40 stateless API servers. Nothing limits requests yet. Auth already maps a key or token to an account and a plan from a local cache, outside the check's budget. Postgres exists. Redis exists as one primary with a replica, used for caching. We may add Redis nodes or a new Redis Cluster for the limiter, and a gateway tier.
+- **Today:** a public REST API over HTTPS, in one region. A load balancer sends traffic to 40 stateless API servers. Nothing limits requests yet. Auth already maps a key or token to an account and a plan from a local cache, outside the check's budget. Postgres exists. Redis exists as one primary with a replica, used for caching. We may add new infrastructure if the design needs it.
 - **Who is limited:** developers use an API key. Our own apps use a user token and get the free limits. The limit is per key or user id, not per account. The client IP is used only for `POST /login` and `POST /signup`, where no key or token exists yet. No client is exempt. A request with a missing or bad key gets `401` from auth and is not counted here. Every allowed request counts, whatever the API answers.
 - **Client IP:** the load balancer appends the real address as the last `X-Forwarded-For` value. Earlier values can be forged. People behind a shared address (an office, a mobile carrier) share the login limit. The product accepts that.
 - **Why we limit:** capacity, so one client cannot starve the rest, and security, so login resists password guessing. The first tolerates small errors. The second does not.
@@ -60,8 +70,11 @@ Extras (credit when they name one, never a gap):
 
 ## Capacity math
 
+The bucket and log-entry sizes and the 50% target load below are assumptions. Accept other reasonable values when the candidate gives a reason.
+
 - **Shared count:** every request needs one check: 100,000 a second at peak. If each of 40 API servers counted alone, a pro client could send 40 x 1,100 = 44,000 a minute against a limit of 1,000, which means the count must sit in one shared store.
 - **Redis throughput:** a node does about 100,000 simple commands a second, and a script that reads, computes and writes costs about two, so about 50,000 checks a second. At 50% target load, 100,000 / (50,000 x 0.5) = 4 shards (accept 3 to 6 when the formula and assumptions are stated; a candidate who counts a check as one command gets 2, so ask them to price the script), which means one node cannot carry the peak and the start is 4 primaries, each with a replica.
+- **Gateways:** one gateway takes about 20,000 requests a second, so 5 gateways carry the 100,000 peak at full load, with nothing spare for a dead node or a deploy. At 50% target load, 100,000 / (20,000 x 0.5) = 10 gateways (accept 8 to 10 with the headroom stated), which means the gateway tier is small, and every later number that counts gateways (the login fallback, leased tokens) uses about 10.
 - **Memory:** a bucket is 100 to 200 bytes, and a TTL equal to the refill time (6 seconds) drops idle clients. So 1 million active clients is at most 100 to 200 MB, which means throughput forces the cluster, not memory.
 - **Latency:** a round trip is about 0.5 ms median and 1 to 2 ms at p99. The timeout is 3 ms, just above p99 (accept 2 to 5 ms; hundreds of ms or seconds is wrong). One call fits the 5 ms budget, which means a chain of three or four does not, and a read then a write would also be a race.
 - **Slow Redis:** at peak the fleet holds 100,000 x 0.05 s = 5,000 requests in flight. If every check waits 200 ms, that is 25,000. With a 3 ms timeout it is about 5,300, which means a slow Redis can exhaust worker pools and take the API down, and a short timeout caps the damage at 6%.
@@ -72,7 +85,7 @@ Extras (credit when they name one, never a gap):
 ## API and entities
 
 External API (the limiter adds no endpoints; it changes what every endpoint returns):
-- Every response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (the `X-RateLimit-` forms are fine). For a bucket, reset is the seconds until it is full again, at most 6.
+- Every response shows the limit, what is left and when it resets, in any common form: `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; the older draft names `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`; or the current draft's `RateLimit` and `RateLimit-Policy` fields. For a bucket, reset is the seconds until it is full again, at most 6.
 - A blocked request gets `429 Too Many Requests`, `Retry-After` in whole seconds rounded up, and a body such as `{ "error": "rate_limited", "retryAfter": 1 }`. A token bucket's wait is the time until one token exists, at most 0.06 s on pro, so the header says `1`. The login log's wait is the time until the oldest attempt leaves the window.
 - If login fails closed because the limiter is down, answer `503` with `Retry-After`, never `429`.
 
@@ -89,7 +102,7 @@ Core entities:
 ```
  rules:    Postgres (plans, limits, overrides) ── reload every 30 s ──> memory of every gateway
 
- request:  Client ──> Load balancer ──> Gateway (stateless, about 5) ── allowed ──> API servers (40)
+ request:  Client ──> Load balancer ──> Gateway (stateless, 8 to 10) ── allowed ──> API servers (40)
                                           │ 1. identify: key or token -> account -> plan (auth cache)
                                           │              login and signup: client IP
                                           │ 2. pick the one matching rule from memory
@@ -107,13 +120,13 @@ Walk one blocked request: the script takes nothing and returns blocked with the 
 
 Walk one big client: a client flagged `bigClient` in its override, such as the 50,000-a-second client, is the one exception. The gateway sends each check to one of 4 sub-buckets at random, one per shard, each with a quarter of the rate and burst. Every shard then carries 12,500 of its checks. All other clients keep the single key.
 
-If the call passes 3 ms, the gateway applies the rule's fail mode. Capacity rules let the request through and count the failure. Login uses a local limit of 5 a minute per IP on each gateway, at most 5 x 5 = 25 a minute per IP. A breaker per shard skips a failing shard for a few seconds, then probes.
+If the call passes 3 ms, the gateway applies the rule's fail mode. Capacity rules let the request through and count the failure. Login uses a local limit of 5 a minute per IP on each gateway, at most 10 x 5 = 50 a minute per IP. A breaker per shard skips a failing shard for a few seconds, then probes.
 
 ## Accepted alternatives
 
 - **Algorithm.** Judge the reason, not the name.
   - Token bucket is the reference. A leaky bucket used as a meter, or one stored timestamp per client (GCRA), behaves the same.
-  - Sliding window counter: fine when the near-2x worst case for a timed burst is stated and weighed against "never 2x". Calling it exact is wrong.
+  - Sliding window counter: fine when the near-2x worst case for a timed burst is stated and weighed against "never 2x". Calling it exact is wrong. A candidate who quotes the tiny error measured on real traffic and still names the worst case for a client who times its burst deserves full credit.
   - Sliding log for plan limits: a candidate who computes 400 MB instead of 64 GB is right. The better reasons against it are several commands per check and millions of entries in one key for a big client. It suits login.
   - Fixed window: only for coarse limits where a boundary burst is harmless, such as a daily quota.
 - **Where the check runs.** A gateway tier (reference). Middleware in each API server after auth: no new tier, but a blocked request still holds a connection, and the login fallback grows to 40 x 5 = 200 a minute. A separate limiter service adds a hop of about 1 ms.
@@ -130,7 +143,7 @@ If the call passes 3 ms, the gateway applies the rule's fail mode. Capacity rule
  scheme                  state per client       worst minute for a limit of 100      fit
  fixed window            1 counter              200 (burst across the boundary)      breaks "never 2x"
  sliding log             1 entry per request    100 (exact)                          login only
- sliding window counter  2 counters             about 197 for a timed burst          only if 2x is accepted
+ sliding window counter  2 counters             about 199 for a timed burst          only if 2x is accepted
  token bucket (C = 10)   2 numbers              110                                  plan limits
 ```
 
@@ -154,28 +167,28 @@ If the call passes 3 ms, the gateway applies the rule's fail mode. Capacity rule
 
 - **Bad:** "add more shards" or "add replicas". One key lives on one shard, and replicas cannot take writes.
 - **Good:** sizes it (one shard at 62,500 a second against about 50,000). Fixes it with sub-buckets on different shards, each with limit / N; or gateways leasing tokens in batches (500 a call is about 100 Redis calls a second instead of 50,000); or a local limit per gateway.
-- **Great:** applies the fix only to flagged big clients and keeps the exact single-key path for the rest. States the rule: the bigger the client, the less a few percent of error matters (5 gateways x 500 tokens is 2,500 out of 3 million a minute, 0.08%). Names each cost: sub-buckets need key names picked by shard (a plain hash may put two on one shard) and block a client whose sub-bucket is empty while others have room, leases lose tokens when a gateway crashes, local limits suffer from uneven balancer spread.
+- **Great:** applies the fix only to flagged big clients and keeps the exact single-key path for the rest. States the rule: the bigger the client, the less a few percent of error matters (10 gateways x 500 tokens is 5,000 out of 3 million a minute, about 0.17%). Names each cost: sub-buckets need key names picked by shard (a plain hash may put two on one shard) and block a client whose sub-bucket is empty while others have room, leases lose tokens when a gateway crashes, local limits suffer from uneven balancer spread.
 
 ## Curveballs
 
 Use one, at the extension point, unless it was already handled. Prefer 2 or 3 when the hot client deep dive already came up in the round.
 1. **Hot client:** "One enterprise client sends 50,000 requests a second for an hour. What breaks first?" Expect: the client's one key lives on one shard, which takes about 62,500 a second against about 50,000, so more shards or replicas do not help. Fixes: sub-buckets on different shards, each with limit / N; gateways leasing tokens in batches (500 a call is about 100 Redis calls a second instead of 50,000); or a local limit per gateway. Strong: applies the fix only to flagged big clients, keeps the exact single-key path for the rest, and names each cost (sub-bucket key names picked by shard, a lease lost when a gateway crashes, uneven balancer spread for local limits).
    Fits: The hot client
-2. **Shard failure:** "At peak, one Redis primary dies. Its replica takes over after about 20 seconds and is about 1 second behind. What do clients on that shard see, and what is different afterwards?" Expect: the blast radius first: 1 of 4 shards, a quarter of clients. Calls time out at 3 ms, a breaker stops the waiting, and the other 3 shards keep enforcing. Capacity limits let those clients through for about 20 seconds, and login uses the local limit. About 1 second of updates is lost: a pro client at its limit (17 a second) gets about 17 extra requests, under 2% of a minute. A shard that returns empty gives every bucket full: one extra burst of at most C (10%). So synchronous replication and persistence are not needed. Weak: retrying on timeout, failing closed, or "Redis Cluster handles it".
+2. **Shard failure:** "At peak, one Redis primary dies. Its replica takes over after about 20 seconds and is about 1 second behind. What do clients on that shard see, and what is different afterwards?" Expect: the blast radius first: 1 of 4 shards, a quarter of clients. Calls time out at 3 ms, a breaker stops the waiting, and the other 3 shards keep enforcing. Capacity limits let those clients through for about 20 seconds, and login uses the local limit. About 1 second of updates is lost: a pro client at its limit (17 a second) gets about 17 extra requests, under 2% of a minute. A shard that returns empty gives every bucket full: one extra burst of at most C (10%). The login logs on that shard are lost the same way, so each address gets up to 5 fresh attempts, once. Each scheme's loss follows from its state: a bucket loses at most C, a log loses its window. So synchronous replication and persistence are not needed. Weak: retrying on timeout, failing closed, or "Redis Cluster handles it".
    Fits: Redis slow or down
 3. **Second region:** "We add a second region. Clients call either one, and a client's limit of 1,000 a minute must hold across both. The 5 ms budget stays. What changes?" Expect: the other region is tens of ms away (over 100 ms between continents), so a cross-region check on every request is out. Options: split rate and burst between regions and rebalance by usage in the background (two full limits allow 2 x 1,100 = 2,200, halving both gives 2 x (50 + 500) = 1,100); pin each client to a home region; or count locally and merge every 1 to 5 seconds, so the overshoot is about the client's rate times the delay (17 a second x 1 s, about 2%). Strong: a fixed 50/50 split wrongly blocks a client that calls one region, and a lost region's share must expire. Weak: calling the first region's Redis on every request.
-   Fits: One atomic call to the shared count
+   Fits: One atomic call to the shared count; Choosing the algorithm and what it costs
 
 ## Level bar
 
 Hire bar must show:
 - Requirements that cover identity, limits per plan and endpoint, how exact (burst, about 10% over, never 2x), what a blocked client sees, the 5 ms budget and what happens when the limiter fails.
 - The math of 100,000 checks a second against what one node does, with the script cost and some headroom stated, ending in "which means a cluster of a few shards" (about 4; 3 to 6 is fine).
-- An algorithm chosen with a reason, including why a fixed window fails the 2x rule.
+- An algorithm chosen with a reason that meets the "never 2x" rule. When a fixed window comes up, they see the boundary burst.
 - One shared count, updated by one atomic call in one round trip.
 - One request traced with both outcomes: `429` with `Retry-After`, and no API server involved.
-- A timeout and a fail mode per rule when probed on Redis (capacity limits let traffic through, login never unlimited), and a breaker for slow.
-- A hot-client fix that is not "more shards", once the traffic skew comes up or the interviewer asks where it breaks first.
+- When probed on Redis: a timeout and a fail mode per rule (capacity limits let traffic through, login never unlimited), and a breaker for slow.
+- When the traffic skew comes up or the interviewer asks where it breaks first: a hot-client fix that is not "more shards".
 
 Stretch signal:
 - Says slow is worse than down unprompted, with in-flight numbers, and sizes the blast radius of a lost shard first.
@@ -191,7 +204,7 @@ Stretch signal:
 - `GET`, compute, `SET` from the gateway: a lost update and two round trips.
 - Each server counts on its own, so the limit multiplies (40 x 1,100 = 44,000).
 - "Add more shards" or "add replicas" for a hot client or for capacity. One key stays on one shard, and every check is a write.
-- "Fail closed to be safe" everywhere, or fail open everywhere.
+- "Fail closed to be safe" everywhere, or fail open everywhere. Some well-known answers pick fail-closed for every rule because limiter failures come with traffic spikes. That is a red flag here: the facts say the API must stay up, so only login may fail closed.
 - The sliding log for every limit "because it is exact", or a sliding window counter called exact.
 - Postgres for the counters, or counting through Kafka and enforcing later (fine for a monthly quota, too slow for a minute limit).
 - Trusting `X-Forwarded-For` as sent, or limiting everyone by IP.

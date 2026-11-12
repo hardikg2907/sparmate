@@ -8,6 +8,14 @@ tracker:
   section: "### C2. Classic HLD Problems"
   bullet: "Notification System"
 notesFile: notes/c2-notification-system.md
+sources:
+  - title: "Firebase Cloud Messaging: Throttling and quotas"
+    url: "https://firebase.google.com/docs/cloud-messaging/throttling-and-quotas"
+  - title: "Firebase Cloud Messaging: Topic messaging"
+    url: "https://firebase.google.com/docs/cloud-messaging/topic-messaging"
+  - title: "LinkedIn Engineering: Air Traffic Controller, member-first notifications at LinkedIn"
+    url: "https://www.linkedin.com/blog/engineering/messaging-notifications/air-traffic-controller-member-first-notifications-at-linkedin"
+confidence: "The FCM documentation sets a per-project send quota whose default is below this problem's figure, so the 15,000 a second for FCM assumes a raised quota; the APNs figure and the rule that each gateway throttles on its own are this problem's assumptions. The same documentation backs topic messaging as a fit only for broadcasts that are the same for everyone. A production write-up of a large notification gateway agrees on caller quotas, per-user caps and channel decisions, and adds a design with local state partitioned by member, accepted here as an alternative. It also covers digests and aggregation, which this problem leaves out. No first-party source gave numbers for SMS or email providers, so those limits, the traffic mix and the receipt behaviour are this problem's own assumptions."
 ---
 
 ## Opening prompt
@@ -29,7 +37,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Preferences:** on or off per channel and per category. Security and transactional cannot be turned off, on any channel; the switches change marketing only. Marketing is on by default for push and email, and off for SMS until the user opts in. An opt-out must take effect within 1 minute, even for a broadcast already running.
 - **Quiet hours and caps:** quiet hours default to 10 PM to 8 AM in the user's time zone, and the user can change them. They hold marketing only. A held message goes out when quiet hours end, unless it has expired. At most 3 marketing pushes per user per day, counted per notification, so a push to two devices counts once; extra ones are dropped. No cap on marketing email or SMS; the marketing tool plans those.
 - **Ordering:** no strict order. Two messages to one user a few seconds apart may arrive swapped, and that is acceptable.
-- **Provider limits:** APNs and FCM together accept about 30,000 pushes per second from us and throttle above that. SMS provider A (primary, cheaper) takes 500 per second. Provider B (backup, about 30% dearer) takes 300 per second. One email provider takes 2,000 per second. There is no backup email provider; email can wait out a short outage.
+- **Provider limits:** APNs accepts about 15,000 pushes per second from us, and FCM about 15,000. Each gateway throttles on its own above its limit. SMS provider A (primary, cheaper) takes 500 per second. Provider B (backup, about 30% dearer) takes 300 per second. One email provider takes 2,000 per second. There is no backup email provider; email can wait out a short outage.
 - **Provider behaviour:** an error is throttling, temporary or permanent (invalid number, uninstalled app, hard bounce). Some calls time out, and then nobody knows whether the message went out. SMS and email providers do not deduplicate: a repeated call sends again. Push takes a collapse id: a second push with the same id replaces the first on the device. Keep mailing bounced addresses and the email provider suspends us.
 - **Receipts:** SMS providers post a delivery receipt to our webhook, usually within a minute, but sometimes hours later, twice, or never. The email provider posts delivered, bounced, opened and complaint events. Push gateways only confirm they accepted a message; "opened" comes from our app.
 - **Duplicates:** callers retry on timeout. Every request carries an idempotency key. A repeated key within 24 hours must not produce a second notification.
@@ -49,6 +57,7 @@ Core, functional:
 1. Accept a send request (user, template, variables, channels, time) and return an id. *Ask: What does a caller give us to send one message, and what comes back?*
 2. Send a campaign to a segment of up to 50 million users. *Ask: Do we send to one user at a time, or to whole groups?*
 3. Apply preferences, quiet hours and the marketing cap before sending. *Ask: What can stop a message from reaching a user?*
+4. Track the status of each send from sender results and provider receipts; callers read it by id. *Ask: How does a caller learn what happened to a message?*
 
 Core, non-functional:
 1. About 440 million sends a day, with broadcast bursts close to the push quota. *Ask: How many messages a day, and how big is the biggest broadcast?*
@@ -60,7 +69,7 @@ Core, non-functional:
 Extras (credit when they name one, never a gap):
 - Render each template per channel and language.
 - Schedule a send for later, and cancel a scheduled send or a running campaign.
-- Track status per message from provider receipts, and totals per campaign.
+- Totals per campaign, at most 5 minutes old.
 - The email campaign finishes within 4 hours.
 - An opt-out takes effect within 1 minute, even for a running broadcast.
 - A scheduled send goes within 1 minute of its time, and a cancel takes effect within 1 minute.
@@ -68,14 +77,14 @@ Extras (credit when they name one, never a gap):
 ## Capacity math
 
 - **Average:** 400 million pushes, 30 million emails and 10 million SMS make 440 million sends a day, about 5,000 per second, which means the average is easy. Bursts and provider limits shape the design.
-- **The 7 PM broadcast:** 60 million devices in 1 hour is about 17,000 pushes per second. Triggered push averages about 3,200 per second (280 million a day), so about 10,000 per second at the evening peak. Together that is about 27,000 per second against a 30,000 quota, which means the provider quota, not our server count, is the ceiling.
-- **Priority inside the quota:** give transactional push first claim (about 10,000 per second) and about 20,000 per second is left, so 60 million devices take about 50 minutes, which means the 1-hour deadline holds only with a pacer that fills the leftover quota and never competes with transactional push.
+- **The 7 PM broadcast:** 60 million devices in 1 hour is about 17,000 pushes per second. Triggered push averages about 3,200 per second (280 million a day), so about 10,000 per second at the evening peak. Together that is about 26,400 per second. Half the devices sit on each gateway, so each sees about 13,200 per second against its own 15,000, which means the provider quota, not our server count, is the ceiling.
+- **Priority inside the quota:** give transactional push first claim (about 5,000 per second on each gateway) and about 10,000 per second is left on each. Each gateway's 30 million devices then take about 50 minutes, which means the 1-hour deadline holds only with a pacer that runs one token bucket per gateway, fills the leftover quota and never competes with transactional push.
 - **SMS:** 10 million a day is about 120 per second on average and 350 at the evening peak, which provider A (500) carries alone. At peak, OTPs need about 210 per second and transactional SMS about 105, so about 315, more than provider B's 300, which means a failover to B must shed by priority: OTPs first, then transactional, and marketing SMS waits for A.
 - **Email:** the 20 million campaign at 2,000 per second takes 10,000 seconds, nearly 3 hours. Transactional email runs about 120 per second on average and 350 at peak, which means the campaign is paced over hours, and the 4-hour deadline holds only if it leaves a reserved share of the cap (about 400 per second) for order and payment emails: 20 million at 1,600 per second takes about 3.5 hours.
 - **Accept path:** 280 million triggered pushes over about 1.5 devices per user is about 190 million requests, so about 200 million requests a day in all. That is about 2,300 per second, and about 7,000 at peak, which means a small stateless API fleet that writes to a durable queue and replies. Fan-out and sending happen after the reply.
 - **Lookups and dedupe:** preferences for 50 million users plus 60 million device tokens, at about 200 bytes each, are about 22 GB. Send ids kept 24 hours for dedupe are 440 million at about 100 bytes, about 44 GB. Both fit in a Redis cluster, which means no per-message Postgres reads on the hot path, and a fan-out worker that reads 1,000 users per call needs only tens of calls per second.
 - **Status:** at least 2 writes per send (queued, then sent or failed), plus receipts for SMS and email, is about 900 million writes a day: about 10,000 per second on average and over 50,000 per second during the 7 PM broadcast. Thirty days is 13 billion rows (one per send, updated in place), about 4 TB at 300 bytes each, which means a write-optimised store with built-in expiry (Cassandra with a TTL, or daily partitions that are dropped), never a row update in the main Postgres per event.
-- **Scheduled sends:** 30 million waiting at about 500 bytes is 15 GB, which fits one Postgres table indexed by due time. The 1 million due at 9:00 must go within a minute, about 17,000 claims per second. After fan-out to devices that is up to 1.5 million pushes, about 25,000 per second. With about 3,000 per second of morning traffic that nearly fills the 30,000 quota, which means workers claim due rows a few minutes early and release them on time, instead of scanning the table at 9:00.
+- **Scheduled sends:** 30 million waiting at about 500 bytes is 15 GB, which fits one Postgres table indexed by due time. The 1 million due at 9:00 must go within a minute, about 17,000 claims per second. After fan-out to devices that is up to 1.5 million pushes, about 750,000 on each gateway. With about 1,500 per second of morning traffic on each, a gateway has about 13,500 per second left, so its share takes about 56 seconds. That means the minute barely holds: workers claim due rows a few minutes early and release them on time, instead of scanning the table at 9:00, and an uneven split between the two gateways pushes the tail past the minute.
 
 ## API and entities
 
@@ -84,7 +93,7 @@ External API (callers are internal services):
 - `DELETE /notifications/{id}` cancels a scheduled send: `204`, or `409` if it already went.
 - `POST /campaigns` with `{ idempotencyKey, segmentId, templateId, channels, startAt, finishBy }` returns `202 { campaignId }`. `POST /campaigns/{id}/cancel` stops it.
 - `GET /notifications/{id}` returns the status of each send. `GET /users/{userId}/notifications?since=` serves support. `GET /campaigns/{id}/stats` returns the totals.
-- From the app: `PUT /users/{userId}/preferences`, and `POST` or `DELETE /users/{userId}/devices` for push tokens.
+- From the app: `PUT /users/{userId}/preferences`, and `POST` or `DELETE /users/{userId}/devices` for push tokens. `POST /notifications/{id}/opened` (idempotent) records an open and produces a status event.
 - `POST /webhooks/{provider}` takes receipts.
 
 Core entities:
@@ -118,12 +127,14 @@ Core entities:
  Senders: dedupe on sendId; marketing sends re-check opt-out and cancel flags (cache at most 30 seconds old);
           token bucket per provider, higher priority first; circuit breaker;
           retries with backoff through delay topics; dead-letter topic after the last try
-        ├──> APNs / FCM, 30,000 per second together
+        ├──> APNs 15,000 per second, FCM 15,000 per second, one token bucket each
         ├──> SMS provider A, 500 per second ── on failover ──> SMS provider B, 300 per second
         └──> email provider, 2,000 per second
 
- status: senders + webhook receiver ──> Kafka status ──> status writer ──> Cassandra, 30-day TTL
-                                                     └──> stream counters ──> campaign totals
+ status: routers and fan-out workers (queued, suppressed), senders (sent, failed),
+         webhook receiver (delivered, failed on a bounce), app (opened)
+           ──> Kafka status ──> status writer ──> Cassandra, 30-day TTL
+                            └──> stream counters ──> campaign totals
 ```
 
 Walk one OTP: the login service posts a request with an idempotency key. The template is in the security category, so the API produces to `requests.security` and replies `202` with an id derived from the caller and the key. A security router skips the preference and quiet-hour checks, renders the SMS and produces one send to `sms.otp`. An OTP sender checks that the send id is new, takes a token from provider A's bucket and calls A with a 2-second timeout. On success it records `sent` with A's message id, and A's receipt later moves it to `delivered`. On a timeout or an open breaker it sends through B with the same code, and gives up once the OTP is 60 seconds old.
@@ -141,7 +152,8 @@ Walk the 7 PM broadcast: the campaign service splits a 50 million user segment i
 - **Status store.** Cassandra or DynamoDB with a TTL, or Postgres partitioned by day with old partitions dropped. Keeping only counts and failures for broadcasts, instead of 60 million rows each, is fine.
 - **Scheduled sends.** A Postgres table with `SKIP LOCKED`, a Redis sorted set scored by due time, or a timer service or workflow engine. SQS delays alone stop at 15 minutes, so they cannot cover 30 days.
 - **Preference checks.** At send time, from a cache at most 30 seconds old or one that a preference write invalidates. A check only at fan-out is fine only if the fan-out is paced so that no more than about a minute of sends waits in the topic; a long backlog needs the recheck.
-- **Preference and device store.** Postgres with a Redis cache, or a key-value store such as DynamoDB or Cassandra. About 22 GB fits either.
+- **Preference and device store.** Postgres with a Redis cache, or a key-value store such as DynamoDB or Cassandra. About 22 GB fits either. Local state in a stream processor partitioned by user id (for example RocksDB backed up to a Kafka log) also works: caps and preferences become local reads, but every preference write and every request for a user must reach that user's partition.
+- **Provider-side fan-out.** FCM topic messaging reaches every device subscribed to a topic with one call. It fits only a broadcast that is the same for everyone: it skips per-user preferences, quiet hours, the daily cap, language and per-user status, and it covers only the devices on FCM. Accept it for that case if the candidate names those costs. As the whole broadcast design it misses the requirements.
 - **Rate limiting.** A shared Redis token bucket, a fixed share of the quota per worker that rebalances when workers change, or adaptive backoff on throttling errors.
 
 ## Deep dives
@@ -149,7 +161,7 @@ Walk the 7 PM broadcast: the campaign service splits a 50 million user segment i
 ### Priority, provider limits and failover
 - **Bad:** one queue for every notification, senders running as fast as they can, and "switch provider when it is down" with no way to detect it.
 - **Good:** a topic per channel and priority, each with its own worker pool. A token bucket per provider sized to its limit. A circuit breaker that moves SMS from A to B on errors and timeouts.
-- **Great:** transactional traffic has first claim on each quota, and marketing borrows only what is left. Senders lease tokens from Redis in batches: 100 at a time is about 300 Redis calls per second at 30,000 pushes per second. The send rate halves on throttling errors and creeps back up. Each provider has its own connection pool, so a slow one cannot stall the rest. Failover sheds by priority, because B is smaller than the evening peak: marketing first, then some transactional, OTPs last. Health includes the delivery-receipt rate, because a provider can accept messages and silently drop them.
+- **Great:** transactional traffic has first claim on each quota, and marketing borrows only what is left. Senders lease tokens from Redis in batches: 100 at a time is about 300 Redis calls per second at 30,000 pushes per second over both gateways. The send rate halves on throttling errors and creeps back up. Each provider has its own connection pool, so a slow one cannot stall the rest. Failover sheds by priority, because B is smaller than the evening peak: marketing first, then some transactional, OTPs last. Health includes the delivery-receipt rate, because a provider can accept messages and silently drop them.
 
 ### Retries, duplicates and idempotency
 - **Bad:** "Use exactly-once delivery." Retrying every failure at once and forever. Deduping only at the API, so a redelivered queue message still sends twice.
@@ -175,6 +187,8 @@ Use one, at the extension point, unless the candidate already handled it.
    Fits: Retries, duplicates and idempotency; Priority, provider limits and failover
 3. **New countries (geography, change):** "Next quarter we launch in 15 countries across 10 time zones, including the EU. Good SMS providers differ by country, and EU users' data must stay in the EU. What changes?" Expect: the user's time zone drives quiet hours and "9 AM local" campaigns, which turns one broadcast into hourly waves and flattens the push peak; a routing table of primary and backup SMS providers per country, with a breaker per provider and country; templates per locale with a fallback language. Stretch: a separate EU stack (API, queues, stores), a small global directory from user to home region, callers routed to it, campaigns fanned out per region, and only totals without personal data leaving the region. States what stays the same: the pipeline.
    Fits: Priority, provider limits and failover; Broadcast fan-out and scheduled sends
+4. **Receipt storm:** "SMS provider A had a 6-hour fault on its side. When it recovers, it replays all 6 hours of delivery receipts to our webhook in 10 minutes. Many come twice, and many arrive out of order. What happens?" Expect: 6 hours of SMS at about 120 a second is about 2.6 million receipts, perhaps 4 million with repeats, so about 7,000 a second for 10 minutes, 20 to 60 times the normal receipt rate, but well under the 50,000 status writes a second the store takes during a broadcast. The webhook stores each receipt and answers at once, because a slow answer makes the provider retry and adds to the storm. Kafka absorbs the burst and the status writer drains it. Each receipt matches its send by the provider message id saved at send time. Status moves one way only, so a duplicate or a receipt older than the current status changes nothing. Campaign counters move only on a real status change, so repeats do not inflate totals. Stretch: during the fault the receipt rate per provider dropped to zero while calls still succeeded, which is the silent-drop signal to alarm on. Notes that support views and campaign totals are stale until the backlog drains.
+   Fits: Delivery status tracking
 
 ## Level bar
 
