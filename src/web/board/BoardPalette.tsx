@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ChevronLeftIcon, ChevronRightIcon } from "../components/icons";
 import { Tooltip } from "../components/ui";
 import { ARROW_SPECS, HLD_SHAPES, LLD_SHAPES, type ArrowPreset, type ArrowSpec, type ShapeKind, type ShapeSpec, type StrokeStyle } from "./palette";
 
@@ -10,6 +11,31 @@ export interface PaletteProps {
   /** `focusCanvas` is true for a mouse click, so Delete and the arrow keys act on the new shape at once. */
   onInsertShape: (kind: ShapeKind, focusCanvas: boolean) => void;
   onInsertArrow: (preset: ArrowPreset, focusCanvas: boolean) => void;
+}
+
+const COLLAPSED_KEY = "sparmate-palette-collapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Whether the palette is folded to a slim rail, kept per browser so the choice survives a reload. */
+function usePaletteCollapsed(): [boolean, () => void] {
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+    } catch {
+      // The panel then opens again on the next visit, which is harmless.
+    }
+  };
+  return [collapsed, toggle];
 }
 
 interface Entry {
@@ -88,8 +114,10 @@ function ArrowSwatch({ spec }: { spec: ArrowSpec }) {
 
 export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertArrow }: PaletteProps) {
   const uid = useId().replace(/:/g, "");
+  const listId = `${uid}-list`;
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const [active, setActive] = useState(0);
+  const [collapsed, toggleCollapsed] = usePaletteCollapsed();
 
   const shapeEntry = (spec: ShapeSpec): Entry => ({
     id: spec.kind,
@@ -143,10 +171,38 @@ export function BoardPalette({ track, theme, disabled, onInsertShape, onInsertAr
     }
   }
 
+  const toggle = (
+    <Tooltip content={collapsed ? "Show the palette" : "Hide the palette"} side="right">
+      <button
+        type="button"
+        className="ir-palette__toggle flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        aria-expanded={!collapsed}
+        aria-controls={collapsed ? undefined : listId}
+        aria-label={collapsed ? "Show the palette" : "Hide the palette"}
+        onClick={toggleCollapsed}
+      >
+        {collapsed ? <ChevronRightIcon size={14} /> : <ChevronLeftIcon size={14} />}
+      </button>
+    </Tooltip>
+  );
+
+  if (collapsed) {
+    return (
+      <aside className="ir-palette ir-palette--collapsed flex w-10 shrink-0 flex-col items-center pt-2 text-ui text-foreground" data-theme={theme} aria-label="Board palette">
+        {toggle}
+      </aside>
+    );
+  }
+
   let index = -1;
   return (
     <aside className="ir-palette flex w-44 shrink-0 flex-col max-md:w-12 text-ui text-foreground" data-theme={theme} aria-label="Board palette">
+      <div className="flex shrink-0 items-center justify-between px-2.5 pt-2 max-md:justify-center max-md:px-0">
+        <span className="text-meta font-semibold text-muted-foreground max-md:hidden">Palette</span>
+        {toggle}
+      </div>
       <div
+        id={listId}
         className="ir-palette__list min-h-0 flex-1 overflow-y-auto px-1.5 pt-2"
         role="toolbar"
         aria-orientation="vertical"
