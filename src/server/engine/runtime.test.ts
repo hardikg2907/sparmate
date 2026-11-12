@@ -1339,6 +1339,39 @@ describe("the coach and the scorecard gaps", () => {
     return { t, rt, session, turns, say, tool, dividers };
   }
 
+  it("asks for the reply tool, and stores the settled reply when it differs from what streamed", async () => {
+    let replyTool: boolean | undefined;
+    const driver: Driver = {
+      ...createFakeDriver({ chunkDelayMs: 0 }),
+      startConversation(s) {
+        if (s.role === "coach") replyTool = s.replyTool;
+        return {
+          sdkSessionId: () => "s",
+          close: () => {},
+          async send(_turn, handlers) {
+            handlers.onTextDelta("A draft that streamed.");
+            return { text: "The settled reply.", stats: { durationMs: 1, costUsd: 0 }, superseded: true };
+          },
+        };
+      },
+    };
+    const t = setup(driver);
+    const session = newSession("interview");
+    session.status = "debriefed";
+    session.scorecard = { gaps: GAPS, verdict: { sde2: "hire", senior: "lean_no_hire", summary: "ok" } } as unknown as Session["scorecard"];
+    session.transcript.push({ id: "c0", at: 0, wall: new Date().toISOString(), channel: "coach", role: "coach", text: "Let's start." });
+    const rt = new SessionRuntime(t.deps, session, await urlShortener());
+    await rt.init();
+    rt.attach(t.peer);
+    await rt.handle({ type: "chat.send", channel: "coach", clientMsgId: "m1", text: "Go on." }, t.peer);
+    await vi.waitFor(() => expect(session.transcript.filter((e) => e.channel === "coach" && e.role === "coach")).toHaveLength(2));
+    expect(replyTool).toBe(true);
+    expect(session.transcript.at(-1)?.text).toBe("The settled reply.");
+    const sent = t.msgs.flatMap((m) => (m.type === "chat.message" && m.entry.role === "coach" ? [m.entry.text] : []));
+    expect(sent).toEqual(["The settled reply."]);
+    rt.dispose();
+  });
+
   it("sends no coach opening on its own, and one when the candidate starts the chat", async () => {
     const { rt, turns, t } = await coachRoom({ started: false });
     await new Promise((resolve) => setTimeout(resolve, 50));

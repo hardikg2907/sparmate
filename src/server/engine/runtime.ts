@@ -1791,6 +1791,7 @@ export class SessionRuntime {
         });
       },
       tools: this.coachTools(ch),
+      replyTool: true,
       fake: { problem: this.problem, scorecard: this.session.scorecard, track: this.session.track, mode: this.session.mode, session: () => this.session },
       usage: { sessionId: this.session.id, problemId: this.session.problemId, track: this.session.track, mode: this.session.mode },
     };
@@ -2083,6 +2084,7 @@ export class SessionRuntime {
       }),
       createEmitBlockTool({
         channel: "coach",
+        repliesThroughTool: true,
         track: this.session.track,
         pendingCount: () => ch.pendingBlocks.length,
         pushBlock: (block) => {

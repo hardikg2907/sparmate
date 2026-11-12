@@ -1,6 +1,8 @@
 import { createSdkMcpServer, query, tool, type Options, type Query, type SDKMessage, type SDKResultMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 import {
   DriverError,
+  textOutput,
   type Conversation,
   type ConversationSetup,
   type ManagedDriver,
@@ -13,6 +15,7 @@ import {
   type UserTurn,
 } from "./driver";
 import { truncate, type Logger } from "./log";
+import { ReplyTextStream } from "./reply-stream";
 import { AssistantSpend, addStats, attachFailureStats, extractConversationStats, extractOneShotStats, failureStats, noResultStats } from "./usage-capture";
 
 export interface ClaudeDriverOptions {
@@ -397,6 +400,72 @@ class TurnText {
   }
 }
 
+export const REPLY_TOOL = "reply";
+const REPLY_TOOL_FULL = `mcp__${MCP_SERVER}__${REPLY_TOOL}`;
+
+/** The tool a role sends its visible reply through. A second call in one turn is refused, and it is never shown. */
+export class ReplyGate {
+  private calls = 0;
+  readonly tool: RoomTool = {
+    name: REPLY_TOOL,
+    description: "Send your reply to the candidate. This is the only text they see. Make every other tool call first, then call this once, last, with the whole reply in Markdown.",
+    shape: { text: z.string().min(1) },
+    run: async () => {
+      this.calls++;
+      if (this.calls > 1) return textOutput("You already replied this turn, and only that reply is shown. End your turn.", true);
+      return textOutput("Delivered.");
+    },
+  };
+
+  newTurn(): void {
+    this.calls = 0;
+  }
+}
+
+/**
+ * The visible reply of a turn, when the role sends it through the reply tool. Only the first call that carries text
+ * is shown: its text streams from the tool input as the model writes it, and the complete input settles it. Text the
+ * model writes outside the tool is never shown while a reply exists, so a draft written before a tool call and
+ * written again after it cannot reach the reader twice.
+ */
+class ReplyCapture {
+  /** The settled reply, from the first complete call with text. */
+  accepted: string | null = null;
+  private live: { index: number; stream: ReplyTextStream } | null = null;
+  private streamedDone = false;
+  private streamedText = "";
+
+  constructor(private readonly emit: (delta: string) => void) {}
+
+  get streamed(): string {
+    return this.streamedText + (this.live?.stream.text ?? "");
+  }
+
+  startBlock(index: number, name: string): void {
+    this.live = null;
+    if (name !== REPLY_TOOL_FULL || this.streamedDone) return;
+    this.live = { index, stream: new ReplyTextStream((d) => this.emit(d)) };
+  }
+
+  delta(index: number, partialJson: string): void {
+    if (this.live?.index === index) this.live.stream.push(partialJson);
+  }
+
+  stopBlock(index: number): void {
+    if (this.live?.index !== index) return;
+    this.streamedText += this.live.stream.text;
+    // A call that streamed no text (an empty or malformed value) leaves room for the next one.
+    if (this.live.stream.text !== "") this.streamedDone = true;
+    this.live = null;
+  }
+
+  complete(name: string, input: unknown): void {
+    if (name !== REPLY_TOOL_FULL || this.accepted !== null) return;
+    const text = (input as { text?: unknown } | null)?.text;
+    if (typeof text === "string" && text.trim() !== "") this.accepted = text;
+  }
+}
+
 /** The blocks of a reply that was never streamed, without a block that repeats an earlier one. */
 function distinctBlocks(blocks: string[]): string[] {
   const seen: string[] = [];
@@ -408,6 +477,33 @@ function distinctBlocks(blocks: string[]): string[] {
     kept.push(block);
   }
   return kept;
+}
+
+/**
+ * What a turn with a reply tool returns. The reply's complete input is the truth; when it differs from what streamed
+ * (a value that could not be read live), the stored message is replaced. With no reply call at all, the loose text is
+ * shown instead, which is also how a bare `<silent/>` still reaches the silence filter.
+ */
+function replyResult(reply: ReplyCapture, loose: string, stats: TurnReply["stats"], handlers: TurnHandlers): TurnReply {
+  const streamed = reply.streamed;
+  const text = reply.accepted ?? loose;
+  if (streamed === "") {
+    if (text) handlers.onTextDelta(text);
+    return { text, stats };
+  }
+  return streamed.trim() === text.trim() ? { text, stats } : { text, stats, superseded: true };
+}
+
+/** Stops the turn once the reply tool has run, so the model is not called again just to say it is done. */
+function endTurnAfterReply(): Options["hooks"] {
+  return {
+    PostToolUse: [
+      {
+        matcher: REPLY_TOOL_FULL,
+        hooks: [async () => ({ continue: false, stopReason: "The reply was delivered." })],
+      },
+    ],
+  };
 }
 
 /** Set once the server starts to stop, so a process the terminal's interrupt kills first is not logged as a failure. */
@@ -426,6 +522,7 @@ class ClaudeConversation implements Conversation {
   private lastCumulativeCost = 0;
   // A resumed session's first running total already holds earlier turns, so that turn's own cost is unknown.
   private costBaselineKnown: boolean;
+  private readonly replyGate = new ReplyGate();
 
   constructor(
     private readonly setup: ConversationSetup,
@@ -448,22 +545,27 @@ class ClaudeConversation implements Conversation {
     if (!this.q) {
       const systemPrompt = await this.setup.systemPrompt();
       if (this.closed) throw new DriverError("The conversation was closed.");
+      const withReply = this.setup.replyTool ? { ...this.setup, tools: [...this.setup.tools, this.replyGate.tool] } : this.setup;
       const options: Options = {
-        ...baseOptions(this.setup, this.opts, systemPrompt, this.abort, this.stderr),
+        ...baseOptions(withReply, this.opts, systemPrompt, this.abort, this.stderr),
         includePartialMessages: true,
         persistSession: true,
         ...(this.setup.resumeSessionId ? { resume: this.setup.resumeSessionId } : {}),
+        ...(this.setup.replyTool ? { hooks: endTurnAfterReply() } : {}),
       };
       this.q = query({ prompt: this.input.iterate(), options });
       this.iterator = this.q[Symbol.asyncIterator]();
     }
     this.input.push(userMessage(turn));
+    this.replyGate.newTurn();
     return this.readTurn(handlers);
   }
 
   private async readTurn(handlers: TurnHandlers): Promise<TurnReply> {
     const started = Date.now();
-    const turnText = new TurnText((d) => handlers.onTextDelta(d));
+    const reply = this.setup.replyTool ? new ReplyCapture((d) => handlers.onTextDelta(d)) : null;
+    // With a reply tool, loose text is the model's own notes: it is kept back and shown only if no reply comes.
+    const turnText = new TurnText(reply ? () => {} : (d) => handlers.onTextDelta(d));
     const assistantTexts: string[] = [];
     const spend = new AssistantSpend();
     let errorKind: AssistantErrorKind | null = null;
@@ -483,14 +585,24 @@ class ClaudeConversation implements Conversation {
       if (msg.type === "stream_event") {
         if (msg.parent_tool_use_id !== null) continue;
         const ev = msg.event;
-        if (ev.type === "content_block_start" && ev.content_block.type === "text") turnText.startBlock(ev.index);
-        else if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") turnText.delta(ev.delta.text);
-        else if (ev.type === "content_block_stop") turnText.stopBlock(ev.index);
+        if (ev.type === "content_block_start") {
+          if (ev.content_block.type === "text") turnText.startBlock(ev.index);
+          else if (ev.content_block.type === "tool_use") reply?.startBlock(ev.index, ev.content_block.name);
+        } else if (ev.type === "content_block_delta") {
+          if (ev.delta.type === "text_delta") turnText.delta(ev.delta.text);
+          else if (ev.delta.type === "input_json_delta") reply?.delta(ev.index, ev.delta.partial_json);
+        } else if (ev.type === "content_block_stop") {
+          turnText.stopBlock(ev.index);
+          reply?.stopBlock(ev.index);
+        }
       } else if (msg.type === "assistant") {
         if (msg.parent_tool_use_id !== null) continue;
         if (msg.error) errorKind = msg.error;
         spend.add(msg.message.id, msg.message.usage);
-        for (const block of msg.message.content) if (block.type === "text") assistantTexts.push(block.text);
+        for (const block of msg.message.content) {
+          if (block.type === "text") assistantTexts.push(block.text);
+          else if (block.type === "tool_use") reply?.complete(block.name, block.input);
+        }
       } else if (msg.type === "result") {
         turnText.finish();
         const streamed = turnText.text;
@@ -502,6 +614,7 @@ class ClaudeConversation implements Conversation {
           this.costBaselineKnown = true;
         }
         if (msg.subtype === "success" && !msg.is_error) {
+          if (reply) return replyResult(reply, settled || distinctBlocks(assistantTexts).join("\n\n"), stats, handlers);
           if (streamed) return settled === streamed ? { text: streamed, stats } : { text: settled, stats, superseded: true };
           const text = distinctBlocks(assistantTexts).join("\n\n") || msg.result;
           if (text) handlers.onTextDelta(text);

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const scripted: { messages: any[][]; hang: Promise<void> | null } = { messages: [], hang: null };
+const scripted: { messages: any[][]; hang: Promise<void> | null; options: any } = { messages: [], hang: null, options: null };
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importActual) => {
   const actual = await importActual<typeof import("@anthropic-ai/claude-agent-sdk")>();
   return {
     ...actual,
-    query: () => {
+    query: (args: { options: unknown }) => {
+      scripted.options = args.options;
       const msgs = scripted.messages.shift() ?? [];
       return {
         close() {},
@@ -25,7 +26,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", async (importActual) => {
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createClaudeDriver } from "./claude-driver";
+import { ReplyGate, createClaudeDriver } from "./claude-driver";
 import { memoryLogger } from "./log";
 import { UsageLedger } from "./usage-ledger";
 import { wrapDriverWithLedger } from "./usage-driver";
@@ -187,6 +188,122 @@ describe("a reply the model rewrites after a tool call", () => {
     const { reply } = await runTurn([...block(0, first), toolStart(1), stop(1), ...block(2, other), done()]);
     expect(reply.text).toBe(`${first}\n\n${other}`);
     expect(reply.superseded).toBeUndefined();
+  });
+});
+
+describe("a role that replies through the reply tool", () => {
+  beforeEach(() => {
+    scripted.messages = [];
+    scripted.hang = null;
+    scripted.options = null;
+  });
+
+  const REPLY = "mcp__room__reply";
+  const toolUse = (index: number, name: string) => ({
+    type: "stream_event",
+    parent_tool_use_id: null,
+    session_id: "s",
+    event: { type: "content_block_start", index, content_block: { type: "tool_use", id: `t${index}`, name, input: {} } },
+  });
+  const json = (index: number, partial_json: string) => ({
+    type: "stream_event",
+    parent_tool_use_id: null,
+    session_id: "s",
+    event: { type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json } },
+  });
+  const called = (name: string, input: unknown) => ({
+    type: "assistant",
+    parent_tool_use_id: null,
+    session_id: "s",
+    message: { content: [{ type: "tool_use", id: "x", name, input }] },
+  });
+  /** One reply call as the SDK streams it, then the complete message. */
+  const replyCall = (index: number, text: string, pieces = 3) => {
+    const raw = JSON.stringify({ text });
+    const size = Math.ceil(raw.length / pieces);
+    const parts: unknown[] = [toolUse(index, REPLY)];
+    for (let i = 0; i < raw.length; i += size) parts.push(json(index, raw.slice(i, i + size)));
+    return [...parts, stop(index), called(REPLY, { text })];
+  };
+
+  async function runReplyTurn(messages: unknown[]) {
+    scripted.messages = [messages as any[]];
+    const conv = driver().startConversation({ ...setup, role: "coach", replyTool: true });
+    const deltas: string[] = [];
+    const reply = await conv.send({ text: "q", meta: {} } as any, { onTextDelta: (d: string) => deltas.push(d) });
+    conv.close();
+    return { reply, streamed: deltas.join(""), deltas };
+  }
+
+  const draft = "Here is the setup in your design. Every message is a row keyed by its id, and the server has to scan them all.";
+
+  it("offers the reply tool and ends the turn once it has run", async () => {
+    await runReplyTurn([...replyCall(0, "Hi."), done()]);
+    expect(scripted.options.allowedTools).toContain(REPLY);
+    expect(scripted.options.hooks.PostToolUse[0].matcher).toBe(REPLY);
+    expect(await scripted.options.hooks.PostToolUse[0].hooks[0]()).toMatchObject({ continue: false });
+  });
+
+  it("streams the reply text live, in pieces", async () => {
+    const { reply, streamed, deltas } = await runReplyTurn([...replyCall(0, "Which rows does the server read?", 4), done()]);
+    expect(streamed).toBe("Which rows does the server read?");
+    expect(deltas.length).toBeGreaterThan(1);
+    expect(reply.text).toBe("Which rows does the server read?");
+    expect(reply.superseded).toBeUndefined();
+  });
+
+  it("never shows a draft written before a tool call, however it is worded", async () => {
+    const { reply, streamed } = await runReplyTurn([...block(0, draft), toolStart(1), stop(1), ...replyCall(2, "A different wording of the same lesson."), done()]);
+    expect(streamed).toBe("A different wording of the same lesson.");
+    expect(reply.text).toBe("A different wording of the same lesson.");
+  });
+
+  it("shows only the first reply when the model calls the tool twice", async () => {
+    const { reply, streamed } = await runReplyTurn([...replyCall(0, "First."), ...replyCall(1, "Second."), done()]);
+    expect(streamed).toBe("First.");
+    expect(reply.text).toBe("First.");
+  });
+
+  it("refuses a second reply call in the same turn, and allows one again next turn", async () => {
+    const gate = new ReplyGate();
+    expect((await gate.tool.run({ text: "a" })).isError).toBeUndefined();
+    const second = await gate.tool.run({ text: "b" });
+    expect(second.isError).toBe(true);
+    expect(second.content[0]).toMatchObject({ text: expect.stringContaining("already replied") });
+    gate.newTurn();
+    expect((await gate.tool.run({ text: "c" })).isError).toBeUndefined();
+  });
+
+  it("falls back to the loose text when no reply call comes, so a silent turn still reads as silent", async () => {
+    const silent = await runReplyTurn([...block(0, "<silent/>"), done()]);
+    expect(silent.streamed).toBe("<silent/>");
+    expect(silent.reply.text).toBe("<silent/>");
+  });
+
+  it("settles on the complete input when the live text could not be read", async () => {
+    const { reply, streamed } = await runReplyTurn([toolUse(0, REPLY), json(0, '{"note":"x","text":"Final."}'), stop(0), called(REPLY, { note: "x", text: "Final." }), done()]);
+    expect(streamed).toBe("Final.");
+    expect(reply.text).toBe("Final.");
+  });
+
+  it("replaces a live text that differs from the complete input", async () => {
+    const { reply, streamed } = await runReplyTurn([toolUse(0, REPLY), json(0, '{"text":"Draf'), stop(0), called(REPLY, { text: "Final." }), done()]);
+    expect(streamed).toBe("Draf");
+    expect(reply.text).toBe("Final.");
+    expect(reply.superseded).toBe(true);
+  });
+
+  it("streams the next call when the first one carried no text", async () => {
+    const { reply, streamed } = await runReplyTurn([toolUse(0, REPLY), json(0, '{"text":""}'), stop(0), ...replyCall(1, "Now with text."), done()]);
+    expect(streamed).toBe("Now with text.");
+    expect(reply.text).toBe("Now with text.");
+  });
+
+  it("leaves a role without the switch on plain streamed text", async () => {
+    const { reply, streamed } = await runTurn([...block(0, "Plain."), done()]);
+    expect(streamed).toBe("Plain.");
+    expect(reply.text).toBe("Plain.");
+    expect(scripted.options.hooks).toBeUndefined();
   });
 });
 
