@@ -458,11 +458,15 @@ body {
 /*
  * Screen-reader text is absolutely positioned, and by default it sits where it would have flowed. Inside a scroller
  * whose positioned ancestor is outside it, that spot can lie far past the content, and the 1px box then stretches an
- * outer scroller into blank space. Pinning it to the corner of its containing block keeps it inside every box.
+ * outer scroller into blank space. Pinning it to the corner of its containing block keeps it inside every box. It is
+ * a base rule, so a utility such as the skip link's `focus:top-3` still wins.
  */
-.sr-only {
-  top: 0;
-  left: 0;
+@layer base {
+  [class~="sr-only"],
+  [class*=":sr-only"] {
+    top: 0;
+    left: 0;
+  }
 }
 
 /* Model replies are Markdown. Tailwind's reset strips list and heading styles, so they come back here. */

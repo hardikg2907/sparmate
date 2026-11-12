@@ -329,6 +329,21 @@ try {
     totalFailures += 1;
     console.error(`FAIL: ${message}`);
   };
+  // The skip link is screen-reader text until it takes focus; then its own top and left place it, not the pin that
+  // keeps hidden text inside its box.
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.goto(`${BASE}/?theme=dark`, { waitUntil: "networkidle0" });
+  await sleep(350);
+  const skip = await page.evaluate(() => {
+    const a = [...document.querySelectorAll("a")].find((el) => /Skip to main content/.test(el.textContent ?? ""));
+    if (!a) return null;
+    a.focus();
+    const r = a.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width };
+  });
+  if (!skip || skip.left !== 12 || skip.top !== 12 || skip.width < 40) fail(`skip link on focus sits at ${JSON.stringify(skip)}, not 12px in`);
+  else console.log("PASS: the skip link shows 12px in from the corner on focus");
+
   for (const width of [640, 768, 1024]) {
     await page.setViewport({ width, height: 900 });
     await page.goto(`${BASE}/?fixture=home&theme=dark`, { waitUntil: "networkidle0" });
