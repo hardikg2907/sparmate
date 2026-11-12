@@ -19,6 +19,10 @@ const components: Components = {
     void node;
     return <ScrollablePre {...rest} />;
   },
+  table: ({ node, ...rest }) => {
+    void node;
+    return <ScrollableTable {...rest} />;
+  },
 };
 
 /**
@@ -38,6 +42,25 @@ function ScrollablePre(props: ComponentPropsWithoutRef<"pre">) {
     return () => observer?.disconnect();
   }, [props.children]);
   return <pre ref={ref} {...props} {...(wide ? { tabIndex: 0, role: "region", "aria-label": "Code block, scrolls sideways" } : {})} />;
+}
+
+function ScrollableTable({ className, style, ...props }: ComponentPropsWithoutRef<"table">) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [wide, setWide] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWide(el.scrollWidth > el.clientWidth);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    return () => observer?.disconnect();
+  }, [props.children]);
+  return (
+    <div ref={ref} className="my-3 max-w-full overflow-x-auto" {...(wide ? { tabIndex: 0, role: "region", "aria-label": "Table, scrolls sideways" } : {})}>
+      <table {...props} className={className} style={{ display: "table", maxWidth: "none", margin: 0, ...style }} />
+    </div>
+  );
 }
 
 const PLUGINS = [remarkGfm];

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import type { AnchorTarget } from "../../shared/blocks";
 import { Board } from "../board/Board";
-import { CodeEditor } from "../code/CodeEditor";
+import { CodeEditor, type CodeReveal } from "../code/CodeEditor";
 import { Console } from "../code/Console";
 import { ChatPanel } from "../components/ChatPanel";
 import { ChatResizeHandle, useChatWidth } from "../components/ChatWidth";
@@ -56,7 +57,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
   // Which board view he last asked for; the board opens on the current step's frame.
   const [boardView, setBoardView] = useState<"step" | "board">("step");
   const [confirm, setConfirm] = useState<"end" | "leave" | "discard" | null>(null);
-  const [reveal, setReveal] = useState<{ line: number; column: number; nonce: number } | null>(null);
+  const [reveal, setReveal] = useState<CodeReveal | null>(null);
   const [chatWidth, setChatWidth] = useChatWidth();
   // On a phone the chat shrinks to a strip while the work area shows, and the work area gives way while the chat is opened.
   const [phoneView, setPhoneView] = useState<"work" | "chat">("work");
@@ -73,7 +74,31 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
 
   const jumpTo = (line: number, column: number) => {
     setTab("code");
-    setReveal({ line, column, nonce: (reveal?.nonce ?? 0) + 1 });
+    setReveal((prev) => ({ line, column, nonce: (prev?.nonce ?? 0) + 1 }));
+  };
+
+  const handleAnchor = (target: AnchorTarget) => {
+    if (target.kind === "board") {
+      setPhoneView("work");
+      setGraphOpen(false);
+      if (lld) {
+        diagramFitted.current = true;
+        setTab("diagram");
+      }
+      requestAnimationFrame(() => {
+        ctl.boardRef.current?.focusElement(target.elementId);
+      });
+      return;
+    }
+    if (!lld) return;
+    setPhoneView("work");
+    setTab("code");
+    setReveal((prev) => ({
+      line: target.line,
+      column: 1,
+      ...(target.endLine !== undefined ? { endLine: target.endLine } : {}),
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
   };
 
   const frameStep = evidenceStepFor(session.track, session.phase);
@@ -352,6 +377,7 @@ export function RoomView({ ctl, session, theme, studyRoot }: RoomViewProps) {
               empty={guided ? "The guide starts with the first step in a moment." : "The interviewer opens the conversation in a moment."}
               onSend={(text) => actions.sendChat("interview", text)}
               onDraft={actions.composing}
+              onAnchor={handleAnchor}
               topSlot={!lld ? <StepChecklist step={session.steps[session.phase]} /> : null}
               afterOpening={lld && currentPhase ? <StepNeeds label={currentPhase.label} goal={currentPhase.goal} step={session.steps[session.phase]} /> : null}
               tools={

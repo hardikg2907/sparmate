@@ -3,6 +3,13 @@ import { MONO_FONT, monaco, monacoTheme, remeasureWhenFontLoads } from "../monac
 import type { CompileDiagnostic } from "../../shared/types";
 import { diffEdit, mapOffset, normaliseEol } from "./textEdit";
 
+export interface CodeReveal {
+  line: number;
+  column?: number;
+  endLine?: number;
+  nonce: number;
+}
+
 export interface CodeEditorProps {
   /** Current file content. A change from outside (your editor, reload) replaces the editor text. */
   value: string;
@@ -13,8 +20,8 @@ export interface CodeEditorProps {
   readOnly?: boolean;
   /** Every edit; the parent debounces what it sends. */
   onChange?: (content: string) => void;
-  /** Lets the console jump to a diagnostic. */
-  revealLine?: { line: number; column: number; nonce: number } | null;
+  /** Lets the console or an anchor jump to a line or line range. */
+  revealLine?: CodeReveal | null;
 }
 
 const MARKER_OWNER = "clang";
@@ -233,7 +240,17 @@ export function CodeEditor(props: CodeEditorProps) {
     // A request that was already there when the editor mounted is old news.
     if (revealSeen.current === revealLine.nonce) return;
     revealSeen.current = revealLine.nonce;
-    const position = model.validatePosition({ lineNumber: revealLine.line, column: revealLine.column });
+    if (revealLine.endLine !== undefined && revealLine.endLine >= revealLine.line) {
+      const lineCount = model.getLineCount();
+      const startLine = clamp(revealLine.line, 1, lineCount);
+      const endLine = clamp(revealLine.endLine, startLine, lineCount);
+      const range = new monaco.Range(startLine, 1, endLine, model.getLineMaxColumn(endLine));
+      editor.setSelection(range);
+      editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Immediate);
+      editor.focus();
+      return;
+    }
+    const position = model.validatePosition({ lineNumber: revealLine.line, column: revealLine.column ?? 1 });
     editor.setPosition(position);
     editor.revealPositionInCenterIfOutsideViewport(position, monaco.editor.ScrollType.Immediate);
     editor.focus();

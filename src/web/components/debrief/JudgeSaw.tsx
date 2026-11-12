@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CodeEditor } from "../../code/CodeEditor";
+import { CodeEditor, type CodeReveal } from "../../code/CodeEditor";
 import { phasesFor, type Track } from "../../../shared/phases";
 import { lintText } from "../../lib/lintLabel";
 import { StepAnswers } from "../StepAnswers";
@@ -19,9 +19,10 @@ interface JudgeSawProps {
   answers: Readonly<Record<string, string>>;
   /** The judge's own checks of its writing. */
   lint: readonly { field: string; issue: string }[];
+  codeReveal?: CodeReveal | null;
 }
 
-export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers, lint }: JudgeSawProps) {
+export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers, lint, codeReveal }: JudgeSawProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const text = graphText.trim();
 
@@ -64,11 +65,11 @@ export function JudgeSaw({ imageUrl, graphText, code, lld, theme, track, answers
         ) : null}
 
         {lld ? (
-          <Card variant="raised" className="p-4 sm:p-5">
+          <Card id="final-code" variant="raised" className="p-4 sm:p-5">
             <h3 className="mb-2 text-ui font-semibold text-muted-foreground">Final code</h3>
             {code ? (
               <div className="h-[22rem] overflow-hidden rounded-md border border-border [&>*]:h-full [&>*]:w-full">
-                <CodeEditor value={code.content} version={code.version} diagnostics={[]} theme={theme} readOnly />
+                <CodeEditor value={code.content} version={code.version} diagnostics={[]} theme={theme} readOnly revealLine={codeReveal} />
               </div>
             ) : (
               <p className="text-ui text-muted-foreground">The final code is not available.</p>

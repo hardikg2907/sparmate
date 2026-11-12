@@ -490,6 +490,7 @@ async function hldRound(dirs) {
     first.deltas.length >= 2 && first.deltas.map((d) => d.textDelta).join("") === first.reply.entry.text,
     `${first.deltas.length} deltas`,
   );
+  check("interview mode never attaches rich blocks", first.reply.entry.blocks === undefined, JSON.stringify(first.reply.entry.blocks));
   check(
     "a second tab receives the broadcast",
     second.msgs.some((m) => m.type === "chat.message" && m.clientMsgId === "c1"),
@@ -654,6 +655,11 @@ async function hldRound(dirs) {
     label: "coach opening",
   });
   check("coach opens on request", coachOpen.entry.text.includes("Let's start with"), coachOpen.entry.text.slice(0, 80));
+  check(
+    "coach opening attaches structured options block",
+    Array.isArray(coachOpen.entry.blocks) && coachOpen.entry.blocks[0]?.kind === "options",
+    JSON.stringify(coachOpen.entry.blocks),
+  );
   check("coach can read the round's transcript", /I read [1-9]\d* lines of the round/.test(coachOpen.entry.text), coachOpen.entry.text.slice(0, 200));
   mark = c.mark();
   c.send({ type: "chat.send", channel: "coach", clientMsgId: "k1", text: "Can you explain the first gap?" });
@@ -841,6 +847,11 @@ async function guidedRound() {
     "'I'm stuck' gets a model answer and the server counts the assist",
     stuck.entry.text.includes("model answer") && assisted.session.assistCount === 1 && !("assists" in assisted.session),
     stuck.entry.text.slice(0, 60),
+  );
+  check(
+    "guided model answer attaches a flow diagram block",
+    Array.isArray(stuck.entry.blocks) && stuck.entry.blocks[0]?.kind === "diagram" && stuck.entry.blocks[0]?.layout === "flow",
+    JSON.stringify(stuck.entry.blocks),
   );
 
   mark = c.mark();

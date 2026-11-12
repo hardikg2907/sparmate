@@ -1,3 +1,4 @@
+import { blocksToPlainText } from "../../shared/blocks";
 import type { Track } from "../../shared/phases";
 import type { CompileDiagnostic, RunResult, StepSummary, TranscriptEntry } from "../../shared/types";
 import { formatClock, formatStamp, type CheckpointKind } from "./clock";
@@ -287,12 +288,18 @@ export function stepEntries(entries: readonly TranscriptEntry[], history: readon
   return entries.filter((e) => e.channel === "interview" && !e.hidden && e.kind !== "phase" && spans.some(([from, to]) => e.at >= from && e.at <= to));
 }
 
+function entryText(e: Pick<TranscriptEntry, "text" | "blocks">): string {
+  const blocksText = blocksToPlainText(e.blocks);
+  return e.text && blocksText ? `${e.text}\n${blocksText}` : e.text || blocksText;
+}
+
 export function transcriptLines(entries: readonly TranscriptEntry[], channel: TranscriptEntry["channel"]): string {
   return entries
     .filter((e) => e.channel === channel)
     .map((e) => {
       const stamp = `[${formatStamp(e.at)}]`;
-      return e.role === "system" ? `${stamp} (event) ${e.text}` : `${stamp} ${e.role}: ${e.text}`;
+      const content = entryText(e);
+      return e.role === "system" ? `${stamp} (event) ${content}` : `${stamp} ${e.role}: ${content}`;
     })
     .join("\n");
 }
@@ -316,10 +323,10 @@ export function parseStamp(stamp: string): number | null {
 function readableLine(e: TranscriptEntry): string | null {
   const stamp = `[${formatStamp(e.at)}]`;
   const body = (text: string) => text.replace(/\r\n?|[\n\u0085\u2028\u2029]/g, "\n    ");
-  if (e.role !== "system") return `${stamp} ${e.role}: ${body(e.text)}`;
+  if (e.role !== "system") return `${stamp} ${e.role}: ${body(entryText(e))}`;
   if (e.kind === "hint") return `${stamp} (event) The interviewer gave a hint on: ${body(e.text.replace(/^hint H\d:\s*/, ""))}`;
   if (e.hidden) return null;
-  return `${stamp} (event) ${body(e.text)}`;
+  return `${stamp} (event) ${body(entryText(e))}`;
 }
 
 /** One channel of the transcript for a model that reads it after the round and writes for the candidate. */

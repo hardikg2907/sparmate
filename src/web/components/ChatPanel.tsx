@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { blocksToSpeechText, type AnchorTarget } from "../../shared/blocks";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { useVoiceOutput } from "../hooks/useVoiceOutput";
 import { CHAT_MAX_CHARS } from "../lib/contract";
@@ -7,6 +8,7 @@ import { formatClock } from "../lib/format";
 import { isPanelActiveAndVisible } from "../lib/panelVisibility";
 import { useVoices, useVoiceSettings, type VoiceSettings } from "../lib/voiceSettings";
 import type { AgentState, ChatItem } from "../session/types";
+import { ChatBlocks } from "./blocks/ChatBlocks";
 import { ChevronDownIcon, MicIcon, MicOffIcon, SendIcon, VolumeXIcon } from "./icons";
 import { Markdown } from "./Markdown";
 import { Button, Badge, Tooltip, cn } from "./ui";
@@ -59,6 +61,8 @@ interface ChatPanelProps {
   afterOpening?: ReactNode;
   /** Called whenever the draft changes, typed or dictated. */
   onDraft?: () => void;
+  /** Jumps to a board element or code line range referenced by an anchor block. */
+  onAnchor?: (target: AnchorTarget) => void;
 }
 
 export function ChatPanel({
@@ -77,6 +81,7 @@ export function ChatPanel({
   topSlot,
   afterOpening,
   onDraft,
+  onAnchor,
 }: ChatPanelProps) {
   const panelRef = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -85,6 +90,7 @@ export function ChatPanel({
   const held = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
   const [isActive, setIsActive] = useState(true);
+  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const streaming = items.some((item) => item.state === "streaming");
   const busy = agent.state === "thinking" || streaming;
 
@@ -149,7 +155,12 @@ export function ChatPanel({
     }
     if (last && last.id !== announced.current) {
       announced.current = last.id;
-      setAnnouncement(`${speaker}: ${last.text.slice(0, 500)}`);
+      const prose = last.text.trim();
+      const blockSpeech = blocksToSpeechText(last.blocks);
+      const combined = [prose, blockSpeech].filter(Boolean).join(" ");
+      if (combined) {
+        setAnnouncement(`${speaker}: ${combined.slice(0, 500)}`);
+      }
     }
   }, [items, speaker]);
 
@@ -205,6 +216,18 @@ export function ChatPanel({
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
+  const handleSend = (text: string): boolean => {
+    const sent = onSend(text);
+    if (sent) stick.current = true;
+    return sent;
+  };
+
+  const handlePrefill = (text: string): boolean => {
+    if (effectiveDisabled) return false;
+    setPrefill((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }));
+    return true;
+  };
+
   return (
     <section ref={panelRef} aria-label={heading} className="flex h-full min-h-0 flex-col bg-card">
       <header className="chat-head header-hairline flex h-11 shrink-0 items-center justify-between gap-2 px-4">
@@ -248,9 +271,23 @@ export function ChatPanel({
             <div className="px-2 py-8 text-center text-ui text-muted-foreground">{empty}</div>
           ) : (
             <ul className="space-y-5">
-              {items.map((item) => (
-                <Message key={item.id} item={item} speaker={speaker} showTime={showTimes === true} />
-              ))}
+              {items.map((item, index) => {
+                const isAssistant = item.role !== "candidate" && item.role !== "system";
+                const nextCandidate = isAssistant && item.blocks?.length ? items.slice(index + 1).find((m) => m.role === "candidate") : undefined;
+                return (
+                  <Message
+                    key={item.id}
+                    item={item}
+                    speaker={speaker}
+                    showTime={showTimes === true}
+                    settled={Boolean(nextCandidate)}
+                    answeredText={nextCandidate?.text ?? null}
+                    blocksDisabled={effectiveDisabled || agent.state === "thinking"}
+                    onChoose={(text, action) => (action === "prefill" ? handlePrefill(text) : handleSend(text))}
+                    onAnchor={onAnchor}
+                  />
+                );
+              })}
             </ul>
           )}
           {busy ? <Typing speaker={speaker} early={streaming} /> : null}
@@ -277,19 +314,34 @@ export function ChatPanel({
         isSpeaking={isSpeaking}
         tools={tools}
         voiceSettings={voiceSettings}
+        prefill={prefill}
         onBargeIn={stopSpeaking}
         onDraft={onDraft}
-        onSend={(text) => {
-          const sent = onSend(text);
-          if (sent) stick.current = true;
-          return sent;
-        }}
+        onSend={handleSend}
       />
     </section>
   );
 }
 
-function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string; showTime: boolean }) {
+function Message({
+  item,
+  speaker,
+  showTime,
+  settled,
+  answeredText,
+  blocksDisabled,
+  onChoose,
+  onAnchor,
+}: {
+  item: ChatItem;
+  speaker: string;
+  showTime: boolean;
+  settled: boolean;
+  answeredText: string | null;
+  blocksDisabled: boolean;
+  onChoose: (text: string, action: "send" | "prefill") => boolean;
+  onAnchor?: (target: AnchorTarget) => void;
+}) {
   if (item.role === "system") {
     return (
       <li className={cn("flex items-center gap-3 px-1 text-meta text-faint", ENTER)} data-gap-divider={item.kind === "gap" ? item.text : undefined}>
@@ -324,6 +376,7 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
   // The other side reads like a transcript rather than a bubble, so long replies with lists and code stay easy to scan.
   // The card sits on an inner element because `attention` and the enter animation both set `animation`.
   const extension = item.kind === "extension";
+  const hasProse = item.text.trim().length > 0;
   return (
     <li className={cn("flex flex-col", ENTER, !extension && "pr-2")} aria-busy={item.state === "streaming" ? true : undefined}>
       <div className={cn("flex flex-col", extension && "chat-extension surface-raised rounded-lg bg-raised p-3 attention")}>
@@ -334,7 +387,10 @@ function Message({ item, speaker, showTime }: { item: ChatItem; speaker: string;
           {extension ? <Badge tone="accent">New requirement</Badge> : null}
           {item.kind === "hint" ? <Badge tone="warn">Hint</Badge> : null}
         </div>
-        <Markdown text={item.text} className="text-body text-foreground" />
+        {hasProse ? <Markdown text={item.text} className="text-body text-foreground" /> : null}
+        {item.blocks?.length ? (
+          <ChatBlocks blocks={item.blocks} hasProse={hasProse} settled={settled} disabled={blocksDisabled} answeredText={answeredText} onChoose={onChoose} onAnchor={onAnchor} />
+        ) : null}
       </div>
     </li>
   );
@@ -360,6 +416,7 @@ function Composer({
   isActive,
   isSpeaking,
   tools,
+  prefill,
   onSend,
   onBargeIn,
   onDraft,
@@ -371,6 +428,7 @@ function Composer({
   isActive: boolean;
   isSpeaking: boolean;
   tools?: ReactNode;
+  prefill: { text: string; nonce: number } | null;
   onSend: (text: string) => boolean;
   onBargeIn: () => void;
   onDraft?: () => void;
@@ -386,6 +444,7 @@ function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   // The room stays mounted behind the debrief, so two chat boxes can exist at once and each needs its own id.
   const inputId = useId();
+  const prefillSeen = useRef<number>(0);
 
   const voiceInput = useVoiceInput({
     disabled,
@@ -405,6 +464,20 @@ function Composer({
     draft,
     setDraft,
   });
+  const { noteTypedDraft } = voiceInput;
+
+  useEffect(() => {
+    if (!prefill || prefill.nonce === prefillSeen.current) return;
+    prefillSeen.current = prefill.nonce;
+    setDraft(prefill.text);
+    noteTypedDraft(prefill.text);
+    const el = input.current;
+    if (el && !disabled) {
+      el.focus();
+      const end = prefill.text.length;
+      el.setSelectionRange(end, end);
+    }
+  }, [prefill, disabled, noteTypedDraft]);
 
   useEffect(() => {
     const el = input.current;

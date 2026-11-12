@@ -3,6 +3,7 @@ import { unwatchFile, watch, watchFile, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { z } from "zod";
+import type { ChatBlock } from "../../shared/blocks";
 import { deriveChecklist } from "../../shared/checklist";
 import { gapDividerText, gapForTeachMessage } from "../../shared/gaps";
 import { frameEvidence, pinTargets, pinTargetsText, stepFrames, withFrameMembership } from "../../shared/graph/frames";
@@ -36,6 +37,7 @@ import type { PrivacyGuard } from "../guard/privacy";
 import type { CppRunner } from "../runner/cpp";
 import { applyProposal, planProposal } from "../study/bookkeeping";
 import { atomicWrite, resolveInside } from "../study/files";
+import { createEmitBlockTool, isSilentReply, stripDisallowedHintBlocks } from "./chat-blocks";
 import { CheckerOutputSchema, checkerMessage, evidenceKey, mergeCheck, stepReadingText, type CheckerEvidence } from "./checker";
 import {
   CheckpointScheduler,
@@ -77,6 +79,7 @@ import {
   type RoleName,
   type RoomTool,
   type ToolOutput,
+  type TurnMeta,
   type UserTurn,
 } from "./driver";
 import {
@@ -231,6 +234,7 @@ export class UserError extends Error {
 
 interface BuiltTurn {
   turn: UserTurn;
+  checkedPhase?: string;
   /** Marks the context as seen; runs only once the model has answered. */
   commit(): void;
 }
@@ -261,6 +265,13 @@ interface ChannelState {
   boardSeen: number;
   notesSeen: number;
   codeSeen: number;
+  // Tool instances are created once per conversation, so per-turn block state lives on the channel.
+  pendingBlocks: ChatBlock[];
+  currentTurnMeta: TurnMeta | null;
+  checkedPhaseThisTurn: string | null;
+  hintNotedThisTurn: boolean;
+  countOnlyVerdictThisTurn: boolean;
+  namedVerdictPhasesThisTurn: Set<string>;
 }
 
 function newChannel(name: Channel): ChannelState {
@@ -277,7 +288,22 @@ function newChannel(name: Channel): ChannelState {
     boardSeen: -1,
     notesSeen: -1,
     codeSeen: -1,
+    pendingBlocks: [],
+    currentTurnMeta: null,
+    checkedPhaseThisTurn: null,
+    hintNotedThisTurn: false,
+    countOnlyVerdictThisTurn: false,
+    namedVerdictPhasesThisTurn: new Set(),
   };
+}
+
+function resetTurnBlocks(ch: ChannelState): void {
+  ch.pendingBlocks = [];
+  ch.currentTurnMeta = null;
+  ch.checkedPhaseThisTurn = null;
+  ch.hintNotedThisTurn = false;
+  ch.countOnlyVerdictThisTurn = false;
+  ch.namedVerdictPhasesThisTurn.clear();
 }
 
 /**
@@ -1255,6 +1281,9 @@ export class SessionRuntime {
       this.boardLooksThisTurn = 0;
       this.rechecksThisTurn = 0;
       this.passBarredThisTurn = built.turn.meta.request === "stuck";
+      resetTurnBlocks(ch);
+      ch.currentTurnMeta = built.turn.meta;
+      ch.checkedPhaseThisTurn = built.checkedPhase ?? null;
       entryId = newEntryId();
       const f = new SilentFilter((text) => this.broadcast({ type: "chat.delta", channel: ch.name, messageId: entryId, textDelta: text }));
       filter = f;
@@ -1264,11 +1293,21 @@ export class SessionRuntime {
         return;
       }
       const text = f.finish();
+      const silent = isSilentReply(reply.text);
+      const blocks = silent ? [] : [...ch.pendingBlocks];
       ch.queue.shift();
       built.commit();
       ch.freshResume = false;
       this.rememberSdkSession(ch, conv);
-      if (text) this.addEntry({ id: entryId, channel: ch.name, role: ch.name === "coach" ? "coach" : "interviewer", text });
+      if (!silent && (text || blocks.length > 0)) {
+        this.addEntry({
+          id: entryId,
+          channel: ch.name,
+          role: ch.name === "coach" ? "coach" : "interviewer",
+          text,
+          ...(blocks.length > 0 ? { blocks } : {}),
+        });
+      }
       this.setChannelStatus(ch, "idle");
       this.log.info(`${ch.name} turn (${next.kind}) in ${reply.stats.durationMs} ms for session ${this.session.id}`);
       try {
@@ -1285,6 +1324,7 @@ export class SessionRuntime {
     } finally {
       ch.busy = false;
       this.passBarredThisTurn = false;
+      resetTurnBlocks(ch);
       if (ch === this.interview) {
         if (this.session.status === "paused") {
           ch.conv?.close();
@@ -1442,7 +1482,7 @@ export class SessionRuntime {
           this.pinTargetsBlock(),
         ].join("\n");
         const { view, commit } = this.interviewContext(this.interview, false);
-        return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "feedback" } }, commit };
+        return { turn: { text: requestTurn(view, body), meta: { kind: "request", request: "feedback" } }, checkedPhase: phaseId, commit };
       },
       after: () => this.afterInterviewerTurn(),
     };
@@ -1790,6 +1830,8 @@ export class SessionRuntime {
         "Record the hint you are giving in this reply, before you write the reply text, so the debrief can count it. Level 1 points at an area, level 2 names the concern, level 3 offers two options. Write the topic in plain words with no level code in it. The candidate never sees this record.",
         { level: z.number().int().min(1).max(3), topic: z.string().min(1).max(200) },
         async ({ level, topic }) => {
+          ch.hintNotedThisTurn = true;
+          ch.pendingBlocks = stripDisallowedHintBlocks(ch.pendingBlocks);
           const at = this.roundNow();
           const plain = plainHintTopic(topic);
           this.session.hints.push({ at, level: level as 1 | 2 | 3, topic: plain });
@@ -1807,7 +1849,7 @@ export class SessionRuntime {
         },
       ),
     ];
-    // Pins are guided-mode help; an interview round gives none, so the interviewer never gets the tool.
+    // Pins and structured chat blocks are guided-mode help; an interview round gives none, so the interviewer never gets them.
     if (guided) {
       tools.push(
         defineTool(
@@ -1833,11 +1875,14 @@ export class SessionRuntime {
               return textOutput("This reply gives a model answer, so the step cannot pass now. Ask him to redo the step; judge it on his next check.", true);
             if (verdict === "pass" && this.session.stepVerdicts?.[phase]?.verdict !== "pass") {
               const refused = await this.passRefusal(phase);
-              if (refused && this.countsOnly(phase))
+              if (refused && this.countsOnly(phase)) {
+                ch.countOnlyVerdictThisTurn = true;
+                ch.pendingBlocks = [];
                 return textOutput(
                   `The step cannot pass yet. Checks of this step name nothing: call step_verdict with "not_yet" and say only that ${openCountPhrase(this.openCount(phase))} still open.`,
                   true,
                 );
+              }
               if (refused) return textOutput(refused, true);
             }
             // A count-only check stores the count itself, so the page never shows the item the guide was told not to name.
@@ -1847,8 +1892,16 @@ export class SessionRuntime {
             if (!done.ok) return textOutput(done.error, true);
             this.saveSoon();
             this.sendState();
-            if (counted) return textOutput(`Recorded: not yet. The page shows: "${input.gap}" Name nothing that is missing in your reply.`);
-            if (verdict === "not_yet") return textOutput("Recorded: not yet.");
+            if (counted) {
+              ch.countOnlyVerdictThisTurn = true;
+              ch.pendingBlocks = [];
+              return textOutput(`Recorded: not yet. The page shows: "${input.gap}" Name nothing that is missing in your reply.`);
+            }
+            if (verdict === "not_yet") {
+              // The second miss flips countsOnly for future turns, not for the named check currently finishing.
+              ch.namedVerdictPhasesThisTurn.add(phase);
+              return textOutput("Recorded: not yet.");
+            }
             this.notePractice(phase);
             return textOutput(`Recorded: the step passed. Steps now: ${this.stepsLine()}.`);
           },
@@ -1864,6 +1917,22 @@ export class SessionRuntime {
             return this.recheckStep(phase);
           },
         ),
+        createEmitBlockTool({
+          channel: "interview",
+          track: this.session.track,
+          pendingCount: () => ch.pendingBlocks.length,
+          pushBlock: (block) => {
+            ch.pendingBlocks.push(block);
+            return ch.pendingBlocks.length;
+          },
+          turnMeta: () => ch.currentTurnMeta,
+          hintNotedThisTurn: () => ch.hintNotedThisTurn,
+          currentPhase: () => ch.checkedPhaseThisTurn ?? this.session.phase,
+          isCountOnly: (phase) => this.countsOnly(phase) && !ch.namedVerdictPhasesThisTurn.has(phase),
+          countOnlyVerdictThisTurn: () => ch.countOnlyVerdictThisTurn,
+          boardElements: () => this.boardElements,
+          readCode: () => this.codeContent,
+        }),
       );
     }
     if (this.session.track === "lld") {
@@ -1991,13 +2060,29 @@ export class SessionRuntime {
       defineTool("view_whiteboard", "See the candidate's final whiteboard: an image plus its exact text form.", {}, async () => {
         ch.boardSeen = this.session.board.version;
         const png = await this.deps.store.readFinalPng(this.session.id);
-        if (!png) return textOutput(`No image of the final board was saved, so here is the text form only.\n\n${this.boardText()}`);
+        const text = `${this.boardText()}\n\n${this.pinTargetsBlock()}`;
+        if (!png) return textOutput(`No image of the final board was saved, so here is the text form only.\n\n${text}`);
         return {
           content: [
             { type: "image", data: png.toString("base64"), mimeType: "image/png" },
-            { type: "text", text: this.boardText() },
+            { type: "text", text },
           ],
         };
+      }),
+      createEmitBlockTool({
+        channel: "coach",
+        track: this.session.track,
+        pendingCount: () => ch.pendingBlocks.length,
+        pushBlock: (block) => {
+          ch.pendingBlocks.push(block);
+          return ch.pendingBlocks.length;
+        },
+        turnMeta: () => ch.currentTurnMeta,
+        hintNotedThisTurn: () => false,
+        currentPhase: () => this.session.phase,
+        isCountOnly: () => false,
+        boardElements: () => this.boardElements,
+        readCode: async () => (await this.readAttemptFile()) ?? (await this.deps.store.readFinalCode(this.session.id)) ?? this.codeContent,
       }),
     ];
     if (this.session.track === "lld") {
@@ -2529,7 +2614,15 @@ export class SessionRuntime {
   }
 
   private addEntry(
-    e: { id?: string; channel: Channel; role: TranscriptEntry["role"]; text: string; kind?: TranscriptEntry["kind"]; hidden?: boolean },
+    e: {
+      id?: string;
+      channel: Channel;
+      role: TranscriptEntry["role"];
+      text: string;
+      blocks?: ChatBlock[];
+      kind?: TranscriptEntry["kind"];
+      hidden?: boolean;
+    },
     clientMsgId?: string,
   ): TranscriptEntry {
     const entry: TranscriptEntry = {
@@ -2539,6 +2632,7 @@ export class SessionRuntime {
       channel: e.channel,
       role: e.role,
       text: e.text,
+      ...(e.blocks && e.blocks.length > 0 ? { blocks: e.blocks } : {}),
       ...(e.kind ? { kind: e.kind } : {}),
       ...(e.hidden ? { hidden: true } : {}),
     };

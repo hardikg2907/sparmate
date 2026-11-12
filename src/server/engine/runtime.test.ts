@@ -2696,3 +2696,393 @@ describe("guided step verdicts, assists and move-on offers", () => {
     rt.dispose();
   });
 });
+
+describe("rich chat blocks", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  function scriptedDriver(script: (role: ConversationSetup["role"], turn: UserTurn, tools: RoomTool[]) => Promise<string> | string): {
+    driver: Driver;
+    seenTools: Map<string, string[]>;
+  } {
+    const base = createFakeDriver({ chunkDelayMs: 0 });
+    const seenTools = new Map<string, string[]>();
+    const driver: Driver = {
+      ...base,
+      startConversation(convSetup) {
+        seenTools.set(
+          convSetup.role,
+          convSetup.tools.map((x) => x.name),
+        );
+        let closed = false;
+        let sid = convSetup.resumeSessionId;
+        return {
+          sdkSessionId: () => sid,
+          close: () => {
+            closed = true;
+          },
+          async send(turn, handlers) {
+            if (closed) throw new DriverError("Closed");
+            sid ??= `scripted-${convSetup.role}`;
+            const text = await script(convSetup.role, turn, convSetup.tools);
+            if (text) handlers.onTextDelta(text);
+            return { text, stats: { durationMs: 1, costUsd: 0 } };
+          },
+        };
+      },
+    };
+    return { driver, seenTools };
+  }
+
+  it("exposes emit_block to guided and coach channels, and never to interviewer mode", async () => {
+    const s1 = scriptedDriver(() => "Opening.");
+    const ti = setup(s1.driver, "interview");
+    const rti = await ti.start(newSession("interview"));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(s1.seenTools.get("interviewer")).not.toContain("emit_block");
+    rti.dispose();
+
+    const s2 = scriptedDriver(() => "Opening.");
+    const tg = setup(s2.driver, "guided");
+    const guidedSession = newSession("guided");
+    const rtg = await tg.start(guidedSession);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(s2.seenTools.get("guide")).toContain("emit_block");
+    rtg.dispose();
+
+    const coachSession = newSession("interview");
+    coachSession.status = "debriefed";
+    coachSession.scorecard = {
+      gaps: [{ title: "Hot keys", severity: "major", whyItMatters: "x", whatGoodLooksLike: "y", teachMinutes: 8 }],
+      verdict: { sde2: "hire", senior: "lean_no_hire", summary: "ok" },
+    } as unknown as Session["scorecard"];
+    const s3 = scriptedDriver(() => "Let's look at hot keys.");
+    const tc = setup(s3.driver, "interview");
+    const rtc = new SessionRuntime(tc.deps, coachSession, await urlShortener());
+    await rtc.init();
+    rtc.attach(tc.peer);
+    await rtc.handle({ type: "coach.open" }, tc.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(s3.seenTools.get("coach")).toContain("emit_block");
+    rtc.dispose();
+  });
+
+  it("attaches blocks to entry.blocks in FakeDriver without altering streamed entry.text", async () => {
+    const t = setup(createFakeDriver({ chunkDelayMs: 0 }), "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Hints 1 and 2 have no blocks; Hint 3 attaches a 2-item options block.
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const hintReplies = t.msgs.flatMap((m) => (m.type === "chat.message" && m.entry.role === "interviewer" && m.entry.text.startsWith("Hint ") ? [m.entry] : []));
+    expect(hintReplies).toHaveLength(3);
+    expect(hintReplies[0]?.blocks).toBeUndefined();
+    expect(hintReplies[1]?.blocks).toBeUndefined();
+    expect(hintReplies[2]?.blocks).toHaveLength(1);
+    expect(hintReplies[2]?.blocks?.[0]?.kind).toBe("options");
+
+    // Streamed deltas for Hint 3 match entry.text byte-for-byte.
+    const h3Id = hintReplies[2]?.id;
+    const streamedH3 = t.msgs.flatMap((m) => (m.type === "chat.delta" && m.messageId === h3Id ? [m.textDelta] : [])).join("");
+    expect(streamedH3).toBe(hintReplies[2]?.text);
+
+    // "I'm stuck" attaches a 3-node flow diagram alongside the model answer prose.
+    await rt.handle({ type: "guided.stuck" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const stuckReply = [...t.msgs].reverse().find((m): m is Extract<ServerMsg, { type: "chat.message" }> => m.type === "chat.message" && m.entry.role === "interviewer");
+    expect(stuckReply?.entry.text).toContain("model answer");
+    expect(stuckReply?.entry.blocks?.[0]).toMatchObject({ kind: "diagram", layout: "flow" });
+
+    // Ending and opening Coach attaches an options block on coach_open while preserving prose.
+    await rt.handle({ type: "session.end" }, t.peer);
+    await vi.waitFor(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(session.status).toBe("debriefed");
+    });
+    await rt.handle({ type: "coach.open" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const coachOpen = t.msgs.find((m): m is Extract<ServerMsg, { type: "chat.message" }> => m.type === "chat.message" && m.entry.channel === "coach" && m.entry.role === "coach");
+    expect(coachOpen?.entry.text).toContain("Let's start with");
+    expect(coachOpen?.entry.blocks?.[0]?.kind).toBe("options");
+    rt.dispose();
+  });
+
+  it("discards queued blocks when the reply is <silent/>, and keeps blocks-only replies when prose is empty", async () => {
+    const s = scriptedDriver(async (_role, turn, tools) => {
+      const emit = tools.find((x) => x.name === "emit_block")!;
+      if (turn.meta.kind === "start") return "Start.";
+      if (turn.meta.kind === "clock") {
+        await emit.run({ block: { kind: "callout", text: "Should be dropped on silent." } });
+        return "<silent/>";
+      }
+      await emit.run({ block: { kind: "callout", label: "Constraint", text: "Peak traffic is 10x average." } });
+      return "";
+    });
+    const t = setup(s.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Planned end of requirements fires a clock turn at 5:00; its <silent/> reply drops the queued block.
+    await rt.handle({ type: "notes.update", phase: "requirements", text: "Active work", version: 1 }, t.peer);
+    await vi.advanceTimersByTimeAsync(5 * MIN + 1_000);
+    expect(session.transcript.filter((e) => e.role === "interviewer")).toHaveLength(1);
+
+    // Candidate message gets a blocks-only reply (empty prose, non-silent).
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "m1", text: "Give me a curveball." }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const replies = session.transcript.filter((e) => e.role === "interviewer");
+    expect(replies).toHaveLength(2);
+    expect(replies[1]?.text).toBe("");
+    expect(replies[1]?.blocks).toEqual([{ kind: "callout", label: "Constraint", text: "Peak traffic is 10x average." }]);
+    rt.dispose();
+  });
+
+  it("clears pendingBlocks when a turn fails so a retry or replay never leaks stale blocks", async () => {
+    let failCandidateOnce = true;
+    const s = scriptedDriver(async (_role, turn, tools) => {
+      const emit = tools.find((x) => x.name === "emit_block")!;
+      if (turn.meta.kind === "start") return "Start.";
+      if (failCandidateOnce) {
+        failCandidateOnce = false;
+        await emit.run({ block: { kind: "callout", text: "Stale block from failed attempt" } });
+        throw new DriverError("Connection dropped.");
+      }
+      return "Clean retry reply with no blocks.";
+    });
+    const t = setup(s.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "m1", text: "Hello" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(session.status).toBe("paused");
+    expect(session.pauseReason).toBe("error");
+
+    await rt.handle({ type: "session.resume" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const last = [...session.transcript].reverse().find((e) => e.role === "interviewer");
+    expect(last?.text).toBe("Clean retry reply with no blocks.");
+    expect(last?.blocks).toBeUndefined();
+    rt.dispose();
+  });
+
+  it("enforces hint, stuck, and count-only guardrails across turns, including mid-turn note_hint stripping", async () => {
+    const toolResults: boolean[] = [];
+    const s = scriptedDriver(async (_role, turn, tools) => {
+      const emit = tools.find((x) => x.name === "emit_block")!;
+      const noteHint = tools.find((x) => x.name === "note_hint")!;
+      const verdict = tools.find((x) => x.name === "step_verdict")!;
+      if (turn.meta.kind === "start") return "Start.";
+
+      if (turn.meta.request === "hint") {
+        const r1 = await emit.run({
+          block: {
+            kind: "diagram",
+            layout: "flow",
+            nodes: [
+              { id: "a", label: "A" },
+              { id: "b", label: "B" },
+            ],
+            edges: [{ from: "a", to: "b" }],
+          },
+        });
+        const r2 = await emit.run({ block: { kind: "kv", rows: [{ key: "k", value: "v" }] } });
+        const r3 = await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
+        toolResults.push(Boolean(r1.isError), Boolean(r2.isError), Boolean(r3.isError));
+        return "Hint reply.";
+      }
+
+      if (turn.meta.candidateText === "give me a hint in chat") {
+        // Emit a diagram and a callout BEFORE calling note_hint, then try kv AFTER note_hint.
+        await emit.run({
+          block: {
+            kind: "diagram",
+            layout: "flow",
+            nodes: [
+              { id: "a", label: "A" },
+              { id: "b", label: "B" },
+            ],
+            edges: [{ from: "a", to: "b" }],
+          },
+        });
+        await emit.run({ block: { kind: "callout", text: "Think about write amplification." } });
+        await noteHint.run({ level: 1, topic: "write amplification" });
+        const afterHint = await emit.run({ block: { kind: "kv", rows: [{ key: "QPS", value: "10k" }] } });
+        toolResults.push(Boolean(afterHint.isError));
+        return "Nudge in chat.";
+      }
+
+      if (turn.meta.request === "stuck") {
+        const rOpts = await emit.run({ block: { kind: "options", items: [{ label: "A" }, { label: "B" }] } });
+        const rKv = await emit.run({ block: { kind: "kv", rows: [{ key: "k", value: "v" }] } });
+        const rDiag = await emit.run({
+          block: {
+            kind: "diagram",
+            layout: "flow",
+            nodes: [
+              { id: "a", label: "A" },
+              { id: "b", label: "B" },
+            ],
+            edges: [{ from: "a", to: "b" }],
+          },
+        });
+        toolResults.push(Boolean(rOpts.isError), Boolean(rKv.isError), Boolean(rDiag.isError));
+        return "Model answer.";
+      }
+
+      if (turn.meta.request === "feedback") {
+        await verdict.run({ phase: "requirements", verdict: "not_yet", gap: "What latency target must redirects meet?" });
+        const rCallout = await emit.run({ block: { kind: "callout", text: "Latency target open" } });
+        const rHldCode = await emit.run({ block: { kind: "anchor", target: { kind: "code", line: 1 }, label: "main" } });
+        toolResults.push(Boolean(rCallout.isError), Boolean(rHldCode.isError));
+        return "Still open.";
+      }
+
+      return "Ok.";
+    });
+
+    const t = setup(s.driver, "guided");
+    const session = newSession("guided");
+    const rt = await t.start(session);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // 1. Explicit hint button turn
+    await rt.handle({ type: "guided.hint" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(toolResults.splice(0)).toEqual([true, true, false]);
+    expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks?.map((b) => b.kind)).toEqual(["options"]);
+
+    // 2. Candidate asks for a hint in chat: note_hint strips the earlier diagram while keeping callout, and blocks kv after.
+    await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "h-chat", text: "give me a hint in chat" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(toolResults.splice(0)).toEqual([true]);
+    expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks).toEqual([{ kind: "callout", text: "Think about write amplification." }]);
+
+    // 3a. Second "Not yet" (misses 1 -> 2) is still a named check: callout succeeds after step_verdict, HLD code anchor is refused.
+    session.stepVerdicts = { requirements: { verdict: "not_yet", gap: "Missing scale", at: 1, misses: 1 } };
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(toolResults.splice(0)).toEqual([false, true]);
+    expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks?.map((b) => b.kind)).toEqual(["callout"]);
+
+    // 3b. Third check (misses >= 2 at turn start) is count-only and refuses emit_block.
+    await rt.handle({ type: "guided.feedback" }, t.peer);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(toolResults.splice(0)).toEqual([true, true]);
+    expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks).toBeUndefined();
+
+    // 4. "I'm stuck" refuses options and kv, and accepts diagram.
+    await rt.handle({ type: "guided.stuck" }, t.peer);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(toolResults.splice(0)).toEqual([true, true, false]);
+    expect(session.transcript.findLast((e) => e.role === "interviewer")?.blocks?.map((b) => b.kind)).toEqual(["diagram"]);
+
+    rt.dispose();
+  });
+
+  it("validates board anchors, lists pin targets in Coach view_whiteboard, and validates LLD code anchors in live and debrief modes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ir-blocks-lld-"));
+    const attemptRel = "lld/parking-lot/attempt-2026-10-30.cpp";
+    await mkdir(join(root, "lld", "parking-lot"), { recursive: true });
+    const cpp = ["#include <iostream>", "struct Spot {", "  int id = 0;", "};"].join("\n");
+    await writeFile(join(root, attemptRel), cpp);
+
+    try {
+      const boardElements = [
+        { id: "f-clarify", type: "frame", name: "Clarify", x: 0, y: 0, width: 500, height: 300, customData: { step: "clarify" } },
+        { id: "box-spot", type: "rectangle", frameId: "f-clarify", x: 40, y: 40, width: 120, height: 60 },
+        { id: "txt-spot", type: "text", containerId: "box-spot", text: "Spot", originalText: "Spot", x: 50, y: 55, width: 80, height: 20 },
+      ];
+
+      let coachBoardView = "";
+      const outcomes: boolean[] = [];
+      const s = scriptedDriver(async (role, turn, tools) => {
+        const emit = tools.find((x) => x.name === "emit_block")!;
+        if (turn.meta.kind === "start") return "Start LLD.";
+        if (role === "guide") {
+          const badBoard = await emit.run({
+            block: { kind: "anchor", target: { kind: "board", elementId: "missing-box" }, label: "Missing" },
+          });
+          const goodBoard = await emit.run({
+            block: { kind: "anchor", target: { kind: "board", elementId: "box-spot" }, label: "Spot box" },
+          });
+          const outOfRangeCode = await emit.run({
+            block: { kind: "anchor", target: { kind: "code", line: 2, endLine: 10 }, label: "Spot" },
+          });
+          const goodCode = await emit.run({
+            block: { kind: "anchor", target: { kind: "code", line: 2, endLine: 4 }, label: "struct Spot" },
+          });
+          outcomes.push(Boolean(badBoard.isError), Boolean(goodBoard.isError), Boolean(outOfRangeCode.isError), Boolean(goodCode.isError));
+          return "Checked your board and code.";
+        }
+        if (role === "coach") {
+          const wb = await tools.find((x) => x.name === "view_whiteboard")!.run({});
+          coachBoardView = wb.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+          const goodBoard = await emit.run({
+            block: { kind: "anchor", target: { kind: "board", elementId: "box-spot" }, label: "Final Spot box" },
+          });
+          const goodCode = await emit.run({
+            block: { kind: "anchor", target: { kind: "code", line: 1, endLine: 4 }, label: "Final Spot file" },
+          });
+          outcomes.push(Boolean(goodBoard.isError), Boolean(goodCode.isError));
+          return "Debriefing Spot.";
+        }
+        return "Ok.";
+      });
+
+      const file = join(APP_ROOT, "content", "problems", "lld", "b3-parking-lot.md");
+      const problem = parseProblem(await readFile(file, "utf8"), file, false);
+      const t = setup(s.driver, "guided", root);
+      t.store.board = { version: 1, elements: boardElements };
+      t.store.code = cpp;
+      const session: Session = {
+        ...newSession("guided"),
+        id: "20261030-1000-b3-parking-lot-abcd",
+        problemId: "b3-parking-lot",
+        title: "Parking Lot",
+        track: "lld",
+        durationMs: 90 * MIN,
+        phase: "clarify",
+        phaseHistory: [{ phase: "clarify", at: 0, by: "candidate" }],
+        board: { version: 1, graphText: "Nodes:\n- [Spot]", updatedAt: 0 },
+        code: { path: attemptRel, version: 1, lastRun: null },
+      };
+
+      const rt = await t.start(session, problem);
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      await rt.handle({ type: "chat.send", channel: "interview", clientMsgId: "m1", text: "Check Spot" }, t.peer);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(outcomes.splice(0)).toEqual([true, false, true, false]);
+      const guideReply = session.transcript.findLast((e) => e.channel === "interview" && e.role === "interviewer");
+      expect(guideReply?.blocks).toHaveLength(2);
+
+      // Move session to debriefed and verify Coach view_whiteboard + board/code anchors.
+      session.status = "debriefed";
+      session.scorecard = {
+        gaps: [{ title: "Spot locking", severity: "major", whyItMatters: "x", whatGoodLooksLike: "y", teachMinutes: 8 }],
+        verdict: { sde2: "hire", senior: "lean_no_hire", summary: "ok" },
+      } as unknown as Session["scorecard"];
+      await rt.handle({ type: "coach.open" }, t.peer);
+      await vi.waitFor(() => expect(session.transcript.some((e) => e.channel === "coach" && e.role === "coach")).toBe(true));
+      expect(coachBoardView).toContain("Pin targets");
+      expect(coachBoardView).toContain('box-spot: box "Spot"');
+      expect(outcomes.splice(0)).toEqual([false, false]);
+      const coachReply = session.transcript.findLast((e) => e.channel === "coach" && e.role === "coach");
+      expect(coachReply?.blocks).toHaveLength(2);
+
+      rt.dispose();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

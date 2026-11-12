@@ -53,13 +53,33 @@ const MIN = 60_000;
 export function hldRoom(mode: Mode, status: "live" | "paused" = "live", pauseReason?: PublicSession["pauseReason"]): PublicSession {
   const roundMs = 17.5 * MIN;
   const base = Date.now() - roundMs;
+  const guided = mode === "guided";
   const e = (id: string, at: number, role: TranscriptEntry["role"], text: string, extra?: Partial<TranscriptEntry>) => entry(base, id, at, role, text, extra);
   const transcript: TranscriptEntry[] = [
     e("t1", 0, "interviewer", "Let's design a URL shortener, something like bit.ly. Where would you like to start?"),
     e("t2", 20, "candidate", "Before I design anything, I want to pin down scope. Who creates links, and do we need custom aliases?"),
     e("t3", 38, "interviewer", "Anyone with an API key can create links. A custom alias is optional. An expiry date is optional too."),
     e("t4", 72, "candidate", "Next, scale. How many new links a month, and what is the read to write ratio?"),
-    e("t5", 90, "interviewer", "About 100 million new links a month. Roughly 100 redirects for every link created."),
+    e(
+      "t5",
+      90,
+      "interviewer",
+      "About 100 million new links a month. Roughly 100 redirects for every link created.",
+      guided
+        ? {
+            blocks: [
+              {
+                kind: "kv",
+                rows: [
+                  { key: "New links", value: "100M / month (~40 writes/s)" },
+                  { key: "Redirects", value: "10B / month (~4,000 reads/s)" },
+                  { key: "Read : write", value: "100 : 1" },
+                ],
+              },
+            ],
+          }
+        : undefined,
+    ),
     e("t6", 276, "system", "Moved to Core entities", { kind: "phase" }),
     e(
       "t7",
@@ -70,11 +90,70 @@ export function hldRoom(mode: Mode, status: "live" | "paused" = "live", pauseRea
     e("t8", 322, "interviewer", "Okay, go on."),
     e("t9", 432, "system", "Moved to API", { kind: "phase" }),
     e("t10", 470, "candidate", "POST /v1/links takes the long URL, an optional alias and an optional expiry. GET /{code} answers with a redirect."),
-    e("t11", 505, "interviewer", "Why a `302` and not a `301`? Think about what each one lets the browser do."),
+    e(
+      "t11",
+      505,
+      "interviewer",
+      "Why a `302` and not a `301`? Think about what each one lets the browser do.",
+      guided
+        ? {
+            blocks: [
+              {
+                kind: "options",
+                items: [
+                  {
+                    label: "302 Found",
+                    note: "Browsers hit our redirect service each time so clicks count and deletes take effect",
+                    reply: "A 301 gets cached by browsers, so I could not count clicks or delete a link quickly. So I pick 302.",
+                  },
+                  {
+                    label: "301 Moved Permanently",
+                    note: "Browsers cache the destination indefinitely and bypass our servers",
+                    reply: "I would pick 301 so repeat visits stay off our servers even if click counts lag.",
+                  },
+                ],
+              },
+            ],
+          }
+        : undefined,
+    ),
     e("t12", 540, "candidate", "A 301 gets cached by browsers, so I could not count clicks or delete a link quickly. So I pick 302."),
     e("t13", 684, "system", "Moved to High-level design", { kind: "phase" }),
     e("t14", 720, "candidate", "My design has a CDN in front, then a stateless redirect service, Redis for the hot set, and Postgres as the source of truth. Let me draw it."),
-    e("t15", 1000, "interviewer", "Walk me through one redirect, start to finish."),
+    e(
+      "t15",
+      1000,
+      "interviewer",
+      "Walk me through one redirect, start to finish.",
+      guided
+        ? {
+            blocks: [
+              {
+                kind: "anchor",
+                target: { kind: "board", elementId: "redis" },
+                label: "Redis hot-set cache",
+                note: "Pinned note: state the TTL and what happens on a miss",
+              },
+              {
+                kind: "options",
+                action: "prefill",
+                items: [
+                  {
+                    label: "Trace a hot-set cache hit first",
+                    note: "Client -> CDN -> Redirect service -> Redis -> 302",
+                    reply: "On a cache hit, the client hits the CDN, reaches a stateless redirect server, reads the long URL from Redis, and gets a 302.",
+                  },
+                  {
+                    label: "Trace a cold miss all the way to Postgres",
+                    note: "Include populating Redis and handling an expired row",
+                    reply: "On a cache miss, the redirect server checks Redis, falls back to Postgres by primary key, populates Redis with a TTL, and returns 302.",
+                  },
+                ],
+              },
+            ],
+          }
+        : undefined,
+    ),
   ];
   return buildSession({
     id: "20261030-1015-c2-url-shortener-fx01",
@@ -355,7 +434,7 @@ export function hldDebrief(status: PublicSession["status"] = "debriefed"): Publi
   const roundMs = 44.2 * MIN;
   const base = Date.now() - roundMs - 4 * MIN;
   const e = (id: string, at: number, role: TranscriptEntry["role"], text: string, extra?: Partial<TranscriptEntry>) => entry(base, id, at, role, text, extra);
-  const c = (id: string, at: number, role: "coach" | "candidate", text: string) => coachEntry(base, id, at, role, text);
+  const c = (id: string, at: number, role: "coach" | "candidate", text: string, extra?: Partial<TranscriptEntry>) => coachEntry(base, id, at, role, text, extra);
   const divider = (id: string, at: number, title: string) => entry(base, id, at, "system", `Now on: ${title}`, { channel: "coach", kind: "gap" });
   const transcript: TranscriptEntry[] = [
     e("t1", 0, "interviewer", "Let's design a URL shortener, something like bit.ly. Where would you like to start?"),
@@ -373,7 +452,33 @@ export function hldDebrief(status: PublicSession["status"] = "debriefed"): Publi
       "c3",
       roundMs / 1000 + 62,
       "coach",
-      'Right. That is the clash. Here it is in a picture:\n\n```\n server A: counter = 1000 -> code "g8"\n server B: counter = 1000 -> code "g8"   <- two links, one code\n```\n\nThe fix is to stop each server from owning the counter alone. One way is to give each server a **block** of ids, for example 1,000 at a time. Each server then counts inside its own block.\n\nWhat do you think happens to the unused ids in a block when a server crashes?',
+      "Right. That is the clash. Instead of each server owning a shared counter per request, a small coordinator hands each server a disjoint **block** of ids (say 1,000 at a time), and each server counts locally inside its block.\n\nWhat do you think happens to the unused ids in a block when a server crashes?",
+      {
+        blocks: [
+          {
+            kind: "diagram",
+            layout: "flow",
+            title: "Range allocation per create server",
+            nodes: [
+              { id: "coord", label: "Range coordinator", detail: "leases 1,000 ids" },
+              { id: "srvA", label: "Create server A", detail: "1000..1999" },
+              { id: "srvB", label: "Create server B", detail: "2000..2999" },
+              { id: "pg", label: "Links table", detail: "base62 primary key" },
+            ],
+            edges: [
+              { from: "coord", to: "srvA", label: "lease" },
+              { from: "coord", to: "srvB", label: "lease" },
+              { from: "srvA", to: "pg", label: "insert" },
+              { from: "srvB", to: "pg", label: "insert" },
+            ],
+          },
+          {
+            kind: "callout",
+            label: "Key invariant",
+            text: "Disjoint `[start, end)` leases keep code generation lock-free on the hot write path.",
+          },
+        ],
+      },
     ),
     c("c4", roundMs / 1000 + 100, "candidate", "They are lost, but that is fine. A gap in the codes costs nothing, and the next block starts above the last one."),
     divider("d2", roundMs / 1000 + 130, "What happens when the cache tier is gone"),
@@ -382,6 +487,17 @@ export function hldDebrief(status: PublicSession["status"] = "debriefed"): Publi
       roundMs / 1000 + 130,
       "coach",
       "Yes, that holds. Lost ids cost nothing, so no recovery step is needed.\n\nNext is the cache tier. This gap takes about 14 minutes. Do you want the full lesson now, or the core idea now and the rest as a topic session later?",
+      {
+        blocks: [
+          {
+            kind: "options",
+            items: [
+              { label: "Core idea now, the rest later.", note: "~4 min summary now, queue full lesson for later" },
+              { label: "Full lesson now", note: "~14 min walkthrough with Postgres load math" },
+            ],
+          },
+        ],
+      },
     ),
     c("c6", roundMs / 1000 + 160, "candidate", "Core idea now, the rest later."),
     c(
@@ -389,9 +505,43 @@ export function hldDebrief(status: PublicSession["status"] = "debriefed"): Publi
       roundMs / 1000 + 190,
       "coach",
       "The core idea: with no cache, every redirect reads Postgres, so the load is about 100 times what the database was sized for. Protect it with a request limit before you add capacity.\n\nThis is the core idea only. The topic session will cover warm standby caches and request coalescing. The notes draft will add it to your tracker.",
+      {
+        blocks: [
+          {
+            kind: "anchor",
+            target: { kind: "board", elementId: "redis" },
+            label: "Redis hot-set cache",
+            note: "High-level design frame — check fallback load on Postgres",
+          },
+          {
+            kind: "callout",
+            label: "Takeaway",
+            text: "Cap fallback QPS at the redirect tier before a cold cache turns into a database outage.",
+          },
+        ],
+      },
     ),
     divider("d3", roundMs / 1000 + 220, "Index and key choice for the links table"),
-    c("c8", roundMs / 1000 + 220, "coach", "Next, the links table. The redirect path looks a link up by its code. Which column would you make the primary key, and why?"),
+    c("c8", roundMs / 1000 + 220, "coach", "Next, the links table. The redirect path looks a link up by its code. Which column would you make the primary key, and why?", {
+      blocks: [
+        {
+          kind: "options",
+          action: "prefill",
+          items: [
+            {
+              label: "code as primary key",
+              note: "Single B-tree lookup on every redirect",
+              reply: "I would make code the primary key because every redirect queries by code, avoiding a secondary-index hop.",
+            },
+            {
+              label: "Surrogate bigint primary key + unique index on code",
+              note: "Sequential inserts, extra index lookup on reads",
+              reply: "I would use a bigint primary key for sequential inserts and put a unique index on code.",
+            },
+          ],
+        },
+      ],
+    }),
   ];
   const session = buildSession({
     id: "20261030-1015-c2-url-shortener-fx03",
@@ -629,6 +779,55 @@ export function lldDebrief(status: PublicSession["status"] = "debriefed"): Publi
       roundMs / 1000,
       "coach",
       "The design was clean, and the lock was in the right place. The round lost its bar on one thing: an unknown ticket freed a spot.\n\nLet's start there. What should `exit(99, 10)` do when ticket 99 was never issued?",
+      {
+        blocks: [
+          {
+            kind: "diagram",
+            layout: "sequence",
+            title: "How exit(99, 10) freed spot 0",
+            actors: [
+              { id: "caller", label: "Caller" },
+              { id: "lot", label: "ParkingLot" },
+              { id: "tickets", label: "tickets_" },
+              { id: "spots", label: "spots_" },
+            ],
+            steps: [
+              { from: "caller", to: "lot", label: "exit(99, 10)" },
+              { from: "lot", to: "tickets", label: "operator[](99) inserts spotId = 0" },
+              { from: "lot", to: "spots", label: "spots_[0].ticketId.reset()" },
+              { from: "lot", to: "caller", label: "returns 0 (spot 0 now free)", style: "dashed" },
+            ],
+          },
+          {
+            kind: "anchor",
+            target: { kind: "code", line: 60, endLine: 65 },
+            label: "ParkingLot::exit(int ticketId, int minute)",
+            note: "tickets_[ticketId] default-inserts before checking validity",
+          },
+          {
+            kind: "anchor",
+            target: { kind: "board", elementId: "lot" },
+            label: "ParkingLot on the Entities frame",
+            note: "Pinned gap: exit() trusts any ticket id",
+          },
+          {
+            kind: "options",
+            action: "prefill",
+            items: [
+              {
+                label: "Return std::nullopt without mutating state",
+                note: "Use tickets_.find(ticketId) and reject missing or closed tickets",
+                reply: "Look up with tickets_.find(ticketId), reject missing or already-closed tickets, and return std::nullopt without touching spots_.",
+              },
+              {
+                label: "Return -1 sentinel on invalid ticket",
+                note: "Keep int return type and guard before resetting spot",
+                reply: "Keep int exit(...) returning -1 when tickets_.find(ticketId) misses or ticket.open is false, before resetting spots_.",
+              },
+            ],
+          },
+        ],
+      },
     ),
   ];
   const session = buildSession({

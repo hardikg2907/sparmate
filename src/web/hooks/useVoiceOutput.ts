@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../backend";
-import { markRepliesHeard, replyToSpeak } from "../lib/replySpeech";
-import { cleanMarkdownForSpeech } from "../lib/speechCleaning";
-import { splitSentences } from "../lib/speechSentences";
+import { markRepliesHeard, replySpeechSentences, replyToSpeak } from "../lib/replySpeech";
 import { pickDefaultSystemVoice } from "../lib/systemVoiceRanking";
 import type { VoiceSettings } from "../lib/voiceSettings";
 import type { ChatItem } from "../session/types";
@@ -315,8 +313,7 @@ export function useVoiceOutput({ items, disabled, voiceSettings, voices }: UseVo
     if (currentStream.stopped) return;
 
     const isFinal = latest.state === "done";
-    const cleaned = cleanMarkdownForSpeech(latest.text, isFinal);
-    const { sentences } = splitSentences(cleaned, isFinal);
+    const sentences = replySpeechSentences(latest);
 
     if (sentences.length > currentStream.spokenCount) {
       const newSentences = sentences.slice(currentStream.spokenCount);

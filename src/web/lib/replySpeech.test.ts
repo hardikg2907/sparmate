@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatItem } from "../session/types";
-import { markRepliesHeard, replyToSpeak } from "./replySpeech";
+import { markRepliesHeard, replySpeechSentences, replyToSpeak } from "./replySpeech";
 
 function reply(id: string, text: string, state: ChatItem["state"] = "streaming"): ChatItem {
   return { id, role: "interviewer", text, at: null, state };
@@ -36,5 +36,47 @@ describe("which reply is read aloud", () => {
 
   it("ignores the user's own messages and system notes", () => {
     expect(replyToSpeak([mine, { ...mine, id: "s1", role: "system" }], new Set(), null)).toBeNull();
+  });
+});
+
+describe("replySpeechSentences", () => {
+  it("speaks all blocks when a finished turn has no prose", () => {
+    const item: ChatItem = {
+      id: "m1",
+      role: "coach",
+      text: "   ",
+      at: 1000,
+      state: "done",
+      blocks: [
+        {
+          kind: "diagram",
+          layout: "flow",
+          title: "Read path",
+          nodes: [
+            { id: "a", label: "Client" },
+            { id: "b", label: "Redis" },
+          ],
+          edges: [{ from: "a", to: "b" }],
+        },
+        { kind: "kv", rows: [{ key: "QPS", value: "4,000" }] },
+      ],
+    };
+    expect(replySpeechSentences(item)).toEqual(["Diagram: Read path.", "QPS: 4,000."]);
+  });
+
+  it("appends only callout and options blocks when prose is non-empty", () => {
+    const item: ChatItem = {
+      id: "m2",
+      role: "coach",
+      text: "Here is the setup.",
+      at: 1000,
+      state: "done",
+      blocks: [
+        { kind: "kv", rows: [{ key: "Reads", value: "4,000 / s" }] },
+        { kind: "callout", label: "Scenario", text: "Redis `TTL` expires on a hot key." },
+        { kind: "options", items: [{ label: "Stampede on Postgres" }, { label: "Stale read from CDN" }] },
+      ],
+    };
+    expect(replySpeechSentences(item)).toEqual(["Here is the setup.", "Scenario.", "Redis TTL expires on a hot key.", "Options: Stampede on Postgres, Stale read from CDN."]);
   });
 });

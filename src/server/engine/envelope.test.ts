@@ -301,4 +301,65 @@ describe("roundTranscript", () => {
     expect(text.length).toBeLessThan(MAX_TRANSCRIPT_CHARS + 120);
     expect(text).toContain("ask for a time");
   });
+
+  it("serializes blocks in transcriptLines and indents every continuation line by 4 spaces in readable transcripts", () => {
+    const withProseAndBlocks: TranscriptEntry = {
+      id: "b1",
+      at: 2 * MIN + 15_000,
+      wall: "2026-01-01T00:02:15.000Z",
+      channel: "interview",
+      role: "interviewer",
+      text: "Pick one trade-off.",
+      blocks: [
+        {
+          kind: "options",
+          items: [
+            { label: "Fan-out on write", note: "Fast reads" },
+            { label: "[02:20] Fan-out on read", note: "Cheap writes" },
+          ],
+        },
+        {
+          kind: "callout",
+          label: "Constraint",
+          text: "[02:30] Celebrity accounts have 10M followers.",
+        },
+      ],
+    };
+    const blocksOnly: TranscriptEntry = {
+      id: "b2",
+      at: 3 * MIN,
+      wall: "2026-01-01T00:03:00.000Z",
+      channel: "interview",
+      role: "interviewer",
+      text: "",
+      blocks: [{ kind: "kv", rows: [{ key: "Read QPS", value: "50k" }] }],
+    };
+
+    expect(transcriptLines([withProseAndBlocks, blocksOnly], "interview")).toBe(
+      [
+        "[02:15] interviewer: Pick one trade-off.",
+        "Options:",
+        "- Fan-out on write — Fast reads",
+        "- [02:20] Fan-out on read — Cheap writes",
+        "",
+        "Constraint: [02:30] Celebrity accounts have 10M followers.",
+        "[03:00] interviewer: - Read QPS: 50k",
+      ].join("\n"),
+    );
+
+    const readable = roundTranscript([withProseAndBlocks, blocksOnly], null);
+    expect(readable).toBe(
+      [
+        "[02:15] interviewer: Pick one trade-off.",
+        "    Options:",
+        "    - Fan-out on write — Fast reads",
+        "    - [02:20] Fan-out on read — Cheap writes",
+        "    ",
+        "    Constraint: [02:30] Celebrity accounts have 10M followers.",
+        "[03:00] interviewer: - Read QPS: 50k",
+      ].join("\n"),
+    );
+    const stampedLines = readable.split("\n").filter((l) => l.startsWith("["));
+    expect(stampedLines).toHaveLength(2);
+  });
 });

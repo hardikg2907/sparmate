@@ -39,6 +39,8 @@ export interface BoardHandle {
   flush(): void;
   /** Pans and zooms to a step's frame; null, or a step with no frame, shows the whole board. False when not ready. */
   showStep(step: string | null, animate?: boolean): boolean;
+  /** Pans and zooms to a board element (or step frame fallback), selecting it when editable. */
+  focusElement(elementId: string): boolean;
 }
 
 declare global {
@@ -332,6 +334,36 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
         showStepOn(current, step, animate);
         return true;
       },
+      focusElement: (elementId: string) => {
+        const current = apiRef.current;
+        if (!current) return false;
+        const elements = current.getSceneElements();
+        const targets = elements.filter(
+          (el) =>
+            !el.isDeleted && (el.id === elementId || ("containerId" in el && el.containerId === elementId) || (Array.isArray(el.groupIds) && el.groupIds.includes(elementId))),
+        );
+        if (targets.length === 0) {
+          const fallbackFrame = findStepFrame(elements as unknown as Record<string, unknown>[], elementId);
+          if (!fallbackFrame) return false;
+          showStepOn(current, elementId, true);
+          return true;
+        }
+        current.scrollToContent(targets, {
+          fitToViewport: true,
+          canvasOffsets: { left: current.getAppState().width >= STYLE_PANEL_MIN_WIDTH ? STYLE_PANEL_WIDTH : 0 },
+          viewportZoomFactor: 0.45,
+          maxZoom: 1,
+          animate: !reducedMotion(),
+          duration: 240,
+        });
+        if (!readOnly) {
+          current.updateScene({
+            appState: { selectedElementIds: Object.fromEntries(targets.map((t) => [t.id, true])) },
+            captureUpdate: CaptureUpdateAction.NEVER,
+          });
+        }
+        return true;
+      },
       getElements: () => {
         const current = apiRef.current;
         const elements = current ? current.getSceneElements() : startElements.current.filter((el) => !el.isDeleted);
@@ -339,7 +371,7 @@ function BoardSession({ initialElements, initialVersion, track, theme, readOnly 
       },
       flush,
     }),
-    [flush],
+    [flush, readOnly],
   );
 
   // Opens on the step he is working on rather than the whole board; it waits a moment so Excalidraw's own
