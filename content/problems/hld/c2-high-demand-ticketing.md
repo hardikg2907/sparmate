@@ -13,7 +13,7 @@ sources:
     url: "https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster"
   - title: "Cloudflare Waiting Room: About"
     url: "https://developers.cloudflare.com/waiting-room/about/"
-confidence: "The hold designs (a long database lock is bad, a status with an expiry is good, an expiry checked on read or a lock with a time limit in Redis is great), the waiting queue and the server-sent seat updates come from an interview breakdown. The admission thresholds, first-in-first-out order and cookie-tracked places come from a waiting room product's documentation. The breakdown keeps holds in Redis with the database as a backstop; this brief keeps the hold in the database as the reference and accepts Redis, because both appear in the sources and the database alone carries this load. The random order for people who arrive before the start is this problem's own rule. Scale numbers are this problem's own assumptions."
+confidence: "The hold designs (a long database lock is bad, a status with an expiry is good, an expiry checked on read or a lock with a time limit in Redis is great), the waiting queue and the server-sent seat updates come from an interview breakdown. The admission thresholds, first-in-first-out order and cookie-tracked places come from a waiting room product's documentation. The breakdown keeps holds in Redis with the database as a backstop; this brief keeps the hold in the database as the reference and accepts Redis, because both appear in the sources and the database alone carries this load. The random order for people who arrive before the start is this problem's own design choice. Scale numbers are this problem's own assumptions."
 ---
 
 ## Opening prompt
@@ -24,8 +24,7 @@ Let's design the booking system for a ticket site that sells seats for concerts 
 
 Reveal a fact only when the candidate asks about it, or asks a question whose honest answer needs it. Never volunteer the list.
 
-Terms: a **hold** sets seats aside for one buyer for a limited time while they pay. An **on-sale** is the moment tickets for a show go on sale.
-
+- **Terms:** a hold sets seats aside for one buyer for a limited time while they pay. An on-sale is the moment tickets for a show go on sale.
 - **Scope:** a buyer views an event and its seat map, picks seats (or asks for the best available), holds them, pays and gets tickets. Event search, venues setup, resale, refunds and dynamic prices are out of scope. Buyers must sign in to hold seats.
 - **Seats:** every ticket is for a numbered seat. A big stadium has 50,000 seats. Most venues have under 5,000.
 - **Normal days:** about 100,000 events are on sale. About 1 million tickets sell a day, and event pages get about 100 views per ticket sold.
@@ -34,12 +33,12 @@ Terms: a **hold** sets seats aside for one buyer for a limited time while they p
 - **Holds:** a hold lasts 10 minutes. Once the buyer starts paying, the hold may run up to 5 more minutes. If the hold ends, the seats go back on sale.
 - **Never:** a seat is never sold twice. Telling a buyer that a seat they clicked is gone is fine. Charging two buyers for one seat is not.
 - **Seat map:** the map may be up to 2 seconds behind. Only the hold itself must be exact.
-- **Fairness:** a big on-sale is first come, first served from the start time. People who arrive before the start get a random place among themselves, so refreshing early gives no edge.
+- **Fairness:** a big on-sale is first come, first served from the start time. Arriving early, or refreshing many times before the start, must give no edge.
 - **Waiting:** a buyer in line sees their place and an estimated wait, updated about every 20 seconds. Leaving the page loses the place after a few minutes.
 - **Payment:** an outside payment provider. Paying takes 30 seconds to 3 minutes. The provider takes an idempotency key and confirms by webhook. It accepts up to 500 calls a second.
 - **Latency:** for a buyer who is through the line, a hold answers within 1 second at p99.
 - **Availability:** viewing events targets 99.9%. Holds and payments target 99.95%. When the two conflict, a correct booking beats being up.
-- **Numbers:** one Postgres primary takes about 5,000 simple row writes a second. Updating one row takes about 2 ms, and the next update to that row waits for it. One Redis shard takes 50,000 to 100,000 simple commands a second. A CDN is available.
+- **Numbers:** one Postgres primary takes about 5,000 simple row writes a second. Updating one row takes about 2 ms. One Redis shard takes 50,000 to 100,000 simple commands a second. A CDN is available.
 - **Out of scope:** bots and scalpers beyond the 6-ticket limit, seat prices that change, mobile ticket delivery.
 
 For the interviewer: on the numbers, give them only when the candidate asks what one database or cache can take.
@@ -59,11 +58,13 @@ Core, non-functional:
 
 Extras (credit when they name one, never a gap):
 - At most 6 tickets per account per event.
-- A random place for people who arrive before the start.
+- Arriving early or refreshing before the start gives no edge.
 - A buyer in line sees their place and an estimated wait.
 - Payment by an outside provider, confirmed by webhook.
 
 ## Capacity math
+
+The refresh interval, the admission rate, the share of admitted buyers who complete an order and the hold attempts per buyer below are assumptions. Accept other reasonable values when the candidate gives a reason.
 
 - **Demand against supply:** 50,000 seats at 2.5 per order is about 20,000 orders, against 2 million people, which means about 99% of buyers will not get tickets, and the design must say no fast and fairly instead of letting everyone fight for the same rows.
 - **No line:** 1 million people in the first minute, each refreshing the seat map every 2 seconds, is 500,000 requests a second for one event, and every click is a write on the same 50,000 rows, which means a waiting room in front of the booking path.
@@ -155,15 +156,15 @@ Use one, at the extension point, unless the candidate already handled it.
    Fits: Holding seats without double booking; Paying inside the hold
 3. **Standing area:** "The venue adds a standing area of 20,000 tickets with no seat numbers. Product wants to admit 2,000 buyers a second for it. What changes?" Expect: with no seats, every hold updates one counter row. At about 2 ms a row that is about 500 updates a second, so 2,000 a second queue up and time out. Fixes: split the 20,000 into 20 buckets of 1,000 and pick one at random (moving to another bucket when it runs out), keep the count in Redis with an atomic decrement and confirm in the database, or create 20,000 ticket rows and claim one with `FOR UPDATE SKIP LOCKED`. Strong: says buckets can say "sold out" while others still have stock, and handles it by trying the others.
    Fits: Holding seats without double booking
+4. **Live map:** "Product wants seat changes to show on every admitted buyer's map within 1 second during a big on-sale, not 2. What changes?" Expect: polling a cached snapshot every second doubles the reads to about 30,000 a second, still cheap from the CDN, but the snapshot must be built more often and its cache time cut below a second, so the worst case is about 1.5 seconds; tight. Pushing: about 50,000 seats change state about twice each (held, then sold or freed) in about 8 minutes, about 200 changes a second. Sending every change to 30,000 buyers one by one is about 6 million messages a second, so batch changes every 500 ms into one small diff with a version: 2 messages a second per buyer, about 60,000 a second in all, over server-sent events from a fleet of connection servers that read one change stream. A client that misses a version reloads the snapshot. Strong: says a fresher map does not stop two buyers clicking the same seat, so the `409` path stays, and best available cuts the chasing more than freshness does.
+   Fits: Showing the seat map under load
 
 ## Level bar
 
 Hire bar must show:
-- Requirements that cover the seat map, holds with an expiry, payment, the size of a big on-sale, and that a seat is never sold twice.
-- The demand math (2 million for about 20,000 orders, 500,000 requests a second with no line), ending in "which means a waiting room in front of booking".
-- An atomic hold: one conditional update with an expiry, or a lock with a time limit plus a database guard.
-- Holds that end by time, with the seats returning on sale.
-- One buyer walked from the line to a paid order.
+- Requirements with numbers for the size of a big on-sale and the 10-minute hold, and the rule that a seat is never sold twice.
+- The demand math (about 2 million people for about 20,000 orders, about 500,000 requests a second with no line) and the decision it forces: a waiting room in front of booking.
+- An atomic hold that ends by time: one conditional update with an expiry, or a lock with a time limit plus a database guard, with the seats back on sale when it lapses.
 - When probed, a seat map served from a snapshot or cache, not the database.
 
 Stretch signal:
@@ -177,8 +178,8 @@ Stretch signal:
 
 - Read the seat, then write it, in two steps.
 - A database lock held open while the buyer pays.
-- A hold that ends only when a cron job runs.
+- A hold that ends only when a cron job runs. Some guides teach a status plus a cron sweep as a good answer, so it is partial credit, and an accepted alternative once the candidate sees that seats stay blocked until the sweep runs.
 - "Add more servers" for a million people clicking the same 50,000 seats.
 - Charging the card before the seats are held.
-- Redis as the only record of who holds a seat.
+- Redis as the only record of who holds a seat. A Redis lock with a time limit is widely taught and is an accepted alternative when the final sold step still checks the database. It is a red flag only when Redis alone decides who gets charged, because a failover can then sell one seat twice.
 - A waiting room that reads and writes the booking database for every person in line.

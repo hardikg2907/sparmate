@@ -37,7 +37,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Offline:** a laptop or phone can keep editing offline for up to 24 hours. Its edits merge when it reconnects, and no text is lost.
 - **Cursors:** other people's cursors and names show within about 1 second. They are never stored.
 - **Regions:** users are global. Each document lives in one home region. Between regions a round trip is about 150 ms.
-- **Numbers:** one WebSocket server holds about 100,000 connections. One database node takes about 20,000 small writes a second. A Kafka broker takes about 100 MB a second of writes.
+- **Numbers:** one connection server holds about 100,000 open connections. One database node takes about 20,000 small writes a second. A Kafka broker takes about 100 MB a second of writes.
 - **Out of scope:** sharing and permissions (a check already says edit or view), search, spelling, export, printing.
 
 For the interviewer: on the numbers, give them only when the candidate asks what one server or node can do.
@@ -62,11 +62,13 @@ Extras (credit when they name one, never a gap):
 
 ## Capacity math
 
+The headroom factors, the 3 log copies, the network times, the daily average (a third of the peak) and the snapshot interval below are assumptions. Accept other reasonable values when the candidate gives a reason.
+
 - **Connections:** 3 million / 100,000 per server is 30 WebSocket servers, about 60 with headroom, which means connections spread over many servers, so the editors of one document land on different servers unless we route them together.
-- **Edit rate:** 1 million typists x 2 batches a second is about 2 million operations a second at peak, about 200 MB a second, which means every operation must be stored before it is confirmed, at a scale where one row per operation would need about 100 database nodes (2,000,000 / 20,000) before replication, while an append-only log partitioned by document takes 200 MB a second on a few brokers.
+- **Edit rate:** 1 million typists x 2 batches a second is about 2 million operations a second at peak, about 200 MB a second, which means every operation must be stored before it is confirmed, at a scale where one row per operation would need about 100 database nodes (2,000,000 / 20,000) before replication, while an append-only log keyed by docId (so one document's operations stay in order in one partition) takes 200 MB a second, 600 MB a second with 3 copies, on about 6 brokers, about 10 with headroom. A wide-column table keyed by `(docId, revision)` also works if the candidate sizes its nodes.
 - **One document:** a document with 100 editors at 2 batches a second is 200 operations a second, which means one process can order every edit of a document easily; the hard part is getting all editors to that one place, not raw speed.
 - **Fan-out:** those 200 operations a second go to 99 other editors, about 20,000 messages a second for that document, which means the owner batches outgoing changes every 50 to 100 ms.
-- **Latency budget:** up to 200 ms of client batching, about 50 ms to the server, a few ms to order and store, and about 50 ms to the other clients is about 300 ms, which means the 500 ms target holds in one region, while a person in another region adds about 150 ms but still fits.
+- **Latency budget:** up to 200 ms of client batching, about 50 ms to the server, a few ms to order and store, up to 50 ms waiting for the owner's outgoing batch, and about 50 ms to the other clients is about 350 ms, which means the 500 ms target holds in one region, while a person in another region adds up to about 150 ms and lands near the limit, which is why the target is set within a region.
 - **History:** the daily average is about a third of the peak, so about 670,000 operations a second x 100 bytes x 86,400 is about 5.8 TB a day, and about 170 TB for 30 days, which means operations are kept for 30 days for version history, and older history is kept as snapshots.
 - **Opening a document:** replaying a long-lived document's full history on every open is too slow, which means a snapshot (for example every 1,000 operations or when the document goes quiet) plus the operations after it. At 2 million operations a second, one snapshot per 1,000 is 2,000 snapshots a second of about 50 KB, about 100 MB a second.
 
@@ -150,18 +152,19 @@ Use one, at the extension point, unless the candidate already handled it.
    Fits: One owner per document; Storing operations and snapshots
 3. **End-to-end encryption:** "A customer requires end-to-end encryption: our servers must never see document text. What changes?" Expect: the server cannot transform operations it cannot read, so server-ordered OT no longer works in its usual form. Options: a CRDT on the clients, with the server storing and relaying encrypted updates in order; or the server only orders opaque batches and clients do all transforms. Snapshots must be made and encrypted by clients. Search, previews and server-side checks are lost. Strong: keys are shared between members on their devices, and a removed member needs a key change for future edits.
    Fits: Merging concurrent edits; Storing operations and snapshots
+4. **Long offline session:** "A user edits a long document offline for 10 hours and makes 6,000 operations. Meanwhile 20 colleagues make 40,000 operations online. The laptop reconnects. What happens?" Expect: transforming the 6,000 against the 40,000 one pair at a time is about 240 million transform steps on the document's owner, which would stall every other editor of that document. Fixes: the client rebases itself (it fetches the 40,000 server operations, transforms its own pending ones locally, and sends the result as one batch based on the latest revision), and consecutive keystrokes are composed into far fewer operations first. A CRDT merges both sides in one pass by character id. Resent batches are deduped by `(clientId, seq)`. Where both sides edited the same sentence, both texts survive, side by side, and the result may read oddly. Strong: shows the returning user what changed while they were away, and caps how long a client may stay offline before it must reload.
+   Fits: Offline edits and reconnect; Merging concurrent edits
 
 ## Level bar
 
 Hire bar must show:
-- Requirements that cover live co-editing, convergence with no lost text, the 500 ms target, cursors and offline edits.
-- A merge method (OT or a CRDT) explained with a concrete pair of edits, and why last write wins fails.
-- WebSockets and one place that orders each document's edits, with routing by docId.
-- Operations stored before the ack, and snapshots for fast loading.
-- The edit rate math (about 2 million operations a second), ending in "which means a partitioned log, not one database row per keystroke".
-- One edit walked from one person's keyboard to another person's screen, including the transform.
+- Requirements with numbers for the editors at peak and per document, and the 500 ms target, plus convergence with no lost text and offline edits.
+- A merge method (OT or a CRDT) shown on a concrete pair of concurrent edits; when last write wins comes up, why it loses text.
+- A live connection and routing by docId, so each document's edits meet in one place that orders them (or, with a CRDT, stores and relays them).
+- Edits stored before the ack, in a store sized from the edit-rate math (about 2 million operations a second), with snapshots for fast loading.
 
 Stretch signal:
+- Traces one edit from one person's keyboard to another person's screen and says how a receiving client with unsent typing of its own applies it (a transform for OT, a merge by id for a CRDT).
 - A lease with an epoch so two servers never order the same document.
 - Dedupes resent batches by `(clientId, seq)`.
 - Compares OT and CRDTs on real costs (transform correctness against ids and delete markers) and ties the choice to the offline fact.
@@ -170,11 +173,11 @@ Stretch signal:
 
 ## Traps
 
-- Last write wins on paragraphs, or locks, presented as collaboration.
+- Last write wins on paragraphs, or locks, presented as collaboration. Last write wins per property is a known answer for shapes in design tools, so it is partial credit when used only for formatting, and a red flag when it decides the text itself, because it loses typed text.
 - Every editor connected to a random server with no single order per document.
 - Confirming an edit before it is stored.
 - Saving the whole document on every keystroke.
 - Replaying the full history on every open.
 - Storing cursor positions in the database.
-- "CRDTs need no server", so no thought about storage, fan-out and ordering of the log.
+- "CRDTs need no server", so no thought about storage, fan-out and ordering of the log. CRDT write-ups often stress serverless merging, so the CRDT choice itself earns full credit; only the missing storage and fan-out is the gap.
 - "OT is solved, any library works" with no word on how the server and client transform.

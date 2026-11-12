@@ -9,6 +9,10 @@ tracker:
   bullet: "Notification Service (class-level)"
 notesFile: notes/b3-notification-service.md
 lldFolder: notification-service
+sources:
+  - title: "prepdeck: Design a Notification System"
+    url: "https://prepdeck-three.vercel.app/lld/notification-system"
+confidence: "Retry and rate limiting as wrappers around a sender agree with the write-up read. That write-up retries with a growing wait, removes duplicates by request and channel before sending, and sends through a queue and a worker; this problem retries at once, accepts duplicates for the first version, and keeps sending synchronous, with each of those as a probe or an extension. The channels, message templates, preferences, the delivery log, the retry count, the scale and the demo users are this problem's own assumptions."
 ---
 
 ## Opening prompt
@@ -20,9 +24,9 @@ Design a notification service. Build it as a running, in-memory C++ program, wit
 Reveal a fact only when the candidate asks about it. Never volunteer the list.
 
 - **What happens:** another part of the product tells the service that something happened to a user, for example an order shipped. The service decides which channels to use, builds the text for each, sends it, retries failures and keeps a log. The call is synchronous: it returns after every channel is done. No background threads in the first version.
-- **Channels:** email, SMS and push. One interface for all three. A notification goes to every channel the user has enabled for that type. It is not "first success wins" and there is no fallback to another channel. The service tries channels in the order email, SMS, push.
+- **Channels:** email, SMS and push. Each channel has its own sender. A notification goes to every channel the user has enabled for that type. It is not "first success wins" and there is no fallback to another channel. The service tries channels in the order email, SMS, push.
 - **Senders:** no real network. Each channel has a fake sender. It keeps every message it accepts in an outbox, counts its calls, and can be told to fail the next N calls and then succeed again. The demo must show a failure. A failed send means the provider refused the message. There is no error text, and every failure is retried the same way. Any style works for how `send` shows a failure: a `bool`, a status or an exception.
-- **Types:** 3, fixed for the demo: `ORDER_SHIPPED`, `PAYMENT_FAILED`, `PROMO`. Adding a type must be new data (message templates), not a new code branch.
+- **Types:** 3, fixed for the demo: `ORDER_SHIPPED`, `PAYMENT_FAILED`, `PROMO`. A new type is an enum value plus its message templates, with no new branch in `notify`.
 - **Users:** set up before the demo; there is no sign-up flow. A user has an id and at most one contact per channel: an email address, a phone number, a push token. They are plain strings with no format check. A user may have no contact for a channel, for example no phone. Users and contacts do not change once `notify` calls start.
 - **Message templates:** one text per type and channel, with placeholders in curly braces such as `{orderId}`. They are set at setup.
 - **Rendering rules:** the caller passes the values as a map of name to string. Extra values are ignored. A placeholder with no value is an error. A placeholder may appear twice, and both are replaced. Templates are always well formed: every `{` starts a placeholder. Email has a body only, with no subject and no HTML. There is no length limit. Values go in as literal text and are never scanned again, so a value that contains `{orderId}` stays as written. No escaping and no formatting.
@@ -56,17 +60,19 @@ For the interviewer: on size, a queue with a worker pool is the next step.
 
 Core:
 1. Set up users with contacts, templates and one sender per channel, all on one interface. *Ask: Which channels exist, and how are messages sent?*
-2. `notify(user, type, values, minute)`: render, send and log per enabled channel; return an id. *Ask: What happens when a notification is requested?*
-3. Reject an unknown user, a missing value or a missing template; a rejected call does nothing. *Ask: What if the request is bad or incomplete?*
-4. At most 3 attempts per channel in total; a failing channel does not stop the others. *Ask: How many times do we retry, and does one failure stop the rest?*
+2. `notify(user, type, values, minute)`: render, send and log on every channel the user has a contact for and has not switched off; return an id. *Ask: What happens when a notification is requested?*
+3. Reject an unknown user, a missing value or a missing template. A rejected call sends nothing, logs nothing and uses no id. *Ask: What if the request is bad or incomplete?*
+4. At most 3 attempts per channel in total, a number set at setup; a failing channel does not stop the others. *Ask: How many times do we retry, and does one failure stop the rest?*
 5. `setPreference(user, channel, type, on)`. The default is on. The next notification obeys it. *Ask: Can a user turn a kind of message off, and what is the default?*
 6. A delivery log with one row per attempt, readable by notification id. *Ask: What must be recorded about each delivery?*
-7. Safe under concurrent `notify` and `setPreference` calls, with no lock held during a send. *Ask: Can several threads use it at once?*
+7. A fake sender per channel that keeps an outbox, counts its calls and can be told to fail the next N calls. `main()` shows a failure. *Ask: How do we send without real providers, and how do we show a failure?*
+8. Safe under concurrent `notify` and `setPreference` calls, with no lock held during a send (only when asked). *Ask: Can several threads use it at once?*
 
 Extras (credit when they name one, never a gap):
-- Fake senders that fail on command. The demo shows a success, a skip, a retry that works and a retry that gives up.
-- Only channels with a contact are used; failures are retried and every attempt is logged.
-- A rejected call sends nothing, logs nothing and uses no id.
+- A demo that shows a success, a skip, a retry that works and a retry that gives up.
+- A `SKIPPED` row with a reason for a skipped channel, kept apart from the `SENT` and `FAILED` counts.
+- A per-channel result returned from `notify`, besides the log.
+- Mandatory alerts named as a later need, with where the flag would live.
 
 ## Entities and relationships
 
@@ -107,19 +113,57 @@ Extras (credit when they name one, never a gap):
    virtual ~ChannelSender() = default;
    virtual bool send(const Message& m) = 0;                    // true = the provider accepted it
  };
- class FakeSender     : public ChannelSender { ... outbox, calls, failNext, own mutex ... };
- class RetryingSender : public ChannelSender { ... shared_ptr<ChannelSender> inner; int maxAttempts; ... };   // copy m, loop 1..max, set attempt on the copy
- class LoggingSender  : public ChannelSender { ... inner; shared_ptr<DeliveryLog> log; ... };                 // one row per call
+ class FakeSender : public ChannelSender {                     // keeps what it accepts; fails on command
+   std::vector<Message> outbox;
+   int calls = 0, failNext = 0;
+   std::mutex mtx;                                             // its own lock, never held while it waits
+  public:
+   bool send(const Message& m) override;
+   void failNextCalls(int n);
+ };
+
+ class DeliveryLog {
+   std::vector<DeliveryRecord> rows;
+   std::mutex mtx;                                             // its own short lock per row
+  public:
+   void add(const DeliveryRecord& r);
+   std::vector<DeliveryRecord> forId(int notificationId);
+ };
+
+ class RetryingSender : public ChannelSender {                 // copy m, loop 1..max, set attempt on the copy
+   std::shared_ptr<ChannelSender> inner;
+   int maxAttempts;
+  public:
+   RetryingSender(std::shared_ptr<ChannelSender> inner, int maxAttempts);
+   bool send(const Message& m) override;
+ };
+
+ class LoggingSender : public ChannelSender {                  // one row per call
+   std::shared_ptr<ChannelSender> inner;
+   std::shared_ptr<DeliveryLog> log;
+  public:
+   LoggingSender(std::shared_ptr<ChannelSender> inner, std::shared_ptr<DeliveryLog> log);
+   bool send(const Message& m) override;
+ };
+
+ class MessageTemplates {
+   std::map<std::pair<NotificationType, Channel>, std::string> texts;
+  public:
+   void set(NotificationType t, Channel c, const std::string& body);
+   std::optional<std::string> render(NotificationType t, Channel c, const Values& v) const;   // empty when the text or a value is missing
+ };
 
  class NotificationService {
    std::map<int, User> users;
    std::map<Channel, std::shared_ptr<ChannelSender>> senders;  // each is Retrying(Logging(real sender))
-   MessageTemplates templates;                                 // map<pair<type, channel>, string>
+   MessageTemplates templates;
    std::set<std::tuple<int, Channel, NotificationType>> off;   // switched-off pairs; default is on
-   std::shared_ptr<DeliveryLog> log;                           // rows + its own mutex
+   std::shared_ptr<DeliveryLog> log;
    int nextId = 1;
    std::mutex mtx;                                             // off, nextId (and the users read in the same step)
   public:
+   NotificationService(std::map<int, User> users, std::map<Channel, std::shared_ptr<ChannelSender>> senders,
+                       MessageTemplates templates, std::shared_ptr<DeliveryLog> log);
    std::optional<int> notify(int userId, NotificationType type, const Values& values, int minute);
    bool setPreference(int userId, Channel c, NotificationType t, bool on);
    std::vector<DeliveryRecord> deliveries(int notificationId);
@@ -135,6 +179,8 @@ Extras (credit when they name one, never a gap):
    return id                        rows were added by LoggingSender, one per attempt
 ```
 
+`render` makes one left-to-right pass over the message template. It copies plain characters. At a `{` it finds the next `}`, looks the name up with `find`, and appends the value. The output is never scanned again, so a value that holds `{orderId}` stays as written. A missing template or a missing name returns an empty optional, and `notify` then rejects the whole call.
+
 `Logging` sits inside `Retrying`, so every attempt gets a row. Reverse the order and the log gets one row per channel, with no attempt count. A `std::map` keyed by channel makes a new channel one more entry, not one more branch. A plain retry loop inside `notify` is an equal answer to the two Decorators.
 
 ## Patterns that fit
@@ -142,11 +188,12 @@ Extras (credit when they name one, never a gap):
 - **Strategy (a channel interface):** one class per channel behind `ChannelSender`. The dispatch loop names no channel.
 - **Decorator:** retry and logging wrap any sender. The wrapping order matters, as shown above. It only fits if the log row can still say which attempt it was, and `Message.attempt` does that.
 - **Observer:** only at the edge. An event source publishes and the service subscribes and calls `notify`. Accept it. Do not let it take more than a few minutes.
+- **Accepted alternatives:** a plain retry loop in the dispatcher or a small `RetryPolicy` instead of the two Decorators, if retry lives in one place and counts total attempts. One log row per channel with an attempts count instead of one row per attempt. A `std::shared_mutex`, an atomic id counter, or one lock for both the service state and the log, if no lock is held across a send. A sender that throws on failure while the retry code catches it. Preferences as a nested map or a small `Preferences` class, if reads use `find` and the default is on.
 - Not needed: Singleton service, Factory for senders (a map filled in `main` is enough), State, Chain of Responsibility, and an interface for the template engine or the preference store.
 
 ## Demo scenarios
 
-Setup for every scenario unless it says "continues": three fake senders, 3 attempts maximum, all preferences on, and these message templates.
+Every scenario starts from a fresh setup: three fake senders, 3 attempts maximum unless the scenario says otherwise, all preferences on, and these message templates.
 
 | Type | EMAIL | SMS | PUSH |
 |---|---|---|---|
@@ -157,17 +204,18 @@ Setup for every scenario unless it says "continues": three fake senders, 3 attem
 User 1: email `asha@x.com`, phone `+91-111`, push token `tok-1`. User 2: email `ben@x.com`, no phone, push token `tok-2`. Notification ids start at 1 in a fresh setup. Adapt the calls to the candidate's own API. A log row below means one attempt. Compare rows as a set. If the candidate logs one row per channel with an attempts count, read the counts as the same facts. Ignore any `SKIPPED` rows in every count below.
 
 1. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, minute 7)` returns id 1. Email outbox: one message to `asha@x.com`, body `Hi Asha, order 1001 has shipped.` SMS: one to `+91-111`, body `Order 1001 has shipped.` Push: one to `tok-1`, body `Order 1001 is on its way.` The log for id 1 has 3 rows: EMAIL, SMS, PUSH, each attempt 1, `SENT`, minute 7.
-2. User 1 switches SMS off for `ORDER_SHIPPED`. The same notify at minute 5 returns id 1. Email and push each hold one message. The SMS sender got 0 calls and its outbox is empty. The log has 2 rows (EMAIL, PUSH), both `SENT`. No SMS row.
-3. Continues 2. `notify(1, PAYMENT_FAILED, {name: Asha, orderId: 1002, amount: 499}, 6)` returns id 2 and goes out on all 3 channels. Preferences are per type. Email `Hi Asha, payment failed for order 1002.` SMS `Payment failed for order 1002.` Push `Payment of 499 failed for order 1002.` Then user 1 switches SMS back on for `ORDER_SHIPPED` and notifies `ORDER_SHIPPED` (name Asha, orderId 1003) at minute 8. It returns id 3 and has 3 `SENT` rows including SMS. The rows for id 1 still number 2.
+2. User 1 switches SMS off for `ORDER_SHIPPED`. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, 5)` returns id 1. Email and push each hold one message. The SMS sender got 0 calls and its outbox is empty. The log has 2 rows (EMAIL, PUSH), both `SENT`. No SMS row.
+3. User 1 switches SMS off for `ORDER_SHIPPED`. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, 5)` returns id 1 with 2 rows (EMAIL, PUSH). Then `notify(1, PAYMENT_FAILED, {name: Asha, orderId: 1002, amount: 499}, 6)` returns id 2 and goes out on all 3 channels. Preferences are per type. Email `Hi Asha, payment failed for order 1002.` SMS `Payment failed for order 1002.` Push `Payment of 499 failed for order 1002.` Then user 1 switches SMS back on for `ORDER_SHIPPED` and notifies `ORDER_SHIPPED` (name Asha, orderId 1003) at minute 8. It returns id 3 and has 3 `SENT` rows including SMS. The rows for id 1 still number 2.
 4. `notify(2, ORDER_SHIPPED, {name: Ben, orderId: 1003}, 0)` returns id 1. Email to `ben@x.com`: `Hi Ben, order 1003 has shipped.` Push to `tok-2`: `Order 1003 is on its way.` SMS has no call and no row. 2 rows, both `SENT`.
 5. User 1 switches all 3 channels off for `PROMO`. `notify(1, PROMO, {name: Asha, offer: 20% off today}, 0)` is accepted and returns id 1. No sender got a call, every outbox is empty, and the log has no rows. No error.
 6. The SMS sender is told to fail the next 2 calls. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, 3)` returns id 1. The SMS sender got 3 calls and its outbox holds exactly 1 message. SMS rows: attempt 1 `FAILED`, attempt 2 `FAILED`, attempt 3 `SENT`. Email and push have 1 `SENT` row each. 5 rows in total.
-7. The SMS sender is told to fail the next 3 calls. The same notify at minute 3 returns id 1 and does not throw. The SMS sender got exactly 3 calls (no 4th) and its outbox is empty. SMS rows: attempts 1, 2, 3, all `FAILED`. Email and push still have 1 `SENT` row each and hold their messages. 5 rows in total.
-8. Continues 7. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1002}, 4)` returns id 2. The SMS sender has no failures left. Its total calls are 4. Id 2 has 3 rows, all attempt 1 and `SENT`. Id 1 still shows its 3 `FAILED` SMS rows. 8 rows in total.
+7. The SMS sender is told to fail the next 3 calls. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, 3)` returns id 1 and does not throw. The SMS sender got exactly 3 calls (no 4th) and its outbox is empty. SMS rows: attempts 1, 2, 3, all `FAILED`. Email and push still have 1 `SENT` row each and hold their messages. 5 rows in total.
+8. The SMS sender is told to fail the next 3 calls. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, 3)` returns id 1, with 3 `FAILED` SMS rows. Then `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1002}, 4)` returns id 2. The SMS sender has no failures left. Its total calls are 4, and its outbox holds only the message for order 1002. Id 2 has 3 rows, all attempt 1 and `SENT`. Id 1 still shows its 3 `FAILED` SMS rows. 8 rows in total.
 9. `notify(1, PAYMENT_FAILED, {name: Asha, orderId: 1002}, 0)` has no `amount`. Only the push text needs it, but the whole call is rejected. Email and SMS would render fine and are not sent. No sender got a call, every outbox is empty, and the log has no rows. The next valid notify returns id 1. If they never asked what a bad value does and chose another rule, judge it against their own stated rule.
 10. `notify(99, ORDER_SHIPPED, {name: X, orderId: 1}, 0)` is rejected. `setPreference(99, SMS, PROMO, off)` is rejected. Nothing changes: no calls, no rows, no new user. The next valid notify returns id 1.
 11. `notify(1, ORDER_SHIPPED, {name: "{orderId}", orderId: 1001, coupon: SAVE5}, 0)` returns id 1. The email body is exactly `Hi {orderId}, order 1001 has shipped.` The SMS body is `Order 1001 has shipped.` The extra key `coupon` is ignored.
-12. Only if the candidate made it thread-safe: 8 threads each call `notify(1, ORDER_SHIPPED, ...)` 1,000 times with healthy senders. Every call returns an id. The ids are exactly 1 to 8,000, none repeated and none missing. Each outbox holds exactly 8,000 messages. The log has exactly 24,000 rows, and each id has exactly 3. A `-fsanitize=thread` build reports no race. Lock-scope check, only if their fake can be given a delay: the email fake waits 50 ms per call, outside its own lock, and 8 threads make 20 calls each. With no lock held during a send, the run takes about 1 second (20 sends in a row per thread). With a lock held over the sends, it takes about 8 seconds (160 sends in a row). If the fake has no delay setting, ask them to explain the lock scope instead.
+12. **Two attempts.** A fresh setup with 2 attempts maximum. The SMS sender is told to fail the next 2 calls. `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, 2)` returns id 1. The SMS sender got exactly 2 calls and its outbox is empty. SMS rows: attempt 1 `FAILED`, attempt 2 `FAILED`. Email and push have 1 `SENT` row each. 4 rows in total. Then the SMS sender is told to fail the next call, and `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1002}, 4)` returns id 2 with SMS rows attempt 1 `FAILED`, attempt 2 `SENT`. If the attempt count cannot be set at setup, this scenario fails.
+13. Only if the candidate made it thread-safe: 8 threads each call `notify(1, ORDER_SHIPPED, {name: Asha, orderId: 1001}, 0)` 250 times with healthy senders. At the same time a ninth thread calls `setPreference(1, SMS, PROMO, ...)` 500 times, switching it off and on in turn; `PROMO` is never sent here, so it changes no count. Every notify returns an id. The ids are exactly 1 to 2,000, none repeated and none missing. Each outbox holds exactly 2,000 messages. Each id has exactly 3 rows, all attempt 1 and `SENT`, so the log holds 6,000 rows. No crash and no sanitizer report. Lock-scope check, only if their fake can be given a delay: the email fake waits 10 ms per call, outside its own lock, and 8 threads make 20 notify calls each. With no lock held during a send, the run takes about 0.25 seconds (20 sends in a row per thread). With a lock held over the sends, it takes about 1.6 to 2 seconds (160 sends in a row). A run under 1 second passes. If the fake has no delay setting, skip the timing check and say so in the notes.
 
 ## Extensions
 
@@ -176,6 +224,7 @@ Pick one. Give a second only if more than 10 minutes remain. Extension 2 is the 
 1. **Per-user rate limit:** a user gets at most 5 notifications in any 60 minutes. A call at minute `m` counts the earlier accepted calls with a minute greater than `m - 60`. A limited call is rejected, uses no id, sends nothing, logs nothing and does not count. `PAYMENT_FAILED` is exempt: never limited, never counted. Any accepted call counts, even if every channel is skipped. A call rejected for any other reason never counts. Assume the minutes for one user never go backwards. What changes? Expect: a `RateLimiter` with `allow(userId, type, minute)` that checks and records in one step. It is injected into the service and called once in the locked part of `notify`, with a "no limit" default. It runs last in that part, after the user lookup and the render check and just before the id is taken. That is how a rejected call stays uncounted. The send loop is untouched. Check, user 1, `ORDER_SHIPPED` (every `PAYMENT_FAILED` call carries an `amount`): minutes 0, 10, 20, 30, 40 are accepted (ids 1 to 5). Minute 50 is rejected, but `PAYMENT_FAILED` at minute 50 is accepted (id 6). Minute 59 is rejected, 60 is accepted (id 7), 61 is rejected, 70 is accepted (id 8). User 2 at minute 50 is accepted at any point and takes the next id, because one user never limits another. Must stay the same: scenarios 1 to 11 below the limit, retries, log rows, and rejected calls using no id. Telling a limited call apart from other rejections is a stretch signal. Interviewer note: state the `PAYMENT_FAILED` exemption when you give the extension.
 2. **A fourth channel, chat:** delivered to a chat handle, a new contact on the user. Add the message templates `ORDER_SHIPPED` `Order {orderId} has shipped.`, `PAYMENT_FAILED` `Payment failed for order {orderId}.` and `PROMO` `{offer}`. What changes? Expect: a new enum value, a new sender class, one more entry in the sender map (wrapped like the others), and 3 rows of template data. `notify`, `RetryingSender` and `LoggingSender` stay untouched. Check: user 1 gets handle `@asha`, and `ORDER_SHIPPED` returns 4 `SENT` rows (EMAIL, SMS, PUSH, CHAT). User 2 has no handle and gets exactly the 2 rows of scenario 4, with no chat row. With the chat sender told to fail the next 2 calls, the chat rows read `FAILED`, `FAILED`, `SENT` with no new retry code. Must stay the same: scenarios 1 to 11, the on-by-default rule (a user with a handle gets chat until they switch it off), and the try order, with chat last.
 3. **Priority ordering:** callers stop waiting for slow providers. `submit(user, type, values, priority, minute)` validates, takes the id in arrival order, queues, and returns the id. Priorities are `HIGH`, `NORMAL`, `LOW`. `processNext(minute)` and `processAll(minute)` deliver the highest priority first, and first-in first-out inside one priority. No background thread: the caller drives processing. The log rows carry the minute given to `processNext` or `processAll`. What changes? Expect: a queue in front of the existing delivery code (a `std::priority_queue` ordered by priority then id, or one queue per priority). The delivery code stays as it is. Check, user 1: submit A `LOW` (orderId 1001, id 1), B `NORMAL` (1002, id 2), C `HIGH` (1003, id 3), D `NORMAL` (1004, id 4), E `HIGH` (1005, id 5). Before processing, every outbox and the log are empty. `processAll(10)` delivers in the order 3, 5, 2, 4, 1, so the email outbox order is orderIds 1003, 1005, 1002, 1004, 1001. Variant: `processNext` twice (ids 3, 5), then submit F `HIGH` (1006, id 6), then `processAll` gives 6, 2, 4, 1. Must stay the same: rejection at submit with no id used, retries inside one notification (a failing SMS never moves the next notification), and the rows per notification. Reading preferences at submit and re-reading them at delivery are both accepted. Re-reading is a stretch signal, because an opt-out should win. A candidate at the stretch level also names starvation of `LOW`.
+4. **SMS length limit:** the SMS provider now refuses long texts, so every SMS body must be cut to fit. Email and push stay as they are. What changes? Expect: the rule sits with the SMS channel only, as a small wrapper around the SMS sender (one more Decorator in its stack) or a per-channel length limit applied between render and send. `notify`, `render`, `RetryingSender` and `LoggingSender` stay untouched, and the dispatch loop still names no channel. A retry resends the same cut text. Weak answers: an `if (channel == SMS)` inside `notify` or `render`, or cutting the message template instead of the rendered text, which still overflows once a long value goes in. Stretch: says where the limit is configured (one number per channel at setup), and names multi-part SMS as the next product question. Facts: the limit is 160 characters. A body longer than that keeps its first 160 characters, with no marker added. A body of 160 characters or fewer goes out unchanged. Every demo text is plain ASCII, so a character is a byte. The log rows do not change. Check, user 1, `PROMO` with an offer of 200 "x" characters at minute 0 (id 1): the SMS body is 160 characters, the push body is all 200, and the email body is all 209 (`Hi Asha, ` plus the offer). An offer of exactly 160 characters (id 2) goes to SMS unchanged. With the SMS sender told to fail the next call, a third such notify (id 3) gives SMS rows `FAILED`, `SENT`, and the accepted SMS body is 160 characters. Must stay the same: scenarios 1 to 12, where every SMS body is short.
 
 ## Concurrency follow-up
 
@@ -192,7 +241,7 @@ Stretch signal: says the rate limiter must check and record in one locked step, 
 Other probes (use one, only if time allows and they have not covered it):
 - "A send times out, but the message did arrive. What happens on retry?" Expect: the user may get it twice (at-least-once). A real fix is an idempotency key per notification and channel, which the provider checks. The first version accepts duplicates and says so.
 - "How would retries wait 1 minute, then 4 minutes?" Expect: no `sleep`, time as a parameter, a retry that becomes a later call or a queue with a due time.
-- "How do you add a notification type?" Expect: an enum value and template data, with no new branch in the dispatch loop.
+- "How do you add a notification type?" Expect: an enum value plus its message templates, with no new branch in `notify`.
 
 ## Level bar
 
@@ -239,4 +288,4 @@ Accepted alternatives (never mark these down):
 - Sending channel by channel while rendering, so a bad value for the last channel leaves a half-sent notification (scenario 9).
 - Holding one mutex around `send()`: "global lock, done". One slow provider then blocks every notification.
 - Building an event bus with threads, a Singleton service, or an interface for every class (`ITemplateEngine`, `IPreferenceStore`) before one channel works.
-- Spending more than 25 minutes on steps 1 to 3 so nothing runs at the end.
+- Spending more than about a third of the round on steps 1 to 3 so nothing runs at the end.

@@ -8,6 +8,16 @@ tracker:
   section: "### C2. Classic HLD Problems"
   bullet: "Video Streaming (YouTube/Netflix)"
 notesFile: notes/c2-video-streaming.md
+sources:
+  - title: "Hello Interview: Design YouTube"
+    url: "https://www.hellointerview.com/learn/system-design/problem-breakdowns/youtube"
+  - title: "Apple: HLS Authoring Specification for Apple Devices"
+    url: "https://developer.apple.com/documentation/http-live-streaming/hls-authoring-specification-for-apple-devices"
+  - title: "AWS: Amazon S3 multipart upload limits"
+    url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html"
+  - title: "Netflix: How Netflix works with ISPs around the globe"
+    url: "https://about.netflix.com/en/news/how-netflix-works-with-isps-around-the-globe-to-deliver-a-great-viewing-experience"
+confidence: "The sources agree on the shape: multipart upload straight to object storage, chunked parallel transcoding into a ladder of renditions, short segments listed in playlists, and a CDN that serves almost every byte. The multipart limits (10,000 parts, 5 MiB minimum part) come from the storage provider's own documentation. The platform's authoring guide prefers 6-second segments and a higher 1080p bitrate than this problem uses; segment length is accepted as a trade-off, and the bitrates here are given facts. One source leaves view counts out of scope, where this problem makes them a feature. Scale, cost and encoder-speed numbers are this problem's own round assumptions."
 ---
 
 ## Opening prompt
@@ -18,7 +28,7 @@ Let's design a video streaming service, something like YouTube. Where would you 
 
 Reveal a fact only when the candidate asks about it, or asks a question whose honest answer needs it. Never volunteer the list.
 
-- **What it is:** creators upload videos and anyone can watch them, like YouTube (not a licensed catalog like Netflix). Accounts and login are out of scope. Every video is public: no private or unlisted videos, no access control, no geo-blocking. Viewers and creators are global. Start with one home region for uploads and processing. A commercial CDN covers delivery.
+- **What it is:** creators upload videos and anyone can watch them, like YouTube (not a licensed catalog like Netflix). Accounts and login are out of scope. Every video is public: no private or unlisted videos, no access control, no geo-blocking. Viewers and creators are global. Start with one home region for uploads and processing.
 - **Core features:** upload with a title and description, adaptive playback, an approximate view count, one thumbnail that we cut from a frame of the video. Search by title exists. The video file cannot be edited or replaced after upload.
 - **Out of scope:** live streaming, DRM, recommendations, comments, ads, captions, 4K and HDR, offline downloads, creator payouts, subscriptions, likes, the home feed and notifications. Copyright and abuse scanning is out of scope.
 - **Users:** about 100 million viewers a day, about 5 views each. About 2 million creators upload in a month.
@@ -50,6 +60,7 @@ Core, functional:
 1. Upload a video (up to 50 GB) with a title and description; a dropped upload resumes. *Ask: What can a creator upload, and what if the connection drops?*
 2. Process it into several quality levels, with a visible status. *Ask: What happens to a video after the upload finishes?*
 3. Play it on any device, with quality that adapts to the network and working seeks. *Ask: How is a video played on different devices and networks?*
+4. Show a view count that may lag a minute and be off by a few percent, but never goes down. *Ask: How exact and how fresh must the view count be?*
 
 Core, non-functional:
 1. 500 million views a day, 1,000 views per upload; about 2 Tbps on average, 4 Tbps at peak. *Ask: How many videos are watched and uploaded a day?*
@@ -57,10 +68,8 @@ Core, non-functional:
 3. 99.99% availability for playback, 99.9% for upload and processing. *Ask: Which matters more if something fails, watching or uploading?*
 4. Originals are never lost after "upload complete". *Ask: What must be true once an upload is complete?*
 5. Watchable within 5 minutes and fully processed within 15 (videos up to 1 hour). *Ask: How soon after upload must a video be watchable?*
-6. The view count may lag a minute and be off by a few percent, but never goes down. *Ask: How exact and how fresh must the view count be?*
 
 Extras (credit when they name one, never a gap):
-- Show an approximate view count.
 - Delete a video. Removed videos stop playing within 15 minutes.
 - About 900 million videos and 600 PB in 5 years, so storage and egress cost shape the design.
 
@@ -73,7 +82,7 @@ Per-server, per-row and per-link figures below are assumptions. Accept other rea
 - **Segments:** one 4-second segment per stream every 4 seconds is about 260,000 requests a second on average and 520,000 at peak, which means segment requests must be plain cacheable GETs on static files.
 - **Uploads:** 500,000 a day is only 6 a second, but at 300 MB it is 150 TB a day, about 14 Gbps on average and 28 at peak. A 5 GB file takes 33 minutes at 20 Mbps. In 8 MB parts, an average file is 38 parts and a 50 GB file about 6,250 (many stores cap a multipart upload at 10,000), which means the bytes must not pass through our API, and drops are normal, so devices send parts straight to object storage and resume at the last stored part.
 - **Transcode:** 500,000 videos times 300 seconds is 150 million video seconds a day. At 10 vCPU-seconds each, that is about 17,400 vCPUs busy on average and 35,000 at peak (about 270 and 540 machines of 64 vCPUs), which means a large elastic fleet on spot capacity, so every task must be safe to retry.
-- **Chunking:** a 1-hour video is 36,000 vCPU-seconds, or 75 minutes on one 8-vCPU machine against a 15-minute target. In 20-second chunks it is 180 chunks times 5 renditions, or 900 tasks of 40 vCPU-seconds. An average video is 75 tasks, about 430 a second across the platform, which means chunking meets the target for long videos, and the queue choice rests on semantics (ack, retry, delay), not throughput.
+- **Chunking:** a 1-hour video is 36,000 vCPU-seconds, or 75 minutes on one 8-vCPU machine against a 15-minute target. In 20-second chunks it is 180 chunks times 5 renditions, or 900 tasks of 40 vCPU-seconds on average. Cost follows pixel count roughly, so a 1080p chunk is about half the ladder's work (about 110 vCPU-seconds) and a 240p chunk about 5; the 1080p tasks are the long ones. An average video is 75 tasks, about 430 a second across the platform, which means chunking meets the target for long videos, and the queue choice rests on semantics (ack, retry, delay), not throughput.
 - **Storage:** a 5-minute video at 10 Mbps is 375 MB of renditions plus the 300 MB original, or 675 MB. At 500,000 a day, that is 337.5 TB a day, 123 PB a year and about 616 PB in 5 years (912 million videos), which means the library is hundreds of petabytes, so what we keep and on which tier matters.
 - **Objects and metadata:** 5 renditions times 75 segments is 375 objects per video, about 342 billion in 5 years. Metadata is 912 million rows at about 1 KB, or about 0.9 TB, which means manifests are stored, never built by listing a folder, and one Postgres primary with replicas and a Redis cache holds the metadata.
 - **Hot head and origin:** 1% of 912 million videos is 9 million videos, or about 3.4 PB at 375 MB each, far more than one edge site holds, so each edge keeps a recent and regional slice. Each 1% of bytes the CDN misses is about 21 Gbps at the origin (42 at peak): a 95% hit ratio leaves about 100 Gbps and 99% about 21, which means the hit ratio is the number to protect, and a shield tier with request collapsing moves it from 95% toward 99%.
@@ -110,7 +119,8 @@ Core entities:
                      Encode workers (stateless, spot, scaled on queue age): take a task under a lease, encode one
                        chunk, write 4 s segments to a fixed key in the media bucket, mark the task done
                      Packager: a rendition has all its chunks ──> write its playlist
-                     240p and 360p done: Video = playable.  All five done: final master playlist, Video = ready
+                     The two lowest renditions that apply are done: master playlist with them, Video = playable
+                     All renditions done: master playlist rewritten with every rung, Video = ready
 
  watch:    Player ──> API: GET /videos/{id} (Redis, then replica) ──> manifestUrl
            Player ──> CDN edge ──miss──> shield tier ──miss──> media bucket (origin): master playlist, then segments
@@ -118,9 +128,9 @@ Core entities:
            after 30 s of play ──> POST /views ──> Kafka ──> consumers add up per video for 5 s ──> counter store
 ```
 
-Walk one video: the client sends parts straight to object storage and, after a drop, asks which parts exist. On complete, the API checks the parts, sets the status and writes the job in one transaction (outbox), so a crash cannot leave a video that never starts. The original is safe once complete succeeds, because object storage keeps copies in several zones and nothing in the pipeline deletes it. Workers write segments under a key built from video, rendition and chunk, so a retry overwrites the same objects. Every rendition puts keyframes at the same positions. Low renditions run first, and the master playlist is written last, so a video never appears half-built.
+Walk one upload: the client sends parts straight to object storage and, after a drop, asks which parts exist. On complete, the API checks the parts, sets the status and writes the job in one transaction (outbox), so a crash cannot leave a video that never starts. The original is safe once complete succeeds, because object storage keeps copies in several zones and nothing in the pipeline deletes it. Workers write segments under a key built from video, rendition and chunk, so a retry overwrites the same objects. Every rendition puts keyframes at the same positions. Low renditions run first. A rendition joins the master playlist only after all its segments exist, so a player never sees a rung with missing segments. The master is first written at "playable" with the two lowest renditions that apply (a 240p source has only one), and rewritten when all are done. Until then it has a short TTL, so the CDN picks up the new rungs.
 
-Walk one watch: the player fetches the master playlist from the CDN and starts on a low rung, so the first segment arrives fast. It then picks each next rung from throughput and buffer level, switching at segment boundaries. Every request is a plain GET for a file that never changes, so the edge answers almost all of them.
+Walk one watch: the player fetches the master playlist from the CDN and starts on a low rung, so the first segment arrives fast. It then picks each next rung from throughput and buffer level, switching at segment boundaries. Every request is a plain GET for a file that never changes, so the edge answers almost all of them. On an edge miss, the shield tier answers, and only a shield miss reads the media bucket; the segment arrives later but still arrives. If a segment comes slowly and the buffer drains, the player steps down a rung for the next segment instead of stalling.
 
 Metadata and search (a mention): Postgres keyed by `videoId`, behind Redis. Change events feed a separate search index that runs a minute or two behind, off the playback path.
 
@@ -143,7 +153,7 @@ Metadata and search (a mention): Postgres keyed by `videoId`, behind Redis. Chan
 ### The transcoding pipeline
 - **Bad:** encode inside the upload request, or one worker runs ffmpeg on the whole file, one rendition after another. A 1-hour video holds a worker for over an hour, and a crash restarts everything.
 - **Good:** a job on a queue, workers pulling tasks, the file split into chunks, each chunk encoded per rendition in parallel, segments and playlists written to object storage. Workers scale on queue depth, failed tasks retry, status lives in a database.
-- **Great:** a split on keyframes into chunks of about 20 seconds (75 tasks for an average video, 900 for a 1-hour one). Keyframes at the same positions in every rendition, so the player switches cleanly. Output keys built from video, rendition and chunk, so a retry is safe. A lease returns a dead worker's task. A retry limit and a dead-letter queue stop one corrupt file from killing every worker. Low renditions first, manifests last. Separate queues by video length, so a 10-hour upload cannot starve short ones.
+- **Great:** a split on keyframes into chunks of about 20 seconds (75 tasks for an average video, 900 for a 1-hour one). Keyframes at the same positions in every rendition, so the player switches cleanly. Output keys built from video, rendition and chunk, so a retry is safe. A lease returns a dead worker's task. A retry limit and a dead-letter queue stop one corrupt file from killing every worker. Low renditions first, and a rendition enters the master playlist only when all its segments exist. Separate queues by video length, so a 10-hour upload cannot starve short ones.
 
 ### Adaptive playback and CDN hit ratio
 - **Bad:** the application server streams the file, or serves one MP4 for byte-range fetches. Or the server picks each viewer's quality. Or segments get a short TTL "for freshness".
@@ -153,7 +163,7 @@ Metadata and search (a mention): Postgres keyed by `videoId`, behind Redis. Chan
 ### View counts without hot rows
 - **Bad:** `UPDATE videos SET views = views + 1` per view, so a viral video queues on one row lock.
 - **Good:** the player sends one event after 30 seconds, the event goes to Kafka, and a consumer adds up events per video every few seconds and writes one update.
-- **Great:** says the count is at-least-once, slightly high and never blocking, and why that suits a number on a page. A viral video is a hot key, so its counter splits into sub-counters (a shard suffix on the key) summed on read. Raw events stay the source of truth, and an offline job reconciles the shown count.
+- **Great:** says the count is at-least-once, slightly high and never blocking, and why that suits a number on a page. A viral video is a hot key, so its counter splits into sub-counters (a shard suffix on the key) summed on read. Raw events stay the source of truth. An offline job reconciles from them and only ever raises the shown count (it keeps the larger of the two), so the count never goes down even when the job finds duplicates.
 
 ## Curveballs
 
@@ -163,16 +173,16 @@ Use one, at the extension point, unless the candidate already handled it.
 2. **Encode fleet failure (nothing encodes for 2 hours):** "The cloud provider reclaims all the spot workers at once, and nothing encodes for 2 hours. What happens?" Expect: uploads and playback are unaffected, because uploads land in object storage and the queue holds the jobs. Leases expire, and fixed output keys make re-runs safe. The backlog is about 42,000 videos, or 125 million vCPU-seconds, so a fleet twice as big clears it in about 2 hours. The two lowest renditions (about a tenth of the work) go first. An alert on the age of the oldest task. If time remains: one corrupt file crashes every worker that reads it. Expect a retry limit and a dead-letter queue.
    Fits: The transcoding pipeline
 3. **New market (slow, costly mobile data):** "We launch where most viewers are on slow, expensive mobile connections and the nearest CDN site is far away. What changes?" Expect: lower rungs (for example 144p, or audio only, at 100 to 150 kbps) and a data-saver default that starts low. Smaller first segments. Caches closer to viewers (a regional shield, or caches inside local internet providers' networks) and a regional copy of popular videos. Upload parts at the store's 5 MB minimum and more retries on weak phone connections. Smaller than that needs a resumable upload service in front of storage. Startup time and rebuffering measured per region.
-   Fits: Adaptive playback and CDN hit ratio
+   Fits: Adaptive playback and CDN hit ratio; Resumable upload to object storage
 
 ## Level bar
 
 Hire bar must show:
-- Requirements that cover views and uploads a day, video size and length, the startup and processing targets, view-count freshness, and what is out of scope.
+- Requirements that cover the view and upload volume, the video size, and the startup and processing targets.
 - The math, ending in "which means": about 2 Tbps against about 6,000 requests a second means the CDN carries the bytes, and 14 Gbps of uploads means devices upload straight to object storage.
 - A clean API and a working design: resumable chunked upload, a queue with workers, renditions cut into segments with a manifest, a CDN in front of object storage, a metadata service.
 - A correct account of adaptive bitrate: the player measures and decides, and the server only serves static files.
-- Retries and idempotent tasks after a nudge about a dead worker, and a fix for the hot view-count row when probed.
+- When probed on a dead worker or the view count: retries and idempotent tasks, and a fix for the hot view-count row.
 - One deep dive done properly when the interviewer picks it.
 
 Stretch signal:
@@ -192,5 +202,7 @@ Stretch signal:
 - "The CDN hit ratio is about 100%." The long tail and cold starts miss.
 - Short TTLs on segments for freshness, or a per-viewer token in the cache key. Both wreck the hit ratio. Year-long TTLs with no takedown story are the opposite mistake.
 - `views = views + 1` per view, or "exactly-once view counting". A displayed count needs neither.
+- An offline reconcile that lowers the shown count after it removes duplicates. The count must never go down.
+- Leaving the view count out of scope, as some popular write-ups do. Here it is a core feature with its own freshness rule, so leaving it out is a gap.
 - WebSockets or WebRTC for stored video. Plain HTTP GETs on cacheable files are cheaper.
 - Encoding every upload up to 4K in many codecs, when half the videos go quiet after their first week. Or a fleet of microservices for 6 uploads a second.

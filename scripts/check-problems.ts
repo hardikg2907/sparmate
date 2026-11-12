@@ -1,6 +1,6 @@
 // Validates problem files: frontmatter, required sections, tracker bullet present in TRACKER.md, id matches file name,
 // an "Expect:" in every numbered Curveballs or Extensions entry not marked "(already seen)", and at least two
-// checklist items in every step whose items come from the brief.
+// checklist items in every step whose items come from the brief, and no hire-bar item that restates an Extra.
 // Usage: npx tsx scripts/check-problems.ts [file ...]   (no arguments: every file under content/problems)
 // Bullets are checked against study-kit/TRACKER.md, or against the TRACKER.md in STUDY_ROOT when that is set.
 import { readFile, readdir } from "node:fs/promises";
@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { parseProblem } from "../src/server/engine/problems";
 import { BRIEF_STEPS, deriveChecklist, MIN_BRIEF_STEP_ITEMS } from "../src/shared/checklist";
 import { findBullet } from "../src/server/study/tracker";
+import { extrasHireBarClashes } from "../src/server/engine/problem-lint";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const trackerDir = process.env.STUDY_ROOT ? resolve(process.env.STUDY_ROOT) : join(appRoot, "study-kit");
@@ -65,6 +66,9 @@ for (const file of files) {
     }
     const changes = p.meta.track === "lld" ? "Extensions" : "Curveballs";
     for (const num of entriesWithoutExpect(p.sections[changes] ?? "")) problems.push(`${changes} entry ${num} has no "Expect:"`);
+    for (const c of extrasHireBarClashes(p.sections)) {
+      problems.push(`hire-bar item "${c.hire.slice(0, 60)}..." restates the Extra "${c.extra.slice(0, 60)}...": move the Extra into Core or word the item "when asked"`);
+    }
     const checklist = deriveChecklist(p.meta.track, p.sections);
     for (const step of BRIEF_STEPS[p.meta.track]) {
       const items = checklist[step]?.length ?? 0;

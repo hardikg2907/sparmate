@@ -9,6 +9,10 @@ tracker:
   bullet: "Vending Machine"
 notesFile: notes/b3-vending-machine.md
 lldFolder: vending-machine
+sources:
+  - title: "techinterview.org, Vending Machine LLD"
+    url: "https://www.techinterview.org/post/3233463855/lld-vending-machine/"
+confidence: "Medium. The coin-and-note model, change from stock, and the refund of exact pieces are the problem's standard form. One outside write-up agrees on the greedy-change flaw (it uses the same kind of counter-example) and on one sale at a time. It describes four states and an insert-then-select flow, and returns to the paying state when change cannot be made. This version chooses two states, select-then-insert, and a cancelled sale with a refund, and states each choice as a rule. Scenario and extension numbers were traced against the rules stated here."
 ---
 
 ## Opening prompt
@@ -39,6 +43,8 @@ Reveal a fact only when the candidate asks about it. Never volunteer the list.
 - **Demo:** `main()` shows an exact-money sale, a sale with change, a cancel, a sold-out slot, a refused operator call and a restock.
 - **Out of scope:** cards and other payment, a screen, collecting the cash, the operator taking products or pieces out, hardware faults, price changes during a sale, receipts, several products in one sale, saving state to disk.
 
+For the interviewer: on the order of steps, if the candidate proposes inserting money first and selecting after, say "select first" and add nothing.
+
 For the interviewer: on the change, largest piece first is accepted for the first version.
 
 For the interviewer: on the cancel, either no error or a no-slot-selected error is fine for a cancel with nothing selected.
@@ -49,16 +55,16 @@ For the interviewer: on the demo, read-only getters (quantity of a slot, count o
 
 Core:
 1. A machine with a fixed number of slots. The operator stocks each slot with a product and a quantity. *Ask: What does the machine hold, and who fills it?*
-2. The customer selects a slot, inserts pieces one at a time, and may cancel. *Ask: What are the customer's steps, and in what order?*
+2. The customer selects a slot, inserts pieces one at a time, and may cancel. They may select another slot while a sale is open, and the money stays. A sold-out or invalid slot, and any call made out of order, is refused and changes nothing. *Ask: What are the customer's steps, and in what order?*
 3. The sale completes when the total reaches the price. The machine dispenses, lowers the quantity and returns change. *Ask: When does a sale complete, and what does the customer get?*
-4. Change comes from stock, including the customer's pieces; no exact change cancels the sale. *Ask: Where does change come from, and what if it cannot be made?*
+4. Change comes from stock, including the customer's pieces. With no exact change the sale is cancelled and the exact pieces come back. *Ask: Where does change come from, and what if it cannot be made?*
 5. Cancel returns exactly the pieces inserted. *Ask: What does a customer get back on cancel?*
 6. The operator can restock and load money; both are refused during a sale. *Ask: What can the operator do, and when?*
-7. Safe when the keypad thread and the operator thread call at the same time. *Ask: Can several threads use it at once?*
+7. Safe when the keypad thread and the operator thread call at the same time (only when asked). *Ask: Can several threads use it at once?*
 
 Extras (credit when they name one, never a gap):
-- Invalid or out-of-order calls are refused without changing state. A bad call never crashes the machine.
-- When a sale is cancelled for lack of exact change, the exact pieces come back. The restock rule holds.
+- The restock rule holds: an empty slot takes any product, and a non-empty slot takes only the same product.
+- Read-only getters for the quantity of a slot and the count of a piece in stock, so `main()` can show state changes.
 
 ## Entities and relationships
 
@@ -138,12 +144,14 @@ The completion check (pay into stock, make change, then dispense or roll back), 
    Cash cashStock;
    State state = State::IDLE;
    std::optional<Order> order;              // has a value exactly when state == SLOT_SELECTED
-   std::mutex mtx;                          // one lock for both panels
+   mutable std::mutex mtx;                  // one lock for both panels and the getters
    Result tryCompleteSale();                // wait, or: pieces into stock, make change, roll back on failure
    bool makeChange(int amount, Cash& change);   // largest first; writes cashStock only on success
   public:
    explicit VendingMachine(int slotCount);  // throws std::invalid_argument when slotCount < 1
-   // the five overrides, each starts with std::lock_guard<std::mutex> lock(mtx);
+   int quantity(int slotId) const;          // read-only, for the demo: the quantity in a slot, 0 for an unknown id
+   int stockOf(Denomination d) const;       // read-only, for the demo: the pieces of one denomination in stock
+   // the five overrides and the two getters each start with std::lock_guard<std::mutex> lock(mtx);
  };
 ```
 
@@ -205,8 +213,9 @@ Pick one. Say the requirement, ask "What changes?", and hold the facts back unti
    - Same: with every call inside the window, scenarios 1 to 11 give the same results. Cancel still returns the exact pieces. No system clock and no sweeper thread.
    - Interviewer note: operator calls carry no time, but the demo ticks or makes a customer call first, so this never decides a result.
 3. **Dispense failure:** the dispenser can jam. The machine calls a `Dispenser` and may get a failure back. What changes?
-   - Facts: the dispenser returns success or failure. On failure the sale is cancelled. The customer gets back the exact pieces. The quantity and the stock stay as they were. The machine then goes to OUT_OF_ORDER. In that state every customer call is refused as out of order, and a piece inserted comes straight back. The operator's restock and load calls still work. A new operator call `repair()` goes back to idle. `repair()` in any other state is refused. A jam stops the whole machine, not one slot.
-   - Expect: a third state and a cell for every method. A dispenser interface injected at construction; the demo uses a fake that fails on demand. In the completion check, change is worked out in a local, then the dispenser runs, and only then do the stock and quantity change. A good answer says why that order matters.
+   - Facts: the dispenser returns success or failure. On failure the sale is cancelled. The customer gets back the exact pieces. The quantity and the stock stay as they were. A jam stops the whole machine, not one slot.
+   - Expect: a third state and a cell for every method. A dispenser interface injected at construction; the demo uses a fake that fails on demand. Either the stock and the quantity change only after the dispenser succeeds (the change is worked out on a copy), or a failure puts the stock back as it was: the change that `makeChange` took out goes back in, and the customer's pieces come out. A good answer says why the order matters.
+   - Facts once they ask what happens after a jam: the machine goes to OUT_OF_ORDER. In that state every customer call is refused as out of order, and a piece inserted comes straight back. The operator's restock and load calls still work. A new operator call `repair()` goes back to idle. `repair()` in any other state is refused.
    - Same: with a dispenser that never fails, scenarios 1 to 11 give the same results. Cancel, change and the busy rule do not change.
 
 ## Concurrency follow-up
@@ -258,4 +267,4 @@ Stretch signal:
 - Floating point for prices (rounding errors), or an `int` piece that is not checked against the seven values (an invalid piece gets in).
 - Locking each panel with its own mutex, or calling a public method from inside a locked one, or running code that can call back into the machine while holding the lock.
 - Reading the system clock for a timeout: the behaviour cannot be tested.
-- Five State classes and a factory before anything runs, or more than 25 minutes on steps 1 to 3 so nothing runs at the end.
+- Five State classes and a factory before anything runs, or more than about a third of the round on steps 1 to 3 so nothing runs at the end.

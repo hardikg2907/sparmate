@@ -28,7 +28,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Core features:** upload and download files of any type, keep a user's devices in sync automatically, and share a folder with other users (edit or view only). Deleted files can be restored for 30 days.
 - **Users:** 100 million users store data. 50 million are active each day, with about 2 devices each. About 40 million devices are online at the busiest time.
 - **Files:** a user has about 1,000 files on average. The average file is about 500 KB. Most files are under 1 MB. The largest allowed file is 50 GB.
-- **Changes:** an active user changes about 10 files a day. After skipping data we already hold, an average change uploads about 200 KB of new data. The busiest hour carries about 3 times the average.
+- **Changes:** an active user changes about 10 files a day. An average change brings about 200 KB of new data. The busiest hour carries about 3 times the average.
 - **Networks:** home upload speed is often 20 Mbit/s. Laptops sleep and phones lose signal in the middle of transfers.
 - **Sync speed:** a small file saved on one device shows on the user's other online devices within 10 seconds at p95. Large files take as long as the transfer needs.
 - **Offline:** a device may be offline for weeks, then catch up.
@@ -37,7 +37,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Consistency:** a user may see another device's change a few seconds late. A file must never appear half written.
 - **Sharing:** most shared folders have under 10 members. A shared folder appears inside each member's own folder tree.
 - **Available tech:** object storage, Postgres or MySQL, Redis, Kafka.
-- **Numbers:** one notification server holds about 200,000 idle connections. One metadata database shard holds about 2 TB comfortably.
+- **Numbers:** one server holds about 200,000 idle long-lived connections. One database node holds about 2 TB of data comfortably.
 - **Out of scope:** editing a file together in real time, previews, search inside files, virus scanning, billing and storage quotas.
 
 For the interviewer: on the numbers, give them only when the candidate asks what one server or shard can hold.
@@ -63,10 +63,13 @@ Extras (credit when they name one, never a gap):
 
 ## Capacity math
 
+The metadata bytes per file and per journal entry, the 4 MB block size and the headroom factors below are assumptions. Accept other reasonable values when the candidate gives a reason.
+
 - **Change rate:** 50 million users x 10 changes is 500 million a day, about 6,000 metadata commits a second and about 18,000 at peak, which means the metadata service is a busy database tier that needs sharding.
 - **Upload volume:** 500 million changes x 200 KB is 100 TB a day, about 1.2 GB a second (about 9 Gbit/s) on average and about 28 Gbit/s at peak, which means file bytes go straight from the client to object storage with signed URLs, never through our API servers.
 - **Stored bytes:** 100 TB a day is about 36 PB a year of new data, and live data is about 100 million users x 1,000 files x 500 KB = 50 PB, which means object storage for the bytes and a separate database for the metadata.
 - **Metadata:** 100 billion files x about 500 bytes of metadata is about 50 TB. At 2 TB a shard that is 25 shards, and about 50 with room to grow, which means a shard key is needed, and the natural one is the folder tree a change belongs to (a user's root or a shared folder), so one tree's journal lives on one shard.
+- **Journal growth:** 500 million changes a day at about 500 bytes an entry is about 250 GB a day, about 7.5 TB for the 30 days that restores need, which means old entries that a newer entry for the same path replaces are compacted away after 30 days, and a device that is further behind reads the current file entries instead.
 - **Large files:** 50 GB at 20 Mbit/s is 20,000 seconds, about 5.6 hours, which means an upload must be split into blocks and resume after a drop. At 4 MB a block that is 12,500 blocks, and the list of their 32-byte SHA-256 hashes is about 400 KB.
 - **Connections:** 40 million online devices / 200,000 per server is 200 notification servers, which means the push channel is its own fleet and carries only "something changed", never file data.
 - **Sync time:** the 10-second rule for small files leaves room for a commit (tens of ms), a push (under a second) and a list call plus a download of a few blocks, which means push, not polling every few minutes; polling every 10 seconds from 40 million devices would be 4 million requests a second.
@@ -113,7 +116,7 @@ Walk one sync to another device: the laptop holds a connection to a notification
 - **How bytes reach storage.** Signed URLs straight to object storage (reference), or the provider's multipart upload with one URL per part. A block service of our own in front of storage is fine if the candidate prices 28 Gbit/s through it.
 - **Block size.** Fixed 4 MB blocks (reference). Smaller blocks find more repeats but cost more metadata. Content-defined blocks (cut points chosen by a rolling hash) keep an insert near the start of a file from changing every later block. Fine with that reason.
 - **Deduplication scope.** Within one account (reference). Across all accounts saves more storage, but whether an upload was skipped tells a user that someone else holds that exact file, so it leaks information. Fine if the leak is named and handled.
-- **Push channel.** Long polling (reference), WebSockets or server-sent events. Polling alone is fine only with the request-rate math and a sync target it still meets.
+- **Push channel.** Long polling (reference), WebSockets or server-sent events. Polling alone is fine only with the request-rate math and a sync target it still meets. A message queue per device that carries the change records, as some guides teach, is partial credit: it works, but it keeps a second copy of the journal for each of 40 million devices, and a device that is offline for weeks needs a fallback anyway. The journal read by cursor gives the same result from one copy.
 - **Metadata store.** Sharded Postgres or MySQL by namespace (reference), or a distributed SQL or wide-column store, as long as appends to one namespace's journal stay ordered.
 - **Conflicts.** Keep both versions as a conflicted copy (reference). Last write wins fails the "never lose an edit" fact. Merging file contents is out of scope for arbitrary files.
 
@@ -146,20 +149,21 @@ Use one, at the extension point, unless the candidate already handled it.
    Fits: The change journal and cursors; Sharding the metadata
 2. **Reconnect storm:** "A bad deploy restarts every notification server at once. 40 million devices lose their connection. What happens, and what do you change?" Expect: if every device reconnects and lists at once, that is about 670,000 connections a second over one minute. Clients reconnect with random backoff spread over about 10 minutes (about 67,000 a second). No change is lost, because the journal and cursors hold the truth, and devices that wait just sync a little later. Roll deploys out a slice of servers at a time. Strong: the list call after a reconnect is cheap when nothing changed, and the server can tell clients to wait longer under load.
    Fits: The change journal and cursors
-3. **Version history:** "Product wants users to restore any version of any file from the last 12 months, not just deleted files for 30 days. What changes, and what does it cost?" Expect: the journal already records every version as a list of block hashes, so a restore is a new commit of an old list. Storage stops shrinking when files are overwritten: up to about 36 PB more over a year on top of about 50 PB of live data. Blocks must be kept while any version points at them, so count references or run a mark-and-sweep job. A block that is about to be deleted can be reused by an upload that was just told "already stored", so the sweep must skip recent blocks and recheck before deleting. Strong: old versions can move to cheaper storage.
+3. **Version history:** "Product wants users to restore any version of any file from the last 12 months, not just deleted files for 30 days. What changes, and what does it cost?" Expect: the journal already records every version as a list of block hashes, so a restore is a new commit of an old list. Storage stops shrinking when files are overwritten: up to about 36 PB more over a year on top of about 50 PB of live data. The journal must also be kept for 12 months instead of being compacted after 30 days: about 250 GB a day, about 90 TB a year of metadata, about 45 more shards' worth. Blocks must be kept while any version points at them, so count references or run a mark-and-sweep job. A block that is about to be deleted can be reused by an upload that was just told "already stored", so the sweep must skip recent blocks and recheck before deleting. Strong: old versions can move to cheaper storage.
    Fits: Uploading in blocks and skipping known ones
+4. **Long flight:** "A user edits 40 files in a shared folder on a laptop during a 12-hour flight. Meanwhile a colleague edits 5 of those files, deletes a subfolder that holds 3 others, and renames 1 more. The laptop reconnects. What does each person see?" Expect: the laptop first reads the journal from its cursor, then commits each change with the revision it started from. The 31 files nobody else touched commit normally. The 5 edited on both sides fail the compare-and-set and become conflicted copies next to the colleague's versions, so both edits survive. The 3 deleted files come back with the laptop's edits, because an edit beats a delete, and the colleague sees them reappear. For the renamed file, with the path as the key, the laptop's edit lands under the old name next to the renamed file: nothing is lost, but it is untidy; a stable file id that survives renames lets the edit follow the file. Strong: the laptop never applies the colleague's delete to a local file that still has unsent edits, and the app shows the user a list of what conflicted.
+   Fits: Conflicts and never losing an edit; The change journal and cursors
 
 ## Level bar
 
 Hire bar must show:
-- Requirements that cover sync across devices, sharing, the 50 GB limit, the change volume, no lost edits and how fast a change appears.
-- The upload math (about 100 TB a day, about 28 Gbit/s at peak), ending in "which means bytes go straight to object storage and metadata lives apart".
-- Files split into hashed blocks, with only missing blocks uploaded and uploads that resume.
-- A journal per namespace read by cursor, with a push that only says "something changed".
-- A clear answer for two devices editing one file that loses no edit.
-- One upload and one sync to a second device, walked through every box.
+- Requirements with numbers for the change volume, the 50 GB limit and the 10-second sync target, and the rule that no edit is lost.
+- The upload math (about 100 TB a day, about 28 Gbit/s at peak) and the decision it forces: bytes go straight to object storage, and metadata lives apart.
+- Files split into hashed blocks: only missing blocks are uploaded, and an upload resumes after a drop.
+- A sync path that loses nothing: devices catch up from an ordered change log read from a saved position, any push only says that something changed, and two devices editing one file never overwrite each other.
 
 Stretch signal:
+- Keeps other devices from seeing a half-written file (a temp file, then a rename) without a prompt.
 - Checks on the server that uploaded blocks really exist before the commit.
 - Treats notifications as hints and the journal as the truth, with a periodic check as a safety net.
 - Shards by namespace with the size math, and plans for a giant shared folder.
@@ -169,7 +173,7 @@ Stretch signal:
 ## Traps
 
 - File bytes sent through the API servers, or stored in the database.
-- Last write wins presented as fine, when the facts say no edit may be lost.
+- Last write wins presented as fine, when the facts say no edit may be lost. Some interview guides teach it for this problem, so it is partial credit when the candidate never heard the fact and switches to a conflicted copy once told; it is a red flag when they keep it after hearing the fact.
 - Polling the whole folder tree, or polling every few seconds from 40 million devices with no math.
 - Pushing file contents through the notification channel.
 - Trusting the client's word that a block was uploaded.

@@ -35,7 +35,7 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 - **Latency:** a search answers in under 200 ms at p99 on our side.
 - **Availability:** search targets 99.9%. Owner edits can be 99.5%.
 - **Sizes:** a place's full record is about 1 KB. Its location, category and id fit in about 40 bytes.
-- **Numbers:** one search server answers about 5,000 nearby searches a second from memory. Postgres is available, and so is Redis.
+- **Numbers:** one search server answers about 5,000 nearby searches a second. Postgres is available, and so is Redis.
 - **Regions:** users are global. One home region holds the source of truth; read copies in other regions are fine.
 - **Out of scope:** reviews and ratings, ranking by personal taste, text search by name, map tiles, routing and travel time, ads.
 
@@ -62,13 +62,15 @@ Extras (credit when they name one, never a gap):
 
 ## Capacity math
 
+The 50% target load per server and the snapshot load speed below are assumptions. Accept other reasonable values when the candidate gives a reason.
+
 - **Search rate:** 100 million users x 5 searches is 500 million a day, about 6,000 a second on average (500,000,000 / 86,400 = 5,787) and about 18,000 at peak, which means the read path decides the design.
 - **Write rate:** 1 million changes a day is about 12 a second, which means one Postgres primary carries all writes with room to spare. Read to write is about 500 to 1.
 - **Index size:** 100 million places x 40 bytes is about 4 GB, which means the whole geo index fits in the memory of one server. Sharding is not needed for size.
 - **Search servers:** 18,000 a second / 5,000 per server is about 4 servers at full load. At a 50% target load that is 8, spread over zones, which means each server holds a full copy of the index and more copies add throughput. Replication, not sharding.
 - **Full records:** 100 million x 1 KB is about 100 GB, which means place details live in Postgres (or a key-value store) with read replicas and a cache, separate from the small geo index.
 - **Cell size:** a geohash of 6 characters is a cell of about 1.2 km x 0.6 km, and 5 characters about 4.9 km x 4.9 km. For a 1 km radius, a 3 x 3 block of 5-character cells covers about 216 km² against a circle of about 3.1 km², while covering the circle's 2 km x 2 km bounding box with 6-character cells (about 0.74 km² each) takes 8 to 15 cells (6 to 11 km²), which means the cell size must follow the radius.
-- **Dense areas:** in the busiest part of a city, 11 km² at up to 5,000 places per km² is up to about 55,000 candidates for one search, which means a category filter inside the index and a radius that shrinks or a search that stops early at 20 results.
+- **Dense areas:** in the busiest part of a city, 11 km² at up to 5,000 places per km² is up to about 55,000 candidates for one search (an upper bound, because only the busiest square kilometre is that dense), which means a category filter inside the index and a radius that shrinks or a search that stops early at 20 results.
 - **Startup:** loading a 4 GB index snapshot at about 500 MB/s takes about 8 seconds, which means a restarted server can rebuild its copy quickly from a snapshot instead of from the database.
 
 ## API and entities
@@ -109,6 +111,7 @@ Walk one owner edit: the owner changes the address and position of a cafe. The p
   - Hierarchical cells such as S2 or H3 on an integer index. Fine; H3 hexagons give one distance from a cell to each neighbour.
   - PostGIS with a spatial index, or a search engine with geo queries, if the candidate shows it meets 18,000 searches a second with replicas.
   - A plain B-tree on latitude and longitude with a bounding box: only for tiny data. It returns a strip of the map, not nearby places.
+- **Cell size for a radius.** Cells sized to the radius, with a cover of smaller cells for small radii (reference). A fixed table from radius to geohash length, then the cell and its 8 neighbours (for example 5 characters for 1 km), is a common textbook answer and is correct. At 1 km it reads about 70 times the circle's area (216 km² against 3.1 km²), so in a dense centre it returns far too many candidates. Full credit when the candidate sees that and stops early or uses smaller cells; partial credit when they never weigh the cost.
 - **Where the index lives.** In-memory on each search server (reference), Redis GEO commands, or the database's own spatial index. All fine if the full copy versus sharded choice follows the 4 GB size.
 - **Keeping the index fresh.** A change stream to every server (reference), a rebuild every hour from the database, or both. An hourly rebuild alone meets the 1-hour rule.
 - **Paging.** A page token that holds the last distance and id, or caching the sorted candidate list for a minute. Offset paging that recomputes everything is weak but works at this size.
@@ -144,14 +147,13 @@ Use one, at the extension point, unless the candidate already handled it.
 ## Level bar
 
 Hire bar must show:
-- Requirements that cover radius, category, sort order, the search rate, the latency target and how fresh results must be.
-- The math that the index is about 4 GB, ending in "which means a full copy per server, scaled by replicas, not shards".
-- A geo index with a reason, and why a plain latitude and longitude index fails.
-- The neighbour cells and an exact distance check after the index lookup.
-- One search walked through every box, and one owner edit reaching the index.
+- Requirements with numbers for the search rate, the latency target and the 1-hour freshness rule.
+- The index-size math (about 4 GB) and the decision it forces: a full copy per server, scaled by replicas, not shards.
+- A search path: a geo index chosen with a reason that misses no nearby place at a cell edge (when the index is cell-based), then an exact distance check. An owner edit reaches search within the hour.
 - When probed, a fix for dense areas that is not "add servers".
 
 Stretch signal:
+- Says why a plain latitude and longitude index fails, when it comes up.
 - Matches the cell size to the radius, with the coverage numbers.
 - Adapts to density (a count-based quadtree or a ring-by-ring search) without a prompt.
 - Uses the outbox or change data capture so no edit is lost on the way to the index.
@@ -160,7 +162,7 @@ Stretch signal:
 
 ## Traps
 
-- "Shard the index by region" before doing the math: 4 GB fits in one server's memory.
+- "Shard the index by region" before doing the math: 4 GB fits in one server's memory. Many guides teach region sharding, so this is partial credit, not a red flag: full credit once the size math leads them to full copies and replicas.
 - A B-tree on latitude and longitude, or computing the distance to every place.
 - Looking up only the user's own cell, so nearby places across an edge go missing.
 - Calling the cell lookup the answer, with no exact distance check.

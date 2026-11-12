@@ -2,13 +2,19 @@
 id: b3-tic-tac-toe
 track: lld
 title: Tic-Tac-Toe
-difficulty: easy
+difficulty: medium
 tags: [grid, validation, win-detection, command, strategy]
 tracker:
   section: "### B3. Applied Practice — Classic LLD Problems"
   bullet: "Tic-Tac-Toe / Chess"
 notesFile: notes/b3-tic-tac-toe.md
 lldFolder: tic-tac-toe
+sources:
+  - title: "AlgoMaster, design tic tac toe"
+    url: "https://algomaster.io/learn/lld/design-tic-tac-toe"
+  - title: "Hello Interview, Connect Four"
+    url: "https://www.hellointerview.com/learn/low-level-design/problem-breakdowns/connect-four"
+confidence: "Medium. The grid, the typed move result, the turn rule and the win check around the last move are the problem's standard form. The outside write-ups use a fixed board where the win length equals the board size, and two players. This version generalises to a win length below the board size and to three or more players, and it states why per-line counters then fail. The undo and second-game extensions follow the usual move-stack and rules-interface shapes. Scenario and extension numbers were traced against the stated rules."
 ---
 
 ## Opening prompt
@@ -49,10 +55,10 @@ Core:
 3. Players take turns in setup order. Only accepted moves pass the turn. *Ask: Who moves first, and when does the turn pass?*
 4. A win is K or more in a row, column or diagonal, checked only around the last move. *Ask: What counts as a win, and how fast must the check be?*
 5. A draw is a full board with no winner. A win on the last cell is a win. *Ask: When is the game a draw?*
-6. Safe when moves arrive from several threads. *Ask: Can several threads use it at once?*
+6. Safe when moves arrive from several threads (only when asked). *Ask: Can several threads use it at once?*
+7. The caller can read the game state (in progress, won, draw), the winner, whose turn it is, and any cell. *Ask: What can the caller read about the game?*
 
 Extras (credit when they name one, never a gap):
-- The caller can read the game state (in progress, won, draw), the winner, whose turn it is, and any cell.
 - The win check costs O(K) or better and never scans the whole board.
 
 ## Entities and relationships
@@ -103,11 +109,12 @@ Questions to ask once the code runs, one per turn, only if the candidate has not
 
  class Game {
    int k;
-   Board board;
+   Board board;                                                      // built from checkedSize(...), so a negative N never reaches the vector
    std::vector<Player> players;
    int current = 0, moves = 0, winner = -1;
    GameState state = GameState::IN_PROGRESS;
    mutable std::mutex mtx;
+   static int checkedSize(int size, int winLength, const std::vector<Player>& ps);   // validates the whole setup, returns size
    bool completesLine(int r, int c, int who) const {
      static const int axes[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
      for (const auto& a : axes)
@@ -127,12 +134,13 @@ A grid of player indexes plus a walk from the last cell turns "did this move win
 
 - **Strategy** for a computer player (how it picks a cell) and, later, for pluggable board-game rules. It is not needed in the first version.
 - **Command** for undo. A stack of `Move` records is just as good here. Accept either.
-- Not needed: Singleton, Factory, State pattern (3 states), Observer, a class per direction (`RowChecker` and so on), a `WinStrategy` hierarchy before a second win rule exists.
+- **Observer** for a game-over callback: accepted if it takes only a few minutes and the callback runs after the lock is released.
+- Not needed: Singleton, Factory, State pattern (3 states), a class per direction (`RowChecker` and so on), a `WinStrategy` hierarchy before a second win rule exists.
 - **Accepted alternatives:**
   - Per-line counters per player (rows, columns, 2 diagonals) give O(1) checks, but only when K equals N. K is configurable, so a candidate who starts here must handle K below N. Switching to the walk after one question is fine. A single signed counter (+1 for one player, -1 for the other) works for 2 players only.
   - A full-board scan is correct but costs O(N times N) per move. It is below the bar if the candidate defends it as "fine for 3 by 3". It is at the bar if the candidate names the cost and fixes it after one question.
   - A scan of the whole row, column and both diagonals through the last cell costs O(N) per move. It is at the bar if the candidate names the cost and bounds the walk by K after one question.
-  - A `char` grid of symbols works when setup also refuses the empty marker as a symbol, because every symbol is unique. The player index is simpler: identity never depends on display.
+  - A `char` grid of symbols works only if the empty state is stored apart from the symbols (a flag per cell, or the player index), because any character is a legal symbol. The player index is simpler: identity never depends on display.
   - Flat storage (one `vector<int>` of N times N) works if the walk steps by row and column and checks the range on both, never by flat-index steps.
   - The line-walk living in `Board` or in `Game`, a result enum, a result struct or distinct exceptions for bad moves, `Move` as a struct or three ints. Accept all, with one error style.
 
@@ -175,9 +183,11 @@ Unless stated, each scenario starts from a fresh 3 by 3 game with K = 3, and two
    - `O(0,0)` is accepted.
    - `X(1,1)` and `X(0,0)` are both rejected: cell taken.
    - End state: 2 moves played, X at `(1,1)`, O at `(0,0)`, X to move.
-6. **After the game ends.** Take the finished game from scenario 1. `O(2,2)`, `X(2,2)` and `X(0,0)` are each rejected as game over, even though `(0,0)` is taken. The board, the winner and the move count do not change. The finished draw from scenario 3 also rejects every move as game over.
+6. **After the game ends.** On a fresh game, play the five moves of scenario 1, so X has won. `O(2,2)`, `X(2,2)` and `X(0,0)` are each rejected as game over, even though `(0,0)` is taken. The board, the winner and the move count do not change. On another fresh game, play the nine moves of scenario 3, so the game is a draw. `O(0,0)` and `X(0,0)` are both rejected as game over.
 7. **Setup checks.** Each of these is rejected with a visible error, and no game exists:
    - N = 2, K = 2.
+   - N = 0, K = 3.
+   - N = -1, K = 3.
    - N = 3, K = 4.
    - N = 5, K = 2.
    - N = 3, K = 3 with two players that both use the symbol `X`.
@@ -222,8 +232,8 @@ Unless stated, each scenario starts from a fresh 3 by 3 game with K = 3, and two
 Give one with 15 minutes left. Undo is the default. Use 2 or 3 for a candidate who finishes early.
 
 1. **Undo the last move.** "Players may take back their last move, as many times as they like, back to an empty board." What changes? Expect: a history of accepted moves, as a stack of `Move` records or as `Command` objects with `execute` and `undo`. `undo()` removes the last record, empties its cell, lowers the move count, gives the turn back to that mover, and sets the state to IN_PROGRESS with no winner. Undoing a winning or drawing move reopens the game. `undo()` on an empty history reports "nothing to undo" and changes nothing. The line-walk needs no rollback. A counter design must roll its counters back, and that is where it breaks. `undo()` takes the same lock as `move`. What must stay the same: all 5 reject reasons, turn order, win and draw rules. A rejected move leaves no history entry. No redo.
-   - Check: after scenario 1, `undo()` empties `(0,2)`, the game is in progress, X is to move, and there is no winner. `X(0,2)` wins again. Then 5 undos reach an empty board with X to move, and a 6th is rejected.
-   - Check: after scenario 3, `undo()` empties `(2,2)`, the game is in progress, and X is to move. `X(2,2)` gives DRAW again.
+   - Check: after the moves of scenario 1, `undo()` empties `(0,2)`, the game is in progress, X is to move, and there is no winner. `X(0,2)` wins again. Then 5 undos reach an empty board with X to move, and a 6th is rejected.
+   - Check: after the moves of scenario 3, `undo()` empties `(2,2)`, the game is in progress, and X is to move. `X(2,2)` gives DRAW again.
 2. **A computer player.** "A seat can be played by the computer." What changes? Expect: a `MoveStrategy` interface that reads the board and returns a cell, and a way to mark which players are computers. The computer's cell goes through the same `move` call, so the same validation applies. The strategy sees a read-only board and never writes to it. `Game` asks the strategy in one place and has no other `isComputer` branches. Two strategies, so Strategy has a reason to exist. `FirstFree` takes the lowest row, then the lowest column, among empty cells. `WinOrBlock` takes a cell that wins now, else a cell that blocks the opponent's immediate win, else the first free cell. Ties go to the lowest row, then the lowest column. No minimax. This extension is for two players. What must stay the same: human moves, reject reasons, turn order, win and draw rules.
    - Check: O is `FirstFree`. After `X(1,1)` it takes `(0,0)`. After `X(0,1)` it takes `(0,2)`. `X(2,1)` wins for X.
    - Check: X is `FirstFree` and O is `WinOrBlock`, both computers. The moves are `X(0,0)` `O(0,1)` `X(0,2)` `O(1,0)` `X(1,1)` `O(2,0)` `X(1,2)` `O(2,2)` `X(2,1)`, and the result is DRAW.
@@ -241,10 +251,10 @@ Give one with 15 minutes left. Undo is the default. Use 2 or 3 for a candidate w
 
 Hire bar must show:
 - Step 1 questions that cover N and K, the number of players and their symbols, who moves first, what happens on a bad move, the draw rule, and threads.
-- `Board`, `Player`, a typed result for the 5 reject reasons, and `Game` as real types. A player's identity is separate from how it is displayed: cells hold the player index (best), or a symbol with an empty marker that no player can use.
-- A bounded win check: it looks only around the last move and costs O(K) or better. Per-line counters are fine as a start, but the final program must handle K below N (scenarios 8 to 11). A full-board scan or a scan of whole lines is allowed only if the candidate names the cost and fixes it after one question.
+- `Board`, `Player`, a typed result for the 5 reject reasons, and `Game` as real types. A player's identity is separate from how it is displayed: cells hold the player index (best), or a symbol with the empty state kept apart from the symbols, so no legal symbol can read as empty.
+- A win check that looks only around the last move. When asked its cost, they say O(K) or better. Per-line counters are fine as a start, but the final program must handle K below N (scenarios 8 to 11). A full-board scan or a scan of whole lines is allowed only if the candidate names the cost and fixes it after one question.
 - All 5 reject reasons. A rejected move changes nothing and the turn stays. Win is checked before draw.
-- A program that compiles and runs scenarios 1 to 11 inside the time: skeleton compiling by minute 25, a full game running by minute 45. The problem is easy, so speed and cleanliness are the bar.
+- A program that compiles and runs scenarios 1 to 11 inside the time: skeleton compiling by minute 25, a full game running by minute 45. The core is small, so speed and cleanliness are the bar. A win length below the board size is the part that takes thought.
 - Correct locking when asked.
 - One extension landed in the last 15 minutes as a small, local change, with the candidate saying which existing behaviour stays the same.
 
@@ -271,4 +281,4 @@ Stretch signal:
 - Undo by copying the whole board for every move, then forgetting the turn, the winner or the state.
 - A computer player with a writable `Game&` that places its own mark and skips validation.
 - A global lock "and done", locking `move` but not the readers, or holding the lock while calling strategy code that can block or that locks the same game again (a plain `std::mutex` deadlocks).
-- Spending more than 25 minutes on steps 1 to 3 so nothing runs at the end.
+- Spending more than about a third of the round on steps 1 to 3 so nothing runs at the end.
