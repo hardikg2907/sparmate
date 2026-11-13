@@ -32,12 +32,12 @@ export const COMMON_VARS = ["date", "problem_title", "track", "mode", "duration_
 export const PROMPT_VARS = {
   "interviewer-hld": ["problem_brief", "extension_minute", "phase_plan"],
   "interviewer-lld": ["problem_brief", "extension_minute", "phase_plan"],
-  "guide-hld": ["problem_brief", "phase_plan", "focus"],
-  "guide-lld": ["problem_brief", "phase_plan", "focus"],
+  "guide-hld": ["problem_brief", "phase_plan", "focus", "chat_voice"],
+  "guide-lld": ["problem_brief", "phase_plan", "focus", "chat_voice"],
   "tester-lld": ["problem_brief"],
   "judge-hld": ["problem_brief", "rubric"],
   "judge-lld": ["problem_brief", "rubric"],
-  coach: ["problem_brief", "teaching_md", "scorecard_json"],
+  coach: ["problem_brief", "teaching_md", "scorecard_json", "chat_voice"],
   scribe: ["teaching_md", "max_ops"],
   "brief-writer": ["section_list", "example_problem"],
   "brief-checker": ["example_problem"],
@@ -70,6 +70,8 @@ export class PromptLoader {
     for (const [k, v] of Object.entries(vars)) if (allowed.has(k)) scoped[k] = v;
     // The rubric is inserted as a value, so its own level placeholders need filling before it goes in.
     if (scoped.rubric !== undefined) scoped.rubric = renderPrompt(scoped.rubric, levelVars(scoped), "rubric");
+    // The study folder's TEACHING.md is the learner's own copy and can lag behind, so the chat writing rules ship with the app.
+    if ((PROMPT_VARS[name] as readonly string[]).includes("chat_voice")) scoped.chat_voice = await this.readContent("voice.md", "content/voice.md");
     return renderPrompt(await this.template(name), scoped, `content/prompts/${name}.md`);
   }
 

@@ -206,3 +206,25 @@ describe("structured block rules in guide and coach prompts", () => {
     expect(coachOut).not.toContain("frame id");
   });
 });
+
+describe("chat voice rules", () => {
+  it("ship with the app and reach every teaching role", async () => {
+    const loader = new PromptLoader(join(APP_ROOT, "content"), APP_ROOT);
+    const base = commonVars({ date: "2026-01-01", problemTitle: "Cache", track: "hld", mode: "guided", durationMin: 45, candidateProfile: "" });
+    for (const name of ["coach", "guide-hld", "guide-lld"] as const) {
+      const extra = Object.fromEntries(PROMPT_VARS[name].map((k) => [k, "x"]));
+      const out = await loader.render(name, { ...base, ...extra } as never);
+      expect(out, name).toContain("Teach one new idea per reply.");
+      expect(out, name).toContain("Explain a term before you use it.");
+      expect(out, name).not.toMatch(/\bmushy\b/);
+    }
+  });
+
+  it("are filled in even when the caller passes something else for them", async () => {
+    const loader = new PromptLoader(join(APP_ROOT, "content"), APP_ROOT);
+    const base = commonVars({ date: "2026-01-01", problemTitle: "Cache", track: "hld", mode: "interview", durationMin: 45, candidateProfile: "" });
+    const out = await loader.render("coach", { ...base, problem_brief: "b", teaching_md: "t", scorecard_json: "{}", chat_voice: "ignored" } as never);
+    expect(out).not.toContain("ignored");
+    expect(out).toContain("Start with the content, not a grade.");
+  });
+});
