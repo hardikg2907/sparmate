@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LIMITS } from "../../shared/protocol";
@@ -204,5 +204,32 @@ describe("structured block rules in guide and coach prompts", () => {
     const coachOut = await loader.render("coach", { ...base, ...coachExtra } as never);
     expect(coachOut).not.toContain("box, arrow, or frame");
     expect(coachOut).not.toContain("frame id");
+  });
+});
+
+describe("chat voice rules", () => {
+  it("ship with the app and reach every teaching role", async () => {
+    const loader = new PromptLoader(join(APP_ROOT, "content"), APP_ROOT);
+    const base = commonVars({ date: "2026-01-01", problemTitle: "Cache", track: "hld", mode: "guided", durationMin: 45, candidateProfile: "" });
+    for (const name of ["coach", "guide-hld", "guide-lld"] as const) {
+      const extra = Object.fromEntries(PROMPT_VARS[name].map((k) => [k, "x"]));
+      const out = await loader.render(name, { ...base, ...extra } as never);
+      expect(out, name).toContain("Teach one new idea per reply.");
+      expect(out, name).toContain("Explain a term before you use it.");
+      expect(out, name).not.toMatch(/\bmushy\b/);
+    }
+  });
+
+  it("keep prompt-only labels out of the starter study contract", async () => {
+    const teaching = await readFile(join(APP_ROOT, "study-kit", "TEACHING.md"), "utf8");
+    expect(teaching).not.toMatch(/\bmushy\b/);
+  });
+
+  it("are filled in even when the caller passes something else for them", async () => {
+    const loader = new PromptLoader(join(APP_ROOT, "content"), APP_ROOT);
+    const base = commonVars({ date: "2026-01-01", problemTitle: "Cache", track: "hld", mode: "interview", durationMin: 45, candidateProfile: "" });
+    const out = await loader.render("coach", { ...base, problem_brief: "b", teaching_md: "t", scorecard_json: "{}", chat_voice: "ignored" } as never);
+    expect(out).not.toContain("ignored");
+    expect(out).toContain("Start with the content, not a grade.");
   });
 });
