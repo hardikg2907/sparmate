@@ -114,7 +114,7 @@ What it should have been:
 
 What it should have been:
 
-> The second thing to know is that **a WAL record is physical, not logical.** It does not store your SQL statement. It stores something much lower level, along the lines of "in block 4200, at offset 12, set these bytes to this value."
+> The second thing to know is that **a WAL record is physical.** It stores a byte-level change, along the lines of "in block 4200, at offset 12, set these bytes to this value." Your SQL statement is not in it.
 >
 > Why does that matter? Replaying a WAL record needs no SQL parser and no query planner. Postgres just copies bytes into a page. **That is why recovery can chew through gigabytes of log quickly.**
 >
@@ -262,7 +262,7 @@ With the notes closed, ask three things.
 
 The check is a **diagnostic, not an exam.** Its job is to find the soft spot while fixing it is still cheap.
 
-If an answer is mushy, say which part is mushy, **re-teach that piece on the spot**, then ask again. Never flag a gap and move on, because a gap you named but did not fill is worse than one you never found. Leave the topic at `[~]` and pick it up next session. The `[~]` mark means "needs one more pass", not "failed".
+If part of an answer is vague or wrong, quote that part, **re-teach that piece on the spot**, then ask again. Never flag a gap and move on, because a gap you named but did not fill is worse than one you never found. Leave the topic at `[~]` and pick it up next session. The `[~]` mark means "needs one more pass", not "failed".
 
 Do not mark `[x]` to be kind, because a false `[x]` hides a hole they will rediscover in an interview. Equally, do not withhold `[x]` to look rigorous. If they can explain the mechanism, name the tradeoff and transfer it to a new system, then they know it. Say so, and let them enjoy it.
 
@@ -491,7 +491,7 @@ Only edit the status marks and note links in the tracker. Do not rewrite or reor
 | Use `→` and `≈` and `×` inside a sentence | Spell the words out, and keep the symbols in the diagram |
 | Print the scaffolding, such as `# BUILD 3` | Name the heading after the topic |
 | Announce that something is surprising | Say the surprising thing and let it surprise them |
-| End every section with a quotable aphorism | Save it for once a session, at most |
+| End every section with a quotable aphorism | Say the point as a plain fact |
 | Explain with text when a picture would do | Draw the layers, the sequence, the layout, the before and after |
 | Say "it depends" and stop there | Give the decision rule and a number |
 | Cover six bullets shallowly in one session | Cover one bullet deeply enough that they can defend it |

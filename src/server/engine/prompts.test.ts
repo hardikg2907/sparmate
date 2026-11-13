@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LIMITS } from "../../shared/protocol";
@@ -218,6 +218,11 @@ describe("chat voice rules", () => {
       expect(out, name).toContain("Explain a term before you use it.");
       expect(out, name).not.toMatch(/\bmushy\b/);
     }
+  });
+
+  it("keep prompt-only labels out of the starter study contract", async () => {
+    const teaching = await readFile(join(APP_ROOT, "study-kit", "TEACHING.md"), "utf8");
+    expect(teaching).not.toMatch(/\bmushy\b/);
   });
 
   it("are filled in even when the caller passes something else for them", async () => {
