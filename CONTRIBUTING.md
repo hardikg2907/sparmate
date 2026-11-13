@@ -43,8 +43,9 @@ Several people or agents can work on this repo at once. These rules keep them ap
   npm ci
   ```
 
-- The main checkout stays on `main` and only receives merges. Nobody commits to `main` directly.
-- Every change lands through a pull request, squash-merged. After a merge, other open branches rebase on `main` before they merge.
+- The main checkout stays on `main` and only receives merges. Nobody commits code to `main` directly.
+- Every code change lands through a pull request, squash-merged. After a merge, other open branches rebase on `main` before they merge.
+- A docs-only change (Markdown files only) is the exception. Commit it straight on `main` and push. It needs no worktree, no pull request and no `npm run verify`. Run `npx prettier --check` on the changed files and the privacy scan first.
 - Run `npm run verify` before you open or update a pull request. While CI is not running, paste the result in the pull request body.
 - A worktree has no `.env`. For a manual run, set `STUDY_ROOT` and `DATA_DIR` to scratch folders, so the app does not create or change a real study folder.
 - The end-to-end scripts pick a free port from 4750 to 4799 when `PORT` is unset. Do not use the app's default port 4747 for tests, because someone may be using the app.

@@ -11,8 +11,9 @@ Sparmate is a TypeScript app (Fastify server, React and Vite web app). Read `CON
 
 - One task is one git worktree and one branch. Never share a checkout. Never switch branches in a checkout that someone else uses.
 - Make a worktree with `git worktree add ../sparmate-<topic> -b <type>/<topic> main`, then run `npm ci`.
-- The main checkout stays on `main` and only receives merges. Never commit to `main`.
-- Every change lands through a pull request, squash-merged. After a merge, rebase your branch on `main`.
+- The main checkout stays on `main` and only receives merges. Never commit code to `main`.
+- Every code change lands through a pull request, squash-merged. After a merge, rebase your branch on `main`.
+- A docs-only change (Markdown files only) is the exception. Commit it straight on `main` and push. It needs no worktree, no pull request and no `npm run verify`. Run `npx prettier --check` on the changed files and the privacy scan first.
 - A worktree has no `.env`. For a manual run, set `STUDY_ROOT` and `DATA_DIR` to scratch folders.
 
 ## Before you open a pull request
