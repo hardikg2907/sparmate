@@ -104,6 +104,27 @@ describe("recommendation", () => {
     expect(out.find((p) => p.id === "b3-lot")?.redoDueOn).toBe("2026-11-06");
   });
 
+  it("pushes the due date out after a redo that scored better, and back to a week after a worse one", () => {
+    const scored = (createdAt: string, score: number): SessionSummary => ({ ...session("b3-lot", "lld", createdAt), scores: [{ id: "k", name: "K", score }] });
+    const due = (history: SessionSummary[]) => buildProblemSummaries(problems, { bullets: marks, lastLogTrack: null }, history, "2026-11-12").find((p) => p.id === "b3-lot");
+    const first = scored("2026-10-20T10:00:00.000Z", 2);
+    expect(due([first])).toMatchObject({ redoDueOn: "2026-10-27", badge: "redo" });
+    const better = scored("2026-11-03T10:00:00.000Z", 3);
+    expect(due([first, better])).toMatchObject({ redoDueOn: "2026-11-17", badge: null });
+    expect(due([first, better, scored("2026-11-04T10:00:00.000Z", 1)])).toMatchObject({ redoDueOn: "2026-11-11", badge: "redo" });
+  });
+
+  it("gives the next badge to a problem with no tracker bullet, and not to a tried one", () => {
+    const partial = bullets([["c2-chat", { lineIndex: 254, mark: "[ ]", suffix: null }]]);
+    expect(buildProblemSummaries(problems, { bullets: partial, lastLogTrack: "lld" }, [], "2026-10-29").find((p) => p.badge === "next")?.id).toBe("c2-chat");
+    const missing = bullets([]);
+    const out = buildProblemSummaries(problems, { bullets: missing, lastLogTrack: "lld" }, [], "2026-10-29");
+    expect(out.find((p) => p.badge === "next")?.id).toBe("c2-url");
+    const tried = buildProblemSummaries(problems, { bullets: missing, lastLogTrack: "lld" }, [session("c2-url", "hld", "2026-10-28T10:00:00.000Z")], "2026-10-29");
+    expect(tried.find((p) => p.id === "c2-url")?.badge).toBeNull();
+    expect(tried.find((p) => p.badge === "next")?.id).toBe("b3-lot");
+  });
+
   it("does not count a gap round as an attempt: it leaves the last attempt, the redo clock and the next track alone", () => {
     const gapRound: SessionSummary = { ...session("b3-lot", "lld", "2026-11-05T10:00:00.000Z"), focus: true };
     const out = buildProblemSummaries(problems, { bullets: marks, lastLogTrack: "lld" }, [gapRound], "2026-11-06");

@@ -163,7 +163,7 @@ The rest of the file is free text. You can list stacks you know well, for exampl
 
 ## A round, step by step
 
-1. **Start the day's session.** Today picks it from your weekly plan, and a due redo of the day's track comes first. Or pick any problem in the Library.
+1. **Start the day's session.** Today picks it from your weekly plan, and a new problem of the day's track comes before a due redo. The redo day is for redos. Or pick any problem in the Library.
 2. **Choose a mode.** Interview mode is the real round. HLD gets 45 minutes, and LLD gets 120 (you can change both in Settings). There is no help on the clock. The interviewer adds the extension 10 minutes (HLD) or 15 minutes (LLD) before the end. In guided mode you ask the guide to check a step or give a hint.
 3. **Work through the steps.** The step bar shows where you are. Click a step to move there.
    - **HLD:** draw on the whiteboard with the component palette and talk in the chat, typed or spoken. Each step has its own frame, and the frame comes into view when the step changes. "What the interviewer sees" shows how your diagram reads as text, so you can fix an unlabelled box or a loose arrow.

@@ -9,8 +9,12 @@ const DAY = 86_400_000;
 export const RECENT_PAUSE_MS = DAY;
 /** A round with less clock than this has nothing worth a debrief. */
 export const MIN_DEBRIEF_CLOCK_MS = 5 * MINUTE;
-/** A redo is due this many days after the last attempt. */
+/** The first redo gap, and the gap after a round that scored lower than the one before it. */
 export const REDO_AFTER_DAYS = 7;
+/** The redo gap never grows past this, so a mastered problem still comes back. */
+export const MAX_REDO_GAP_DAYS = 56;
+/** Two mean scores closer than this are equal, so float noise never counts as progress. */
+const SCORE_EPSILON = 1e-9;
 /** Rounds in this window count when the Redo day chooses the track with less practice. */
 const RECENT_ROUNDS_DAYS = 14;
 
@@ -76,9 +80,31 @@ export function localDay(date: Date): string {
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
 
-/** The day a redo falls due: a week after the attempt, as a local date. */
-export function redoDueOn(attemptDay: string): string {
-  return addDays(attemptDay, REDO_AFTER_DAYS);
+/**
+ * Days between the last attempt and the next redo. The gap starts at the base gap, doubles each time a scored attempt
+ * beats the one before it (up to the cap), resets after a lower score and stays after an equal one. Gap rounds and
+ * rounds without a scorecard say nothing about how well the problem went, so they are left out.
+ */
+export function redoIntervalDays(history: readonly Pick<SessionHistoryItem, "focus" | "status" | "scores" | "createdAt">[]): number {
+  const means = history
+    .filter((h) => isAttempt(h) && h.status === "debriefed" && h.scores !== undefined && h.scores.length > 0)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((h) => {
+      const scores = h.scores ?? [];
+      return scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
+    });
+  let gap = REDO_AFTER_DAYS;
+  for (let i = 1; i < means.length; i++) {
+    const diff = (means[i] ?? 0) - (means[i - 1] ?? 0);
+    if (diff > SCORE_EPSILON) gap = Math.min(gap * 2, MAX_REDO_GAP_DAYS);
+    else if (diff < -SCORE_EPSILON) gap = REDO_AFTER_DAYS;
+  }
+  return gap;
+}
+
+/** The day a redo falls due, as a local date, when the server did not send one. */
+export function redoDueOn(attemptDay: string, gapDays: number = REDO_AFTER_DAYS): string {
+  return addDays(attemptDay, gapDays);
 }
 
 function addDays(day: string, days: number): string {
@@ -153,8 +179,10 @@ export function newestOpenGap(history: readonly SessionHistoryItem[]): { item: S
 }
 
 /**
- * Chooses what Today offers. Order: a round paused in the last day first; then by the day's kind. On a track day a
- * due redo of that track comes before an unfinished round of that track, and both come before a new problem.
+ * Chooses what Today offers. Order: a round paused in the last day first; then by the day's kind. On a track day:
+ * an unfinished round of that track, the next new problem of that track, the oldest due redo of that track, the next
+ * new problem of the other track, then the oldest due redo of any track. The Redo day is the place for redos, so a
+ * partly done problem never crowds out new ones.
  * A problem with an open round is never offered as a redo or as new, because its round is the way back to it.
  * The next new problem is the first fresh, non-custom problem in the list order the server gives, which follows
  * the tracker; the server's own recommendation wins when it is on the day's track.
@@ -201,12 +229,15 @@ export function selectToday({ now, plan, problems, history }: TodayInput): Today
   }
 
   const track: Track = dayKind;
-  const redo = dueRedos.find((e) => e.problem.track === track);
-  if (redo) return finish(redoHero(redo));
+  const other: Track = track === "hld" ? "lld" : "hld";
   const unfinished = open.find((item) => item.track === track);
   if (unfinished) return finish({ kind: "resume", round: unfinishedRound(unfinished, nowMs) });
-  const next = newFor(track) ?? newFor(track === "hld" ? "lld" : "hld");
+  const next = newFor(track);
   if (next) return finish(newHero(next));
+  const redo = dueRedos.find((e) => e.problem.track === track);
+  if (redo) return finish(redoHero(redo));
+  const nextOther = newFor(other);
+  if (nextOther) return finish(newHero(nextOther));
   const anyRedo = dueRedos[0];
   return finish(anyRedo ? redoHero(anyRedo) : { kind: "empty" });
 }

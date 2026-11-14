@@ -19,6 +19,7 @@ import { UsageLedger } from "./engine/usage-ledger";
 import { wrapDriverWithLedger } from "./engine/usage-driver";
 import { killLiveProcessGroups } from "./runner/process";
 import { initStudyKit } from "./study/kit";
+import { syncTrackerBullets } from "./study/trackerSync";
 import { createLeetcodeClient } from "./leetcode/client";
 import { LeetcodeService } from "./leetcode/service";
 import { withDefaultCountFrom } from "../shared/dsa";
@@ -124,6 +125,8 @@ async function main(): Promise<void> {
   const cppTmpRoot = process.env.SPARMATE_IN_CONTAINER === "1" ? "/tmp/runtime/cpp" : paths.cppTmp;
   const manager = new SessionManager({ config, store, settings, driver, guard, runner: lazyRunner(cppTmpRoot, config.studyRoot), prompts, log, problems });
   await manager.init();
+  // After the problems are loaded, so a tracker from an older template gets bullets for problems added since.
+  await syncTrackerBullets(config.studyRoot, problems.list(), log).catch((err) => log.warn("The tracker sync failed", err));
   const drillStore = new DrillStore(paths.drills, log);
   await drillStore.load();
   const drills = new DrillService({ store: drillStore, history: () => manager.history(), problems, driver, settings, prompts, guard, log, costs: () => usageLedger.drillCosts() });

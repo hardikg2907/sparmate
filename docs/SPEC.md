@@ -543,9 +543,13 @@ Keep the FakeDriver in its own file so the Claude driver has no test-only branch
 `GET /api/problems` builds `ProblemSummary[]` from `content/problems/**` plus `DATA_DIR/custom-problems/`,
 tracker marks (section 10.1) and app history:
 - `badge: "redo"` when the mark is `[~]` and the latest attempt (app history, dated by the day it ended, or the day
-  it began when it has no end time) is 7 or more days old, or there
-  is no app attempt and the tracker bullet's newest date suffix is 7 or more days old.
-- `badge: "next"` on exactly one problem: the first `[ ]` problem, in tracker order, in the track opposite to
+  it began when it has no end time) is at least the redo gap old, or there
+  is no app attempt and the tracker bullet's newest date suffix is at least the redo gap old. `redoDueOn` is that
+  date plus the gap. The gap is `redoIntervalDays` in `src/shared/today.ts`: it starts at 7 days. Over the debriefed
+  attempts that have a scorecard (gap rounds left out), oldest first, it doubles when an attempt's mean score beats
+  the one before (up to 56 days), resets to 7 when it is lower and stays when it is equal.
+- `badge: "next"` on exactly one problem: the first fresh non-custom problem (`isFresh`: no real attempt, and a `[ ]`
+  mark or no tracker bullet), in tracker order, in the track opposite to
   the most recent session's track (app history first, else the last Session Log row: "B3" means LLD, "C2"
   means HLD). Tracker order = the order of bullets in the section.
 - `summary`: the first sentence of the problem's "Opening prompt", which the candidate hears anyway. Nothing from
@@ -564,10 +568,11 @@ restored). The order of its rules:
    primary action is Finish. When several qualify, the newest wins and the rest go to the Unfinished card.
 2. A rest day shows a calm rest hero. A DSA day shows "Solve on LeetCode" with a link to `https://leetcode.com/problemset/`
    and, when a scored round has a gap the coach has not finished, a 20-minute gap round on the newest such gap.
-3. On an HLD or LLD day the order is: a due redo of that track, then an unfinished (older than 24 hours) round of that
-   track, then the next new problem of that track. The next new problem is the server's recommendation when it is on
-   the track, else the first `[ ]` non-custom problem of the track in list order (the list order follows the tracker).
-   With nothing on that track it falls back to the other track.
+3. On an HLD or LLD day the order is: an unfinished (older than 24 hours) round of that track, then the next new
+   problem of that track, then the oldest due redo of that track, then the next new problem of the other track, then
+   the oldest due redo of any track. The next new problem is the server's recommendation when it is on the track, else
+   the first fresh non-custom problem of the track in list order (the list order follows the tracker). A partly done
+   problem never crowds out a new one, because the redo day is where redos are taken.
 4. On a redo day the oldest due redo of any track leads. With none due, the hero is a new problem on the track with
    fewer rounds in the last 14 days.
 5. A problem with an open round is never offered as a redo or as a new problem. Its round is the way back to it, and

@@ -1,7 +1,7 @@
 import type { Track } from "../../shared/phases";
 import type { Problem } from "../../shared/problem";
 import type { ProblemSummary, TrackerMark } from "../../shared/types";
-import { roundEndedDay } from "../../shared/today";
+import { isFresh, redoIntervalDays, roundEndedDay } from "../../shared/today";
 import { localDate } from "./fsutil";
 import type { SessionSummary } from "./store";
 
@@ -17,8 +17,6 @@ export interface TrackerView {
   /** The track named by the last Session Log row ("B3" means LLD, "C2" means HLD), if any. */
   lastLogTrack: Track | null;
 }
-
-const REDO_AFTER_DAYS = 7;
 
 export function daysBetween(from: string, to: string): number {
   const parse = (d: string) => {
@@ -81,6 +79,9 @@ export function buildProblemSummaries(problems: readonly Problem[], tracker: Tra
     if (!prev || s.createdAt > prev.createdAt) latestByProblem.set(s.problemId, s);
   }
 
+  const attemptsByProblem = new Map<string, SessionSummary[]>();
+  for (const s of history) attemptsByProblem.set(s.problemId, [...(attemptsByProblem.get(s.problemId) ?? []), s]);
+
   const rows = problems.map((p) => {
     const bullet = p.meta.tracker ? (tracker.bullets.get(p.meta.id) ?? null) : null;
     const latest = latestByProblem.get(p.meta.id) ?? null;
@@ -98,8 +99,9 @@ export function buildProblemSummaries(problems: readonly Problem[], tracker: Tra
     if (bullet?.mark === "[~]") {
       const since = lastAttempt?.date ?? newestDate(bullet.suffix);
       if (since) {
-        redoDueOn = addDays(since, REDO_AFTER_DAYS);
-        if (daysBetween(since, today) >= REDO_AFTER_DAYS) badge = "redo";
+        const gap = redoIntervalDays(attemptsByProblem.get(p.meta.id) ?? []);
+        redoDueOn = addDays(since, gap);
+        if (daysBetween(since, today) >= gap) badge = "redo";
       }
     }
     const summary: ProblemSummary = {
@@ -120,7 +122,7 @@ export function buildProblemSummaries(problems: readonly Problem[], tracker: Tra
 
   const newest = history.filter((h) => !h.focus).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const lastTrack = newest?.track ?? tracker.lastLogTrack;
-  const fresh = rows.filter((r) => r.summary.trackerMark === "[ ]" && !r.summary.custom).sort((a, b) => a.lineIndex - b.lineIndex);
+  const fresh = rows.filter((r) => isFresh(r.summary) && !r.summary.custom).sort((a, b) => a.lineIndex - b.lineIndex);
   const wanted: Track | null = lastTrack === null ? null : lastTrack === "hld" ? "lld" : "hld";
   const next = (wanted ? fresh.find((r) => r.summary.track === wanted) : undefined) ?? fresh[0];
   if (next) next.summary.badge = "next";
