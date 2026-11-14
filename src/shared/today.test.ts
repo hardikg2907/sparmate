@@ -64,10 +64,25 @@ const catalog = [
 ];
 
 describe("day types", () => {
-  it("offers the due redo of the track on an HLD day, before a new problem", () => {
+  it("offers the new problem of the track on an HLD day, before a due redo", () => {
     const result = pick({ problems: catalog });
     expect(result.dayKind).toBe("hld");
+    expect(result.hero).toMatchObject({ kind: "problem", reason: "new", problem: { id: "hld-new" } });
+  });
+
+  it("offers the due redo of the track when the track has no new problem left", () => {
+    const result = pick({ problems: catalog.filter((p) => p.track !== "hld" || p.id === "hld-redo") });
     expect(result.hero).toMatchObject({ kind: "problem", reason: "redo", problem: { id: "hld-redo" } });
+  });
+
+  it("offers the oldest due redo of the track, then a new problem of the other track, then any redo", () => {
+    const hld = [redoProblem("hld-late", "hld", "2026-10-30"), redoProblem("hld-early", "hld", "2026-10-20")];
+    expect(pick({ problems: [...hld, problem("lld-new", "lld"), redoProblem("lld-redo", "lld", "2026-10-01")] }).hero).toMatchObject({
+      reason: "redo",
+      problem: { id: "hld-early" },
+    });
+    expect(pick({ problems: [problem("lld-new", "lld"), redoProblem("lld-redo", "lld", "2026-10-01")] }).hero).toMatchObject({ reason: "new", problem: { id: "lld-new" } });
+    expect(pick({ problems: [redoProblem("lld-redo", "lld", "2026-10-01")] }).hero).toMatchObject({ reason: "redo", problem: { id: "lld-redo" } });
   });
 
   it("offers the recommended new problem of the track when no redo is due", () => {
@@ -162,17 +177,17 @@ describe("rule 1: an open round blocks the redo", () => {
   });
 
   it("skips the blocked redo and takes the next due one", () => {
-    const problems = [...catalog, redoProblem("hld-redo-2", "hld", "2026-10-31")];
+    const problems = [...catalog.filter((p) => p.trackerMark !== "[ ]"), redoProblem("hld-redo-2", "hld", "2026-10-31")];
     const result = pick({ problems, history: [paused("open", "hld-redo", "lld", 72)] });
     expect(result.hero).toMatchObject({ reason: "redo", problem: { id: "hld-redo-2" } });
   });
 });
 
-describe("rule 2: a due redo of the track comes before an unfinished round of the track", () => {
-  it("offers the redo, and lists the older round on the side", () => {
+describe("rule 2: an unfinished round of the track comes before a new problem and a due redo", () => {
+  it("offers the unfinished round before a due redo, and the redo waits in the queue", () => {
     const result = pick({ problems: catalog, history: [paused("open", "hld-other", "hld", 72)] });
-    expect(result.hero).toMatchObject({ kind: "problem", reason: "redo", problem: { id: "hld-redo" } });
-    expect(result.unfinished.map((u) => u.item.id)).toEqual(["open"]);
+    expect(result.hero).toMatchObject({ kind: "resume", round: { item: { id: "open" } } });
+    expect(result.moreRedos.map((e) => e.problem.id)).toContain("hld-redo");
   });
 
   it("offers an older unfinished round of the track before a new problem", () => {
@@ -265,7 +280,8 @@ describe("redo queue", () => {
   });
 
   it("puts the other redos in moreRedos without the hero", () => {
-    const result = pick({ problems: catalog });
+    const result = pick({ problems: catalog.filter((p) => p.id !== "hld-new" && p.id !== "hld-other") });
+    expect(result.hero).toMatchObject({ problem: { id: "hld-redo" } });
     expect(result.moreRedos.map((e) => e.problem.id)).toEqual(["lld-redo"]);
   });
 });

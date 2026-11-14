@@ -212,7 +212,7 @@ export function SettingsView({ settings, studyRoot, testMode, onSave, onApplyThe
           </nav>
 
           <div className="flex max-w-[880px] flex-col gap-5">
-            <Section id="plan" title="Weekly plan" help="Today picks its session from this. A redo of the day's track comes first." refFor={register}>
+            <Section id="plan" title="Weekly plan" help="Today picks its session from this. A new problem of the day's track comes before a redo." refFor={register}>
               <div className="py-4">
                 <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-4 xl:grid-cols-7">
                   {WEEKDAYS.map((day, index) => (

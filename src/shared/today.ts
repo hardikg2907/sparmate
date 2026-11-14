@@ -153,8 +153,10 @@ export function newestOpenGap(history: readonly SessionHistoryItem[]): { item: S
 }
 
 /**
- * Chooses what Today offers. Order: a round paused in the last day first; then by the day's kind. On a track day a
- * due redo of that track comes before an unfinished round of that track, and both come before a new problem.
+ * Chooses what Today offers. Order: a round paused in the last day first; then by the day's kind. On a track day:
+ * an unfinished round of that track, the next new problem of that track, the oldest due redo of that track, the next
+ * new problem of the other track, then the oldest due redo of any track. The Redo day is the place for redos, so a
+ * partly done problem never crowds out new ones.
  * A problem with an open round is never offered as a redo or as new, because its round is the way back to it.
  * The next new problem is the first fresh, non-custom problem in the list order the server gives, which follows
  * the tracker; the server's own recommendation wins when it is on the day's track.
@@ -201,12 +203,15 @@ export function selectToday({ now, plan, problems, history }: TodayInput): Today
   }
 
   const track: Track = dayKind;
-  const redo = dueRedos.find((e) => e.problem.track === track);
-  if (redo) return finish(redoHero(redo));
+  const other: Track = track === "hld" ? "lld" : "hld";
   const unfinished = open.find((item) => item.track === track);
   if (unfinished) return finish({ kind: "resume", round: unfinishedRound(unfinished, nowMs) });
-  const next = newFor(track) ?? newFor(track === "hld" ? "lld" : "hld");
+  const next = newFor(track);
   if (next) return finish(newHero(next));
+  const redo = dueRedos.find((e) => e.problem.track === track);
+  if (redo) return finish(redoHero(redo));
+  const nextOther = newFor(other);
+  if (nextOther) return finish(newHero(nextOther));
   const anyRedo = dueRedos[0];
   return finish(anyRedo ? redoHero(anyRedo) : { kind: "empty" });
 }
