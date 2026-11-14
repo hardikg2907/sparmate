@@ -543,9 +543,13 @@ Keep the FakeDriver in its own file so the Claude driver has no test-only branch
 `GET /api/problems` builds `ProblemSummary[]` from `content/problems/**` plus `DATA_DIR/custom-problems/`,
 tracker marks (section 10.1) and app history:
 - `badge: "redo"` when the mark is `[~]` and the latest attempt (app history, dated by the day it ended, or the day
-  it began when it has no end time) is 7 or more days old, or there
-  is no app attempt and the tracker bullet's newest date suffix is 7 or more days old.
-- `badge: "next"` on exactly one problem: the first `[ ]` problem, in tracker order, in the track opposite to
+  it began when it has no end time) is at least the redo gap old, or there
+  is no app attempt and the tracker bullet's newest date suffix is at least the redo gap old. `redoDueOn` is that
+  date plus the gap. The gap is `redoIntervalDays` in `src/shared/today.ts`: it starts at 7 days. Over the debriefed
+  attempts that have a scorecard (gap rounds left out), oldest first, it doubles when an attempt's mean score beats
+  the one before (up to 56 days), resets to 7 when it is lower and stays when it is equal.
+- `badge: "next"` on exactly one problem: the first fresh non-custom problem (`isFresh`: no real attempt, and a `[ ]`
+  mark or no tracker bullet), in tracker order, in the track opposite to
   the most recent session's track (app history first, else the last Session Log row: "B3" means LLD, "C2"
   means HLD). Tracker order = the order of bullets in the section.
 - `summary`: the first sentence of the problem's "Opening prompt", which the candidate hears anyway. Nothing from

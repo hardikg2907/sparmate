@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "./phases";
-import { clockUsedMs, isFresh, largestOverrun, modeFor, redoQueue, selectToday, type TodayInput } from "./today";
+import { clockUsedMs, isFresh, largestOverrun, modeFor, redoIntervalDays, redoQueue, selectToday, type TodayInput } from "./today";
 import type { ProblemSummary, SessionHistoryItem } from "./types";
 import { DEFAULT_WEEKLY_PLAN, type DayKind } from "./week";
 
@@ -365,5 +365,52 @@ describe("clock and overrun helpers", () => {
   it("states the plan for the coming round when given one", () => {
     const timing = [{ phase: "capacity", label: "Capacity math", plannedMinutes: 4, actualMinutes: 22 }];
     expect(largestOverrun(timing, new Map([["capacity", 3]]))?.plannedMinutes).toBe(3);
+  });
+});
+
+describe("redo interval", () => {
+  const scored = (id: string, day: number, scores: number[], extra: Partial<SessionHistoryItem> = {}) =>
+    round(id, "p", "hld", { createdAt: at(day).toISOString(), scores: scores.map((score, i) => ({ id: `s${i}`, name: `S${i}`, score })), ...extra });
+
+  it("is 7 days with no scored attempt", () => {
+    expect(redoIntervalDays([])).toBe(7);
+    expect(redoIntervalDays([round("a", "p", "hld")])).toBe(7);
+    expect(redoIntervalDays([scored("a", 1, [])])).toBe(7);
+  });
+
+  it("is 7 days with one scored attempt", () => {
+    expect(redoIntervalDays([scored("a", 1, [2, 3])])).toBe(7);
+  });
+
+  it("doubles after each attempt that beats the one before", () => {
+    expect(redoIntervalDays([scored("a", 1, [2]), scored("b", 2, [3])])).toBe(14);
+    expect(redoIntervalDays([scored("a", 1, [2]), scored("b", 2, [3]), scored("c", 3, [4])])).toBe(28);
+  });
+
+  it("orders attempts by start time, not by list order", () => {
+    expect(redoIntervalDays([scored("b", 2, [3]), scored("a", 1, [2])])).toBe(14);
+  });
+
+  it("compares the mean of the scores", () => {
+    expect(redoIntervalDays([scored("a", 1, [1, 5]), scored("b", 2, [3, 4])])).toBe(14);
+    expect(redoIntervalDays([scored("a", 1, [1, 5]), scored("b", 2, [2, 3])])).toBe(7);
+  });
+
+  it("resets to 7 days after a lower score", () => {
+    expect(redoIntervalDays([scored("a", 1, [2]), scored("b", 2, [3]), scored("c", 3, [4]), scored("d", 4, [3])])).toBe(7);
+  });
+
+  it("keeps the gap after an equal score", () => {
+    expect(redoIntervalDays([scored("a", 1, [2]), scored("b", 2, [3]), scored("c", 3, [3])])).toBe(14);
+  });
+
+  it("stops at 56 days", () => {
+    const rising = [1, 2, 3, 4, 5, 6, 7].map((n) => scored(`r${n}`, n, [n]));
+    expect(redoIntervalDays(rising)).toBe(56);
+  });
+
+  it("ignores gap rounds and rounds that were not debriefed", () => {
+    const history = [scored("a", 1, [2]), scored("f", 2, [1], { focus: true }), scored("x", 3, [1], { status: "failed" }), scored("b", 4, [3])];
+    expect(redoIntervalDays(history)).toBe(14);
   });
 });

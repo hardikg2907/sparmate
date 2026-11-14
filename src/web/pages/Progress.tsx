@@ -566,7 +566,7 @@ function RedosCard({ queue, now, onSeeAll }: { queue: RedoEntry[]; now: Date; on
         ) : null}
       </div>
       {next.length === 0 ? (
-        <p className="mt-3 text-ui text-muted-foreground">No redo is waiting. A partly done round shows up here a week later.</p>
+        <p className="mt-3 text-ui text-muted-foreground">No redo is waiting. A partly done round shows up here after a gap of 1 to 8 weeks, longer each time you improve.</p>
       ) : (
         <ul className="mt-3 divide-y divide-border">
           {next.map((entry) => (
