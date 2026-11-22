@@ -1,11 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { HLD_SECTIONS, LLD_SECTIONS } from "../../shared/problem";
 import { APP_ROOT } from "./config";
 import { memoryLogger } from "./log";
-import { loadProblems, parseProblem, ProblemFileError, splitSections } from "./problems";
+import { loadProblems, type ParsedProblems, ProblemCatalog, parseProblem, ProblemFileError, splitSections } from "./problems";
 
 const HLD_FIXTURE = join(APP_ROOT, "content", "problems", "hld", "c2-url-shortener.md");
 const LLD_FIXTURE = join(APP_ROOT, "content", "problems", "lld", "b3-parking-lot.md");
@@ -106,5 +106,80 @@ describe("loadProblems", () => {
   it("treats a missing folder as empty", async () => {
     const problems = await loadProblems([{ dir: join(tmpdir(), "ir-does-not-exist-xyz"), custom: true, recursive: false }], memoryLogger());
     expect(problems).toEqual([]);
+  });
+});
+
+describe("reloading with the kept parses", () => {
+  let dir = "";
+  afterEach(async () => {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  });
+
+  const setUp = async (): Promise<string> => {
+    dir = await mkdtemp(join(tmpdir(), "ir-problems-"));
+    const file = join(dir, "url.md");
+    await writeFile(file, await readFile(HLD_FIXTURE, "utf8"));
+    return file;
+  };
+  const source = () => [{ dir, custom: false, recursive: false }];
+  const later = async (file: string): Promise<void> => {
+    const { mtime } = await stat(file);
+    const next = new Date(mtime.getTime() + 5000);
+    await utimes(file, next, next);
+  };
+
+  it("does not read an unchanged file again, and reads it once its times change", async () => {
+    const file = await setUp();
+    const parsed: ParsedProblems = new Map();
+    const first = await loadProblems(source(), memoryLogger(), parsed);
+    const kept = parsed.get(file);
+    expect(kept).toBeDefined();
+    // Only a skipped read can return this title.
+    kept!.problem.meta.title = "from the kept parse";
+    expect((await loadProblems(source(), memoryLogger(), parsed))[0]?.meta.title).toBe("from the kept parse");
+    await later(file);
+    expect((await loadProblems(source(), memoryLogger(), parsed))[0]?.meta.title).toBe(first[0]?.meta.title);
+  });
+
+  it("sees an edit that keeps the file's size", async () => {
+    const file = await setUp();
+    const catalog = new ProblemCatalog(source(), memoryLogger());
+    const before = (await catalog.reload())[0]?.meta.title ?? "";
+    const text = await readFile(file, "utf8");
+    const edited = text.replace(/^title: (.*)(.)$/m, (_line, head: string, last: string) => `title: ${head}${last === "Q" ? "R" : "Q"}`);
+    expect(edited.length).toBe(text.length);
+    await writeFile(file, edited);
+    await later(file);
+    const after = (await catalog.reload())[0]?.meta.title ?? "";
+    expect(after).not.toBe(before);
+    expect(after.slice(0, -1)).toBe(before.slice(0, -1));
+  });
+
+  it("hands out copies, so a caller's change never reaches the next reload", async () => {
+    await setUp();
+    const catalog = new ProblemCatalog(source(), memoryLogger());
+    const first = await catalog.reload();
+    const title = first[0]?.meta.title;
+    first[0]!.meta.title = "changed by a caller";
+    expect((await catalog.reload())[0]?.meta.title).toBe(title);
+  });
+
+  it("drops a removed file and picks up a new one", async () => {
+    const file = await setUp();
+    const catalog = new ProblemCatalog(source(), memoryLogger());
+    expect((await catalog.reload()).map((p) => p.meta.id)).toEqual(["c2-url-shortener"]);
+    await writeFile(join(dir, "lot.md"), await readFile(LLD_FIXTURE, "utf8"));
+    await rm(file);
+    expect((await catalog.reload()).map((p) => p.meta.id)).toEqual(["b3-parking-lot"]);
+  });
+
+  it("still warns about a broken file on every reload", async () => {
+    await setUp();
+    await writeFile(join(dir, "broken.md"), "---\nid: [\n---\n");
+    const log = memoryLogger();
+    const catalog = new ProblemCatalog(source(), log);
+    await catalog.reload();
+    await catalog.reload();
+    expect(log.lines.filter((l) => l.includes("broken.md"))).toHaveLength(2);
   });
 });
