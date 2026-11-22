@@ -26,7 +26,18 @@ export function renderPrompt(template: string, vars: Readonly<Record<string, str
   return template.replace(PLACEHOLDER, (_m, key: string) => vars[key] ?? "");
 }
 
-export const COMMON_VARS = ["date", "problem_title", "track", "mode", "duration_min", "candidate_profile", "target_level", "stretch_level", "target_company"] as const;
+export const COMMON_VARS = [
+  "date",
+  "problem_title",
+  "track",
+  "mode",
+  "duration_min",
+  "candidate_profile",
+  "target_level",
+  "stretch_level",
+  "below_level",
+  "target_company",
+] as const;
 
 /** Each prompt file and the variables it may use, besides the common ones. */
 export const PROMPT_VARS = {
@@ -47,7 +58,7 @@ export const PROMPT_VARS = {
 } as const;
 
 function levelVars(vars: Readonly<Record<string, string>>): Record<string, string> {
-  return { target_level: vars.target_level ?? "", stretch_level: vars.stretch_level ?? "", target_company: vars.target_company ?? "" };
+  return { target_level: vars.target_level ?? "", stretch_level: vars.stretch_level ?? "", below_level: vars.below_level ?? "", target_company: vars.target_company ?? "" };
 }
 
 export type PromptName = keyof typeof PROMPT_VARS;
@@ -154,6 +165,7 @@ export function commonVars(input: {
     candidate_profile: input.candidateProfile,
     target_level: target.level,
     stretch_level: target.stretch,
+    below_level: target.below,
     target_company: target.company,
   };
 }

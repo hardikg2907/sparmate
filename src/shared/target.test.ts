@@ -6,8 +6,25 @@ describe("parseTarget", () => {
     expect(parseTarget("# Me\n\nTarget: SDE-3; stretch: staff; company: large product company\n- other")).toEqual({
       level: "SDE-3",
       stretch: "staff",
+      below: DEFAULT_TARGET.below,
       company: "large product company",
     });
+  });
+
+  it("reads the level below the target without leaking it into the company", () => {
+    expect(parseTarget("Target: SDE-3; stretch: staff; below: SDE-2; company: Acme")).toEqual({
+      level: "SDE-3",
+      stretch: "staff",
+      below: "SDE-2",
+      company: "Acme",
+    });
+    expect(parseTarget("Target: SDE-3; below: SDE-2")).toMatchObject({ below: "SDE-2", company: DEFAULT_TARGET.company });
+    expect(parseTarget("Target: SDE-3; below: {{x}}`SDE-2`")).toMatchObject({ below: "xSDE-2" });
+  });
+
+  it("defaults the level below to SDE-1", () => {
+    expect(parseTarget("Target: SDE-3").below).toBe("SDE-1");
+    expect(parseTarget("Target: SDE-3; below: ").below).toBe("SDE-1");
   });
 
   it("accepts a bullet and any letter case", () => {

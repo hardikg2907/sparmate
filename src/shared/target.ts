@@ -2,19 +2,21 @@
 export interface Target {
   level: string;
   stretch: string;
+  below: string;
   company: string;
 }
 
 export const DEFAULT_TARGET: Readonly<Target> = {
   level: "SDE-2",
   stretch: "senior",
+  below: "SDE-1",
   company: "Series A to C startup",
 };
 
 const MAX_VALUE = 60;
 
 const TARGET_LINE = /^[ \t]*(?:[-*][ \t]+)?Target:[ \t]*(.+)$/im;
-const OPTION = /^(stretch|company)[ \t]*:[ \t]*(.*)$/i;
+const OPTION = /^(stretch|below|company)[ \t]*:[ \t]*(.*)$/i;
 
 /** Values reach prompts, so keep them to one short line of plain words. */
 function cleanValue(raw: string): string | null {
@@ -28,7 +30,7 @@ function cleanValue(raw: string): string | null {
 }
 
 /**
- * Reads one profile line of the form `Target: SDE-2; stretch: senior; company: Series A to C startup`.
+ * Reads one profile line of the form `Target: SDE-2; stretch: senior; below: SDE-1; company: Series A to C startup`.
  * Each part is optional, and a missing or malformed part keeps its default. Other wording in the
  * profile, such as `Target level:`, is not read, so free text can never change the bar by accident.
  */
@@ -43,7 +45,9 @@ export function parseTarget(profile: string): Target {
     if (!match) continue;
     const value = cleanValue(match[2] ?? "");
     if (value === null) continue;
-    if (match[1]?.toLowerCase() === "stretch") target.stretch = value;
+    const key = match[1]?.toLowerCase();
+    if (key === "stretch") target.stretch = value;
+    else if (key === "below") target.below = value;
     else target.company = value;
   }
   return target;

@@ -161,12 +161,14 @@ Score every dimension first, then apply these rules. Never move a score to reach
 
 For each column, take the first row from the top that matches.
 
-| Verdict | {{target_level}} | {{stretch_level}} |
-|---|---|---|
-| strong_hire | Every dimension is at 3 or more, and at least two are at 4. | Every dimension is at 3 or more, and at least five are at 4. |
-| hire | There are no 1s, navigation and design are both at 3 or more, and at least four of the six dimensions are at 3 or more. | Every dimension is at 3 or more, and at least three are at 4, including depth and scale_reliability. |
-| no_hire | Navigation or design is at 1, or two or more dimensions are at 1, or fewer than three dimensions are at 3 or more. | Any dimension is below 3. |
-| lean_no_hire | Everything else. | Everything else. |
+| Verdict | {{target_level}} | {{stretch_level}} | {{below_level}} |
+|---|---|---|---|
+| strong_hire | Every dimension is at 3 or more, and at least two are at 4. | Every dimension is at 3 or more, and at least five are at 4. | The {{target_level}} call is hire or strong_hire. |
+| hire | There are no 1s, navigation and design are both at 3 or more, and at least four of the six dimensions are at 3 or more. | Every dimension is at 3 or more, and at least three are at 4, including depth and scale_reliability. | Design is at 3 or more, navigation is at 2 or more, at most one dimension is at 1, and at least two dimensions are at 3 or more. |
+| no_hire | Navigation or design is at 1, or two or more dimensions are at 1, or fewer than three dimensions are at 3 or more. | Any dimension is below 3. | Navigation or design is at 1, or two or more dimensions are at 1. |
+| lean_no_hire | Everything else. | Everything else. | Everything else. |
+
+The {{below_level}} column uses the same scores, which measure against the {{target_level}} bar. A 2 there means short of {{target_level}}, which is often enough for {{below_level}}.
 
 Confidence:
 - **high** when the round reached the curveball and every score rests on direct quotes.

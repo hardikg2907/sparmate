@@ -2410,7 +2410,7 @@ export class SessionRuntime {
           this.log.warn(`Second judge pass failed in session ${s.id}; keeping the first`, err);
         }
       }
-      const ruled = enforceRules(card, { mode: s.mode, track: s.track, tester });
+      const ruled = enforceRules(card, { mode: s.mode, track: s.track, tester, belowLevel: (await this.baseVars()).below_level });
       const scorecard: Scorecard = {
         ...ruled,
         ...(s.mode === "guided" ? { readiness: computeReadiness(s, this.plan) } : {}),

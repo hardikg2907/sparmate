@@ -287,7 +287,7 @@ export function mostSevereGaps<G extends { severity: keyof typeof SEVERITY_RANK 
  * Rules the engine owns regardless of what the judge wrote. Hint caps are not applied: a hint carries free text and
  * no dimension, so which score it caps is a judgement the judge makes.
  */
-export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; track: Session["track"]; tester: TesterOutput | null }): JudgedCard {
+export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; track: Session["track"]; tester: TesterOutput | null; belowLevel?: string }): JudgedCard {
   const out: JudgedCard = { ...card };
   // Scenario results come from the tester alone; without one, a judge's own list would be unchecked model text.
   if (ctx.track === "lld") out.lldScenarios = ctx.tester ? ctx.tester.scenarios.map((s) => ({ ...s })) : [];
@@ -300,6 +300,10 @@ export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; tra
   const verdicts = verdictsFor(ctx.track, card.dimensions);
   const confidence = ctx.mode === "guided" && card.verdict.confidence === "high" ? "medium" : card.verdict.confidence;
   out.verdict = { ...card.verdict, ...(verdicts ?? {}), confidence };
+  // Passing the target bar always passes the level under it, so the judge cannot rate the lower level worse.
+  if (out.verdict.sde2 === "hire" || out.verdict.sde2 === "strong_hire") out.verdict.below = "strong_hire";
+  // An older prompt or a model slip can leave the name out; the lower call is useless without it.
+  if (out.verdict.below !== undefined && out.verdict.belowLevel === undefined && ctx.belowLevel !== undefined) out.verdict.belowLevel = ctx.belowLevel;
 
   if (out.trackerMark === "[x]") {
     const reasons: string[] = [];

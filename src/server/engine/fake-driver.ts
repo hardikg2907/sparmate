@@ -300,6 +300,8 @@ function fakeScorecard(facts: FakeFacts): Scorecard {
     verdict: {
       sde2: "lean_no_hire",
       senior: "no_hire",
+      below: "hire",
+      belowLevel: "SDE-1",
       confidence: "medium",
       summary: "The round covered the opening steps with clear requirements. The design stopped before the deep dives. The numbers did not yet drive the choices.",
     },

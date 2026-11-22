@@ -364,6 +364,26 @@ describe("verdict and confidence rules", () => {
     expect(verdictOf(ids, { edge_cases: 1 }, "lld")).toMatchObject({ sde2: "lean_no_hire" });
   });
 
+  it("raises the lower-level call to strong_hire when the target call passes", () => {
+    const ctx = { mode: "interview" as const, track: "hld" as const, tester: null, belowLevel: "SDE-1" };
+    const withBelow = (scores: Record<string, number>, below: "no_hire" | "lean_no_hire" | "hire") =>
+      enforceRules(card({ dimensions: scored(HLD_IDS, scores), verdict: { sde2: "no_hire", senior: "no_hire", below, belowLevel: "SDE-1", confidence: "low", summary: "s" } }), ctx)
+        .verdict;
+    expect(withBelow({ depth: 2, communication: 2 }, "no_hire")).toMatchObject({ sde2: "hire", below: "strong_hire" });
+    expect(withBelow({ depth: 4, design: 4 }, "lean_no_hire")).toMatchObject({ sde2: "strong_hire", below: "strong_hire" });
+    expect(withBelow({ depth: 1 }, "hire")).toMatchObject({ sde2: "lean_no_hire", below: "hire" });
+  });
+
+  it("leaves a missing lower-level call missing and fills a missing name from the target", () => {
+    const ctx = { mode: "interview" as const, track: "hld" as const, tester: null, belowLevel: "SDE-1" };
+    const dimensions = scored(HLD_IDS, { depth: 1 });
+    const none = enforceRules(card({ dimensions, verdict: { sde2: "hire", senior: "hire", confidence: "low", summary: "s" } }), ctx).verdict;
+    expect(none.below).toBeUndefined();
+    expect(none.belowLevel).toBeUndefined();
+    const unnamed = enforceRules(card({ dimensions, verdict: { sde2: "hire", senior: "hire", below: "hire", confidence: "low", summary: "s" } }), ctx).verdict;
+    expect(unnamed.belowLevel).toBe("SDE-1");
+  });
+
   it("leaves the verdict alone when a required dimension is missing", () => {
     const out = enforceRules(card({ verdict: { sde2: "hire", senior: "hire", confidence: "high", summary: "s" } }), { mode: "interview", track: "hld", tester: null });
     expect(out.verdict).toMatchObject({ sde2: "hire", senior: "hire" });
