@@ -10,7 +10,7 @@ npm run setup
 
 `npm run setup` installs the packages with `npm ci`, which also sets up the git hooks (see "Git hooks" below). It then checks for `clang++` and offers the Claude sign-in and the optional Kokoro voice. You need Node.js 22.12 or newer. `npm install` also works if you only want the packages.
 
-Native setup is for macOS. On Linux and Windows, run the app through the container route in the README. To run the tests on Linux, install `clang` and `bubblewrap`.
+Native setup is for macOS. On Linux and Windows, run the app through the container route in the README. To run the tests on Linux, install `clang`, `libc++-dev`, `libc++abi-dev`, the clang sanitizer runtime (`libclang-rt-<version>-dev`) and `bubblewrap`.
 
 ## Scripts
 
@@ -86,7 +86,7 @@ The formatting commit is listed in `.git-blame-ignore-revs`. To hide it in `git 
 
 GitHub Actions runs on every push to `main` and on every pull request.
 
-- The `check` job runs on Ubuntu and macOS. It runs `npm ci`, `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm test`. On Ubuntu it first installs `clang` and `bubblewrap`, so the sandboxed C++ runner tests run there too.
+- The `check` job runs on Ubuntu and macOS. It runs `npm ci`, `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm test`. On Ubuntu it first installs clang, libc++, the sanitizer runtime and `bubblewrap`, so the sandboxed C++ runner tests run there too.
 - The `commitlint` job runs on pull requests only. It checks every commit message in the pull request.
 
 Run the same scripts locally before you push.
