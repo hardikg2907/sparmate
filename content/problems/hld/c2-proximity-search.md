@@ -44,17 +44,19 @@ For the interviewer: on the numbers, give them only when the candidate asks how 
 ## Expected requirements
 
 Core, functional:
-1. Search places within a radius of a point, with an optional category, nearest first. *Ask: What does a user search by, and how are results ordered?*
+1. Search for places near a point, with an optional category, nearest first. *Ask: What does a user search by, and how are results ordered?*
 2. View the details of one place. *Ask: What happens when a user taps a result?*
 3. Owners add, edit and close places. *Ask: Who changes the place data, and how often?*
 
 Core, non-functional:
-1. 100 million places; about 6,000 searches a second, about 18,000 at peak. *Ask: How many places and how many searches?*
+1. 100 million places; about 6,000 searches a second. *Ask: How many places and how many searches?*
 2. A search answers in under 200 ms at p99. *Ask: How fast must a search feel?*
 3. A changed or closed place shows correctly in search within 1 hour. *Ask: How fresh must the results be after an owner edits a place?*
-4. Search stays up at 99.9%; eventual consistency is fine. *Ask: Which matters more, fresh data or search being up?*
+4. Search stays up; a stale answer beats an error. *Ask: Which matters more, fresh data or search being up?*
 
 Extras (credit when they name one, never a gap):
+- Search stays up at 99.9%.
+- About 18,000 searches a second at peak.
 - Read-heavy: about 500 searches for each place change.
 - Paging through results 20 at a time.
 - Very dense and very sparse areas behave differently.

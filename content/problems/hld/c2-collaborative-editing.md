@@ -46,16 +46,17 @@ For the interviewer: on the numbers, give them only when the candidate asks what
 
 Core, functional:
 1. Several people edit one document at once and see each other's edits live. *Ask: What happens when two people type in the same document at the same moment?*
-2. Show other people's cursors and names. *Ask: What else should people see of each other?*
-3. Edit offline and merge on reconnect; restore versions from 30 days. *Ask: What happens if someone loses their connection while editing?*
+2. Edit offline and merge on reconnect. *Ask: What happens if someone loses their connection while editing?*
 
 Core, non-functional:
-1. Everyone converges to the same text, with no text lost and inserts kept in place. *Ask: What must be true of the document after two people edit it at once?*
+1. Everyone ends with the same text, with no text lost. *Ask: What must be true of the document after two people edit it at once?*
 2. Another person's edit shows within 500 ms at p95 in the same region. *Ask: How fast must I see someone else's typing?*
-3. 3 million people connected and 1 million typing at peak; up to 100 editors per document. *Ask: How many people edit at once, and how many in one document?*
+3. About 3 million people connected at the busiest time; up to 100 editors in one document. *Ask: How many people edit at once, and how many in one document?*
 4. A confirmed edit survives any single server failure. *Ask: What happens to my last edits if a server dies?*
 
 Extras (credit when they name one, never a gap):
+- Show other people's cursors and names.
+- Restore any version from the last 30 days.
 - Cursors are live but never stored.
 - Each document has one home region.
 - The largest document holds about 1 million characters.

@@ -53,20 +53,21 @@ For the interviewer: on disputes, one line on `dispute.opened` is enough.
 ## Expected requirements
 
 Core, functional:
-1. Create a payment for an order with its seller split, and answer with its status. *Ask: What does a caller send to take a payment, and what comes back?*
-2. Handle 3-D Secure and the provider's webhooks; read a payment's status. *Ask: What can the provider send back, and how does a caller check a payment?*
-3. Tell the order service once, in effect, how each payment ended. *Ask: How does the order service learn how a payment ended?*
-4. Refund in full or in part, more than once, up to the captured amount. *Ask: Can a payment be refunded, and what limits that?*
-5. Keep a double-entry ledger: what we owe each seller, our commission, the provider's fees. *Ask: What money records do we keep, and for whom?*
+1. Take a payment for an order with its seller split, and report its status. *Ask: What does a caller send to take a payment, and how do they learn its status?*
+2. Refund in full or in part, more than once, up to the captured amount. *Ask: Can a payment be refunded, and what limits that?*
+3. Keep a double-entry ledger: what we owe each seller, our commission, the provider's fees. *Ask: What money records do we keep, and for whom?*
 
 Core, non-functional:
-1. Never charge twice for one order; never lose a charge; none unknown past 24 hours. *Ask: What is the worst that could happen to a customer's money?*
+1. Never charge twice for one order; never lose a charge. Every effect happens once, although every delivery is at least once. *Ask: What is the worst that could happen to a customer's money, and what if the same message arrives twice?*
 2. The books always balance. Money records are append-only. *Ask: What must always be true about the money records?*
-3. Zero data loss on primary failure; 99.95% available; our overhead under 100 ms at p99. *Ask: What must survive a failure, and how fast and available must we be?*
-4. About 1 million attempts a day: 12 a second on average, 60 at peak. *Ask: How many payments do we take, and when is the busiest time?*
-5. Every effect happens once, although every delivery is at least once. *Ask: What if the same message arrives twice?*
+3. A primary failure loses no committed payment; 99.95% available. *Ask: What must survive a failure, and how available must we be?*
+4. About 1 million payments a day. *Ask: How many payments do we take each day?*
 
 Extras (credit when they name one, never a gap):
+- Handle 3-D Secure and the provider's webhooks.
+- Tell the order service once, in effect, how each payment ended.
+- No payment stays unknown past 24 hours.
+- Our overhead is under 100 ms at p99.
 - The answer is `succeeded`, `failed`, `requires_action` or `pending`.
 - A refund for one seller is capped at that seller's part.
 - Reconcile with the provider's daily report.

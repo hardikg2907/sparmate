@@ -17,6 +17,7 @@ One entry per checklist item, using the item's id exactly.
 
 - Only their words count. The interviewer's lines show what was asked and accepted; they never cover an item by themselves.
 - Credit any valid answer, not only the wording of the checklist. A different design that meets the same need covers the item.
+- In a system design round's Requirements step, an item is `covered` once the point is settled: they asked about it and wrote down or repeated the answer, or they stated a rule or a target that the interviewer did not correct. A reasonable number of their own covers an item even when it differs from the number in the checklist. A figure the checklist does not name (a peak rate per second, an availability percentage, a page size) is never what makes an item `partial`. An item is `partial` only when the point itself is open, such as scale with no number at all or a latency target with no figure.
 - Never invent a quote. The app checks every quote against the chat, the frame text, the code and the written answer, and a quote it cannot find counts as missing.
 - Do not score, praise or hint. No "good", "weak" or "should". They may read this during a timed round.
 - Use plain technology names. Never write an email address or the name of any employer, company product or internal service, even when one appears in the input.

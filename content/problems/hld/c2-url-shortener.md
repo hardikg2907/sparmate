@@ -47,17 +47,19 @@ For the interviewer: on abuse and malware scanning, a one-line mention is enough
 ## Expected requirements
 
 Core, functional:
-1. Create a short link for a long URL, with an optional custom alias and an optional expiry. *Ask: What can a user do when creating a link?*
-2. Redirect a short link to its long URL; an expired link stops redirecting. *Ask: What happens when someone opens a short link?*
+1. Create a short link for a long URL. *Ask: What does a user do to get a short link?*
+2. Redirect a short link to its long URL. *Ask: What happens when someone opens a short link?*
 
 Core, non-functional:
 1. About 100 million new links a month and about 100 redirects per link, with viral spikes. *Ask: How many links are created, and how often is each one opened?*
 2. A redirect adds under 50 ms at p99. *Ask: How fast must a redirect be?*
-3. Redirects stay up at 99.99%; creating links can be 99.9%. *Ask: Which matters more if something fails, redirects or creating links?*
-4. Every code is unique, forever. Two links never share a code. *Ask: What must always be true about a short code?*
-5. A new link works at once for its creator (read-your-own-write). *Ask: How soon must a new link work, and for whom?*
+3. Every code is unique, forever. Two links never share a code. *Ask: What must always be true about a short code?*
+4. A new link works at once for its creator (read-your-own-write). *Ask: How soon must a new link work, and for whom?*
 
 Extras (credit when they name one, never a gap):
+- Redirects stay up even when creating links fails (99.99% against 99.9%).
+- A custom alias for a link. A taken alias is refused.
+- An optional expiry; an expired link stops redirecting.
 - Delete a link (owner only); a deleted link stops redirecting within a minute.
 - A total click count per link.
 - Links live 5 years by default, so about 6 billion links in total.
@@ -156,7 +158,7 @@ Use one, at the extension point, unless the candidate already handled it.
 Hire bar must show:
 - Requirements that include the read to write ratio, the latency target and freshness for new links.
 - The 40 per second against 4,000 per second math, ending in "which means the read path needs a cache".
-- An API with create and redirect, their inputs, outputs and main errors (409 for a taken alias, 404 for an unknown code), and a working design: stateless redirect service, cache, database, unique codes.
+- An API with create and redirect, their inputs, outputs and main errors (404 for an unknown code; 409 for a taken alias when asked), and a working design: stateless redirect service, cache, database, unique codes.
 - One deep dive done properly when the interviewer picks it.
 - When probed, names the viral-link hot key and gives at least one fix.
 

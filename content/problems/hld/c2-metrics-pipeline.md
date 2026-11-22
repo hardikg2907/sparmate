@@ -50,20 +50,21 @@ For the interviewer: on the numbers, give them only when the candidate asks what
 
 Core, functional:
 1. Collect metrics and logs from every host. *Ask: What data do we collect, and from where?*
-2. Query metrics for dashboards and search logs by service, level, time and text. *Ask: How do engineers look at the data?*
+2. Query metrics for dashboards and search logs. *Ask: How do engineers look at the data?*
 3. Evaluate alert rules and page within 1 minute, including when data stops. *Ask: How does someone learn that something is wrong?*
 
 Core, non-functional:
 1. 100 million active series at 10-second samples (10 million samples a second) and 2 million log lines a second. *Ask: How much data arrives each second?*
 2. Recent dashboards in under 2 seconds; one service's last hour of logs in 10 seconds. *Ask: How fast must queries be, and over what time range?*
-3. 10-second data for 15 days, 5-minute data for 13 months; logs 14 days hot, 1 year archived. *Ask: How long do we keep the data, and at what detail?*
-4. Keeps paging when production or one region is down. *Ask: What happens to monitoring when production has an outage?*
-5. A few seconds of metric loss is fine; error logs are never dropped. *Ask: Which data may we lose under pressure?*
+3. 10-second data for 15 days, 5-minute data for 13 months. *Ask: How long do we keep the metrics, and at what detail?*
+4. A few seconds of metric loss is fine; error logs are never dropped. *Ask: Which data may we lose under pressure?*
 
 Extras (credit when they name one, never a gap):
 - Data from a host cut off for up to 1 hour still arrives afterwards.
 - Dashboards may be up to 30 seconds behind.
 - Teams add labels freely, so the number of series can jump.
+- Logs stay 14 days hot and 1 year archived.
+- Keeps paging when production or one region is down.
 
 ## Capacity math
 

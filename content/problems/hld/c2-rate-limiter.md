@@ -52,18 +52,18 @@ For the interviewer: on multi-region, do not volunteer it.
 ## Expected requirements
 
 Core, functional:
-1. Identify the caller: API key, user id from a token, or client IP for login and signup. *Ask: Who or what do we count requests against?*
-2. Apply one rule: free 100, pro 1,000 a minute, enterprise custom; login 5 a minute per IP. *Ask: Do all callers and endpoints share one limit?*
-3. Answer blocked requests with `429` and `Retry-After`, before an API server does work. *Ask: What does a blocked caller see?*
+1. Identify the caller behind each request. *Ask: Who or what do we count requests against?*
+2. Apply the limit that fits the caller's plan and endpoint. *Ask: Do all callers and endpoints share one limit?*
+3. Block requests over the limit before an API server does work, and tell the caller when to retry. *Ask: What does a blocked caller see?*
 
 Core, non-functional:
 1. 100,000 checks a second at peak, 1 million active clients a minute. *Ask: How many checks a second, and how many different clients?*
 2. The check adds under 5 ms at p99. *Ask: How much delay may the check add to a request?*
 3. One shared count on every server; at most about 10% over in any minute, never 2x. *Ask: How exact must a limit be, and must every server agree?*
 4. A limiter failure never takes the API down. Login stays limited. *Ask: What happens to requests if the limiter itself fails?*
-5. One huge client (50,000 a second) cannot slow anyone else. *Ask: What if one client sends a huge amount of traffic?*
 
 Extras (credit when they name one, never a gap):
+- One huge client (50,000 a second) cannot slow anyone else.
 - Search and export get a tenth of the plan's limit.
 - A blocked request uses no quota. Every response shows limit, remaining and reset.
 - Change rules at run time, with no deploy, within a minute.

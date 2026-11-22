@@ -50,7 +50,7 @@ Core, functional:
 3. Share a folder with other users, who then sync it too. *Ask: Can people work on the same files?*
 
 Core, non-functional:
-1. 50 million daily users, 500 million file changes a day, about 100 TB of new data a day. *Ask: How many users and changes, and how much data?*
+1. About 500 million file changes a day, about 100 TB of new data a day. *Ask: How many changes a day, and how much data?*
 2. A synced file is never lost, and no edit is lost when two devices change one file. *Ask: What must never happen to a user's files?*
 3. A small change reaches the user's other online devices within 10 seconds. *Ask: How quickly must my other devices see a change?*
 4. Uploads survive bad networks and resume where they stopped. *Ask: What happens when the connection drops halfway through a big file?*

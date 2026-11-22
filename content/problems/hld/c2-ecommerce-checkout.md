@@ -58,11 +58,10 @@ Core, functional:
 3. Paid on authorization. Cancel on failure, shopper cancel or hold end, and return the stock. *Ask: When does an order count as paid, and what ends it early?*
 
 Core, non-functional:
-1. 3 million placements a day; 175 a second at peak, 17,000 on one SKU in a flash sale. *Ask: How many orders a day, and what is the busiest moment?*
+1. About 3 million orders a day; a flash sale sends 1 million attempts in a minute at one SKU. *Ask: How many orders a day, and what is the busiest moment?*
 2. Never oversell: committed plus held units never exceed the stock. *Ask: What must never happen to the stock?*
-3. A cancelled order never keeps a shopper's funds; one payment attempt never authorizes twice. *Ask: What must always be true about a shopper's money?*
-4. A retried "Place order" never makes a second order or hold. *Ask: What if the shopper's request arrives twice?*
-5. "Place order" under 1 second at p99, 99.95% available. *Ask: How fast and how available must placing an order be?*
+3. A retry never doubles anything: a repeated "Place order" makes no second order or hold, and one payment attempt never authorizes twice. *Ask: What if the shopper's request or payment arrives twice?*
+4. "Place order" answers under 1 second at p99, and a stale stock count beats an error. *Ask: How fast must placing an order be, and what do you do when part of the system is down?*
 
 Extras (credit when they name one, never a gap):
 - The order is created from a cart snapshot.

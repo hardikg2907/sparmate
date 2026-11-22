@@ -60,16 +60,16 @@ Core, functional:
 1. Upload a video (up to 50 GB) with a title and description; a dropped upload resumes. *Ask: What can a creator upload, and what if the connection drops?*
 2. Process it into several quality levels, with a visible status. *Ask: What happens to a video after the upload finishes?*
 3. Play it on any device, with quality that adapts to the network and working seeks. *Ask: How is a video played on different devices and networks?*
-4. Show a view count that may lag a minute and be off by a few percent, but never goes down. *Ask: How exact and how fresh must the view count be?*
 
 Core, non-functional:
-1. 500 million views a day, 1,000 views per upload; about 2 Tbps on average, 4 Tbps at peak. *Ask: How many videos are watched and uploaded a day?*
+1. About 500 million views a day and 1,000 views for every upload. *Ask: How many videos are watched and uploaded a day?*
 2. Playback starts in under 2 seconds at p95; rebuffers under 1% of watch time. *Ask: How fast must playback start, and how smooth must it stay?*
-3. 99.99% availability for playback, 99.9% for upload and processing. *Ask: Which matters more if something fails, watching or uploading?*
-4. Originals are never lost after "upload complete". *Ask: What must be true once an upload is complete?*
-5. Watchable within 5 minutes and fully processed within 15 (videos up to 1 hour). *Ask: How soon after upload must a video be watchable?*
+3. Originals are never lost after "upload complete". *Ask: What must be true once an upload is complete?*
+4. Watchable within 5 minutes and fully processed within 15 (videos up to 1 hour). *Ask: How soon after upload must a video be watchable?*
 
 Extras (credit when they name one, never a gap):
+- Show a view count that may lag a minute and be off by a few percent, but never goes down.
+- Playback stays up more than upload and processing (99.99% against 99.9%).
 - Delete a video. Removed videos stop playing within 15 minutes.
 - About 900 million videos and 600 PB in 5 years, so storage and egress cost shape the design.
 
@@ -203,6 +203,5 @@ Stretch signal:
 - Short TTLs on segments for freshness, or a per-viewer token in the cache key. Both wreck the hit ratio. Year-long TTLs with no takedown story are the opposite mistake.
 - `views = views + 1` per view, or "exactly-once view counting". A displayed count needs neither.
 - An offline reconcile that lowers the shown count after it removes duplicates. The count must never go down.
-- Leaving the view count out of scope, as some popular write-ups do. Here it is a core feature with its own freshness rule, so leaving it out is a gap.
 - WebSockets or WebRTC for stored video. Plain HTTP GETs on cacheable files are cheaper.
 - Encoding every upload up to 4K in many codecs, when half the videos go quiet after their first week. Or a fleet of microservices for 6 uploads a second.
