@@ -58,7 +58,7 @@ Core, non-functional:
 1. About 200 million daily users, with about 20 timeline loads for every post. *Ask: How many users, and how often do they post versus read?*
 2. Follower counts are very uneven: most accounts have a few hundred, and the biggest has 100 million. *Ask: How many followers can an account have?*
 3. A timeline page loads under 200 ms at p99. *Ask: How fast must the timeline load?*
-4. Availability over consistency: a post reaches followers within seconds, and a stale timeline beats an error. *Ask: How fresh must the timeline be, and what matters more if something fails?*
+4. Availability over consistency: a new post may take a few seconds to reach followers. *Ask: How fresh must the timeline be, and what matters more if something fails?*
 
 Extras (credit when they name one, never a gap):
 - A post reaches followers within 5 seconds at p99, or 30 seconds above 100,000 followers. Publishing takes under 500 ms.

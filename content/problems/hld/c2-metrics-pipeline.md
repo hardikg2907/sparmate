@@ -54,7 +54,7 @@ Core, functional:
 3. Evaluate alert rules and page within 1 minute, including when data stops. *Ask: How does someone learn that something is wrong?*
 
 Core, non-functional:
-1. 100 million active series at 10-second samples (10 million samples a second) and 2 million log lines a second. *Ask: How much data arrives each second?*
+1. 100 million active series sampled every 10 seconds, and 2 million log lines a second. *Ask: How much data arrives each second?*
 2. Recent dashboards in under 2 seconds; one service's last hour of logs in 10 seconds. *Ask: How fast must queries be, and over what time range?*
 3. 10-second data for 15 days, 5-minute data for 13 months. *Ask: How long do we keep the metrics, and at what detail?*
 4. A few seconds of metric loss is fine; error logs are never dropped. *Ask: Which data may we lose under pressure?*

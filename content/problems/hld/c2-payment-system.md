@@ -58,12 +58,13 @@ Core, functional:
 3. Keep a double-entry ledger: what we owe each seller, our commission, the provider's fees. *Ask: What money records do we keep, and for whom?*
 
 Core, non-functional:
-1. Never charge twice for one order; never lose a charge. Every effect happens once, although every delivery is at least once. *Ask: What is the worst that could happen to a customer's money, and what if the same message arrives twice?*
+1. Never charge twice for one order, and never lose a charge. *Ask: What is the worst that could happen to a customer's money?*
 2. The books always balance. Money records are append-only. *Ask: What must always be true about the money records?*
-3. A primary failure loses no committed payment; 99.95% available. *Ask: What must survive a failure, and how available must we be?*
+3. A primary failure loses no committed payment. *Ask: What must survive a failure?*
 4. About 1 million payments a day. *Ask: How many payments do we take each day?*
 
 Extras (credit when they name one, never a gap):
+- Payments are 99.95% available.
 - Handle 3-D Secure and the provider's webhooks.
 - Tell the order service once, in effect, how each payment ended.
 - No payment stays unknown past 24 hours.

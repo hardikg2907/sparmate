@@ -62,10 +62,11 @@ Core, functional:
 Core, non-functional:
 1. About 1 billion fetches a month over about 50 million hosts. *Ask: How big is the crawl: pages a month and hosts?*
 2. Politeness is a hard rule: obey robots.txt and `Crawl-delay`, with one request per host at a time and at most one a second. It holds across nodes, restarts and failovers. *Ask: What rules must it follow when visiting a site, and how strictly?*
-3. The list of known URLs is never lost, and one node failing never stops the crawl. *Ask: Which data is costly to lose, and what if a crawler node fails mid-crawl?*
+3. The list of known URLs is never lost. *Ask: Which data is costly to lose?*
 4. Refresh pages as often as they change; nothing older than 6 months. *Ask: How fresh must stored pages be?*
 
 Extras (credit when they name one, never a gap):
+- One node failing never stops the crawl; a duplicate fetch is fine.
 - Fast-changing pages refresh about daily, the next group about weekly.
 - Survive spider traps, slow or broken servers, huge bodies and redirect loops.
 - Up to about 300 TB of raw pages kept for 12 months, with room for about 800 fetches a second when catching up.

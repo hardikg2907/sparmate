@@ -57,7 +57,7 @@ Core, functional:
 3. Run each due run on workers; retry failures with backoff; mark it dead after the last try. *Ask: What happens when a run fails?*
 
 Core, non-functional:
-1. About 200 million runs a day: 2,300 a second on average, 12,000 at the top of the hour. *Ask: How many runs a day, and when is the busiest moment?*
+1. About 200 million runs a day, with a spike at the top of every hour. *Ask: How many runs a day, and when is the busiest moment?*
 2. At least once: an accepted job is never lost, even when a zone dies, and a rare duplicate run carries the same run id. *Ask: Can an accepted job ever be lost?*
 3. Outside the top of the hour, 99% of runs start within 5 seconds of due time, never early. *Ask: How close to its due time must a run start?*
 4. One tenant cannot delay other tenants, and low priority does not starve. *Ask: What if one tenant submits far more than the others?*

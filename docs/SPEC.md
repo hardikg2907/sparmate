@@ -660,7 +660,7 @@ read from its sections (`BRIEF_STEPS`) at least two items, so an HLD brief has t
 a unit test enforces it in `npm run verify`, and `scripts/check-problems.ts` reports it per file.
 
 "Expected requirements" holds a short Core and Extras. HLD briefs have a `Core, functional:` line with about three
-numbered items and a `Core, non-functional:` line with three to five; LLD briefs have one `Core:` line with five or six.
+numbered items (at most three) and a `Core, non-functional:` line with three or four, each one target a candidate could propose; `scripts/check-problems.ts` fails a brief over either limit. LLD briefs have one `Core:` line with five or six.
 Each Core item ends with `*Ask: <question>*`, the question that uncovers it without stating the answer; the parser strips
 it from the label and keeps it as the item's `ask`. Extras are `- ` bullets under `Extras (credit when he names one,
 never a gap):`, so they never become checklist items. The Core matches what a real round pins down in about five

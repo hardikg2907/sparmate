@@ -61,9 +61,10 @@ Core, non-functional:
 1. About 3 million orders a day; a flash sale sends 1 million attempts in a minute at one SKU. *Ask: How many orders a day, and what is the busiest moment?*
 2. Never oversell: committed plus held units never exceed the stock. *Ask: What must never happen to the stock?*
 3. A retry never doubles anything: a repeated "Place order" makes no second order or hold, and one payment attempt never authorizes twice. *Ask: What if the shopper's request or payment arrives twice?*
-4. "Place order" answers under 1 second at p99, and a stale stock count beats an error. *Ask: How fast must placing an order be, and what do you do when part of the system is down?*
+4. "Place order" answers under 1 second at p99. *Ask: How fast must placing an order be?*
 
 Extras (credit when they name one, never a gap):
+- A stale stock count on the product page beats an error.
 - The order is created from a cart snapshot.
 - Void every authorization that does not pay its order.
 - Publish order events to fulfilment, notifications and analytics.

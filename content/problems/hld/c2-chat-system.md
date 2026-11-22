@@ -63,11 +63,12 @@ Core, functional:
 
 Core, non-functional:
 1. About 200 million daily users, each sending about 50 messages a day. *Ask: How many users, and how much do they send?*
-2. An online recipient gets a message under 500 ms at p99. Sending stays up; receipts and presence lag first. *Ask: How fast must a message reach an online recipient, and what may lag if something fails?*
+2. An online recipient gets a message under 500 ms at p99. *Ask: How fast must a message reach an online recipient?*
 3. Nothing is lost once the sender sees "sent", and nobody sees a message twice. *Ask: What must be true once the sender sees a message as sent?*
 4. One order per conversation, the same for every member. *Ask: In what order must members see messages?*
 
 Extras (credit when they name one, never a gap):
+- Sending stays up when something fails; receipts and presence lag first.
 - Online status and last seen in one-to-one chats.
 - One year of history on the server, paged 50 messages at a time, a page in under 200 ms.
 
