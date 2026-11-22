@@ -47,4 +47,4 @@ Write-Host "Starting $ContainerName on http://127.0.0.1:$Port..." -ForegroundCol
   -v "sparmate-claude:/home/node/.claude" `
   $ImageName | Out-Null
 
-Write-Host "Sparmate is running at http://127.0.0.1:$Port" -ForegroundColor Cyan
+Write-Host "Sparmate is running at http://sparmate.localhost:$Port" -ForegroundColor Cyan

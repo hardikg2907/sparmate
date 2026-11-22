@@ -97,7 +97,7 @@ npm start
 
 `npm run setup` installs the packages, checks for a C++ compiler, signs you in to Claude and offers to install the Kokoro voice. You can run it again at any time. It skips what is already done.
 
-Open `http://127.0.0.1:4747`. If something is still missing, Today shows what it is and the command that fixes it.
+Open `http://sparmate.localhost:4747` (`http://127.0.0.1:4747` works too). If something is still missing, Today shows what it is and the command that fixes it.
 
 The first start creates your study folder from `study-kit/` when it is missing or empty. By default it is `~/sparmate-study`. `npm start` builds the web page and then starts the server. Stop it with Ctrl+C.
 
