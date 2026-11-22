@@ -50,13 +50,6 @@ jobs:
       - run: npm run format:check
       - run: npm test
 
-      - name: Diagnose the sandboxed compile (temporary)
-        if: always() && runner.os == 'macOS'
-        run: |
-          xcode-select -p
-          ls -l /Library/Preferences/com.apple.dt.Xcode.plist || true
-          log show --last 15m --style compact --predicate 'sender == "Sandbox"' 2>/dev/null | grep -E "deny\(1\) file-read" | sed -E 's/.*deny\(1\) //' | sort | uniq -c | sort -rn | head -60
-
   commitlint:
     name: commitlint
     if: github.event_name == 'pull_request'

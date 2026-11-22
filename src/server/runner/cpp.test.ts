@@ -1,12 +1,15 @@
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { constants as osConstants, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createServer, type Server } from "node:net";
 import { promisify } from "node:util";
+
+const osSignals = osConstants.signals;
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { type CppRunner, OUTPUT_CUT_PATTERN, createCppRunner, createCppRunnerWithLimits, detectSanitizers } from "./cpp";
+import { type CppRunner, OUTPUT_CUT_PATTERN, createCppRunner, createCppRunnerWithLimits, detectSanitizers, signalFromBubblewrap, undefinedSymbols } from "./cpp";
 import { buildCompileSandboxProfile, buildLinuxSandboxInvocation, buildSandboxProfile, sandboxAvailable, withProcessLimits } from "./sandbox";
 
 const run = promisify(execFile);
@@ -82,6 +85,19 @@ describe("sandbox platform choice and refusal", () => {
     expect(inv.args).toContain("--unshare-all");
     expect(inv.args).toContain("--die-with-parent");
     expect(inv.args).toContain("/tmp/build");
+    for (const device of ["null", "zero", "random", "urandom"]) expect(inv.args).toContain(`/dev/${device}`);
+  });
+
+  it("binds only the named devices when asked, so a compile can read no endless device", () => {
+    const inv = buildLinuxSandboxInvocation("/usr/bin/clang++", "/tmp/build", [], { devices: ["null"] });
+    expect(inv.args).toContain("/dev/null");
+    for (const device of ["zero", "random", "urandom"]) expect(inv.args).not.toContain(`/dev/${device}`);
+  });
+
+  it("lets the compiler read the Xcode license record and nothing else under /Library/Preferences", () => {
+    const profile = buildCompileSandboxProfile("/tmp/build", [], ["/Library/Developer/CommandLineTools"]);
+    expect(profile).toContain('(allow file-read-data (literal "/Library/Preferences/com.apple.dt.Xcode.plist"))');
+    expect(profile).not.toContain('(subpath "/Library/Preferences")');
   });
 
   it("builds a linux compiler invocation that mounts only the named input file and passes the compiler's arguments", () => {
@@ -117,6 +133,27 @@ describe("sandbox platform choice and refusal", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("link errors and exit status from any toolchain", () => {
+  it("reads undefined symbols from Apple's ld, GNU ld and lld", () => {
+    expect(undefinedSymbols('Undefined symbols for architecture arm64:\n  "helper(int)", referenced from:\n      _main in a.o\n')).toEqual(["helper(int)"]);
+    expect(undefinedSymbols("/usr/bin/ld: /tmp/a.o: in function `main':\na.cpp:(.text+0x9): undefined reference to `helper(int)'\n")).toEqual(["helper(int)"]);
+    expect(undefinedSymbols("ld.lld: error: undefined symbol: helper(int)\n>>> referenced by a.cpp\n")).toEqual(["helper(int)"]);
+    expect(undefinedSymbols("(.text+0x1b): undefined reference to `main'\n(.text+0x2b): undefined reference to `main'\n")).toEqual(["main"]);
+    expect(undefinedSymbols("a.cpp:1:1: error: expected ';'\n")).toEqual([]);
+  });
+
+  it("maps a bubblewrap exit of 128 plus a signal number back to the signal, and leaves other codes alone", () => {
+    const n = (name: keyof typeof osSignals): number => osSignals[name];
+    expect(signalFromBubblewrap(128 + n("SIGABRT"), null)).toEqual({ exitCode: null, signal: "SIGABRT" });
+    expect(signalFromBubblewrap(128 + n("SIGSEGV"), null)).toEqual({ exitCode: null, signal: "SIGSEGV" });
+    expect(signalFromBubblewrap(128 + n("SIGXFSZ"), null)).toEqual({ exitCode: null, signal: "SIGXFSZ" });
+    expect(signalFromBubblewrap(3, null)).toEqual({ exitCode: 3, signal: null });
+    expect(signalFromBubblewrap(128, null)).toEqual({ exitCode: 128, signal: null });
+    expect(signalFromBubblewrap(255, null)).toEqual({ exitCode: 255, signal: null });
+    expect(signalFromBubblewrap(null, "SIGKILL")).toEqual({ exitCode: null, signal: "SIGKILL" });
   });
 });
 
@@ -171,7 +208,8 @@ describe("compileAndRun", () => {
     const result = await runner.compileAndRun(fixture("no_main.cpp"));
     expect(result.run).toBeNull();
     expect(result.compile.ok).toBe(false);
-    expect(result.compile.stderr).toContain("Undefined symbols");
+    // Apple's ld and GNU ld word it differently; the diagnostic below is the same on both.
+    expect(result.compile.stderr).toMatch(/Undefined symbols|undefined reference to `main'/);
     expect(result.compile.diagnostics).toEqual([{ line: 1, column: 1, endLine: 1, endColumn: 2, severity: "error", message: "Link error: the program has no main() function." }]);
   });
 
@@ -507,6 +545,12 @@ describe("sanitizers", () => {
     if (!(await addressSanitizerRunsOnThisMachine())) {
       context.skip("AddressSanitizer cannot start on this machine, with or without the sandbox");
     }
+    if (process.platform === "linux") {
+      // AddressSanitizer reads /proc at start, and the Linux sandbox has no /proc so the server's environment stays
+      // hidden. The runner finds that out and falls back to the undefined-behaviour checks alone.
+      expect(await detectSanitizers({ tmpRoot })).toBe("undefined");
+      return;
+    }
     expect(await detectSanitizers({ tmpRoot })).toBe("address,undefined");
     const result = await runner.runHarness(fixture("candidate_counter.cpp"), await readFixture("harness_heap_overflow.cpp"));
     expect(result.run!.exitCode).not.toBe(0);
@@ -515,6 +559,9 @@ describe("sanitizers", () => {
 });
 
 describe("the sandbox", () => {
+  // On Linux the program gets its own empty /tmp, so a write there succeeds inside the sandbox and is thrown away
+  // with it. What matters on both systems is that the file never appears on the machine.
+  const outsideWriteKept = process.platform === "linux" ? /^outside write: (denied|created)/ : /^outside write: denied/;
   const outsidePath = (): string => join(tmpdir(), `ir-sandbox-${Math.random().toString(36).slice(2)}.txt`);
   const writeOutside = (path: string): string =>
     `#include <cerrno>\n#include <cstdio>\n#include <cstring>\nint main() {\n  std::FILE* f = std::fopen("${path}", "w");\n  if (f == nullptr) {\n    std::printf("outside write: denied (%s)\\n", std::strerror(errno));\n    return 0;\n  }\n  std::fputs("x", f);\n  std::fclose(f);\n  std::puts("outside write: created");\n  return 0;\n}\n`;
@@ -524,7 +571,7 @@ describe("the sandbox", () => {
     try {
       const { run: ran } = await runner.compileAndRun(await program("outside.cpp", writeOutside(target)));
       expect(ran!.exitCode).toBe(0);
-      expect(ran!.stdout).toMatch(/^outside write: denied/);
+      expect(ran!.stdout).toMatch(outsideWriteKept);
       expect(existsSync(target)).toBe(false);
     } finally {
       await rm(target, { force: true });
@@ -546,7 +593,7 @@ describe("the sandbox", () => {
   it("denies a write to a sibling folder of the build folder", async () => {
     const sibling = join(tmpRoot, "sibling-file.txt");
     const { run: ran } = await runner.compileAndRun(await program("sibling.cpp", writeOutside(sibling)));
-    expect(ran!.stdout).toMatch(/^outside write: denied/);
+    expect(ran!.stdout).toMatch(outsideWriteKept);
     expect(existsSync(sibling)).toBe(false);
   });
 
@@ -556,18 +603,32 @@ describe("the sandbox", () => {
     expect(ran).toMatchObject({ exitCode: 0, stdout: "inside write: data null: ok\n", stderr: "to stderr\n" });
   });
 
-  const connectProgram = `#include <arpa/inet.h>\n#include <netinet/in.h>\n#include <sys/socket.h>\n#include <unistd.h>\n#include <cerrno>\n#include <cstdio>\nint main() {\n  int s = socket(AF_INET, SOCK_STREAM, 0);\n  sockaddr_in addr{};\n  addr.sin_family = AF_INET;\n  addr.sin_port = htons(9);\n  inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);\n  int r = connect(s, reinterpret_cast<sockaddr*>(&addr), sizeof addr);\n  std::printf("connect=%d errno=%d\\n", r, errno);\n  return 0;\n}\n`;
-
-  it("denies a socket connection to 127.0.0.1", async () => {
-    const { run: ran } = await runner.compileAndRun(await program("connect.cpp", connectProgram));
-    // EPERM (1) is the sandbox saying no; a refused connection would be ECONNREFUSED (61).
-    expect(ran!.stdout).toBe("connect=-1 errno=1\n");
+  // A real listener on the machine's loopback, so the control run proves the port is reachable without the sandbox.
+  let listener: Server;
+  let port: number;
+  beforeAll(async () => {
+    listener = createServer((socket) => socket.end());
+    await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+    port = (listener.address() as { port: number }).port;
+  });
+  afterAll(async () => {
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
   });
 
-  it("proves the denial comes from the sandbox: without it the connection is attempted", async () => {
+  const connectProgram = (): string =>
+    `#include <arpa/inet.h>\n#include <netinet/in.h>\n#include <sys/socket.h>\n#include <unistd.h>\n#include <cerrno>\n#include <cstdio>\nint main() {\n  int s = socket(AF_INET, SOCK_STREAM, 0);\n  sockaddr_in addr{};\n  addr.sin_family = AF_INET;\n  addr.sin_port = htons(${port});\n  inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);\n  int r = connect(s, reinterpret_cast<sockaddr*>(&addr), sizeof addr);\n  std::printf("connect=%d errno=%d\\n", r, r == 0 ? 0 : errno);\n  return 0;\n}\n`;
+
+  it("denies a socket connection to 127.0.0.1", async () => {
+    const { run: ran } = await runner.compileAndRun(await program("connect.cpp", connectProgram()));
+    // macOS says no with EPERM (1). On Linux the program has its own empty network namespace, so the machine's
+    // listener is not there and the connection is refused (ECONNREFUSED, 111).
+    expect(ran!.stdout).toBe(process.platform === "linux" ? "connect=-1 errno=111\n" : "connect=-1 errno=1\n");
+  });
+
+  it("proves the denial comes from the sandbox: without it the connection is made", async () => {
     const open = createCppRunner({ tmpRoot, sandbox: false });
-    const { run: ran } = await open.compileAndRun(await program("connect_control.cpp", connectProgram));
-    expect(ran!.stdout).not.toBe("connect=-1 errno=1\n");
+    const { run: ran } = await open.compileAndRun(await program("connect_control.cpp", connectProgram()));
+    expect(ran!.stdout).toBe("connect=0 errno=0\n");
   });
 
   it.skipIf(!sandboxAvailable())("denies reading files under the private root but not inside the build folder", async () => {
@@ -583,10 +644,13 @@ describe("the sandbox", () => {
         "  std::ifstream a(argv[1]); std::ifstream b(argv[2]);\n" +
         '  std::cout << (a.good() ? "secret-read" : "secret-denied") << " " << (b.good() ? "own-read" : "own-denied");\n}\n',
     );
-    execFileSync("/usr/bin/clang++", ["-std=c++17", "-o", join(build, "r"), src]);
-    const out = execFileSync("/usr/bin/sandbox-exec", ["-p", buildSandboxProfile(build, root), join(build, "r"), join(root, "secret.txt"), join(build, "own.txt")], {
-      cwd: build,
-    }).toString();
+    execFileSync("/usr/bin/clang++", ["-std=c++17", ...(process.platform === "linux" ? ["-stdlib=libc++"] : []), "-o", join(build, "r"), src]);
+    const programArgs = [join(root, "secret.txt"), join(build, "own.txt")];
+    const box =
+      process.platform === "linux"
+        ? buildLinuxSandboxInvocation(join(build, "r"), build, [root], { args: programArgs })
+        : { command: "/usr/bin/sandbox-exec", args: ["-p", buildSandboxProfile(build, root), join(build, "r"), ...programArgs] };
+    const out = execFileSync(box.command, box.args, { cwd: build }).toString();
     rmSync(root, { recursive: true, force: true });
     expect(out).toBe("secret-denied own-read");
   });
@@ -733,7 +797,8 @@ describe("the compile sandbox", () => {
   it("refuses an #include of a file outside the build folder in a syntax check, and echoes none of it", async () => {
     const result = await runner.syntaxCheck(await program("include_secret.cpp", includeProgram()));
     expect(result.ok).toBe(false);
-    expect(result.stderr).toMatch(/Operation not permitted|No such file/);
+    // The macOS sandbox refuses the read; the Linux one never mounts the file.
+    expect(result.stderr).toMatch(/Operation not permitted|No such file|file not found/);
     expect(leaks(result)).toBe(false);
   });
 
@@ -762,7 +827,8 @@ describe("the compile sandbox", () => {
   it("refuses an #include that would read forever from a device", async () => {
     const result = await runner.syntaxCheck(await program("include_zero.cpp", '#include "/dev/zero"\nint main() {}\n'));
     expect(result.ok).toBe(false);
-    expect(result.stderr).toMatch(/Operation not permitted/);
+    // The macOS sandbox refuses the read; the Linux compile sandbox binds no device but /dev/null.
+    expect(result.stderr).toMatch(process.platform === "linux" ? /file not found/ : /Operation not permitted/);
   });
 
   it("proves the refusals come from the sandbox: without it both tricks read the file", async () => {

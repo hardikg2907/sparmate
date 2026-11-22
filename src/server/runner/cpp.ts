@@ -1,4 +1,5 @@
 import { constants, existsSync, realpathSync } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { access, chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseClangDiagnostics, toUtf16Columns } from "../../shared/clang";
@@ -197,6 +198,7 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
           // A missing input is left out so the compiler, not bubblewrap, reports it.
           readOnly: [...outside.filter((i) => existsSync(i)), ...(prefix !== null && !prefix.startsWith("/usr/") ? [prefix] : [])],
           limits: { addressSpaceBytes: COMPILE_ADDRESS_SPACE_BYTES, cpuSeconds: Math.ceil(args.timeoutMs / 1000) + 5, fileBytes: COMPILE_FILE_BYTES },
+          devices: ["null"],
         });
         command = box.command;
         commandArgs = box.args;
@@ -268,9 +270,10 @@ function build(options: CppRunnerOptions, overrides: Partial<RunnerLimits>): { r
     let stderr = withCutNote(run.spawnError === null ? withoutProcNoise(run.stderr) : `${run.spawnError}\n`, run.stderrCut, limits.outputCapBytes);
     if (run.memoryExceeded) stderr += `\n${memoryNote("program", limits.runMemoryBytes)}\n`;
     if (run.startupTimedOut) stderr += `\nThe program did not start within ${Math.round(limits.runStartupTimeoutMs / 1000)} seconds and was stopped.\n`;
+    const status = sandboxed && process.platform === "linux" ? signalFromBubblewrap(run.exitCode, run.signal) : { exitCode: run.exitCode, signal: run.signal };
     return {
-      exitCode: run.exitCode,
-      signal: run.signal,
+      exitCode: status.exitCode,
+      signal: status.signal,
       stdout: withCutNote(run.stdout, run.stdoutCut, limits.outputCapBytes),
       stderr,
       timedOut: run.timedOut,
@@ -496,9 +499,9 @@ function describeFailure(run: ProcessResult, stderr: string, timeoutMs: number, 
   if (run.spawnError !== null) return "The C++ compiler could not be started.";
   if (run.timedOut) return `The compiler did not finish within ${Math.round(timeoutMs / 1000)} seconds.`;
   if (run.memoryExceeded) return memoryNote("compiler", memoryBytes);
-  if (/Undefined symbols/.test(stderr)) {
-    const symbols = [...stderr.matchAll(/^\s+"(.+)", referenced from:/gm)].map((m) => m[1] ?? "");
-    if (symbols.includes("_main")) return "Link error: the program has no main() function.";
+  const symbols = undefinedSymbols(stderr);
+  if (symbols.length > 0) {
+    if (symbols.includes("_main") || symbols.includes("main")) return "Link error: the program has no main() function.";
     const shown = symbols
       .slice(0, 3)
       .map((s) => `"${s}"`)
@@ -509,6 +512,32 @@ function describeFailure(run: ProcessResult, stderr: string, timeoutMs: number, 
   const errorLine = lines.find((l) => /\b(?:fatal )?error: /.test(l)) ?? lines.find((l) => l !== "");
   const message = errorLine?.replace(/^.*?\b(?:fatal )?error: /, "") ?? "";
   return message === "" ? "The build failed." : `Build failed: ${message.slice(0, 300)}`;
+}
+
+/**
+ * The symbols a failed link names, in first-seen order: Apple's ld lists them in quotes under "Undefined symbols",
+ * GNU ld says "undefined reference to `name'", and lld says "undefined symbol: name".
+ */
+export function undefinedSymbols(stderr: string): string[] {
+  const found = /Undefined symbols/.test(stderr)
+    ? [...stderr.matchAll(/^\s+"(.+)", referenced from:/gm)].map((m) => m[1] ?? "")
+    : [...stderr.matchAll(/undefined reference to `([^'\n]+)'|undefined symbol: ([^\n]+)/g)].map((m) => (m[1] ?? m[2] ?? "").trim());
+  return [...new Set(found.filter((s) => s !== ""))];
+}
+
+// Aliases share a number (SIGIOT is SIGABRT), so the first, usual name wins.
+const SIGNAL_NAMES = new Map<number, string>();
+for (const [name, number] of Object.entries(osConstants.signals)) if (!SIGNAL_NAMES.has(number)) SIGNAL_NAMES.set(number, name);
+
+/**
+ * bubblewrap runs the program under its own init, which exits with 128 plus the signal number when the program dies
+ * by a signal. Mapping that back keeps a crash a crash. A program that itself exits with such a code reads as the
+ * signal, which is rare and harmless next to every crash reading as an exit code.
+ */
+export function signalFromBubblewrap(exitCode: number | null, signal: string | null): { exitCode: number | null; signal: string | null } {
+  if (signal !== null || exitCode === null || exitCode <= 128) return { exitCode, signal };
+  const name = SIGNAL_NAMES.get(exitCode - 128);
+  return name === undefined ? { exitCode, signal } : { exitCode: null, signal: name };
 }
 
 function memoryNote(who: "program" | "compiler", bytes: number): string {
