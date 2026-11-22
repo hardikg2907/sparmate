@@ -70,8 +70,10 @@ export function buildCompileSandboxProfile(workDir: string, inputs: readonly str
     `(allow file-write* (subpath ${quote(workDir)}))`,
     DEVICE_WRITES,
     "(deny file-read-data)",
-    // The root listing, the active-toolchain link and the time zone files are read by the toolchain itself.
+    // The root listing, the active-toolchain link and the time zone files are read by the toolchain itself. With a
+    // whole Xcode selected, xcrun refuses to start unless it can read the license record.
     '(allow file-read-data (literal "/") (literal "/private/var/db/xcode_select_link") (subpath "/private/var/db/timezone"))',
+    `(allow file-read-data (literal ${quote(XCODE_LICENSE_RECORD)}))`,
     // Only devices with a fixed size, so an #include cannot read forever from /dev/zero or /dev/urandom.
     '(allow file-read-data (literal "/dev/null") (literal "/dev/dtracehelper") (literal "/dev/autofs_nowait"))',
     `(allow file-read-data ${roots.map((r) => `(subpath ${quote(r)})`).join(" ")})`,
@@ -80,6 +82,7 @@ export function buildCompileSandboxProfile(workDir: string, inputs: readonly str
 }
 
 const COMMAND_LINE_TOOLS = "/Library/Developer/CommandLineTools";
+const XCODE_LICENSE_RECORD = "/Library/Preferences/com.apple.dt.Xcode.plist";
 
 /**
  * Folders the Apple toolchain reads from: the active developer folder (Command Line Tools or a whole Xcode
@@ -133,7 +136,13 @@ export interface LinuxSandboxOptions {
   /** Files or folders outside `writableDir` that must be readable, mounted read-only at the same path. */
   readOnly?: readonly string[];
   limits?: Partial<LinuxLimits>;
+  /** Device files under /dev to bind. A compile gets only null, so an #include cannot read forever from a device. */
+  devices?: readonly LinuxDevice[];
 }
+
+export type LinuxDevice = "null" | "zero" | "random" | "urandom";
+
+const RUN_DEVICES: readonly LinuxDevice[] = ["null", "zero", "random", "urandom"];
 
 export interface LinuxLimits {
   addressSpaceBytes: number;
@@ -180,7 +189,7 @@ export function buildLinuxSandboxInvocation(
   if (existsSync("/etc")) args.push("--ro-bind", "/etc", "/etc");
   // No /proc at all: the container's own would expose the server's environment, token included, and a rootless
   // container cannot mount a fresh one. Only the device files a normal program opens are bound.
-  for (const dev of ["null", "zero", "random", "urandom"]) args.push("--dev-bind", `/dev/${dev}`, `/dev/${dev}`);
+  for (const dev of options.devices ?? RUN_DEVICES) args.push("--dev-bind", `/dev/${dev}`, `/dev/${dev}`);
   args.push("--tmpfs", "/tmp");
 
   for (const path of options.readOnly ?? []) args.push("--ro-bind", path, path);

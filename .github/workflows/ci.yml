@@ -31,11 +31,13 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # The runner builds with -stdlib=libc++ on Linux, and the sanitizer runtime ships apart from clang.
       - name: Install the C++ compiler and sandbox tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang bubblewrap
+          sudo apt-get install -y clang libc++-dev libc++abi-dev bubblewrap
+          sudo apt-get install -y "libclang-rt-$(clang -dumpversion | cut -d. -f1)-dev"
 
       # Ubuntu 24.04 runners block unprivileged user namespaces, which bubblewrap needs.
       - name: Allow unprivileged user namespaces

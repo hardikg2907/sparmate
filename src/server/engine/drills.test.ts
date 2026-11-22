@@ -1683,13 +1683,16 @@ describe("dialogue drills", () => {
     it("answers 409 to a reply sent twice at once, then grades once", async () => {
       const q1 = question(await service.submit(free, OPEN));
       let release: () => void = () => undefined;
+      let entered: () => void = () => undefined;
       const gate = new Promise<void>((resolve) => (release = resolve));
+      const inFlight = new Promise<void>((resolve) => (entered = resolve));
       const slow = service2(async () => {
+        entered();
         await gate;
         return undefined;
       });
       const first = slow.reply(q1.attemptId, 1, LONG_REPLY);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await inFlight;
       await expect(slow.reply(q1.attemptId, 1, LONG_REPLY)).rejects.toMatchObject({ status: 409 });
       await expect(slow.abandon(q1.attemptId)).rejects.toMatchObject({ status: 409 });
       release();
@@ -1780,13 +1783,16 @@ describe("dialogue drills", () => {
     it("holds one lock per target for a submit, a reply and an abandon", async () => {
       const q1 = question(await service.submit(free, OPEN));
       let release: () => void = () => undefined;
+      let entered: () => void = () => undefined;
       const gate = new Promise<void>((resolve) => (release = resolve));
+      const inFlight = new Promise<void>((resolve) => (entered = resolve));
       const slow = service2(async () => {
+        entered();
         await gate;
         return undefined;
       });
       const reply = slow.reply(q1.attemptId, 1, LONG_REPLY);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await inFlight;
       await expect(slow.submit(free, OPEN)).rejects.toMatchObject({ status: 409, message: "This drill is already being graded. Wait for the result." });
       await expect(slow.abandon(q1.attemptId)).rejects.toMatchObject({ status: 409 });
       release();
@@ -1794,13 +1800,16 @@ describe("dialogue drills", () => {
 
       // A submit holds the lock too, so a reply or an abandon for its attempt waits.
       let freeUp: () => void = () => undefined;
+      let submitted: () => void = () => undefined;
       const hold = new Promise<void>((resolve) => (freeUp = resolve));
+      const graded = new Promise<void>((resolve) => (submitted = resolve));
       const submitting = service2(async () => {
+        submitted();
         await hold;
         return undefined;
       });
       const first = submitting.submit(free, OPEN);
-      for (let i = 0; i < 200 && !openRow(); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+      await graded;
       const id = openRow()?.id ?? "";
       await expect(submitting.reply(id, 1, LONG_REPLY)).rejects.toMatchObject({ status: 409, message: "This answer is already being graded. Wait for the result." });
       await expect(submitting.abandon(id)).rejects.toMatchObject({ status: 409 });

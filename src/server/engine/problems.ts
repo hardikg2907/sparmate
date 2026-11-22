@@ -85,17 +85,31 @@ async function markdownFiles(dir: string, recursive: boolean): Promise<string[]>
     .map((n) => join(dir, n));
 }
 
-/** Loads every problem file. A broken file is skipped with a warning so one bad file never hides the rest. */
-export async function loadProblems(sources: { dir: string; custom: boolean; recursive: boolean }[], log: Logger): Promise<Problem[]> {
+/** A file's last good parse, and the stat fields that must all match for it to still be current. */
+export type ParsedProblems = Map<string, { key: string; problem: Problem }>;
+
+/**
+ * Loads every problem file. A broken file is skipped with a warning so one bad file never hides the rest.
+ *
+ * With `parsed`, a file whose size, inode and nanosecond change times all match its last parse is not read or
+ * parsed again; every file is still listed and stat-ed, so an edit, a new file or a removed file shows on the next
+ * call. Callers get copies, so changing a returned problem never changes the kept one.
+ */
+export async function loadProblems(sources: { dir: string; custom: boolean; recursive: boolean }[], log: Logger, parsed?: ParsedProblems): Promise<Problem[]> {
   const out: Problem[] = [];
   const seen = new Set<string>();
+  const current: ParsedProblems = new Map();
   for (const source of sources) {
     for (const file of await markdownFiles(source.dir, source.recursive)) {
       try {
-        const info = await stat(file);
+        const info = await stat(file, { bigint: true });
         if (!info.isFile()) continue;
-        if (info.size > MAX_PROBLEM_BYTES) throw new ProblemFileError(`File is larger than ${MAX_PROBLEM_BYTES} bytes`);
-        const problem = parseProblem(await readFile(file, "utf8"), file, source.custom);
+        if (info.size > BigInt(MAX_PROBLEM_BYTES)) throw new ProblemFileError(`File is larger than ${MAX_PROBLEM_BYTES} bytes`);
+        const key = `${source.custom}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+        const kept = parsed?.get(file);
+        const entry = kept?.key === key ? kept : { key, problem: parseProblem(await readFile(file, "utf8"), file, source.custom) };
+        current.set(file, entry);
+        const problem = structuredClone(entry.problem);
         if (seen.has(problem.meta.id)) throw new ProblemFileError(`Duplicate problem id "${problem.meta.id}"`);
         seen.add(problem.meta.id);
         out.push(problem);
@@ -104,11 +118,17 @@ export async function loadProblems(sources: { dir: string; custom: boolean; recu
       }
     }
   }
+  if (parsed !== undefined) {
+    parsed.clear();
+    for (const [file, entry] of current) parsed.set(file, entry);
+  }
   return out;
 }
 
 export class ProblemCatalog {
   private problems: Problem[] = [];
+  // The drill and session paths reload on every call, and parsing every file each time was most of their cost.
+  private readonly parsed: ParsedProblems = new Map();
 
   constructor(
     private readonly sources: { dir: string; custom: boolean; recursive: boolean }[],
@@ -116,7 +136,7 @@ export class ProblemCatalog {
   ) {}
 
   async reload(): Promise<Problem[]> {
-    this.problems = await loadProblems(this.sources, this.log);
+    this.problems = await loadProblems(this.sources, this.log, this.parsed);
     return this.problems;
   }
 
