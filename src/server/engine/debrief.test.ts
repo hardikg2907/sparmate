@@ -364,24 +364,37 @@ describe("verdict and confidence rules", () => {
     expect(verdictOf(ids, { edge_cases: 1 }, "lld")).toMatchObject({ sde2: "lean_no_hire" });
   });
 
-  it("raises the lower-level call to strong_hire when the target call passes", () => {
-    const ctx = { mode: "interview" as const, track: "hld" as const, tester: null, belowLevel: "SDE-1" };
-    const withBelow = (scores: Record<string, number>, below: "no_hire" | "lean_no_hire" | "hire") =>
-      enforceRules(card({ dimensions: scored(HLD_IDS, scores), verdict: { sde2: "no_hire", senior: "no_hire", below, belowLevel: "SDE-1", confidence: "low", summary: "s" } }), ctx)
-        .verdict;
-    expect(withBelow({ depth: 2, communication: 2 }, "no_hire")).toMatchObject({ sde2: "hire", below: "strong_hire" });
-    expect(withBelow({ depth: 4, design: 4 }, "lean_no_hire")).toMatchObject({ sde2: "strong_hire", below: "strong_hire" });
-    expect(withBelow({ depth: 1 }, "hire")).toMatchObject({ sde2: "lean_no_hire", below: "hire" });
+  it("computes the lower-level call from the scores", () => {
+    const below = (ids: string[], scores: Record<string, number>, track: "hld" | "lld", fallback = 3) =>
+      enforceRules(card({ dimensions: scored(ids, scores, fallback), verdict: { sde2: "no_hire", senior: "no_hire", below: "no_hire", confidence: "low", summary: "s" } }), {
+        mode: "interview",
+        track,
+        tester: track === "lld" ? goodTester : null,
+        belowLevel: "SDE-1",
+      }).verdict;
+    // Passing the target always passes the level under it.
+    expect(below(HLD_IDS, { depth: 2, communication: 2 }, "hld")).toMatchObject({ sde2: "hire", below: "strong_hire", belowLevel: "SDE-1" });
+    expect(below(HLD_IDS, { depth: 1 }, "hld")).toMatchObject({ sde2: "lean_no_hire", below: "hire" });
+    expect(below(HLD_IDS, { design: 3, navigation: 2, depth: 3 }, "hld", 2)).toMatchObject({ below: "hire" });
+    expect(below(HLD_IDS, { design: 2 }, "hld", 3)).toMatchObject({ below: "lean_no_hire" });
+    expect(below(HLD_IDS, {}, "hld", 2)).toMatchObject({ below: "lean_no_hire" });
+    expect(below(HLD_IDS, { navigation: 1 }, "hld")).toMatchObject({ below: "no_hire" });
+    expect(below(HLD_IDS, { depth: 1, drive_time: 1 }, "hld")).toMatchObject({ below: "no_hire" });
+
+    expect(below(LLD_IDS, { working_code: 3, design: 2, extensibility: 1, edge_cases: 3, requirements: 3 }, "lld", 2)).toMatchObject({ below: "hire" });
+    expect(below(LLD_IDS, { working_code: 2 }, "lld")).toMatchObject({ below: "lean_no_hire" });
+    expect(below(LLD_IDS, { design: 1 }, "lld")).toMatchObject({ below: "no_hire" });
   });
 
-  it("leaves a missing lower-level call missing and fills a missing name from the target", () => {
+  it("keeps the judge's lower-level call when a score is missing, raised when the target passes", () => {
     const ctx = { mode: "interview" as const, track: "hld" as const, tester: null, belowLevel: "SDE-1" };
-    const dimensions = scored(HLD_IDS, { depth: 1 });
-    const none = enforceRules(card({ dimensions, verdict: { sde2: "hire", senior: "hire", confidence: "low", summary: "s" } }), ctx).verdict;
+    const dimensions = scored(["navigation", "design"], {});
+    const kept = enforceRules(card({ dimensions, verdict: { sde2: "lean_no_hire", senior: "no_hire", below: "hire", confidence: "low", summary: "s" } }), ctx).verdict;
+    expect(kept).toMatchObject({ below: "hire", belowLevel: "SDE-1" });
+    const raised = enforceRules(card({ dimensions, verdict: { sde2: "hire", senior: "no_hire", below: "no_hire", confidence: "low", summary: "s" } }), ctx).verdict;
+    expect(raised.below).toBe("strong_hire");
+    const none = enforceRules(card({ dimensions, verdict: { sde2: "lean_no_hire", senior: "no_hire", confidence: "low", summary: "s" } }), ctx).verdict;
     expect(none.below).toBeUndefined();
-    expect(none.belowLevel).toBeUndefined();
-    const unnamed = enforceRules(card({ dimensions, verdict: { sde2: "hire", senior: "hire", below: "hire", confidence: "low", summary: "s" } }), ctx).verdict;
-    expect(unnamed.belowLevel).toBe("SDE-1");
   });
 
   it("leaves the verdict alone when a required dimension is missing", () => {

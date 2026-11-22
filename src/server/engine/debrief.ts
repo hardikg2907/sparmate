@@ -221,7 +221,9 @@ const LLD_DIMENSIONS = ["requirements", "working_code", "design", "extensibility
 type Verdict = JudgedCard["verdict"]["sde2"];
 
 /** The rubric's verdict table, or null when a dimension it needs was not scored. Concurrency may be left out of an LLD card. */
-function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions"]): { sde2: Verdict; senior: Verdict } | null {
+const passes = (v: Verdict | undefined): boolean => v === "hire" || v === "strong_hire";
+
+function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions"]): { sde2: Verdict; senior: Verdict; below: Verdict } | null {
   const known = track === "lld" ? LLD_DIMENSIONS : HLD_DIMENSIONS;
   const score = new Map<string, number>();
   for (const d of dimensions) if (known.includes(d.id) && !score.has(d.id)) score.set(d.id, d.score);
@@ -251,7 +253,14 @@ function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions
           : !allThree
             ? "no_hire"
             : "lean_no_hire";
-    return { sde2, senior };
+    const below: Verdict = passes(sde2)
+      ? "strong_hire"
+      : at("working_code") >= 3 && at("design") >= 2 && ones <= 1 && count(3) >= 3
+        ? "hire"
+        : at("working_code") === 1 || at("design") === 1 || ones >= 2
+          ? "no_hire"
+          : "lean_no_hire";
+    return { sde2, senior, below };
   }
   const sde2: Verdict =
     allThree && four >= 2
@@ -262,7 +271,14 @@ function verdictsFor(track: Session["track"], dimensions: JudgedCard["dimensions
           ? "no_hire"
           : "lean_no_hire";
   const senior: Verdict = allThree && four >= 5 ? "strong_hire" : allThree && four >= 3 && fours("depth", "scale_reliability") ? "hire" : !allThree ? "no_hire" : "lean_no_hire";
-  return { sde2, senior };
+  const below: Verdict = passes(sde2)
+    ? "strong_hire"
+    : at("design") >= 3 && at("navigation") >= 2 && ones <= 1 && count(3) >= 2
+      ? "hire"
+      : at("navigation") === 1 || at("design") === 1 || ones >= 2
+        ? "no_hire"
+        : "lean_no_hire";
+  return { sde2, senior, below };
 }
 
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const;
@@ -300,8 +316,8 @@ export function enforceRules(card: JudgedCard, ctx: { mode: Session["mode"]; tra
   const verdicts = verdictsFor(ctx.track, card.dimensions);
   const confidence = ctx.mode === "guided" && card.verdict.confidence === "high" ? "medium" : card.verdict.confidence;
   out.verdict = { ...card.verdict, ...(verdicts ?? {}), confidence };
-  // Passing the target bar always passes the level under it, so the judge cannot rate the lower level worse.
-  if (out.verdict.sde2 === "hire" || out.verdict.sde2 === "strong_hire") out.verdict.below = "strong_hire";
+  // Without a full set of scores the judge's own lower call stands, but passing the target always passes the level under it.
+  if (verdicts === null && passes(out.verdict.sde2)) out.verdict.below = "strong_hire";
   // An older prompt or a model slip can leave the name out; the lower call is useless without it.
   if (out.verdict.below !== undefined && out.verdict.belowLevel === undefined && ctx.belowLevel !== undefined) out.verdict.belowLevel = ctx.belowLevel;
 
