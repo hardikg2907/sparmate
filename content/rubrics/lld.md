@@ -186,7 +186,7 @@ Map each hint to the dimension its topic touched, then cap that dimension:
 - An H2 caps it at 3.
 - An H3 caps it at 2.
 
-C++ syntax help is never a hint and never caps a score, because syntax is not the skill under test. A normal probe is not a hint either: asking why they chose something, asking them to run the program, the concurrency follow-up and the new requirement are all part of the round. A hint the interviewer clearly gave but did not record counts at the level it reads as. In a guided round, any design point the guide taught them directly counts as an H3 on that topic.
+C++ syntax help is never a hint and never caps a score, because syntax is not the skill under test. A scope check, where the interviewer says which of their listed operations are in or out of scope, is not a hint. A normal probe is not a hint either: asking why they chose something, asking them to run the program, the concurrency follow-up and the new requirement are all part of the round. A hint the interviewer clearly gave but did not record counts at the level it reads as. In a guided round, any design point the guide taught them directly counts as an H3 on that topic.
 
 ## Verdicts
 
@@ -194,12 +194,14 @@ Score every dimension first, then apply these rules. Never move a score to reach
 
 For each column, take the first row from the top that matches.
 
-| Verdict | {{target_level}} | {{stretch_level}} |
-|---|---|---|
-| strong_hire | Every scored dimension is at 3 or more, and at least two are at 4. | Every scored dimension is at 3 or more, and at least five are at 4, including working_code, design and extensibility. |
-| hire | There are no 1s, working_code, design and extensibility are all at 3 or more, and at least five scored dimensions are at 3 or more. | Every scored dimension is at 3 or more, and at least three are at 4, including design and extensibility. |
-| no_hire | working_code is at 1, or design or extensibility is at 1, or two or more dimensions are at 1. | Any scored dimension is below 3. |
-| lean_no_hire | Everything else. A working_code score below 3 never gets better than this. | Everything else. |
+| Verdict | {{target_level}} | {{stretch_level}} | {{below_level}} |
+|---|---|---|---|
+| strong_hire | Every scored dimension is at 3 or more, and at least two are at 4. | Every scored dimension is at 3 or more, and at least five are at 4, including working_code, design and extensibility. | The {{target_level}} call is hire or strong_hire. |
+| hire | There are no 1s, working_code, design and extensibility are all at 3 or more, and at least five scored dimensions are at 3 or more. | Every scored dimension is at 3 or more, and at least three are at 4, including design and extensibility. | working_code is at 3 or more, design is at 2 or more, at most one scored dimension is at 1, and at least three scored dimensions are at 3 or more. |
+| no_hire | working_code is at 1, or design or extensibility is at 1, or two or more dimensions are at 1. | Any scored dimension is below 3. | working_code is at 1, or design is at 1, or two or more dimensions are at 1. |
+| lean_no_hire | Everything else. A working_code score below 3 never gets better than this. | Everything else. | Everything else. A working_code score below 3 never gets better than this. |
+
+The {{below_level}} column uses the same scores, which measure against the {{target_level}} bar. A 2 there means short of {{target_level}}, which is often enough for {{below_level}}.
 
 Confidence:
 - **high** when the round reached the extension, the tester ran every scenario, and every score rests on direct quotes or test results.

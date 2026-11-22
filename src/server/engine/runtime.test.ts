@@ -117,7 +117,7 @@ function setup(driver: Driver, _mode: Session["mode"] = "interview", studyRoot =
       compileAndRun: async () => ({ compile: { ok: true, diagnostics: [], stderr: "", durationMs: 0 }, run: null }),
       runHarness: async () => ({ compile: { ok: true, diagnostics: [], stderr: "", durationMs: 0 }, run: null }),
     },
-    prompts: {} as PromptLoader,
+    prompts: { candidateProfile: async () => "" } as unknown as PromptLoader,
     log: memoryLogger(),
   };
   const msgs: ServerMsg[] = [];

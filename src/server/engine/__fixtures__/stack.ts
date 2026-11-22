@@ -52,7 +52,7 @@ export async function makeStack() {
       compileAndRun: async () => ({ compile: { ok: true, diagnostics: [], stderr: "", durationMs: 0 }, run: null }),
       runHarness: async () => ({ compile: { ok: true, diagnostics: [], stderr: "", durationMs: 0 }, run: null }),
     },
-    prompts: {} as PromptLoader,
+    prompts: { candidateProfile: async () => "" } as unknown as PromptLoader,
     log,
     problems,
   };

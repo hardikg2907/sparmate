@@ -9,7 +9,7 @@
 | **Name** | |
 | **Experience** | e.g. two years backend |
 | **Day-to-day stack** | languages, database, queue, cloud, anything they run in production |
-| **Target role** | the `Target:` line in `ABOUT_ME.md` sets the level, the stretch level and the company type |
+| **Target role** | the `Target:` line in `ABOUT_ME.md` sets the level, the stretch level, the level below and the company type |
 | **LLD language** | the language they will write code in for Track B |
 | **Known strong areas** | where they already have real depth |
 | **Known weak areas** | if they already know |

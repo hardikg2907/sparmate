@@ -232,6 +232,8 @@ export const HLD_SCORECARD: Scorecard = {
   verdict: {
     sde2: "hire",
     senior: "lean_no_hire",
+    below: "strong_hire",
+    belowLevel: "SDE-1",
     confidence: "medium",
     summary:
       "You led the early phases well. You asked targeted scope questions and turned each number into a design decision. You chose a 302 and gave two reasons.\n\nThe first design was complete in time. The depth was thinner. When asked how codes stay unique across 6 billion links, you named a counter but did not say how several servers would share it. You handled cache failure only after a nudge.",
@@ -584,6 +586,8 @@ export const LLD_SCORECARD: Scorecard = {
   verdict: {
     sde2: "lean_no_hire",
     senior: "no_hire",
+    below: "hire",
+    belowLevel: "SDE-1",
     confidence: "high",
     summary:
       "The design was clean. The ticket was found early, pricing was a strategy, and the first slice ran. The round lost its bar on correctness. Two scenarios that guard state failed: an unknown ticket freed a spot, and a second exit with the same ticket freed it twice.\n\nThe lock was in the right place, and the concurrency scenario passed.",

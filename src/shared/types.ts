@@ -388,9 +388,12 @@ export const MAX_GAPS = 5;
 
 export const ScorecardSchema = z.strictObject({
   verdict: z.strictObject({
-    // The keys are stored in saved sessions: `sde2` is the call at the target level, `senior` the call at the stretch level.
+    // The keys are stored in saved sessions: `sde2` is the call at the target level, `senior` the call at the stretch level
+    // and `below` the call at the level under the target. `below` is optional because sessions saved before it have none.
     sde2: z.enum(VERDICTS),
     senior: z.enum(VERDICTS),
+    below: z.enum(VERDICTS).optional().describe("The call at the level below the target, from the rubric's third column."),
+    belowLevel: z.string().optional().describe("The lower level name, copied exactly from the prompt."),
     targetLevel: z.string().optional().describe("The target level name, copied exactly from the prompt."),
     stretchLevel: z.string().optional().describe("The stretch level name, copied exactly from the prompt."),
     confidence: z.enum(["low", "medium", "high"]),

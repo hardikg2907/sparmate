@@ -111,18 +111,19 @@ describe("target level in prompts", () => {
 
   it("fills the level variables from the profile and renders the judge prompt and rubric with them", async () => {
     const loader = new PromptLoader(join(APP_ROOT, "content"), "/nonexistent");
-    const vars = commonVars({ ...input, candidateProfile: "Target: SDE-3; stretch: staff; company: large product company" });
-    expect(vars).toMatchObject({ target_level: "SDE-3", stretch_level: "staff", target_company: "large product company" });
+    const vars = commonVars({ ...input, candidateProfile: "Target: SDE-3; stretch: staff; below: junior; company: large product company" });
+    expect(vars).toMatchObject({ target_level: "SDE-3", stretch_level: "staff", below_level: "junior", target_company: "large product company" });
     const out = await loader.render("judge-hld", { ...vars, problem_brief: "brief", rubric: await loader.rubric("hld") });
     expect(out).toContain("SDE-3");
     expect(out).toContain("staff");
     expect(out).not.toContain("SDE-2");
-    expect(out).not.toMatch(/\{\{\s*(target_level|stretch_level|target_company)\s*\}\}/);
+    expect(out).toContain("junior");
+    expect(out).not.toMatch(/\{\{\s*(target_level|stretch_level|below_level|target_company)\s*\}\}/);
   });
 
   it("keeps today's bar when the profile has no target line", async () => {
     const vars = commonVars({ ...input, candidateProfile: "- **Target level:** SDE-3" });
-    expect(vars).toMatchObject({ target_level: "SDE-2", stretch_level: "senior", target_company: "Series A to C startup" });
+    expect(vars).toMatchObject({ target_level: "SDE-2", stretch_level: "senior", below_level: "SDE-1", target_company: "Series A to C startup" });
   });
 
   it("renders the drill prompts, and the interviewer prompt asks one question and never reveals the key", async () => {
@@ -156,7 +157,7 @@ describe("target level in prompts", () => {
     for (const name of Object.keys(PROMPT_VARS) as PromptName[]) {
       const extra = Object.fromEntries(PROMPT_VARS[name].map((k) => [k, "x"]));
       const out = await loader.render(name, { ...vars, ...extra });
-      expect(out).not.toMatch(/\{\{\s*(target_level|stretch_level|target_company)\s*\}\}/);
+      expect(out).not.toMatch(/\{\{\s*(target_level|stretch_level|below_level|target_company)\s*\}\}/);
     }
   });
 });

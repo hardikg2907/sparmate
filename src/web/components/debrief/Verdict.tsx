@@ -12,8 +12,30 @@ export function jumpTo(id: string): void {
 }
 
 /** The level names the round was judged at; a card saved without them was judged at the defaults. */
-export function levelNames(verdict: Scorecard["verdict"]): { target: string; stretch: string } {
-  return { target: verdict.targetLevel ?? DEFAULT_TARGET.level, stretch: verdict.stretchLevel ?? DEFAULT_TARGET.stretch };
+export function levelNames(verdict: Scorecard["verdict"]): { target: string; stretch: string; below: string } {
+  return {
+    target: verdict.targetLevel ?? DEFAULT_TARGET.level,
+    stretch: verdict.stretchLevel ?? DEFAULT_TARGET.stretch,
+    below: verdict.belowLevel ?? DEFAULT_TARGET.below,
+  };
+}
+
+const passes = (call: Scorecard["verdict"]["sde2"] | undefined) => call === "hire" || call === "strong_hire";
+const sameLevel = (a: string, b: string) => a.replace(/[\s-]/g, "").toLowerCase() === b.replace(/[\s-]/g, "").toLowerCase();
+
+/**
+ * The highest of the three levels the candidate passes, or null when the card has no lower-level call. A card saved
+ * before that call existed stays silent, and so does one whose lower level is the target itself, where the line would
+ * repeat the headline.
+ */
+export function highestLevelPassed(verdict: Scorecard["verdict"]): string | null {
+  if (verdict.below === undefined) return null;
+  const levels = levelNames(verdict);
+  if (sameLevel(levels.below, levels.target)) return null;
+  if (passes(verdict.senior)) return levels.stretch;
+  if (passes(verdict.sde2)) return levels.target;
+  if (passes(verdict.below)) return levels.below;
+  return `none at ${levels.below} or above`;
 }
 
 /**
@@ -26,6 +48,7 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
   const tone = readiness ? (readiness.call === "ready" ? "good" : "warn") : VERDICT_TONE[verdict.sde2];
   const levels = levelNames(verdict);
   const confidence = `${verdict.confidence} confidence`;
+  const highest = readiness ? null : highestLevelPassed(verdict);
   return (
     <section id="verdict" aria-labelledby="verdict-heading">
       <h2 id="verdict-heading" className="sr-only">
@@ -43,6 +66,7 @@ export function VerdictCard({ scorecard }: { scorecard: Scorecard }) {
             : "Every step passed on your own, inside the planned time. Interview mode is the next test."
           : VERDICT_EXPLANATION[verdict.sde2]}
       </p>
+      {highest !== null && <p className="text-ui text-muted-foreground">Highest level you pass: {highest}</p>}
     </section>
   );
 }
