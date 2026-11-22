@@ -49,19 +49,19 @@ For the interviewer: on scope, the nearby-cars stretch goal reads the same data.
 ## Expected requirements
 
 Core, functional:
-1. A rider requests a ride from a pickup to a drop-off. One active ride per rider. *Ask: What does a rider do to get a ride?*
+1. A rider requests a ride from a pickup to a drop-off. *Ask: What does a rider do to get a ride?*
 2. Offer the ride to nearby free drivers, one at a time; the first to accept gets it. *Ask: How is a driver chosen for a ride?*
-3. A driver never holds two rides, and a ride never has two drivers. *Ask: What must always be true about drivers and rides?*
-4. The rider sees the driver's live position and pickup ETA, then the live trip. *Ask: What does the rider see after a driver accepts?*
+3. The rider sees the driver's live position and pickup ETA. *Ask: What does the rider see after a driver accepts?*
 
 Core, non-functional:
-1. 15 million trips a day, 500 requests a second at peak; 1 million drivers report every 4 s. *Ask: How many rides and drivers, and how often do drivers report?*
+1. 15 million trips a day; 1 million drivers report every 4 s. *Ask: How many rides and drivers, and how often do drivers report?*
 2. First offer within 2 seconds at p99. *Ask: How fast must the first offer go out?*
-3. Strong consistency for assignment; eventual consistency, even loss, for positions. *Ask: Which data must be exact, and which may be stale or lost?*
-4. A requested ride is never lost; 99.99% available for request and match. *Ask: What if the system fails after a rider requests a ride?*
-5. The ETA is an external, paid dependency that can fail. *Ask: Where does the pickup ETA come from, and what if it is down?*
+3. A driver never holds two rides, and a ride never has two drivers. Assignment is strongly consistent; positions may be stale or lost. *Ask: What must always be true about drivers and rides, and which data may be stale or lost?*
+4. A requested ride is never lost, even if the system fails after the request. *Ask: What if the system fails after a rider requests a ride?*
 
 Extras (credit when they name one, never a gap):
+- One active ride per rider.
+- The ETA is an external, paid dependency that can fail. It needs a timeout and a fallback.
 - A trip moves through its states. Cancels, no-shows and "no drivers" end it early.
 
 ## Capacity math
@@ -198,13 +198,13 @@ Use one, at the extension point, unless the candidate already handled it.
 ## Level bar
 
 Hire bar must show:
-- Requirements that pin down the update interval, drivers online, the offer rules (one at a time, 15 seconds), the never-two-riders rule and what is out of scope.
+- Requirements that pin down the update interval, drivers online, the one-at-a-time offer rule and the never-two-riders rule. The 15-second offer timeout and what is out of scope come up when asked.
 - The math without being asked: about 250,000 location updates per second against about 500 requests per second, ending in "which means positions live in memory, not in the primary database".
 - A clean flow: apps, gateway, location service and geo index, ride service with a durable store that supports conditional writes, matcher with offers, and one ride traced from request to accept.
 - A real geo index (geohash, H3 or quadtree) searched with neighbor cells, partitioned by place, with a rule for stale drivers.
 - A guard against two riders taking one driver (an atomic reserve, a conditional update or one owner per area), a conditional accept, and a timeout path (release, then the next driver). Names the race when probed.
 - When probed, the trip states, who moves each one, and enforcement by conditional update.
-- The ETA service treated as an external call: shortlist first, then a timeout and a fallback.
+- When the ETA comes up, treats the ETA service as an external call: shortlist first, then a timeout and a fallback.
 - When asked where it breaks first, the location write rate or hot-spot contention, with its number and one fix.
 - Real depth in one or two of the four deep dives. Nobody covers all four in 45 minutes.
 

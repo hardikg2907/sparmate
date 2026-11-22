@@ -54,19 +54,19 @@ For the interviewer: on the out-of-scope items, one line each is enough.
 ## Expected requirements
 
 Core, functional:
-1. Accept a send request (user, template, variables, channels, time) and return an id. *Ask: What does a caller give us to send one message, and what comes back?*
+1. Accept a send request and return an id. *Ask: What does a caller give us to send one message, and what comes back?*
 2. Send a campaign to a segment of up to 50 million users. *Ask: Do we send to one user at a time, or to whole groups?*
 3. Apply preferences, quiet hours and the marketing cap before sending. *Ask: What can stop a message from reaching a user?*
-4. Track the status of each send from sender results and provider receipts; callers read it by id. *Ask: How does a caller learn what happened to a message?*
 
 Core, non-functional:
 1. About 440 million sends a day, with broadcast bursts close to the push quota. *Ask: How many messages a day, and how big is the biggest broadcast?*
-2. Security within 1 s at p99, transactional within 10 s; a push broadcast within 1 hour. *Ask: How fast must each kind of message go out, and how long may a broadcast take?*
-3. Marketing volume never delays security or transactional messages. *Ask: What if a big marketing broadcast runs next to urgent traffic?*
-4. Stay under every provider's limit, and survive the loss of an SMS provider. *Ask: What limits do providers set, and what if one goes down?*
-5. An accepted request is never lost, and a retried request never sends twice. *Ask: What if a request is retried, or we crash after accepting it?*
+2. Security within 1 s at p99, transactional within 10 s, and marketing never delays either. *Ask: How fast must each kind of message go out, and what if a big marketing broadcast runs next to urgent traffic?*
+3. Stay under every provider's limit, and survive the loss of an SMS provider. *Ask: What limits do providers set, and what if one goes down?*
+4. An accepted request is never lost, and a retried request never sends twice. *Ask: What if a request is retried, or we crash after accepting it?*
 
 Extras (credit when they name one, never a gap):
+- Track the status of each send from sender results and provider receipts; callers read it by id.
+- A push broadcast finishes within 1 hour.
 - Render each template per channel and language.
 - Schedule a send for later, and cancel a scheduled send or a running campaign.
 - Totals per campaign, at most 5 minutes old.
@@ -195,7 +195,7 @@ Use one, at the extension point, unless the candidate already handled it.
 Hire bar must show:
 - Requirements that separate security, transactional and marketing traffic with their own latency targets, cover preferences, and ask for the provider limits and the broadcast size.
 - The broadcast math against the push quota, ending in "the quota is the ceiling, so the broadcast is paced and transactional traffic goes first".
-- A working async design: an API that accepts durably and replies `202`, queues per channel and priority, stateless senders, preference and template steps, and a status store. One request traced to the provider and back through its receipt, including a failed call.
+- A working async design: an API that accepts durably and replies `202`, queues per channel and priority, stateless senders, preference and template steps, and, when status comes up, a status store. One request traced to the provider and, when status comes up, back through its receipt, including a failed call.
 - Retries with backoff, jitter, a cap and a dead-letter queue, and no retry on permanent errors. An idempotency key plus a dedupe check right before the provider call.
 - One deep dive done properly when the interviewer picks it.
 - For a provider failure: a circuit breaker and failover to B, shedding low-priority traffic (marketing first) because B is smaller.

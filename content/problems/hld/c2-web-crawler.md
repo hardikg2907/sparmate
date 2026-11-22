@@ -56,18 +56,17 @@ For the interviewer: on robots.txt, the published standard lets a crawler treat 
 
 Core, functional:
 1. Start from seed URLs and follow links. Fetch HTML over HTTP and HTTPS. *Ask: What does the crawler start from, and what does it fetch?*
-2. Obey robots.txt and `Crawl-delay`; one request per host at a time, at most one a second. *Ask: What rules must it follow when visiting a site?*
-3. Store the raw HTML of every new or changed page durably, and tell the indexer. *Ask: What must it keep for each page, and who uses it?*
-4. Never queue a known URL, in any form; keep one copy of duplicate content. *Ask: What if one page is reachable by many URLs, or has copies?*
+2. Store the raw HTML of new or changed pages, and tell the indexer. *Ask: What must it keep for each page, and who uses it?*
+3. Never queue a known URL, and keep one copy of duplicate content. *Ask: What if one page is reachable by many URLs, or has copies?*
 
 Core, non-functional:
-1. About 400 fetches a second (1 billion a month); 10 billion URLs, 50 million hosts. *Ask: How big is the crawl: pages a month, URLs and hosts?*
-2. Politeness is a hard rule: it holds across nodes, restarts and failovers. *Ask: How strictly must the per-site request limit hold?*
-3. The list of known URLs is never lost; a lost page body can be fetched again. *Ask: Which data is costly to lose, and which can be rebuilt?*
+1. About 1 billion fetches a month over about 50 million hosts. *Ask: How big is the crawl: pages a month and hosts?*
+2. Politeness is a hard rule: obey robots.txt and `Crawl-delay`, with one request per host at a time and at most one a second. It holds across nodes, restarts and failovers. *Ask: What rules must it follow when visiting a site, and how strictly?*
+3. The list of known URLs is never lost. *Ask: Which data is costly to lose?*
 4. Refresh pages as often as they change; nothing older than 6 months. *Ask: How fresh must stored pages be?*
-5. One node failing never stops the crawl; a duplicate fetch is fine. *Ask: What if a crawler node fails mid-crawl?*
 
 Extras (credit when they name one, never a gap):
+- One node failing never stops the crawl; a duplicate fetch is fine.
 - Fast-changing pages refresh about daily, the next group about weekly.
 - Survive spider traps, slow or broken servers, huge bodies and redirect loops.
 - Up to about 300 TB of raw pages kept for 12 months, with room for about 800 fetches a second when catching up.

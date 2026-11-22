@@ -24,7 +24,9 @@ Never require these, and never reward them:
 - Novel algorithms or research-grade distributed systems.
 - Organisation-level strategy, such as migration roadmaps or team topologies.
 - Memorised internals of one vendor's product.
-- An exhaustive requirements list. About three core features and three to five quality targets meet the bar. Extra requirements earn credit only when they change the design.
+- An exhaustive requirements list. About three core features and three or four quality targets meet the bar. Extra requirements earn credit only when they change the design.
+- Exact figures. A reasonable target they propose, and the interviewer accepts, meets the bar as well as a figure they asked for.
+- Asking every question before the design starts. A requirement found later and folded back in counts as found.
 - Precise arithmetic. Rounded, order-of-magnitude numbers are the norm in a real round.
 
 A product name earns nothing without the reason behind it. "I know that area less well", followed by reasoning from what they do know, is a plus and never a gap.
@@ -37,8 +39,8 @@ Measures whether they find the real problem before solving it: the requirements,
 - **1:** They start designing with no questions, or never state what the system must do.
 - **2:** They ask some questions but miss a requirement that shapes the design (a traffic ratio, a latency target, a freshness or consistency rule), assume features nobody asked for, or do math that never changes a decision.
 - **3, every one of these:**
-  - They ask targeted functional and non-functional questions, and confirm the scope before designing.
-  - They write down the core features and the quality targets, each non-functional one with a number or a rule.
+  - They settle the core scope before designing, by targeted questions or by proposing targets for the interviewer to confirm.
+  - They write down the core features and the quality targets, each non-functional one with a number or a rule. A requirement they find later counts when they add it to that list and say what it changes.
   - They state their assumptions out loud.
   - When the scale shapes the design, they do rough capacity math without being asked, at the point where a number decides something, and the numbers that drive a decision end in that decision. Order of magnitude is enough, and a number that drives nothing needs no consequence.
 - **4, all of 3 plus at least two of these:**
@@ -133,7 +135,7 @@ Measures whether they lead the round and finish a complete design inside the tim
 - **3, every one of these:**
   - They lead the early phases themselves (requirements, entities, API, first design) without being told to move on.
   - They have a complete first design by about the middle of the round.
-  - They keep each phase near its plan, or notice an overrun and recover.
+  - They keep each phase near its plan, or notice an overrun and recover. A short return to an earlier step, to add a requirement, an entity or an endpoint, is not an overrun.
   - They leave time for the deep dives and the curveball.
 - **4, all of 3 plus at least two of these:**
   - They set the agenda for the deep dives, offering two or three and saying why each matters.

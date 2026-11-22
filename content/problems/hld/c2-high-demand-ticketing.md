@@ -52,7 +52,7 @@ Core, functional:
 
 Core, non-functional:
 1. A seat is never sold twice. *Ask: What must never happen with a seat?*
-2. 2 million buyers in 10 minutes for 50,000 seats; 1 million in the first minute. *Ask: How many people come for one big show, and how fast?*
+2. About 2 million buyers come for 50,000 seats within 10 minutes. *Ask: How many people come for one big show, and how fast?*
 3. A hold answers within 1 second at p99 for a buyer who got through. *Ask: How fast must holding a seat be?*
 4. Booking prefers being correct over being up; viewing can be 2 seconds stale. *Ask: Which matters more for booking, being up or being right?*
 

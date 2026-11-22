@@ -57,18 +57,18 @@ For the interviewer: on media, one line is enough: upload to object storage and 
 ## Expected requirements
 
 Core, functional:
-1. Send and receive text in one-to-one chats and in groups of up to 100. *Ask: Which kinds of chats must it support, and how big can a group be?*
+1. Send and receive text in one-to-one chats and in groups. *Ask: Which kinds of chats must it support, and how big can a group be?*
 2. Messages for an offline user wait and arrive in order on reconnect, with a push. *Ask: What happens to a message when the recipient is offline?*
 3. Sent, delivered and read ticks, per member in groups. *Ask: What feedback does the sender get about each message?*
 
 Core, non-functional:
-1. 10 billion messages a day and 50 million open connections at peak. *Ask: How many users, how much do they send, how many are online at once?*
-2. Under 500 ms at p99 from our servers to an online recipient. *Ask: How fast must a message reach an online recipient?*
-3. Nothing is lost once the sender sees "sent" (the message is durable before the ack), and nobody sees a message twice (at-least-once delivery plus dedup). *Ask: What must be true once the sender sees a message as sent?*
-4. One order per conversation, the same for every member; each sender's order is kept. *Ask: In what order must members see messages?*
-5. 99.99% for send and receive; presence, typing and receipts may lag first. *Ask: What must stay up if something fails, and what may lag?*
+1. About 200 million daily users, each sending about 50 messages a day. *Ask: How many users, and how much do they send?*
+2. An online recipient gets a message under 500 ms at p99. *Ask: How fast must a message reach an online recipient?*
+3. Nothing is lost once the sender sees "sent", and nobody sees a message twice. *Ask: What must be true once the sender sees a message as sent?*
+4. One order per conversation, the same for every member. *Ask: In what order must members see messages?*
 
 Extras (credit when they name one, never a gap):
+- Sending stays up when something fails; receipts and presence lag first.
 - Online status and last seen in one-to-one chats.
 - One year of history on the server, paged 50 messages at a time, a page in under 200 ms.
 

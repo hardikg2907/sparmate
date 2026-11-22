@@ -61,20 +61,21 @@ For the interviewer: on batch reads, placing the keys of one batch together is a
 ## Expected requirements
 
 Core, functional:
-1. Get a key (a value or a miss), set a key with an optional TTL, and delete a key. *Ask: What operations must the cache offer?*
+1. Get, set and delete a key, with an optional TTL. *Ask: What operations must the cache offer?*
 2. An expired key is never returned. *Ask: What must a read do with a key whose time is up?*
 3. When memory is full, evict keys by an LRU-like policy instead of failing writes. *Ask: What happens to a write when memory is full?*
 
 Core, non-functional:
-1. About 1 billion keys of about 1 KB, doubling within a year, and 1 million operations a second, 90% reads. *Ask: How many keys, how big is a value, how many operations a second?*
+1. About 1 billion keys of about 1 KB, doubling within a year; about 1 million operations a second, mostly reads. *Ask: How many keys, how big is a value, how many operations a second?*
 2. p99 under 2 ms at the client. *Ask: How fast must a read be?*
-3. 99.99% availability. A dead node costs at most 10 seconds of errors on its own keys. *Ask: How much downtime is fine, and what may a dead node cost?*
-4. No durability: the database is the source of truth. *Ask: Is the cache the only copy of the data?*
-5. Read-after-write by default; up to 2 seconds of staleness only if the caller opts in. *Ask: Must a read always see the latest write?*
+3. A dead node costs at most 10 seconds of errors on its own keys, and never takes the cluster down. *Ask: What must stay up if a node or a zone fails?*
+4. A read sees the latest write by default; up to 2 seconds of staleness only if the caller opts in. *Ask: Must a read always see the latest write?*
 
 Extras (credit when they name one, never a gap):
 - Nodes are added online without a hit-ratio drop the databases would feel.
 - Losing a whole shard's data at once is still not acceptable, because of the database load.
+- No durability: the database is the source of truth, and losing recent writes in a crash is fine.
+- 99.99% availability.
 
 ## Capacity math
 
@@ -195,7 +196,7 @@ Use one, at the extension point, unless the candidate already handled it.
 ## Level bar
 
 Hire bar must show:
-- Requirements that pin down the operations, value size, the TTL rule (an expired key is never returned), behaviour when memory is full, the latency target, and that the database stays the source of truth.
+- Requirements that pin down the operations, value size, the TTL rule (an expired key is never returned), behaviour when memory is full, the latency target, and, when durability comes up, that the database stays the source of truth.
 - The memory math (keys times entry size, over the memory one machine can use), ending in a shard count of about 20 to 30 and a memory cap below the machine's RAM. The load math shows CPU per shard is well under one core's limit.
 - A placement scheme that moves only a small share of keys when a node joins, with the reason `hash mod N` fails (nearly every key moves).
 - A routing choice, client or proxy, with one trade-off stated.

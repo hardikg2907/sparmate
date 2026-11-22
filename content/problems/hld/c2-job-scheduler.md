@@ -52,16 +52,15 @@ Reveal a fact only when the candidate asks about it, or asks a question whose ho
 ## Expected requirements
 
 Core, functional:
-1. Submit a job to run now or at a set time: task type, payload, priority, retry policy. *Ask: What can a tenant submit, and when can it run?*
-2. Create, pause and delete cron schedules with a time zone. *Ask: Are all jobs one-off, or can they repeat?*
+1. Submit a job to run now or at a set time. *Ask: What can a tenant submit, and when can it run?*
+2. Manage cron schedules for repeating jobs. *Ask: Are all jobs one-off, or can they repeat?*
 3. Run each due run on workers; retry failures with backoff; mark it dead after the last try. *Ask: What happens when a run fails?*
 
 Core, non-functional:
-1. About 200 million runs a day: 2,300 a second on average, 12,000 at the top of the hour. *Ask: How many runs a day, and when is the busiest moment?*
+1. About 200 million runs a day, with a spike at the top of every hour. *Ask: How many runs a day, and when is the busiest moment?*
 2. At least once: an accepted job is never lost, even when a zone dies, and a rare duplicate run carries the same run id. *Ask: Can an accepted job ever be lost?*
 3. Outside the top of the hour, 99% of runs start within 5 seconds of due time, never early. *Ask: How close to its due time must a run start?*
 4. One tenant cannot delay other tenants, and low priority does not starve. *Ask: What if one tenant submits far more than the others?*
-5. No single point of failure; losing a machine or zone delays runs by 2 minutes at most. *Ask: What happens to runs if a machine or a zone fails?*
 
 Extras (credit when they name one, never a gap):
 - A dead run can be inspected and re-run by the tenant.
@@ -69,6 +68,7 @@ Extras (credit when they name one, never a gap):
 - Show each job's state and attempt history for 30 days.
 - In the first minute of each hour, high priority starts within 5 seconds and the rest within 60.
 - The submit API is 99.99% available.
+- No single point of failure; losing a machine or zone delays runs by 2 minutes at most.
 
 ## Capacity math
 

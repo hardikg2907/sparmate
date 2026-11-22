@@ -120,3 +120,35 @@ export function extrasHireBarClashes(sections: Readonly<Record<string, string | 
   }
   return clashes;
 }
+
+/**
+ * The most Core requirements a system design brief may list. Each Core item is a checklist item for the Requirements
+ * step, and that step has about five to seven minutes; a longer list turns it into a hunt for hidden figures.
+ */
+export const HLD_CORE_LIMITS = { functional: 3, nonFunctional: 4 } as const;
+
+/** Numbered items under each "Core, ..." heading of "Expected requirements". */
+export function coreRequirementCounts(requirements: string): { functional: number; nonFunctional: number } {
+  const counts = { functional: 0, nonFunctional: 0 };
+  let part: keyof typeof counts | null = null;
+  for (const line of requirements.split("\n")) {
+    if (/^Core, functional\b/i.test(line)) part = "functional";
+    else if (/^Core, non-functional\b/i.test(line)) part = "nonFunctional";
+    else if (/^\S/.test(line) && !/^\d{1,3}\. /.test(line)) part = null;
+    else if (part && /^\d{1,3}\. /.test(line)) counts[part]++;
+  }
+  return counts;
+}
+
+/** Problems with a system design brief's Core requirement counts, empty when both are inside the limits. */
+export function hldCoreLimitIssues(sections: Readonly<Record<string, string | undefined>>): string[] {
+  const counts = coreRequirementCounts(sections["Expected requirements"] ?? "");
+  const issues: string[] = [];
+  if (counts.functional > HLD_CORE_LIMITS.functional) {
+    issues.push(`${counts.functional} core functional requirements; keep at most ${HLD_CORE_LIMITS.functional} and move the rest to Extras`);
+  }
+  if (counts.nonFunctional > HLD_CORE_LIMITS.nonFunctional) {
+    issues.push(`${counts.nonFunctional} core non-functional requirements; keep at most ${HLD_CORE_LIMITS.nonFunctional} and move the rest to Extras`);
+  }
+  return issues;
+}

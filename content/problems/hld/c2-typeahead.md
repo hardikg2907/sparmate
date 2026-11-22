@@ -46,15 +46,15 @@ For the interviewer: on trending queries, the daily update is the requirement; a
 ## Expected requirements
 
 Core, functional:
-1. Return the top 10 completions for a typed prefix, ranked by popularity. *Ask: What should the list show, and in what order?*
-2. Popularity comes from real searches over the last 30 days. *Ask: Where does "popular" come from, and over what time?*
-3. A reported bad suggestion is removed everywhere within 1 hour. *Ask: What if a suggestion is offensive?*
+1. Return the best completions for a typed prefix, ranked by popularity. *Ask: What should the list show, and in what order?*
+2. Popularity comes from what people really search for. *Ask: Where does "popular" come from?*
+3. A reported bad suggestion is removed everywhere within an hour. *Ask: What if a suggestion is offensive?*
 
 Core, non-functional:
-1. 1 billion searches a day, 20 characters each; about 460,000 requests a second at peak. *Ask: How many people type, and how often do we get a request?*
+1. About 1 billion searches a day, and each keystroke is a request. *Ask: How many people type, and how often do we get a request?*
 2. Suggestions show within 100 ms of the request at p99. *Ask: How fast must the list appear?*
 3. Daily popularity updates are fine. *Ask: How quickly must a new popular query show up?*
-4. 99.9% available; a failure hides the list but never breaks search. *Ask: What happens to the search box if suggestions fail?*
+4. A failure hides the list but never breaks search. *Ask: What happens to the search box if suggestions fail?*
 
 Extras (credit when they name one, never a gap):
 - Only queries searched by at least 20 different users, for privacy.
