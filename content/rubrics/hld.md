@@ -153,7 +153,7 @@ Map each hint to the dimension its topic touched, then cap that dimension:
 - An H2 caps it at 3.
 - An H3 caps it at 2.
 
-A normal probe is not a hint. Asking them to go deeper on something they raised, asking where the design breaks first, and delivering the curveball are all part of the round. A hint the interviewer clearly gave but did not record counts at the level it reads as. In a guided round, anything the guide taught them directly counts as an H3 on that topic.
+A normal probe is not a hint, and neither is a scope check, where the interviewer says which of their listed features are in or out of scope. Asking them to go deeper on something they raised, asking where the design breaks first, and delivering the curveball are all part of the round. A hint the interviewer clearly gave but did not record counts at the level it reads as. In a guided round, anything the guide taught them directly counts as an H3 on that topic.
 
 ## Verdicts
 

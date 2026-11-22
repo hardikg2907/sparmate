@@ -186,7 +186,7 @@ Map each hint to the dimension its topic touched, then cap that dimension:
 - An H2 caps it at 3.
 - An H3 caps it at 2.
 
-C++ syntax help is never a hint and never caps a score, because syntax is not the skill under test. A normal probe is not a hint either: asking why they chose something, asking them to run the program, the concurrency follow-up and the new requirement are all part of the round. A hint the interviewer clearly gave but did not record counts at the level it reads as. In a guided round, any design point the guide taught them directly counts as an H3 on that topic.
+C++ syntax help is never a hint and never caps a score, because syntax is not the skill under test. A scope check, where the interviewer says which of their listed operations are in or out of scope, is not a hint. A normal probe is not a hint either: asking why they chose something, asking them to run the program, the concurrency follow-up and the new requirement are all part of the round. A hint the interviewer clearly gave but did not record counts at the level it reads as. In a guided round, any design point the guide taught them directly counts as an H3 on that topic.
 
 ## Verdicts
 
