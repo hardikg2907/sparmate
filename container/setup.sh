@@ -120,4 +120,4 @@ EOF
 echo ""
 echo "Setup complete!"
 echo "To start the server, run: $SCRIPT_DIR/start.sh"
-echo "The app will be available at: http://127.0.0.1:${PORT:-4747}"
+echo "The app will be available at: http://sparmate.localhost:${PORT:-4747}"

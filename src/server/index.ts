@@ -25,6 +25,7 @@ import { LeetcodeService } from "./leetcode/service";
 import { withDefaultCountFrom } from "../shared/dsa";
 import { localDay } from "../shared/week";
 import { runSetupChecks, SetupStatus } from "./setup/checks";
+import { displayHost } from "./http/display-host";
 
 export interface ShutdownDeps {
   kokoro: { shutdown(): void };
@@ -150,7 +151,7 @@ async function main(): Promise<void> {
   const listenHost = process.env.SPARMATE_IN_CONTAINER === "1" ? "0.0.0.0" : "127.0.0.1";
   await app.listen({ port: config.port, host: listenHost });
   log.info(`Started on port ${config.port}${config.fakeAgent ? " with the fake agent" : ""}; ${guard.size()} privacy terms loaded`);
-  process.stdout.write(`Sparmate is running at http://127.0.0.1:${config.port}${config.fakeAgent ? " (fake agent)" : ""}\n`);
+  process.stdout.write(`Sparmate is running at http://${await displayHost()}:${config.port}${config.fakeAgent ? " (fake agent)" : ""}\n`);
 
   const stop = createShutdownHandler({
     kokoro,

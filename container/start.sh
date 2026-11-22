@@ -46,4 +46,4 @@ $ENGINE run -d \
   -v sparmate-claude:/home/node/.claude:Z \
   "$IMAGE_NAME" >/dev/null
 
-echo "Sparmate is running at http://127.0.0.1:$PORT"
+echo "Sparmate is running at http://sparmate.localhost:$PORT"

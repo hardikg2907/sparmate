@@ -30,7 +30,7 @@ The script performs the following actions:
 4. Downloads Kokoro TTS neural voice models.
 5. Creates the study folder. The app fills it with the starter kit on first start when it is empty.
 6. Configures Claude authentication.
-7. Starts the container on `http://127.0.0.1:4747`.
+7. Starts the container on `http://sparmate.localhost:4747`.
 
 ## Daily Use
 
@@ -40,7 +40,7 @@ Start the container:
 .\start.ps1       # Windows PowerShell
 ```
 
-Open `http://127.0.0.1:4747` in your browser.
+Open `http://sparmate.localhost:4747` in your browser (`http://127.0.0.1:4747` works too).
 
 Stop the container:
 ```bash

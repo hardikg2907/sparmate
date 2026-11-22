@@ -2,7 +2,7 @@
 
 A local web app for practising system design (HLD) and machine-coding (LLD, C++) interviews against an AI
 interviewer, then getting a scored debrief, a coach who fills the gaps, and drafted study notes to approve.
-It runs on one machine at `http://127.0.0.1:4747`, uses the user's existing Claude Code login through the Claude
+It runs on one machine at `http://sparmate.localhost:4747`, uses the user's existing Claude Code login through the Claude
 Agent SDK (no API key), and reads and edits a personal study folder (the "study root", set with `STUDY_ROOT`),
 which holds `TEACHING.md`, `TRACKER.md`, `REVIEW.md`, `notes/` and `lld/`. When the study root is missing or
 empty, the server fills it from `study-kit/` at start.
@@ -40,7 +40,7 @@ Read these before building: `src/shared/*.ts` (the typed contract), the two fixt
 
 ```
 npm install          # once, from the repository root
-npm start            # vite build, then serve on http://127.0.0.1:4747
+npm start            # vite build, then serve on http://sparmate.localhost:4747
 npm run dev          # vite on :5173 (proxies /api, /ws, /excalidraw-assets) + server on :4747 with reload
 npm test             # vitest unit tests
 npm run typecheck
@@ -787,9 +787,11 @@ scribe read them.
 ## 6. Security (ENGINE agent owns enforcement; everyone follows it)
 
 1. Bind `127.0.0.1` only.
-2. Host allowlist on every request and upgrade: `127.0.0.1:<PORT>`, `localhost:<PORT>`, and the dev server
-   `127.0.0.1:5173`, `localhost:5173`. Anything else gets `421`. (Defeats DNS rebinding.)
-3. Origin allowlist (same four origins, `http://`) on every non-GET request and every WebSocket upgrade.
+2. Host allowlist on every request and upgrade: `127.0.0.1:<PORT>`, `localhost:<PORT>`, `sparmate.localhost:<PORT>`,
+   and the same three names on the dev server port `5173`. Anything else gets `421`. (Defeats DNS rebinding.)
+   Every `*.localhost` name resolves to loopback (RFC 6761), and the startup line prints `sparmate.localhost` when the
+   resolver answers it, else `127.0.0.1`.
+3. Origin allowlist (same six origins, `http://`) on every non-GET request and every WebSocket upgrade.
    A missing Origin on a non-GET request is rejected.
 4. CSRF token: 32 random bytes (base64url) per server start, from `GET /api/bootstrap`, required as
    `x-csrf-token` on non-GET requests and in the WS `hello`. Compare with `crypto.timingSafeEqual`.

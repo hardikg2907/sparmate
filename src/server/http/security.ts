@@ -5,11 +5,14 @@ import type { FastifyInstance } from "fastify";
 /** Vite's dev server proxies to us from this port. */
 export const DEV_PORT = 5173;
 
+/** Every `*.localhost` name is loopback (RFC 6761), so a name tells this app apart from other local servers with no setup. */
+export const FRIENDLY_HOST = "sparmate.localhost";
+
+const LOCAL_NAMES = ["127.0.0.1", "localhost", FRIENDLY_HOST];
+
 export function allowedHosts(port: number, inContainer: boolean = process.env.SPARMATE_IN_CONTAINER === "1"): Set<string> {
-  if (inContainer) {
-    return new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
-  }
-  return new Set([`127.0.0.1:${port}`, `localhost:${port}`, `127.0.0.1:${DEV_PORT}`, `localhost:${DEV_PORT}`]);
+  const ports = inContainer ? [port] : [port, DEV_PORT];
+  return new Set(ports.flatMap((p) => LOCAL_NAMES.map((name) => `${name}:${p}`)));
 }
 
 export function allowedOrigins(port: number, inContainer: boolean = process.env.SPARMATE_IN_CONTAINER === "1"): Set<string> {
@@ -51,7 +54,7 @@ export function contentSecurityPolicy(port: number): string {
     "font-src 'self' data:",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
-    `connect-src 'self' ws://127.0.0.1:${port} ws://localhost:${port}`,
+    `connect-src 'self' ${LOCAL_NAMES.map((name) => `ws://${name}:${port}`).join(" ")}`,
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",

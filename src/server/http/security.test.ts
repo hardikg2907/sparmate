@@ -7,14 +7,35 @@ const TOKEN = newCsrfToken();
 const good = { host: `127.0.0.1:${PORT}`, origin: `http://127.0.0.1:${PORT}` };
 
 describe("allowlists", () => {
-  it("accepts only the four local hosts", () => {
-    for (const h of [`127.0.0.1:${PORT}`, `localhost:${PORT}`, "127.0.0.1:5173", "localhost:5173", `LOCALHOST:${PORT}`]) expect(hostAllowed(h, PORT), h).toBe(true);
-    for (const h of [undefined, "evil.example", `evil.example:${PORT}`, "127.0.0.1", `0.0.0.0:${PORT}`, `127.0.0.1:${PORT}.evil`])
+  it("accepts only the local hosts", () => {
+    for (const h of [
+      `127.0.0.1:${PORT}`,
+      `localhost:${PORT}`,
+      `sparmate.localhost:${PORT}`,
+      "127.0.0.1:5173",
+      "localhost:5173",
+      "sparmate.localhost:5173",
+      `LOCALHOST:${PORT}`,
+      `Sparmate.Localhost:${PORT}`,
+    ])
+      expect(hostAllowed(h, PORT), h).toBe(true);
+    for (const h of [
+      undefined,
+      "evil.example",
+      `evil.example:${PORT}`,
+      "127.0.0.1",
+      "sparmate.localhost",
+      `other.localhost:${PORT}`,
+      `sparmate.localhost.evil:${PORT}`,
+      `0.0.0.0:${PORT}`,
+      `127.0.0.1:${PORT}.evil`,
+    ])
       expect(hostAllowed(h, PORT), String(h)).toBe(false);
   });
 
   it("accepts only http origins of those hosts", () => {
     expect(originAllowed(`http://localhost:${PORT}`, PORT)).toBe(true);
+    expect(originAllowed(`http://sparmate.localhost:${PORT}`, PORT)).toBe(true);
     expect(originAllowed(`https://localhost:${PORT}`, PORT)).toBe(false);
     expect(originAllowed("null", PORT)).toBe(false);
     expect(originAllowed(undefined, PORT)).toBe(false);
@@ -92,7 +113,7 @@ describe("registerSecurity on a Fastify app", () => {
     const a = await app();
     const res = await a.inject({ method: "GET", url: "/api/ping", headers: { host: good.host } });
     expect(res.statusCode).toBe(200);
-    expect(res.headers["content-security-policy"]).toContain(`connect-src 'self' ws://127.0.0.1:${PORT} ws://localhost:${PORT}`);
+    expect(res.headers["content-security-policy"]).toContain(`connect-src 'self' ws://127.0.0.1:${PORT} ws://localhost:${PORT} ws://sparmate.localhost:${PORT}`);
     expect(res.headers["content-security-policy"]).toContain("media-src 'self' blob:");
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
     expect(res.headers["x-frame-options"]).toBe("DENY");
@@ -114,9 +135,9 @@ describe("registerSecurity on a Fastify app", () => {
 });
 
 describe("container mode Host and Origin rules", () => {
-  it("restricts allowed hosts strictly to 127.0.0.1 and localhost on published port", () => {
+  it("restricts allowed hosts strictly to the local names on published port", () => {
     const hosts = allowedHosts(PORT, true);
-    expect(hosts).toEqual(new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]));
+    expect(hosts).toEqual(new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `sparmate.localhost:${PORT}`]));
     expect(hosts.has(`127.0.0.1:${DEV_PORT}`)).toBe(false);
     expect(hosts.has(`localhost:${DEV_PORT}`)).toBe(false);
     expect(hostAllowed(`127.0.0.1:${PORT}`, PORT, true)).toBe(true);
@@ -125,9 +146,9 @@ describe("container mode Host and Origin rules", () => {
     expect(hostAllowed("evil.example", PORT, true)).toBe(false);
   });
 
-  it("restricts allowed origins to http://127.0.0.1 and http://localhost on published port", () => {
+  it("restricts allowed origins to http on the local names on published port", () => {
     const origins = allowedOrigins(PORT, true);
-    expect(origins).toEqual(new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`]));
+    expect(origins).toEqual(new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`, `http://sparmate.localhost:${PORT}`]));
     expect(originAllowed(`http://127.0.0.1:${PORT}`, PORT, true)).toBe(true);
     expect(originAllowed(`http://localhost:${PORT}`, PORT, true)).toBe(true);
     expect(originAllowed(`http://localhost:${DEV_PORT}`, PORT, true)).toBe(false);

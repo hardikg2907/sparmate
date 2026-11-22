@@ -104,4 +104,4 @@ CONTAINER_ENGINE=$Engine
 Write-Host ""
 Write-Host "Setup complete!" -ForegroundColor Green
 Write-Host "Run .\start.ps1 to start the server." -ForegroundColor Green
-Write-Host "Open: http://127.0.0.1:$Port" -ForegroundColor Cyan
+Write-Host "Open: http://sparmate.localhost:$Port" -ForegroundColor Cyan
