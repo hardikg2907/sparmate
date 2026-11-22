@@ -22,11 +22,11 @@ Native setup is for macOS. On Linux and Windows, run the app through the contain
 | `npm run lint:fix`     | Runs ESLint and fixes what it can.                 |
 | `npm run format`       | Formats the code with Prettier.                    |
 | `npm run format:check` | Checks the formatting without changing files.      |
-| `npm run verify`       | Runs all checks. Stops at the first failure.       |
+| `npm run verify`       | Runs all checks, in two parallel phases.           |
 | `npm run build`        | Builds the web app.                                |
 | `npm run dev`          | Starts the app with hot reload.                    |
 
-`npm run verify` runs typecheck, lint, format check, tests, `vite build`, the fake-agent end-to-end round and the layout and scroll check. The last two pick a free port. The layout check drives Google Chrome, so Chrome must be installed. Set `CHROME_PATH` when it is not in the usual place.
+`npm run verify` runs typecheck, lint, format check, tests, `vite build`, the fake-agent end-to-end round and the layout and scroll check. The first four run together. When they pass, the last three run together. Each step's output prints whole, in step order, and a failure names every step that failed. The two end-to-end scripts each get their own free port. The layout check drives Google Chrome, so Chrome must be installed. Set `CHROME_PATH` when it is not in the usual place. Set `VERIFY_SERIAL=1` to run the steps one by one on a busy machine.
 
 A pull request must pass typecheck, lint, format check and tests. CI runs the same four scripts.
 
